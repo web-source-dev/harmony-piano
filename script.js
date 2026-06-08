@@ -1217,14 +1217,20 @@ Rect.prototype.contains = function(x, y) {
 	// if(channel_id.substr(0, 1) == "/") channel_id = channel_id.substr(1);
 	// if(channel_id == "") channel_id = "lobby";
 
-	var isProd = window.location.hostname.includes('multiplayerpiano.com');
-	var isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+	// Multiplayer: use public MPP server from any static host (GitHub Pages, ngrok, Netlify, etc.).
+	// Only use a local WebSocket server when you open the page with ?ws=local AND run one on port 8081.
 	var mppOrig = 'game.multiplayerpiano.com';
-	var useRemoteServer = isProd || isLocal;
-	var wssport = useRemoteServer ? 443 : 8081;
-	var protocol = useRemoteServer ? 'wss' : 'ws';
-	var wsHost = useRemoteServer ? mppOrig : window.location.hostname;
-	var gClient = new Client(protocol + "://" + wsHost + ":" + wssport);
+	var wsParam = getParameterByName('ws');
+	var useLocalWs = wsParam === 'local';
+	var wsUri;
+	if(useLocalWs) {
+		var wsPort = parseInt(getParameterByName('wsport'), 10) || 8081;
+		var wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+		wsUri = wsProto + '://' + window.location.hostname + ':' + wsPort;
+	} else {
+		wsUri = 'wss://' + mppOrig + ':443';
+	}
+	var gClient = new Client(wsUri);
 
 	gClient.setChannel(channel_id);
 
