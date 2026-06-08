@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8"/>
+    <title>Multiplayer Piano</title>
+    <meta name="description"
+          content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
+    <link rel="stylesheet" href="./screen.css"/>
+    <link rel="canonical" href="https://multiplayerpiano.com/">
+
+
+    <script>
+      window.aiptag = window.aiptag || {cmd: []};
+      aiptag.cmd.display = aiptag.cmd.display || [];
+      aiptag.cmd.player = aiptag.cmd.player || [];
+
+      //CMP tool settings
+      aiptag.cmp = {
+        show: true,
+        position: "centered",  //centered, bottom
+        button: true,
+        buttonText: "Privacy settings",
+        buttonPosition: "bottom-left" //bottom-left, bottom-right, top-left, top-right
+      }
+
+      aiptag.cmd.player.push(function() {
+        aiptag.adplayer = new aipPlayer({
+          AD_WIDTH: 960,
+          AD_HEIGHT: 540,
+          AD_DISPLAY: 'default', //default, fullscreen, center, fill
+          LOADING_TEXT: 'loading advertisement',
+          PREROLL_ELEM: function(){return document.getElementById('preroll')},
+          AIP_COMPLETE: function (evt)  {
+            /*******************
+             ***** WARNING *****
+             *******************
+             Please do not remove the PREROLL_ELEM
+             from the page, it will be hidden automaticly.
+             If you do want to remove it use the AIP_REMOVE callback.
+             */
+            alert("Preroll Ad Completed: " + evt);
+          },
+          AIP_REMOVE: function ()  {
+            // Here it's save to remove the PREROLL_ELEM from the page if you want. But it's not recommend.
+          }
+        });
+      });
+
+      function show_preroll() {
+        //check if the adslib is loaded correctly or blocked by adblockers etc.
+        if (typeof aiptag.adplayer !== 'undefined') {
+          aiptag.cmd.player.push(function() { aiptag.adplayer.startPreRoll(); });
+        } else {
+          //Adlib didnt load this could be due to an adblocker, timeout etc.
+          //Please add your script here that starts the content, this usually is the same script as added in AIP_COMPLETE or AIP_REMOVE.
+          alert("Ad Could not be loaded, load your content here");
+        }
+      }
+    </script>
+    <script async src="//api.adinplay.com/libs/aiptag/pub/BTP/multiplayerpiano.com/tag.min.js"></script>
+</head>
+<body>
+
+<style>
+    .ad1 {
+        position: fixed;
+        top: 100px;
+        z-index: 99999;
+        /*background: red;*/
+        width: 970px;
+        height: 90px;
+        right: 0;
+    }
+    .discord {
+        background: white;
+        padding: 10px;
+        height: 35px;
+        position: fixed;
+        right: 0;
+        top: 24px;
+        z-index: 99999;
+    }
+    .blog {
+        background: white;
+        padding: 10px;
+        height: 8px;
+        line-height: 7px;
+        position: fixed;
+        right: 153px;
+        top: 0px;
+        z-index: 99999;
+        font-size: 17px;
+        border: 3px solid #ff4466;
+    }
+    .contribute {
+        background: white;
+        padding: 10px;
+        height: 8px;
+        line-height: 7px;
+        position: fixed;
+        right: 265px;
+        top: 0px;
+        z-index: 99999;
+        font-size: 17px;
+        border: 3px solid #ff4466;
+    }
+</style>
+
+<script>
+    setInterval(function(){
+      aiptag.cmd.display.push(function() { aipDisplayTag.display('multiplayerpiano-com_970x90'); });
+    }, 14 * 1000)
+</script>
+
+<div class='ad1' id='multiplayerpiano-com_970x90'>
+    <script type='text/javascript'>
+      aiptag.cmd.display.push(function() { aipDisplayTag.display('multiplayerpiano-com_970x90'); });
+    </script>
+</div>
+
+<a class="discord" href="https://discord.gg/Xr5dubEYgV" target="_blank">Join Official Discord 2023</a>
+<a class="blog" href="https://multiplayerpiano.com/piano/" target="_blank">Piano Blog</a>
+<a class="contribute" href="https://multiplayerpiano.com/contribute-piano/" target="_blank">Contribute</a>
+<div id="social">
+    <div id="like-button">
+        <div class="fb-like" data-href="https://www.facebook.com/MultiplayerPiano/" data-layout="button_count"
+             data-action="like" data-size="small" data-show-faces="false" data-share="true"></div>
+    </div>
+    <div id="inclinations"></div>
+</div>
+
+<div id="room-notice"></div>
+
+<div id="names"></div>
+
+<div id="piano"></div>
+
+<div id="cursors"></div>
+
+<div id="chat">
+    <div class="chat-log"><ul></ul></div>
+</div>
+
+<noscript>
+    <center>
+        <p>
+            Multiplayer Piano is an online, full 88-key piano you can play alone or with others in real-time. Plug up
+            your MIDI keyboard, MIDI in and out are supported. You should be able to hear some seriously talented piano
+            players performing here! Join in or just chat and listen.
+        </p>
+        <p>
+            For good performance, Chrome is highly recommended. Firefox also supports the requisite Web Audio API, but
+            performance may not be as good. Chrome has Web MIDI.
+        </p>
+        <p>
+            Of course, first you need to <a href="http://www.enable-javascript.com/" class="link">Enable Javascript</a>
+            or it won't do anything...!
+        </p>
+    </center>
+</noscript>
+
+<div id="bottom">
+    <div id="chat-input-bar">
+        <input placeholder="You can chat with this thing." class="translate" maxlength="512"/>
+    </div>
+    <div class="relative toolbar-band">
+        <div id="room">
+            <div class="info"></div>
+            <div class="expand"></div>
+            <div class="more">
+                <div class="new translate">New Room...</div>
+            </div>
+        </div>
+        <div id="all-rooms-btn" class="ugly-button">All Rooms</div>
+        <div id="new-room-btn" class="ugly-button translate">New Room...</div>
+        <div id="play-alone-btn" class="ugly-button">Play Alone</div>
+        <div id="room-settings-btn" class="ugly-button">Room Settings</div>
+        <div id="midi-btn" class="ugly-button translate">MIDI In/Out</div>
+        <div id="record-btn" class="ugly-button translate">Record MP3</div>
+        <div id="synth-btn" class="ugly-button translate">Synth</div>
+        <div id="sheet-btn" class="ugly-button">Sheet Play</div>
+        <div id="hacks-toggle-btn" class="ugly-button">Hacks ▼</div>
+        <div id="sound-btn" class="ugly-button sound-btn">Sound Select</div>
+        <div id="status"></div>
+        <div id="volume">
+            <input type="range" id="volume-slider" min="0.0" max="1.0" step="0.01">
+        </div>
+        <div id="volume-label">volume</div>
+        <div id="quota">
+            <div class="value"></div>
+        </div>
+    </div>
+</div>
+
+<aside id="hacks-dock" class="hacks-dock" aria-label="Fun and hacks panel">
+    <div class="hacks-dock-panel">
+        <header class="hacks-dock-header">
+            <div class="hacks-dock-heading">
+                <span class="hacks-dock-title">Fun &amp; Hacks</span>
+                <span class="hacks-dock-sub">Piano tricks · chat spam</span>
+            </div>
+            <button type="button" class="hacks-dock-collapse" id="hacks-dock-collapse" title="Hide panel">▲</button>
+        </header>
+        <div class="hacks-dock-body">
+            <section class="hacks-zone">
+                <h3 class="hacks-zone-label">Piano — classic</h3>
+                <div class="hacks-chips">
+                    <button type="button" class="hack-chip" id="fun-all-keys">All keys</button>
+                    <button type="button" class="hack-chip" id="fun-release-all">Release</button>
+                    <button type="button" class="hack-chip" id="fun-glissando">Glissando</button>
+                    <button type="button" class="hack-chip" id="fun-sweep-up">↑ Sweep</button>
+                    <button type="button" class="hack-chip" id="fun-sweep-down">↓ Sweep</button>
+                    <button type="button" class="hack-chip" id="fun-chord">C maj</button>
+                    <button type="button" class="hack-chip" id="fun-g-major">G maj</button>
+                    <button type="button" class="hack-chip" id="fun-a-minor">A min</button>
+                    <button type="button" class="hack-chip" id="fun-arpeggio">Arpeggio</button>
+                    <button type="button" class="hack-chip" id="fun-trill">Trill</button>
+                    <button type="button" class="hack-chip" id="fun-drums">Drums</button>
+                </div>
+                <h3 class="hacks-zone-label">Piano — modes</h3>
+                <div class="hacks-chips">
+                    <button type="button" class="hack-chip" id="fun-random">Random</button>
+                    <button type="button" class="hack-chip" id="fun-chaos">Chaos</button>
+                    <button type="button" class="hack-chip" id="fun-hammer">Hammer</button>
+                    <button type="button" class="hack-chip" id="fun-low-boom">Low boom</button>
+                    <button type="button" class="hack-chip" id="fun-high-tinkle">Tinkle</button>
+                    <button type="button" class="hack-chip" id="fun-bounce">Bounce</button>
+                    <button type="button" class="hack-chip" id="fun-waltz">Waltz</button>
+                    <button type="button" class="hack-chip" id="fun-jazz">Jazz</button>
+                    <button type="button" class="hack-chip" id="fun-ripple">Ripple</button>
+                    <button type="button" class="hack-chip" id="fun-zigzag">Zigzag</button>
+                    <button type="button" class="hack-chip" id="fun-staccato">Staccato</button>
+                    <button type="button" class="hack-chip" id="fun-echo">Echo</button>
+                    <button type="button" class="hack-chip" id="fun-black-keys">Blacks</button>
+                    <button type="button" class="hack-chip" id="fun-white-keys">Whites</button>
+                    <button type="button" class="hack-chip" id="fun-rain">Rain</button>
+                    <button type="button" class="hack-chip" id="fun-heartbeat">Heartbeat</button>
+                    <button type="button" class="hack-chip" id="fun-sustain-hold">Sustain</button>
+                    <button type="button" class="hack-chip" id="fun-piano-spin">Spin</button>
+                </div>
+                <h3 class="hacks-zone-label">Piano — memes</h3>
+                <div class="hacks-chips">
+                    <button type="button" class="hack-chip" id="fun-vine-boom">Vine BOOM</button>
+                    <button type="button" class="hack-chip" id="fun-bruh">BRUH</button>
+                    <button type="button" class="hack-chip" id="fun-oof">OOF</button>
+                    <button type="button" class="hack-chip" id="fun-wrong">Wrong!!</button>
+                    <button type="button" class="hack-chip" id="fun-airhorn">Airhorn</button>
+                    <button type="button" class="hack-chip" id="fun-bonk">Bonk</button>
+                    <button type="button" class="hack-chip" id="fun-sus">Sus</button>
+                    <button type="button" class="hack-chip" id="fun-skill-issue">Skill issue</button>
+                    <button type="button" class="hack-chip" id="fun-nut">NUT button</button>
+                    <button type="button" class="hack-chip" id="fun-yeet">YEET</button>
+                    <button type="button" class="hack-chip" id="fun-gotem">Got em</button>
+                    <button type="button" class="hack-chip" id="fun-rick">Rick'd</button>
+                    <button type="button" class="hack-chip" id="fun-dna">DNA test</button>
+                    <button type="button" class="hack-chip" id="fun-ohno">Oh no song</button>
+                    <button type="button" class="hack-chip" id="fun-bazinga">Bazinga</button>
+                </div>
+                <h3 class="hacks-zone-label">Piano — cursed</h3>
+                <div class="hacks-chips">
+                    <button type="button" class="hack-chip" id="fun-fart">Fart</button>
+                    <button type="button" class="hack-chip" id="fun-clown">Clown horn</button>
+                    <button type="button" class="hack-chip" id="fun-slide-whistle">Slide whistle</button>
+                    <button type="button" class="hack-chip" id="fun-boing">Boing</button>
+                    <button type="button" class="hack-chip" id="fun-slip">Slip &amp; fall</button>
+                    <button type="button" class="hack-chip" id="fun-sad-trombone">Waah waah</button>
+                    <button type="button" class="hack-chip" id="fun-crickets">Crickets</button>
+                    <button type="button" class="hack-chip" id="fun-record-scratch">Record scratch</button>
+                    <button type="button" class="hack-chip" id="fun-nope">Nope nope</button>
+                    <button type="button" class="hack-chip" id="fun-game-over">Game over</button>
+                    <button type="button" class="hack-chip" id="fun-hurt">Hurt noise</button>
+                    <button type="button" class="hack-chip" id="fun-error">Windows error</button>
+                    <button type="button" class="hack-chip" id="fun-jumpscare">Jump scare</button>
+                    <button type="button" class="hack-chip" id="fun-goblin">Goblin mode</button>
+                    <button type="button" class="hack-chip" id="fun-bababooey">Bababooey</button>
+                </div>
+                <h3 class="hacks-zone-label">Piano — long memes (20–45s)</h3>
+                <div class="hacks-chips">
+                    <button type="button" class="hack-chip" id="fun-meme-medley">Meme medley</button>
+                    <button type="button" class="hack-chip" id="fun-rick-full">Full Rick'd</button>
+                    <button type="button" class="hack-chip" id="fun-vine-chain">Vine chain</button>
+                    <button type="button" class="hack-chip" id="fun-bruh-hour">BRUH hour</button>
+                    <button type="button" class="hack-chip" id="fun-airhorn-concert">Airhorn concert</button>
+                    <button type="button" class="hack-chip" id="fun-mega-bonk">Mega bonk</button>
+                    <button type="button" class="hack-chip" id="fun-sus-meeting">Sus meeting</button>
+                    <button type="button" class="hack-chip" id="fun-ohno-loop">Oh no loop</button>
+                    <button type="button" class="hack-chip" id="fun-clown-car">Clown car</button>
+                    <button type="button" class="hack-chip" id="fun-fart-symphony">Fart symphony</button>
+                    <button type="button" class="hack-chip" id="fun-windows-meltdown">Windows meltdown</button>
+                    <button type="button" class="hack-chip" id="fun-goblin-rave">Goblin rave</button>
+                    <button type="button" class="hack-chip" id="fun-skill-roast">Skill roast</button>
+                    <button type="button" class="hack-chip" id="fun-bababooey-opera">Bababooey opera</button>
+                    <button type="button" class="hack-chip" id="fun-nut-megamix">NUT megamix</button>
+                    <button type="button" class="hack-chip" id="fun-wrong-marathon">Wrong marathon</button>
+                    <button type="button" class="hack-chip" id="fun-circus-train">Circus train</button>
+                    <button type="button" class="hack-chip" id="fun-creepy-jumpscare">Creepy → scare</button>
+                    <button type="button" class="hack-chip" id="fun-phone-chaos">Phone chaos</button>
+                    <button type="button" class="hack-chip" id="fun-troll-storm">Troll storm</button>
+                    <button type="button" class="hack-chip" id="fun-slide-rollercoaster">Rollercoaster</button>
+                    <button type="button" class="hack-chip" id="fun-boing-marathon">Boing marathon</button>
+                </div>
+            </section>
+            <section class="hacks-zone hacks-zone-chat">
+                <h3 class="hacks-zone-label">Chat spam</h3>
+                <div class="hacks-chat-grid">
+                    <input type="text" name="spam-msg" class="hacks-spam-input" maxlength="512" placeholder="Type here — use | between lines to rotate"/>
+                    <select name="spam-mode" class="hacks-spam-select" title="Spam mode">
+                        <option value="single">Same</option>
+                        <option value="rotate">Rotate</option>
+                        <option value="counter">Counter</option>
+                        <option value="random">Random</option>
+                    </select>
+                    <label class="hacks-field">ms <input type="number" name="spam-ms" min="400" max="8000" value="900" class="hacks-spam-num"/></label>
+                    <label class="hacks-field">burst <input type="number" name="spam-burst" min="1" max="20" value="1" class="hacks-spam-num"/></label>
+                    <button type="button" class="hack-chip hack-chip-go" id="fun-chat-start">Start</button>
+                    <button type="button" class="hack-chip" id="fun-chat-stop">Stop</button>
+                    <span class="spam-status" id="spam-status">idle</span>
+                </div>
+                <h3 class="hacks-zone-label">Dummy messages — tap to load</h3>
+                <div class="hacks-presets">
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="🎹 | 🎵 | 🎶 | 🎼">Music</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="hi | hello | hey | yo | sup">Hi</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="gg | nice | wow | cool | epic">GG</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="lol | lmao | bruh | kek | haha">LOL</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="piano is life | i love piano | play more | one more song">Piano</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="lets go | WOO | AMAZING | so good | fire">Hype</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="meow | moo | beep | boop | bonk">Silly</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="you're good | beautiful | talented | nice play | respect">Praise</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="asdf | qwerty | test123 | dummy | blah blah">Gibberish</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="join | come play | room party | everyone play">Party</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="lag? | audio? | can you hear | mic check | hello???">Meta</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="1 | 2 | 3 | 4 | 5 | 6 | 7 | 8">Numbers</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="why | how | what | when | where">Questions</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="no | yes | maybe | idk | ok">Answers</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="skill issue | git gud | try harder | practice more">Troll</button>
+                    <button type="button" class="hack-chip hack-chip-mini spam-preset" data-msg="☕ | 🍕 | 🌙 | ⭐ | 🌈">Emoji2</button>
+                </div>
+                <div class="hacks-chips hacks-chips-secondary">
+                    <button type="button" class="hack-chip" id="fun-fill-chat">To chat</button>
+                    <button type="button" class="hack-chip" id="fun-send-chat">Send 1×</button>
+                    <button type="button" class="hack-chip" id="fun-emoji-burst">Emoji burst</button>
+                    <button type="button" class="hack-chip" id="fun-chat-flood">Quick flood</button>
+                    <button type="button" class="hack-chip" id="fun-chat-copypasta">Copypasta</button>
+                    <button type="button" class="hack-chip hack-chip-danger" id="fun-stop-all">Stop all</button>
+                </div>
+            </section>
+        </div>
+    </div>
+</aside>
+
+<div id="midi-transport" class="midi-transport" hidden>
+    <div class="midi-transport-inner">
+        <span class="transport-label">MIDI</span>
+        <span class="time-current">0:00</span><span class="time-sep">/</span><span class="time-total">0:00</span>
+        <input type="range" name="seek" min="0" max="1000" value="0" class="seek-slider" title="Seek"/>
+        <button type="button" class="tb-btn restart" title="Restart">⏮</button>
+        <button type="button" class="tb-btn back" title="-5 sec">⏪</button>
+        <button type="button" class="tb-btn play">▶</button>
+        <button type="button" class="tb-btn pause">⏸</button>
+        <button type="button" class="tb-btn stop">⏹</button>
+        <button type="button" class="tb-btn forward" title="+5 sec">⏩</button>
+        <span class="speed-label">Speed</span>
+        <input type="range" name="tempo" min="25" max="300" value="100" class="tempo-slider" title="Playback speed"/>
+        <span class="tempo-label">100%</span>
+        <button type="button" class="tb-btn speed-half">½×</button>
+        <button type="button" class="tb-btn speed-one">1×</button>
+        <button type="button" class="tb-btn speed-double">2×</button>
+        <label class="loop-label"><input type="checkbox" name="loop"/> Loop</label>
+    </div>
+</div>
+
+<div id="modal">
+    <div class="bg"></div>
+    <div id="modals">
+        <div id="sound-warning" class="dialog">
+            <p>This site makes a lot of sound! You may want to adjust the volume before continuing.</p>
+            <button class="submit">PLAY</button>
+        </div>
+        <div id="all-rooms" class="dialog all-rooms-dialog">
+            <p class="all-rooms-title">All Rooms</p>
+            <p class="all-rooms-hint">Public rooms load from the server. Private rooms are discovered from rooms you have visited or looked up by name.</p>
+            <p class="all-rooms-scan-status"></p>
+            <div class="room-lookup-row">
+                <input type="text" name="lookup" class="room-lookup-input" placeholder="Room name to find…" maxlength="512"/>
+                <button type="button" class="filter-btn room-lookup-btn">Find</button>
+            </div>
+            <div class="room-filters">
+                <button type="button" class="filter-btn active" data-filter="all">All</button>
+                <button type="button" class="filter-btn" data-filter="public">Public</button>
+                <button type="button" class="filter-btn" data-filter="private">Private</button>
+            </div>
+            <p class="all-rooms-count"></p>
+            <div id="all-rooms-list" class="all-rooms-list">
+                <div class="loading">Loading rooms…</div>
+            </div>
+        </div>
+        <div id="new-room" class="dialog">
+            <p><input type="text" name="name" placeholder="room name" class="text translate" maxlength="512"/></p>
+            <p><label><input type="checkbox" name="visible" class="checkbox translate" checked>Visible (open to
+                everyone)</label></p>
+            </label></p>
+            <button class="submit">go</button>
+        </div>
+        <div id="room-settings" class="dialog">
+            <p>
+            <div class="ugly-button drop-crown">Drop crown</div>
+            </p>
+            <p><label><input type="checkbox" name="visible" class="checkbox translate" checked>Visible (open to
+                everyone)</label></p>
+            </label></p>
+            <p><label><input type="checkbox" name="chat" class="checkbox translate" checked>Enable Chat</label></p>
+            <p><label><input type="checkbox" name="crownsolo" class="checkbox">Only Owner can Play
+                <button class="submit">APPLY</button>
+            <p><label>Background color: &nbsp;<input type="color" name="color" placeholder="" maxlength="7"
+                                                     class="color"></label></p>
+        </div>
+        <div id="rename" class="dialog">
+            <p><input type="text" name="name" placeholder="My Fancy New Name" maxlength="40" class="text"/></p>
+            <!--<p><input type="color" name="color" placeholder="" maxlength="7" class="color"/></p>-->
+            <button class="submit">USER SET</button>
+        </div>
+        <div id="sheet-play" class="dialog sheet-dialog">
+            <p class="sheet-title">Sheet / MIDI — load music</p>
+            <p class="sheet-row"><label>MIDI file: <input type="file" name="midifile" accept=".mid,.midi,audio/midi"/></label></p>
+            <p class="file-info">Upload a .mid file or use text notation below. Controls appear at the bottom while playing.</p>
+            <p class="sheet-row sheet-actions-row">
+                <button type="button" class="tb-btn play">▶ Play</button>
+                <button type="button" class="tb-btn stop">⏹ Stop</button>
+            </p>
+            <p class="sheet-row"><label>Text notation (one note per line):</label></p>
+            <p class="sheet-row"><textarea name="notation" rows="5" placeholder="# sec  note  velocity&#10;0.0  c4  0.8&#10;0.5  d4"></textarea></p>
+        </div>
+    </div>
+</div>
+
+<script src="./jquery.min.js"></script>
+<script src="./util.js"></script>
+<script src="./client.js"></script>
+<script src="./NoteQuota.js"></script>
+<script src="./lame.min.js"></script>
+<script src="./color.js"></script>
+<script src="./sheetPlayer.js"></script>
+<!--<script src="/ebsprite.js"></script>-->
+<script src="./script.js"></script>
+<!--<script src="https://mppclone.com/script.js"></script>-->
+</body>
+</html>
