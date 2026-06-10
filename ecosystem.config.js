@@ -19,7 +19,7 @@ module.exports = {
 			name: "harmony-piano",
 			script: "chat-save-server.py",
 			args: "8550",
-			interpreter: "python",
+			interpreter: "python3",
 			cwd: __dirname,
 			watch: false,
 			autorestart: true,
@@ -30,7 +30,7 @@ module.exports = {
 		},
 		{
 			name: "piano-static",
-			script: "python",
+			script: "python3",
 			args: "-m http.server 8550",
 			cwd: __dirname,
 			watch: false,
