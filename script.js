@@ -1540,7 +1540,7 @@ Rect.prototype.contains = function(x, y) {
 		});
 		gClient.on("disconnect", function() {
 			$("#room-media-btn").removeClass("room-dj-visible room-dj-playing");
-			document.body.classList.remove("room-dj-playing", "room-media-active");
+			document.body.classList.remove("room-dj-playing", "room-media-active", "room-dj-video");
 		});
 		$("#room-settings-btn").click(function(evt) {
 			if(gClient.channel && gClient.isOwner()) {
@@ -3473,8 +3473,7 @@ Rect.prototype.contains = function(x, y) {
 			document.body.classList.add("room-media-active");
 		} else {
 			$roomMediaTransport.attr("hidden", "hidden");
-			document.body.classList.remove("room-media-active", "room-media-has-video");
-			$roomMediaVideoWrap.attr("hidden", "hidden");
+			document.body.classList.remove("room-media-active", "room-dj-video");
 			setRoomDjPlaying(false);
 		}
 	}
@@ -3520,13 +3519,13 @@ Rect.prototype.contains = function(x, y) {
 			onTransport: function(info) {
 				if(info.visible) showRoomMediaTransport(true);
 				if(info.kind === "video" && info.videoEl) {
+					document.body.classList.add("room-dj-video");
 					mountRoomMediaVideo(info.videoEl);
 					$roomMediaVideoWrap.removeAttr("hidden");
 					$roomMediaVideoWrap.find(".room-media-video-title").text(gRoomMedia.title || "Video");
-					document.body.classList.add("room-media-has-video");
 				} else {
+					document.body.classList.remove("room-dj-video");
 					$roomMediaVideoWrap.attr("hidden", "hidden");
-					document.body.classList.remove("room-media-has-video");
 				}
 			}
 		});
@@ -4325,7 +4324,6 @@ Rect.prototype.contains = function(x, y) {
 		$roomMediaVideoWrap.on("click", ".room-media-video-close", function(e) {
 			e.preventDefault();
 			$roomMediaVideoWrap.attr("hidden", "hidden");
-			document.body.classList.remove("room-media-has-video");
 		});
 
 		$("#room-media").on("click", ".room-media-load", function(e) {
