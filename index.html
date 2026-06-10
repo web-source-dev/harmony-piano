@@ -358,14 +358,13 @@
 
 <div id="room-media-transport" class="room-media-transport" hidden>
     <div class="room-media-player">
-        <div class="room-media-player-art" aria-hidden="true">🎵</div>
         <div class="room-media-player-body">
             <div class="room-media-player-top">
                 <div class="room-media-player-meta">
                     <span class="room-media-title">No track loaded</span>
                     <span class="room-media-dj"></span>
                 </div>
-                <button type="button" class="room-media-player-close" title="Hide player">✕</button>
+                <button type="button" class="room-media-player-close">Close</button>
             </div>
             <div class="room-media-player-seek">
                 <span class="time-current">0:00</span>
@@ -373,16 +372,17 @@
                 <span class="time-total">0:00</span>
             </div>
             <div class="room-media-player-controls">
-                <button type="button" class="dj-btn back" title="-10 sec">⏪</button>
-                <button type="button" class="dj-btn play primary" title="Play">▶</button>
-                <button type="button" class="dj-btn pause" title="Pause">⏸</button>
-                <button type="button" class="dj-btn stop" title="Stop">⏹</button>
-                <button type="button" class="dj-btn forward" title="+10 sec">⏩</button>
-                <button type="button" class="dj-btn room-media-sync" title="Request sync">Sync</button>
-                <button type="button" class="dj-btn room-media-hide-piano-transport" title="Hide piano" hidden>🎹</button>
-                <button type="button" class="dj-btn room-media-cinema-transport" title="Expand video to fill screen" hidden>⛶</button>
+                <button type="button" class="dj-btn back">-10s</button>
+                <button type="button" class="dj-btn play primary">Play</button>
+                <button type="button" class="dj-btn pause">Pause</button>
+                <button type="button" class="dj-btn stop">Stop</button>
+                <button type="button" class="dj-btn forward">+10s</button>
+                <button type="button" class="dj-btn room-media-sync">Sync</button>
+                <button type="button" class="dj-btn room-media-hide-piano-transport" hidden>Hide piano</button>
+                <button type="button" class="dj-btn room-media-cinema-transport" hidden>Fullscreen</button>
+                <button type="button" class="dj-btn room-media-chat-transport" hidden>Chat</button>
                 <label class="room-media-vol" title="Volume">
-                    <span class="vol-icon">🔊</span>
+                    <span class="vol-label">Vol</span>
                     <input type="range" name="volume" min="0" max="1" step="0.01" value="0.85" class="volume-slider"/>
                 </label>
             </div>
@@ -394,13 +394,16 @@
     <div class="room-media-video-head">
         <span class="room-media-video-title">Video</span>
         <div class="room-media-video-head-actions">
-            <button type="button" class="room-media-hide-piano-btn" title="Hide piano">🎹</button>
-            <button type="button" class="room-media-cinema-btn" title="Expand video to fill screen">⛶</button>
-            <button type="button" class="room-media-video-close" title="Hide video">✕</button>
+            <button type="button" class="room-media-hide-piano-btn">Hide piano</button>
+            <button type="button" class="room-media-cinema-btn">Fullscreen</button>
+            <button type="button" class="room-media-chat-btn" hidden>Chat</button>
+            <button type="button" class="room-media-video-close">Close</button>
         </div>
     </div>
-    <div id="room-media-video-mount" class="room-media-video-mount"></div>
-    <div id="room-media-youtube-mount" class="room-media-youtube-mount"></div>
+    <div class="room-media-video-stage">
+        <div id="room-media-video-mount" class="room-media-video-mount"></div>
+        <div id="room-media-youtube-mount" class="room-media-youtube-mount"></div>
+    </div>
 </div>
 <div id="room-media-audio-mount" class="room-media-audio-mount" hidden aria-hidden="true"></div>
 
@@ -493,7 +496,7 @@
                 <div class="room-media-youtube-block">
                     <div class="room-media-or room-media-or-yt"><span>YouTube &amp; Shorts — watch together</span></div>
                     <input type="text" name="youtubeurl" class="room-media-url room-media-youtube-url" placeholder="Shorts, watch?v=, or youtu.be link" maxlength="480"/>
-                    <p class="room-media-youtube-hint">Any YouTube link works. 🎹 hides the piano. ⛶ expands the video to fill the screen.</p>
+                    <p class="room-media-youtube-hint">Any YouTube link works. Hide piano keeps chat visible. Fullscreen expands the video. Chat button appears in fullscreen.</p>
                 </div>
                 <p class="room-media-status">Ready</p>
                 <div class="room-media-actions">

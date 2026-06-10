@@ -362,8 +362,35 @@
 	RoomMedia.prototype._youtubeMountSize = function () {
 		var mount = this.ytMount;
 		if (!mount) return { w: 640, h: 360 };
-		var w = mount.clientWidth;
-		var h = mount.clientHeight;
+		var doc = typeof document !== "undefined" ? document : null;
+		var isCinema = doc && doc.body && doc.body.classList.contains("room-media-cinema");
+		if (isCinema && typeof global.innerWidth === "number") {
+			var chatOpen = doc.body.classList.contains("room-media-cinema-chat");
+			var transport = doc.getElementById("room-media-transport");
+			var bottom = doc.getElementById("bottom");
+			var transportH = 0;
+			if (transport && !transport.hasAttribute("hidden")) transportH = transport.offsetHeight || 72;
+			var inputH = 0;
+			if (chatOpen && bottom) inputH = doc.getElementById("chat-input-bar") ? doc.getElementById("chat-input-bar").offsetHeight + 8 : 48;
+			var chatW = chatOpen ? Math.min(340, Math.floor(global.innerWidth * 0.38)) : 0;
+			var availW = global.innerWidth - chatW;
+			var availH = global.innerHeight - transportH - inputH;
+			if (availW < 20) availW = global.innerWidth;
+			if (availH < 20) availH = global.innerHeight - transportH;
+			if (this.ytIsShort) {
+				var sw = Math.min(availW, Math.floor(availH * 9 / 16));
+				var sh = Math.floor(sw * 16 / 9);
+				if (sh > availH) {
+					sh = availH;
+					sw = Math.floor(sh * 9 / 16);
+				}
+				return { w: Math.max(20, sw), h: Math.max(20, sh) };
+			}
+			return { w: Math.max(20, Math.floor(availW)), h: Math.max(20, Math.floor(availH)) };
+		}
+		var stage = mount.closest(".room-media-video-stage");
+		var w = stage ? stage.clientWidth : mount.clientWidth;
+		var h = stage ? stage.clientHeight : mount.clientHeight;
 		if (w < 20 || h < 20) {
 			var wrap = mount.closest("#room-media-video-wrap");
 			if (wrap && !wrap.hasAttribute("hidden")) {
@@ -380,16 +407,21 @@
 	RoomMedia.prototype.fitYouTubePlayer = function () {
 		if (!this.ytPlayer || !this.ytMount) return;
 		var size = this._youtubeMountSize();
+		var mount = this.ytMount;
+		mount.style.width = size.w + "px";
+		mount.style.height = size.h + "px";
 		try {
 			if (this.ytPlayer.setSize) this.ytPlayer.setSize(size.w, size.h);
 		} catch (e) {}
-		var inner = this.ytMount.querySelector("#room-media-yt-player");
+		var inner = mount.querySelector("#room-media-yt-player");
 		if (inner) {
 			inner.style.width = size.w + "px";
 			inner.style.height = size.h + "px";
 		}
-		var iframe = this.ytMount.querySelector("iframe");
+		var iframe = mount.querySelector("iframe");
 		if (iframe) {
+			iframe.setAttribute("width", String(size.w));
+			iframe.setAttribute("height", String(size.h));
 			iframe.style.width = size.w + "px";
 			iframe.style.height = size.h + "px";
 		}
@@ -407,6 +439,8 @@
 			this._ytResizeObs = new global.ResizeObserver(onResize);
 			this._ytResizeObs.observe(wrap);
 			this._ytResizeObs.observe(this.ytMount);
+			var stage = wrap.querySelector(".room-media-video-stage");
+			if (stage) this._ytResizeObs.observe(stage);
 		}
 		global.addEventListener("resize", onResize);
 		this._ytResizeUnlisten = onResize;

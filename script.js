@@ -3459,12 +3459,19 @@ Rect.prototype.contains = function(x, y) {
 	var $roomMediaVideoMount = $("#room-media-video-mount");
 	var gRoomMediaCinema = false;
 	var gRoomMediaHidePiano = false;
+	var gRoomMediaCinemaChat = false;
 
 	function roomMediaHasVideoPanel() {
 		return gRoomMedia && (gRoomMedia.kind === "youtube" || gRoomMedia.kind === "video");
 	}
 
 	function refreshRoomMediaLayout() {
+		var transport = document.getElementById("room-media-transport");
+		var transportH = (transport && !transport.hasAttribute("hidden")) ? transport.offsetHeight : 0;
+		var inputBar = document.getElementById("chat-input-bar");
+		var inputH = (gRoomMediaCinemaChat && inputBar) ? inputBar.offsetHeight : 0;
+		document.documentElement.style.setProperty("--room-media-transport-h", transportH + "px");
+		document.documentElement.style.setProperty("--room-media-input-h", inputH + "px");
 		requestAnimationFrame(function() {
 			requestAnimationFrame(function() {
 				if(gRoomMedia && gRoomMedia.fitYouTubePlayer) gRoomMedia.fitYouTubePlayer();
@@ -3473,6 +3480,9 @@ Rect.prototype.contains = function(x, y) {
 		setTimeout(function() {
 			if(gRoomMedia && gRoomMedia.fitYouTubePlayer) gRoomMedia.fitYouTubePlayer();
 		}, 150);
+		setTimeout(function() {
+			if(gRoomMedia && gRoomMedia.fitYouTubePlayer) gRoomMedia.fitYouTubePlayer();
+		}, 400);
 	}
 
 	function updateRoomMediaLayoutUi() {
@@ -3480,14 +3490,16 @@ Rect.prototype.contains = function(x, y) {
 		var hasVideo = roomMediaHasVideoPanel() && !$roomMediaVideoWrap.is("[hidden]");
 		$roomMediaTransport.find(".room-media-hide-piano-transport").prop("hidden", !hasTrack);
 		$roomMediaTransport.find(".room-media-cinema-transport").prop("hidden", !hasVideo);
+		$roomMediaTransport.find(".room-media-chat-transport").prop("hidden", !gRoomMediaCinema);
+		$roomMediaVideoWrap.find(".room-media-chat-btn").prop("hidden", !gRoomMediaCinema);
 	}
 
 	function setRoomMediaHidePiano(on) {
 		gRoomMediaHidePiano = !!on;
 		document.body.classList.toggle("room-media-hide-piano", gRoomMediaHidePiano);
-		var label = gRoomMediaHidePiano ? "Show piano again" : "Hide piano";
-		$roomMediaVideoWrap.find(".room-media-hide-piano-btn").toggleClass("active", gRoomMediaHidePiano).attr("title", label);
-		$roomMediaTransport.find(".room-media-hide-piano-transport").toggleClass("active", gRoomMediaHidePiano).attr("title", label);
+		var label = gRoomMediaHidePiano ? "Show piano" : "Hide piano";
+		$roomMediaVideoWrap.find(".room-media-hide-piano-btn").toggleClass("active", gRoomMediaHidePiano).text(label);
+		$roomMediaTransport.find(".room-media-hide-piano-transport").toggleClass("active", gRoomMediaHidePiano).text(label);
 		refreshRoomMediaLayout();
 	}
 
@@ -3495,12 +3507,31 @@ Rect.prototype.contains = function(x, y) {
 		setRoomMediaHidePiano(!gRoomMediaHidePiano);
 	}
 
+	function setRoomMediaCinemaChat(on) {
+		gRoomMediaCinemaChat = !!on;
+		document.body.classList.toggle("room-media-cinema-chat", gRoomMediaCinemaChat);
+		var label = gRoomMediaCinemaChat ? "Hide chat" : "Chat";
+		$roomMediaVideoWrap.find(".room-media-chat-btn").toggleClass("active", gRoomMediaCinemaChat).text(label);
+		$roomMediaTransport.find(".room-media-chat-transport").toggleClass("active", gRoomMediaCinemaChat).text(label);
+		if(gRoomMediaCinemaChat) {
+			$("#chat").addClass("chatting");
+		}
+		refreshRoomMediaLayout();
+	}
+
+	function toggleRoomMediaCinemaChat() {
+		if(!gRoomMediaCinema) return;
+		setRoomMediaCinemaChat(!gRoomMediaCinemaChat);
+	}
+
 	function setRoomMediaCinema(on) {
 		gRoomMediaCinema = !!on;
 		document.body.classList.toggle("room-media-cinema", gRoomMediaCinema);
-		var label = gRoomMediaCinema ? "Exit expanded view (Esc)" : "Expand video to fill screen";
-		$roomMediaVideoWrap.find(".room-media-cinema-btn").toggleClass("active", gRoomMediaCinema).attr("title", label);
-		$roomMediaTransport.find(".room-media-cinema-transport").toggleClass("active", gRoomMediaCinema).attr("title", label);
+		if(!gRoomMediaCinema) setRoomMediaCinemaChat(false);
+		var label = gRoomMediaCinema ? "Exit fullscreen" : "Fullscreen";
+		$roomMediaVideoWrap.find(".room-media-cinema-btn").toggleClass("active", gRoomMediaCinema).text(label);
+		$roomMediaTransport.find(".room-media-cinema-transport").toggleClass("active", gRoomMediaCinema).text(label);
+		updateRoomMediaLayoutUi();
 		refreshRoomMediaLayout();
 	}
 
@@ -3512,6 +3543,7 @@ Rect.prototype.contains = function(x, y) {
 	function resetRoomMediaLayout() {
 		setRoomMediaCinema(false);
 		setRoomMediaHidePiano(false);
+		setRoomMediaCinemaChat(false);
 	}
 
 	function setRoomDjPlaying(playing) {
@@ -4425,6 +4457,14 @@ Rect.prototype.contains = function(x, y) {
 		$roomMediaTransport.on("click", ".room-media-cinema-transport", function(e) {
 			e.preventDefault();
 			toggleRoomMediaCinema();
+		});
+		$roomMediaTransport.on("click", ".room-media-chat-transport", function(e) {
+			e.preventDefault();
+			toggleRoomMediaCinemaChat();
+		});
+		$roomMediaVideoWrap.on("click", ".room-media-chat-btn", function(e) {
+			e.preventDefault();
+			toggleRoomMediaCinemaChat();
 		});
 		$(document).on("keydown.roomMediaCinema", function(e) {
 			if(e.key === "Escape" && gRoomMediaCinema) setRoomMediaCinema(false);
