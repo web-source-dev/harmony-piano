@@ -3740,9 +3740,13 @@ Rect.prototype.contains = function(x, y) {
 		if(!ensureRoomMediaReady()) return Promise.reject(new Error("Not ready"));
 		var fileInput = $roomMediaDialog.find("input[name=mediafile]")[0];
 		var urlInput = ($roomMediaDialog.find("input[name=mediaurl]").val() || "").trim();
+		var videoInput = ($roomMediaDialog.find("input[name=videourl]").val() || "").trim();
 		var ytInput = ($roomMediaDialog.find("input[name=youtubeurl]").val() || "").trim();
 		var file = fileInput && fileInput.files && fileInput.files[0];
 		var ytUrl = ytInput;
+		if(!ytUrl && videoInput && typeof RoomMedia !== "undefined" && RoomMedia.isYouTubeUrl(videoInput)) {
+			ytUrl = videoInput;
+		}
 		if(!ytUrl && urlInput && typeof RoomMedia !== "undefined" && RoomMedia.isYouTubeUrl(urlInput)) {
 			ytUrl = urlInput;
 		}
@@ -3750,6 +3754,11 @@ Rect.prototype.contains = function(x, y) {
 			var ytTitle = "YouTube Video";
 			if(ytUrl.indexOf("/shorts/") >= 0) ytTitle = "YouTube Short";
 			gRoomMedia.loadUrlAndShare(ytUrl, ytTitle);
+			showRoomMediaTransport(true);
+			return Promise.resolve();
+		}
+		if(videoInput) {
+			gRoomMedia.loadVideoUrlAndShare(videoInput);
 			showRoomMediaTransport(true);
 			return Promise.resolve();
 		}
@@ -3761,12 +3770,11 @@ Rect.prototype.contains = function(x, y) {
 			});
 		}
 		if(urlInput) {
-			return ensureMediaServer().then(function() {
-				gRoomMedia.loadUrlAndShare(urlInput);
-				showRoomMediaTransport(true);
-			});
+			gRoomMedia.loadUrlAndShare(urlInput);
+			showRoomMediaTransport(true);
+			return Promise.resolve();
 		}
-		return Promise.reject(new Error("Choose a file, paste a direct URL, or paste a YouTube / Shorts link."));
+		return Promise.reject(new Error("Choose a file, paste an audio/video/YouTube link, or use Direct video link."));
 	}
 
 	function funClearTimers() {
@@ -4591,6 +4599,7 @@ Rect.prototype.contains = function(x, y) {
 			var f = this.files && this.files[0];
 			if(f) {
 				$roomMediaDialog.find("input[name=mediaurl]").val("");
+				$roomMediaDialog.find("input[name=videourl]").val("");
 				$roomMediaDialog.find(".room-media-drop-name").text(f.name);
 				$roomMediaDialog.find(".room-media-drop-text").text("Selected file");
 			}

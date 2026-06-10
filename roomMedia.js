@@ -119,7 +119,7 @@
 	var MAX_TITLE = 120;
 
 	var AUDIO_EXT = /\.(mp3|m4a|wav|ogg|aac|flac|opus|weba)$/i;
-	var VIDEO_EXT = /\.(mp4|webm|mov|mkv|m4v|ogv)$/i;
+	var VIDEO_EXT = /\.(mp4|webm|mov|mkv|m4v|ogv|m3u8)$/i;
 
 	function formatTime(sec) {
 		if (!isFinite(sec) || sec < 0) sec = 0;
@@ -232,6 +232,22 @@
 		return /\/room-media\/[^/?#]+$/i.test(path);
 	}
 
+	function isExternalStreamUrl(url) {
+		if (!url || typeof url !== "string") return false;
+		url = url.trim();
+		if (!/^https?:\/\//i.test(url)) return false;
+		return !isServerMediaUrl(url);
+	}
+
+	function normalizeHttpUrl(rawUrl) {
+		var url = (rawUrl || "").trim();
+		if (!url) return "";
+		if (!/^https?:\/\//i.test(url) && url.charAt(0) !== "/") {
+			url = "https://" + url;
+		}
+		return url;
+	}
+
 	function normalizeServerMediaUrl(url) {
 		if (!isServerMediaUrl(url)) return null;
 		var path = url.split("?")[0].split("#")[0];
@@ -308,6 +324,7 @@
 	RoomMedia.getMediaServerBase = getMediaServerBase;
 	RoomMedia.parseYouTubeId = parseYouTubeId;
 	RoomMedia.isYouTubeUrl = function (url) { return !!parseYouTubeId(url); };
+	RoomMedia.isExternalStreamUrl = isExternalStreamUrl;
 
 	RoomMedia.prototype._markServerMedia = function (url) {
 		this.serverMediaUrl = normalizeServerMediaUrl(url);
@@ -1035,9 +1052,7 @@
 				kind: "youtube"
 			};
 		}
-		if (!/^https?:\/\//i.test(url) && url.charAt(0) !== "/") {
-			url = "https://" + url;
-		}
+		url = normalizeHttpUrl(url);
 		url = resolveMediaUrl(url);
 		this._replaceServerMedia(url);
 		var kind = kindFromUrl(url);
@@ -1050,9 +1065,33 @@
 		this.playing = false;
 		this.paused = true;
 		this.onTrackChange({ title: this.title, dj: this.djName, kind: this.kind, url: this.url });
-		this.onStatus("Loaded: " + this.title);
+		this.onStatus(isExternalStreamUrl(url)
+			? "Loaded: " + this.title + " (streams from link — no server upload)"
+			: "Loaded: " + this.title);
 		this._emitProgress();
 		return { url: url, title: title, kind: kind };
+	};
+
+	RoomMedia.prototype.loadVideoUrl = function (rawUrl, titleHint) {
+		var url = normalizeHttpUrl(rawUrl);
+		if (!url) throw new Error("Enter a direct video URL");
+		if (parseYouTubeId(url)) {
+			return this.loadFromUrl(url, titleHint);
+		}
+		url = resolveMediaUrl(url);
+		this._replaceServerMedia(url);
+		var title = clampTitle(titleHint || url.split("/").pop().split("?")[0] || "Video");
+		this.djName = (this.ownParticipant() && this.ownParticipant().name) || "You";
+		this.djId = this.client.participantId;
+		this._setActiveElement("video");
+		this.title = title;
+		this._applyMediaUrl(url);
+		this.playing = false;
+		this.paused = true;
+		this.onTrackChange({ title: this.title, dj: this.djName, kind: "video", url: this.url });
+		this.onStatus("Loaded video: " + this.title + " (streams from link — no server bandwidth)");
+		this._emitProgress();
+		return { url: url, title: title, kind: "video" };
 	};
 
 	RoomMedia.prototype.shareLoad = function (url, title, kind) {
@@ -1113,6 +1152,12 @@
 	RoomMedia.prototype.loadUrlAndShare = function (url, title) {
 		var info = this.loadFromUrl(url, title);
 		this.shareLoad(info.shareUrl || info.url, info.title, info.kind);
+		return info;
+	};
+
+	RoomMedia.prototype.loadVideoUrlAndShare = function (url, title) {
+		var info = this.loadVideoUrl(url, title);
+		this.shareLoad(info.url, info.title, info.kind);
 		return info;
 	};
 

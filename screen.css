@@ -1186,6 +1186,12 @@ body.hacks-open #hacks-dock {
 	letter-spacing: 0.06em;
 	color: var(--dj-text-dim);
 }
+.room-media-hint {
+	margin: 8px 0 0;
+	font-size: 11px;
+	line-height: 1.45;
+	color: var(--dj-text-dim);
+}
 .room-media-server-badge {
 	margin: 14px 22px 0;
 	padding: 8px 12px;

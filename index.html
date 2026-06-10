@@ -501,8 +501,15 @@
                     </section>
 
                     <section class="room-media-section">
-                        <h3 class="room-media-section-title">Direct link</h3>
+                        <h3 class="room-media-section-title">Direct audio link</h3>
                         <input type="text" name="mediaurl" class="room-media-url" placeholder="https://example.com/track.mp3" maxlength="480"/>
+                        <p class="room-media-hint">Streams from the link — no upload.</p>
+                    </section>
+
+                    <section class="room-media-section">
+                        <h3 class="room-media-section-title">Direct video link</h3>
+                        <input type="text" name="videourl" class="room-media-url room-media-video-url" placeholder="https://example.com/video.mp4 or .webm" maxlength="480"/>
+                        <p class="room-media-hint">Plays in the room like YouTube — each person streams from the URL (no VPS bandwidth).</p>
                     </section>
 
                     <section class="room-media-section">
