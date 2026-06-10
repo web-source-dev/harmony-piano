@@ -1533,6 +1533,14 @@ Rect.prototype.contains = function(x, y) {
 			} else {
 				$("#room-settings-btn").hide();
 			}
+			$("#room-media-btn").addClass("room-dj-visible");
+		});
+		gClient.on("connect", function() {
+			$("#room-media-btn").addClass("room-dj-visible");
+		});
+		gClient.on("disconnect", function() {
+			$("#room-media-btn").removeClass("room-dj-visible room-dj-playing");
+			document.body.classList.remove("room-dj-playing", "room-media-active");
 		});
 		$("#room-settings-btn").click(function(evt) {
 			if(gClient.channel && gClient.isOwner()) {
@@ -3450,6 +3458,15 @@ Rect.prototype.contains = function(x, y) {
 	var $roomMediaVideoWrap = $("#room-media-video-wrap");
 	var $roomMediaVideoMount = $("#room-media-video-mount");
 
+	function setRoomDjPlaying(playing) {
+		var btn = document.getElementById("room-media-btn");
+		if(btn) {
+			if(playing) btn.classList.add("room-dj-playing");
+			else btn.classList.remove("room-dj-playing");
+		}
+		document.body.classList.toggle("room-dj-playing", !!playing);
+	}
+
 	function showRoomMediaTransport(show) {
 		if(show) {
 			$roomMediaTransport.removeAttr("hidden");
@@ -3457,6 +3474,7 @@ Rect.prototype.contains = function(x, y) {
 		} else {
 			$roomMediaTransport.attr("hidden", "hidden");
 			document.body.classList.remove("room-media-active");
+			setRoomDjPlaying(false);
 		}
 	}
 
@@ -3472,7 +3490,8 @@ Rect.prototype.contains = function(x, y) {
 			if(!seek._dragging) seek.value = info.current || 0;
 		}
 		if(info.title) $roomMediaTransport.find(".room-media-title").text(info.title);
-		if(info.dj) $roomMediaTransport.find(".room-media-dj").text("DJ: " + info.dj);
+		if(info.dj) $roomMediaTransport.find(".room-media-dj").text("DJ · " + info.dj);
+		setRoomDjPlaying(!!info.playing);
 	}
 
 	function mountRoomMediaVideo(videoEl) {
@@ -3488,13 +3507,12 @@ Rect.prototype.contains = function(x, y) {
 				$("#status").text(msg);
 			},
 			onServerReady: function(base) {
-				$roomMediaDialog.find(".room-media-hint").append(
-					' <span class="room-media-server-ok">Media server: ' + base + "</span>"
-				);
+				var badge = $roomMediaDialog.find(".room-media-server-badge");
+				badge.text("Media server online · " + base).removeAttr("hidden");
 			},
 			onTrackChange: function(info) {
-				$roomMediaTransport.find(".room-media-title").text(info.title || "—");
-				$roomMediaTransport.find(".room-media-dj").text(info.dj ? ("DJ: " + info.dj) : "");
+				$roomMediaTransport.find(".room-media-title").text(info.title || "No track loaded");
+				$roomMediaTransport.find(".room-media-dj").text(info.dj ? ("DJ · " + info.dj) : "");
 				showRoomMediaTransport(true);
 			},
 			onProgress: updateRoomMediaProgress,
@@ -4242,7 +4260,11 @@ Rect.prototype.contains = function(x, y) {
 			});
 		}
 
-		$roomMediaTransport.on("click", ".tb-btn", function(e) { e.stopPropagation(); });
+		$roomMediaTransport.on("click", ".dj-btn", function(e) { e.stopPropagation(); });
+		$roomMediaTransport.on("click", ".room-media-player-close", function(e) {
+			e.preventDefault();
+			showRoomMediaTransport(false);
+		});
 		$roomMediaTransport.on("mousedown touchstart", "input[name=seek]", function() {
 			this._dragging = true;
 		});
@@ -4339,8 +4361,13 @@ Rect.prototype.contains = function(x, y) {
 		});
 		$("#room-media").on("change", "input[name=mediafile]", function() {
 			var f = this.files && this.files[0];
-			if(f) $roomMediaDialog.find("input[name=mediaurl]").val("");
+			if(f) {
+				$roomMediaDialog.find("input[name=mediaurl]").val("");
+				$roomMediaDialog.find(".room-media-drop-name").text(f.name);
+				$roomMediaDialog.find(".room-media-drop-text").text("Selected file");
+			}
 		});
+		$("#room-media").on("click", ".dj-btn", function(e) { e.stopPropagation(); });
 
 		var learnBtn = document.getElementById("learn-btn");
 		if(learnBtn) {
