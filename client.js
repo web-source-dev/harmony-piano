@@ -393,6 +393,17 @@ function pickWelcomePopup() {
 Client.welcomePopups = welcomePopups;
 Client.pickWelcomePopup = pickWelcomePopup;
 
+var cornerMessages = [
+	"💖 Dont Forget that your are my botii and i am your noob. And i will never leave you alone and i will always be here for you. Just remember that i love you and i will always be here for you.💖"
+];
+
+function pickCornerMessage() {
+	return cornerMessages[Math.floor(Math.random() * cornerMessages.length)];
+}
+
+Client.cornerMessages = cornerMessages;
+Client.pickCornerMessage = pickCornerMessage;
+
 Client.prototype.findParticipantByUnderscoreId = function(_id) {
 	for(var id in this.ppl) {
 		if(this.ppl.hasOwnProperty(id) && this.ppl[id]._id === _id) {

@@ -2222,6 +2222,10 @@ Rect.prototype.contains = function(x, y) {
 	
 	
 	
+	// funny corner banner (replaces old Contribute / Blog / Discord links)
+	showCornerBanner();
+	setInterval(showCornerBanner, 45000);
+
 	// funny welcome popup before starting sound (no autoplay)
 	showWelcomePopup();
 	function dismissWelcomePopup(evt) {
@@ -2784,6 +2788,13 @@ Rect.prototype.contains = function(x, y) {
 		$("#noob-kickban-block .noob-shield-player").text(name ? "👶 " + name : "");
 		$("#noob-kickban-block .noob-shield-msg").text(reason);
 		openModal("#noob-kickban-block");
+	}
+
+	function showCornerBanner() {
+		var msg = (typeof Client !== "undefined" && Client.pickCornerMessage)
+			? Client.pickCornerMessage()
+			: "👶 Noob is lurking… behave, Botii 👀";
+		$("#botii-corner-banner .botii-corner-text").text(msg);
 	}
 
 	function showWelcomePopup() {

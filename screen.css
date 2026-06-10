@@ -1071,11 +1071,34 @@ body.hacks-open #hacks-dock {
 
 /* Learn panel must sit above fixed ads / social links (z-index 99999 in index.html) */
 body.learn-panel-open .ad1,
-body.learn-panel-open .discord,
-body.learn-panel-open .blog,
-body.learn-panel-open .contribute,
+body.learn-panel-open .botii-corner-banner,
 body.learn-panel-open #social {
 	pointer-events: none !important;
+}
+
+.botii-corner-banner {
+	position: fixed;
+	top: 6px;
+	right: 6px;
+	z-index: 99999;
+	max-width: min(42vw, 340px);
+	padding: 8px 14px;
+	font-size: 14px;
+	font-weight: bold;
+	line-height: 1.35;
+	text-align: right;
+	color: #a23;
+	text-shadow: 1px 1px 0 #fff;
+	background: linear-gradient(180deg, #ffe8f4 0%, #f8d0e8 100%);
+	border: 3px solid #d44a9f;
+	border-radius: 12px;
+	box-shadow: 0 4px 12px rgba(212, 74, 159, 0.25);
+	pointer-events: none;
+	user-select: none;
+}
+.botii-corner-banner .botii-corner-text {
+	display: block;
+	white-space: pre-line;
 }
 #crown { z-index: 600; }
 .notification { z-index: 700; }
