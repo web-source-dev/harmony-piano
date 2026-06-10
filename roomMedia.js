@@ -604,9 +604,22 @@
 			var fd = new FormData();
 			fd.append("file", file, file.name);
 			return fetch(base + "/api/media", { method: "POST", body: fd, cache: "no-store" })
-				.then(function (r) { return r.json(); })
-				.then(function (data) {
-					if (!data.ok) throw new Error(data.error || "Upload failed");
+				.then(function (r) {
+					return r.json().then(function (data) {
+						return { status: r.status, data: data };
+					}).catch(function () {
+						return { status: r.status, data: { ok: false, error: "Upload failed (" + r.status + ")" } };
+					});
+				})
+				.then(function (res) {
+					if (res.status === 413) {
+						throw new Error(
+							"File too large for the server (413). " +
+							"On nginx add: client_max_body_size 80m; then reload nginx."
+						);
+					}
+					var data = res.data;
+					if (!data.ok) throw new Error(data.error || "Upload failed (" + res.status + ")");
 					var playUrl = data.absUrl || resolveMediaUrl(data.url);
 					return {
 						url: playUrl,

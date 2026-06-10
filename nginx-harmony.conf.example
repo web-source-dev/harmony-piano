@@ -1,0 +1,28 @@
+# Example nginx config for piano.harmony4all.org
+# 413 on /api/media = upload body limit too small (default is 1m)
+
+server {
+    listen 443 ssl;
+    server_name piano.harmony4all.org;
+
+    # Required for Room DJ uploads (up to 80 MB)
+    client_max_body_size 80m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8550;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Optional: dedicated media server on 8551 instead of 8550
+    # location /room-media/ {
+    #     proxy_pass http://127.0.0.1:8551;
+    #     client_max_body_size 80m;
+    # }
+    # location /api/media {
+    #     proxy_pass http://127.0.0.1:8551;
+    #     client_max_body_size 80m;
+    # }
+}

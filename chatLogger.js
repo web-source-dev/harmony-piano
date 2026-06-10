@@ -6,14 +6,21 @@
 	"use strict";
 
 	var API_PATH = "/api/e";
-	var MAX_QUEUE = 2000;
+	var MAX_QUEUE = 500;
+	var PROBE_INTERVAL_MS = 60000;
+	var BACKOFF_MS = 120000;
+	var MAX_FAILS = 3;
 
 	var state = {
 		room: null,
 		dateKey: null,
 		useApi: null,
 		enabled: true,
-		queue: []
+		queue: [],
+		draining: false,
+		failCount: 0,
+		pausedUntil: 0,
+		probeTimer: null
 	};
 
 	function todayKey() {
@@ -50,7 +57,27 @@
 		});
 	}
 
+	function canUseApi() {
+		return state.useApi === true && Date.now() >= state.pausedUntil;
+	}
+
+	function pauseApi() {
+		state.useApi = false;
+		state.pausedUntil = Date.now() + BACKOFF_MS;
+		state.failCount = 0;
+	}
+
+	function noteFailure() {
+		state.failCount++;
+		if (state.failCount >= MAX_FAILS) pauseApi();
+	}
+
+	function noteSuccess() {
+		state.failCount = 0;
+	}
+
 	function probeApi() {
+		if (Date.now() < state.pausedUntil) return Promise.resolve(false);
 		return fetch(API_PATH, { method: "OPTIONS", cache: "no-store" })
 			.then(function (r) { return r.ok || r.status === 204 || r.status === 405; })
 			.catch(function () { return false; });
@@ -58,21 +85,19 @@
 
 	function postLine(line) {
 		if (!state.room) return Promise.resolve(false);
-		var body = payload(line);
-		if (global.navigator && navigator.sendBeacon) {
-			try {
-				var blob = new Blob([body], { type: "application/json" });
-				if (navigator.sendBeacon(API_PATH, blob)) return Promise.resolve(true);
-			} catch (e) {}
-		}
 		return fetch(API_PATH, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: body,
-			cache: "no-store",
-			keepalive: true
-		}).then(function (r) { return r.ok; })
-			.catch(function () { return false; });
+			body: payload(line),
+			cache: "no-store"
+		}).then(function (r) {
+			if (r.ok) return true;
+			if (r.status >= 500 || r.status === 429) noteFailure();
+			return false;
+		}).catch(function () {
+			noteFailure();
+			return false;
+		});
 	}
 
 	function enqueue(line) {
@@ -80,54 +105,67 @@
 		state.queue.push(line);
 	}
 
-	function flushQueue() {
-		if (!state.queue.length || state.useApi !== true) return Promise.resolve();
-		var batch = state.queue.slice();
-		state.queue = [];
-		return batch.reduce(function (p, line) {
-			return p.then(function () {
-				return postLine(line).then(function (ok) {
-					if (!ok) enqueue(line);
-				});
-			});
-		}, Promise.resolve());
+	function drainQueue() {
+		if (state.draining || !canUseApi() || !state.queue.length || !state.room) {
+			return Promise.resolve();
+		}
+		state.draining = true;
+		var line = state.queue[0];
+		return postLine(line).then(function (ok) {
+			state.draining = false;
+			if (ok) {
+				state.queue.shift();
+				noteSuccess();
+				if (state.queue.length) return drainQueue();
+				return;
+			}
+			pauseApi();
+		}).catch(function () {
+			state.draining = false;
+			pauseApi();
+		});
 	}
 
 	function writeLine(line) {
 		if (!state.enabled || !state.room) return;
-		if (state.useApi === true) {
-			postLine(line).then(function (ok) {
-				if (!ok) enqueue(line);
-			});
+		enqueue(line);
+		if (canUseApi()) {
+			drainQueue();
 			return;
 		}
-		enqueue(line);
 		if (state.useApi === null) {
 			probeApi().then(function (ok) {
 				state.useApi = !!ok;
-				if (ok) flushQueue();
+				if (ok) drainQueue();
 			});
 		}
+	}
+
+	function scheduleProbe() {
+		if (state.probeTimer) return;
+		state.probeTimer = setInterval(function () {
+			if (canUseApi()) {
+				if (state.queue.length) drainQueue();
+				return;
+			}
+			if (Date.now() < state.pausedUntil) return;
+			probeApi().then(function (ok) {
+				if (ok) {
+					state.useApi = true;
+					state.pausedUntil = 0;
+					drainQueue();
+				}
+			});
+		}, PROBE_INTERVAL_MS);
 	}
 
 	var ChatLogger = {
 		init: function () {
 			probeApi().then(function (ok) {
 				state.useApi = !!ok;
-				if (ok) flushQueue();
+				if (ok) drainQueue();
 			});
-			setInterval(function () {
-				if (state.useApi !== true) {
-					probeApi().then(function (ok) {
-						if (ok) {
-							state.useApi = true;
-							flushQueue();
-						}
-					});
-				} else if (state.queue.length) {
-					flushQueue();
-				}
-			}, 15000);
+			scheduleProbe();
 			return Promise.resolve();
 		},
 
