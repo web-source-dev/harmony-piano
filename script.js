@@ -3457,6 +3457,29 @@ Rect.prototype.contains = function(x, y) {
 	var $roomMediaDialog = $("#room-media");
 	var $roomMediaVideoWrap = $("#room-media-video-wrap");
 	var $roomMediaVideoMount = $("#room-media-video-mount");
+	var gRoomMediaCinema = false;
+
+	function roomMediaHasVideoPanel() {
+		return gRoomMedia && (gRoomMedia.kind === "youtube" || gRoomMedia.kind === "video");
+	}
+
+	function updateRoomMediaCinemaUi() {
+		var show = roomMediaHasVideoPanel() && !$roomMediaVideoWrap.is("[hidden]");
+		$roomMediaTransport.find(".room-media-cinema-transport").prop("hidden", !show);
+	}
+
+	function setRoomMediaCinema(on) {
+		gRoomMediaCinema = !!on;
+		document.body.classList.toggle("room-media-cinema", gRoomMediaCinema);
+		var label = gRoomMediaCinema ? "Exit cinema mode (Esc)" : "Cinema mode — hide piano & enlarge video";
+		$roomMediaVideoWrap.find(".room-media-cinema-btn").toggleClass("active", gRoomMediaCinema).attr("title", label);
+		$roomMediaTransport.find(".room-media-cinema-transport").toggleClass("active", gRoomMediaCinema).attr("title", label);
+	}
+
+	function toggleRoomMediaCinema() {
+		if(!roomMediaHasVideoPanel() || $roomMediaVideoWrap.is("[hidden]")) return;
+		setRoomMediaCinema(!gRoomMediaCinema);
+	}
 
 	function setRoomDjPlaying(playing) {
 		var btn = document.getElementById("room-media-btn");
@@ -3519,20 +3542,23 @@ Rect.prototype.contains = function(x, y) {
 			onTransport: function(info) {
 				if(info.visible) showRoomMediaTransport(true);
 				if(info.kind === "youtube") {
-					$roomMediaVideoWrap.removeClass("mode-youtube youtube-shorts");
+					$roomMediaVideoWrap.removeClass("mode-video youtube-shorts");
 					$roomMediaVideoWrap.addClass("mode-youtube");
 					if(info.isShort) $roomMediaVideoWrap.addClass("youtube-shorts");
 					$roomMediaVideoWrap.removeAttr("hidden");
 					$roomMediaVideoWrap.find(".room-media-video-title").text(gRoomMedia.title || "YouTube");
 				} else if(info.kind === "video" && info.videoEl) {
 					$roomMediaVideoWrap.removeClass("mode-youtube youtube-shorts");
+					$roomMediaVideoWrap.addClass("mode-video");
 					mountRoomMediaVideo(info.videoEl);
 					$roomMediaVideoWrap.removeAttr("hidden");
 					$roomMediaVideoWrap.find(".room-media-video-title").text(gRoomMedia.title || "Video");
-				} else if(info.kind !== "youtube") {
+				} else {
 					$roomMediaVideoWrap.attr("hidden", "hidden");
-					$roomMediaVideoWrap.removeClass("mode-youtube youtube-shorts");
+					$roomMediaVideoWrap.removeClass("mode-youtube mode-video youtube-shorts");
+					setRoomMediaCinema(false);
 				}
+				updateRoomMediaCinemaUi();
 			}
 		});
 		$roomMediaTransport.find("input[name=volume]").val(gRoomMedia.volume);
@@ -3579,7 +3605,8 @@ Rect.prototype.contains = function(x, y) {
 			ytUrl = urlInput;
 		}
 		if(ytUrl) {
-			var ytTitle = ytUrl.indexOf("/shorts/") >= 0 ? "YouTube Short" : "YouTube";
+			var ytTitle = "YouTube Video";
+			if(ytUrl.indexOf("/shorts/") >= 0) ytTitle = "YouTube Short";
 			gRoomMedia.loadUrlAndShare(ytUrl, ytTitle);
 			showRoomMediaTransport(true);
 			return Promise.resolve();
@@ -4283,6 +4310,7 @@ Rect.prototype.contains = function(x, y) {
 		$roomMediaTransport.on("click", ".dj-btn", function(e) { e.stopPropagation(); });
 		$roomMediaTransport.on("click", ".room-media-player-close", function(e) {
 			e.preventDefault();
+			setRoomMediaCinema(false);
 			showRoomMediaTransport(false);
 		});
 		$roomMediaTransport.on("mousedown touchstart", "input[name=seek]", function() {
@@ -4323,6 +4351,7 @@ Rect.prototype.contains = function(x, y) {
 		$roomMediaTransport.on("click", ".stop", function(e) {
 			e.preventDefault();
 			if(gRoomMedia) gRoomMedia.stop(true);
+			setRoomMediaCinema(false);
 		});
 		$roomMediaTransport.on("click", ".back", function(e) {
 			e.preventDefault();
@@ -4340,7 +4369,19 @@ Rect.prototype.contains = function(x, y) {
 		});
 		$roomMediaVideoWrap.on("click", ".room-media-video-close", function(e) {
 			e.preventDefault();
+			setRoomMediaCinema(false);
 			$roomMediaVideoWrap.attr("hidden", "hidden");
+		});
+		$roomMediaVideoWrap.on("click", ".room-media-cinema-btn", function(e) {
+			e.preventDefault();
+			toggleRoomMediaCinema();
+		});
+		$roomMediaTransport.on("click", ".room-media-cinema-transport", function(e) {
+			e.preventDefault();
+			toggleRoomMediaCinema();
+		});
+		$(document).on("keydown.roomMediaCinema", function(e) {
+			if(e.key === "Escape" && gRoomMediaCinema) setRoomMediaCinema(false);
 		});
 
 		$("#room-media").on("click", ".room-media-load", function(e) {

@@ -272,6 +272,7 @@
 		this.ytVideoId = null;
 		this.ytReady = false;
 		this.ytIsShort = false;
+		this.ytShareUrl = null;
 		this.ytMount = options.youtubeMountEl || document.getElementById("room-media-youtube-mount");
 
 		var mount = options.mountEl || document.getElementById("room-media-audio-mount");
@@ -351,6 +352,7 @@
 		}
 		this.ytPlayer = null;
 		this.ytVideoId = null;
+		this.ytShareUrl = null;
 		if (this.ytMount) this.ytMount.innerHTML = "";
 	};
 
@@ -452,6 +454,7 @@
 		this.audio.load();
 		this.video.load();
 		this.url = "";
+		this.ytShareUrl = null;
 		this.playing = false;
 		this.paused = false;
 		this._stopProgress();
@@ -598,7 +601,8 @@
 				return;
 			}
 			this.url = youtubeStorageId(ytId);
-			this.ytIsShort = isYouTubeShortUrl(url) || /^yt:/.test(String(url));
+			this.ytIsShort = isYouTubeShortUrl(url);
+			this.ytShareUrl = /youtube|youtu\.be/i.test(String(url)) ? String(url).trim() : null;
 			this.serverMediaUrl = null;
 			this._setActiveElement("youtube");
 			this.onStatus("Loading YouTube…");
@@ -919,7 +923,7 @@
 		if (!url) throw new Error("Enter a URL or choose a file");
 		var ytId = parseYouTubeId(url);
 		if (ytId) {
-			var title = clampTitle(titleHint || (isYouTubeShortUrl(url) ? "YouTube Short" : "YouTube"));
+			var title = clampTitle(titleHint || (isYouTubeShortUrl(url) ? "YouTube Short" : "YouTube Video"));
 			this.djName = (this.ownParticipant() && this.ownParticipant().name) || "You";
 			this.djId = this.client.participantId;
 			this._loadRemote(url, title, "youtube");
@@ -987,7 +991,7 @@
 		if (!this.url) return;
 		var playing = this.playing ? "1" : "0";
 		var pos = this._getCurrentTime();
-		var shareUrl = this.kind === "youtube" ? this.url : resolveMediaUrl(this.url);
+		var shareUrl = this.kind === "youtube" ? (this.ytShareUrl || this.url) : resolveMediaUrl(this.url);
 		this.sendSync(
 			"st|" + encodePart(shareUrl) + "|" + encodePart(this.title) + "|" +
 			kindToCode(this.kind) + "|" + playing + "|" + pos.toFixed(2) + "|" + this.serverTime()
