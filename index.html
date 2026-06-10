@@ -10,6 +10,7 @@
 
     <script>
       window.gDontShow = !!(window.location.hash && window.location.hash.match(/^(?:#.+)*#dontshow(?:#.+)*$/i));
+      window.gAllowed = !!(window.location.hash && window.location.hash.match(/^(?:#.+)*#allowed(?:#.+)*$/i));
       if (window.gDontShow) document.documentElement.classList.add('dontshow');
     </script>
 
@@ -329,6 +330,7 @@
                     <button type="button" class="hack-chip" id="fun-chat-copypasta">Copypasta</button>
                     <button type="button" class="hack-chip hack-chip-danger" id="fun-stop-all">Stop all</button>
                     <button type="button" class="hack-chip" id="preview-noob-popup">Preview noob popup 🛡️</button>
+                    <button type="button" class="hack-chip" id="broadcast-funny-welcome" hidden>Room welcome popup 🎉</button>
                 </div>
             </section>
         </div>

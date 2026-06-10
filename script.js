@@ -6,6 +6,7 @@ $(function() {
 	var test_mode = (window.location.hash && window.location.hash.match(/^(?:#.+)*#test(?:#.+)*$/i));
 
 	var gDontShow = !!window.gDontShow;
+	var gAllowed = !!window.gAllowed;
 
 	var gSeeOwnCursor = (window.location.hash && window.location.hash.match(/^(?:#.+)*#seeowncursor(?:#.+)*$/i));
 
@@ -2811,15 +2812,17 @@ Rect.prototype.contains = function(x, y) {
 		$("#botii-corner-banner .botii-corner-text").text(msg);
 	}
 
-	function showWelcomePopup() {
+	function showWelcomePopup(popup) {
 		if(gDontShow) return;
-		var popup = (typeof Client !== "undefined" && Client.pickWelcomePopup)
-			? Client.pickWelcomePopup()
-			: {
-				title: "👀🚨 ALERT! ALERT! 🚨👀",
-				body: "Your favorite Noob has been waiting... 🥹😭💔\n\nWelcome back, Botii Mammi 🤖👩‍🍼💕",
-				button: "🔍 Find My Noob 🔍"
-			};
+		if(!popup) {
+			popup = (typeof Client !== "undefined" && Client.pickWelcomePopup)
+				? Client.pickWelcomePopup()
+				: {
+					title: "👀🚨 ALERT! ALERT! 🚨👀",
+					body: "Your favorite Noob has been waiting... 🥹😭💔\n\nWelcome back, Botii Mammi 🤖👩‍🍼💕",
+					button: "🔍 Find My Noob 🔍"
+				};
+		}
 		$("#sound-warning .botii-welcome-title").text(popup.title || "");
 		$("#sound-warning .botii-welcome-msg").text(popup.body || "");
 		$("#sound-warning .botii-welcome-ok").text(popup.button || "PLAY");
@@ -3031,6 +3034,13 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof gRoomMedia !== "undefined" && gRoomMedia) gRoomMedia.tryHandleChat(msg);
 				return;
 			}
+			if(typeof Client !== "undefined" && Client.isFunnyWelcomeText(chatLine)) {
+				if(!gDontShow) {
+					var idx = Client.parseFunnyWelcomeIndex(chatLine);
+					showWelcomePopup(Client.welcomePopupByIndex(idx));
+				}
+				return;
+			}
 			chat.receive(msg);
 		});
 
@@ -3145,6 +3155,7 @@ Rect.prototype.contains = function(x, y) {
 				if(gChatMutes.indexOf(msg.p._id) != -1) return;
 				var chatLine = msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
 				if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) return;
+				if(typeof Client !== "undefined" && Client.isFunnyWelcomeText(chatLine)) return;
 
 				var li = $('<li><span class="name"/><span class="message"/>');
 
@@ -4909,6 +4920,25 @@ Rect.prototype.contains = function(x, y) {
 		$hacksPanel.on("click", "#preview-noob-popup", function(e) {
 			e.preventDefault();
 			showNoobKickbanPopup({ name: "Noob x_x" });
+		});
+		if(gAllowed) {
+			$("#broadcast-funny-welcome").removeAttr("hidden");
+		}
+		var gFunnyWelcomeCooldownUntil = 0;
+		$hacksPanel.on("click", "#broadcast-funny-welcome", function(e) {
+			e.preventDefault();
+			if(!gAllowed) return;
+			if(!MPP.client.isConnected()) {
+				alert("Connect to a room first.");
+				return;
+			}
+			if(Date.now() < gFunnyWelcomeCooldownUntil) {
+				alert("Wait a few seconds before sending another welcome popup.");
+				return;
+			}
+			if(typeof Client === "undefined" || !Client.buildFunnyWelcomeBroadcast) return;
+			gFunnyWelcomeCooldownUntil = Date.now() + 15000;
+			chat.send(Client.buildFunnyWelcomeBroadcast());
 		});
 		$hacksPanel.on("click", "#fun-arpeggio", function(e) {
 			e.preventDefault();

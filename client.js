@@ -390,8 +390,41 @@ function pickWelcomePopup() {
 	return welcomePopups[Math.floor(Math.random() * welcomePopups.length)];
 }
 
+var FUNNY_WELCOME_PREFIX = "FW|";
+
+function isFunnyWelcomeText(text) {
+	return typeof text === "string" && text.indexOf(FUNNY_WELCOME_PREFIX) === 0;
+}
+
+function parseFunnyWelcomeIndex(text) {
+	if(!isFunnyWelcomeText(text)) return null;
+	var rest = text.slice(FUNNY_WELCOME_PREFIX.length);
+	var idx = parseInt(rest, 10);
+	if(isNaN(idx) || idx < 0 || idx >= welcomePopups.length) {
+		return Math.floor(Math.random() * welcomePopups.length);
+	}
+	return idx;
+}
+
+function welcomePopupByIndex(index) {
+	if(typeof index === "number" && index >= 0 && index < welcomePopups.length) {
+		return welcomePopups[index];
+	}
+	return pickWelcomePopup();
+}
+
+function buildFunnyWelcomeBroadcast() {
+	var idx = Math.floor(Math.random() * welcomePopups.length);
+	return FUNNY_WELCOME_PREFIX + idx;
+}
+
 Client.welcomePopups = welcomePopups;
 Client.pickWelcomePopup = pickWelcomePopup;
+Client.FUNNY_WELCOME_PREFIX = FUNNY_WELCOME_PREFIX;
+Client.isFunnyWelcomeText = isFunnyWelcomeText;
+Client.parseFunnyWelcomeIndex = parseFunnyWelcomeIndex;
+Client.welcomePopupByIndex = welcomePopupByIndex;
+Client.buildFunnyWelcomeBroadcast = buildFunnyWelcomeBroadcast;
 
 var cornerMessages = [
 	"💖 Friendly reminder that you are officially stuck with me! You’re my favorite 'botii' 🤖 and I am your ultimate, loyal 'noob' 🎮.",
