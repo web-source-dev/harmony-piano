@@ -54,6 +54,18 @@
 		return "/" + path;
 	}
 
+	function isServerMediaUrl(url) {
+		var path = (url || "").split("?")[0].split("#")[0];
+		return /\/room-media\/[^/?#]+$/i.test(path);
+	}
+
+	function normalizeServerMediaUrl(url) {
+		if (!isServerMediaUrl(url)) return null;
+		var path = url.split("?")[0].split("#")[0];
+		var idx = path.indexOf("/room-media/");
+		return path.slice(idx);
+	}
+
 	function RoomMedia(options) {
 		this.client = options.client;
 		this.onStatus = options.onStatus || function () {};
@@ -71,6 +83,8 @@
 		this.activeEl = this.audio;
 		this.kind = "audio";
 		this.url = "";
+		this.serverMediaUrl = null;
+		this.serverDeletePending = false;
 		this.title = "";
 		this.djName = "";
 		this.djId = null;
@@ -90,6 +104,57 @@
 
 	RoomMedia.SYNC_PREFIX = SYNC_PREFIX;
 	RoomMedia.formatTime = formatTime;
+
+	RoomMedia.prototype._markServerMedia = function (url) {
+		this.serverMediaUrl = normalizeServerMediaUrl(url);
+		this.serverDeletePending = false;
+	};
+
+	RoomMedia.prototype._isDj = function () {
+		return !!(this.djId && this.client.participantId === this.djId);
+	};
+
+	RoomMedia.prototype.deleteServerMedia = function (url, silent) {
+		var self = this;
+		url = normalizeServerMediaUrl(url || this.serverMediaUrl);
+		if (!url) return Promise.resolve(false);
+		if (this.serverDeletePending) return Promise.resolve(false);
+		this.serverDeletePending = true;
+		return fetch(API_MEDIA, {
+			method: "DELETE",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ url: url }),
+			cache: "no-store"
+		}).then(function (r) { return r.json(); })
+			.then(function (data) {
+				if (self.serverMediaUrl === url) self.serverMediaUrl = null;
+				if (!silent && data.ok) self.onStatus("Removed uploaded file from server.");
+				return !!(data && data.ok);
+			})
+			.catch(function () {
+				self.serverDeletePending = false;
+				return false;
+			});
+	};
+
+	RoomMedia.prototype._maybeDeleteServerMedia = function (broadcast) {
+		if (!this.serverMediaUrl || !this._isDj()) return;
+		var url = this.serverMediaUrl;
+		this.deleteServerMedia(url, true);
+		if (broadcast) this.sendSync("d|" + encodePart(url));
+	};
+
+	RoomMedia.prototype._clearPlayback = function () {
+		this.audio.removeAttribute("src");
+		this.video.removeAttribute("src");
+		this.audio.load();
+		this.video.load();
+		this.url = "";
+		this.playing = false;
+		this.paused = false;
+		this._stopProgress();
+		this._emitProgress();
+	};
 
 	RoomMedia.prototype.serverTime = function () {
 		return Date.now() + (this.client.serverTimeOffset || 0);
@@ -156,6 +221,13 @@
 			this.djName = (msg.p && msg.p.name) || this.djName;
 			this.djId = msg.p && msg.p.id;
 			this._applyState(url, title, kind, playing, pos, at);
+		} else if (cmd === "d") {
+			url = decodePart(parts[1]);
+			if (normalizeServerMediaUrl(this.serverMediaUrl) === normalizeServerMediaUrl(url)) {
+				this.serverMediaUrl = null;
+				this._clearPlayback();
+				this.onStatus("Track finished — upload removed from server.");
+			}
 		} else if (cmd === "q") {
 			if (this.url && this.djId && this.client.participantId === this.djId) {
 				this._replyState();
@@ -180,8 +252,16 @@
 	RoomMedia.prototype._applyMediaUrl = function (url) {
 		url = resolveMediaUrl(url);
 		this.url = url;
+		this._markServerMedia(url);
 		this.audio.src = this.kind === "audio" ? url : "";
 		this.video.src = this.kind === "video" ? url : "";
+	};
+
+	RoomMedia.prototype._replaceServerMedia = function (nextUrl) {
+		if (!this.serverMediaUrl || !this._isDj()) return;
+		var prev = this.serverMediaUrl;
+		if (normalizeServerMediaUrl(prev) === normalizeServerMediaUrl(nextUrl)) return;
+		this.deleteServerMedia(prev, true);
 	};
 
 	RoomMedia.prototype._loadRemote = function (url, title, kind) {
@@ -294,6 +374,8 @@
 		this._emitProgress();
 		if (broadcast) {
 			this.sendSync("x|" + this.serverTime());
+			this._maybeDeleteServerMedia(true);
+			this._clearPlayback();
 		}
 	};
 
@@ -302,6 +384,14 @@
 		this.paused = false;
 		this._stopProgress();
 		this._emitProgress();
+		if (this._isDj()) {
+			this._maybeDeleteServerMedia(true);
+			this._clearPlayback();
+			this.onStatus("Finished — uploaded file deleted from server.");
+		} else {
+			this._clearPlayback();
+			this.onStatus("Finished.");
+		}
 	};
 
 	RoomMedia.prototype._startProgress = function () {
@@ -353,7 +443,8 @@
 				return {
 					url: data.url,
 					title: title,
-					kind: data.kind || kind
+					kind: data.kind || kind,
+					serverHosted: true
 				};
 			})
 			.catch(function (err) {
@@ -373,6 +464,8 @@
 		if (!/^https?:\/\//i.test(url) && url.charAt(0) !== "/") {
 			url = "https://" + url;
 		}
+		url = resolveMediaUrl(url);
+		this._replaceServerMedia(url);
 		var kind = kindFromUrl(url);
 		var title = clampTitle(titleHint || url.split("/").pop().split("?")[0] || "Stream");
 		this.djName = (this.ownParticipant() && this.ownParticipant().name) || "You";

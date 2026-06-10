@@ -48,13 +48,33 @@ def media_kind(ext):
     return "video" if ext in VIDEO_EXT else "audio"
 
 
+def media_path_from_url(url):
+    """Resolve /room-media/name.ext to absolute path, or None if invalid."""
+    if not url:
+        return None
+    path = url.split("?", 1)[0].split("#", 1)[0]
+    if path.startswith("/room-media/"):
+        rel = path[len("/room-media/"):]
+    elif "/room-media/" in path:
+        rel = path.split("/room-media/", 1)[1]
+    else:
+        return None
+    rel = rel.replace("\\", "/").lstrip("/")
+    if not rel or ".." in rel.split("/"):
+        return None
+    rel = os.path.basename(rel)
+    if not rel:
+        return None
+    return os.path.join(MEDIA_DIR, rel)
+
+
 class ChatSaveHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
 
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Filename")
         super().end_headers()
 
@@ -208,6 +228,36 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
                 "name": filename,
                 "size": len(data),
             }).encode("utf-8"))
+        except Exception as e:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
+
+    def do_DELETE(self):
+        path = self.path.split("?", 1)[0].rstrip("/")
+        if path == "/api/media":
+            self.handle_media_delete()
+            return
+        self.send_error(404)
+
+    def handle_media_delete(self):
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length).decode("utf-8") if length else "{}"
+            data = json.loads(raw or "{}")
+            url = data.get("url") or data.get("path") or ""
+            file_path = media_path_from_url(url)
+            if not file_path:
+                raise ValueError("Invalid media URL")
+            removed = False
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+                removed = True
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": True, "removed": removed}).encode("utf-8"))
         except Exception as e:
             self.send_response(400)
             self.send_header("Content-Type", "application/json")
