@@ -163,6 +163,7 @@
         <div id="record-btn" class="ugly-button translate">Record MP3</div>
         <div id="synth-btn" class="ugly-button translate">Synth</div>
         <div id="sheet-btn" class="ugly-button">Sheet Play</div>
+        <div id="room-media-btn" class="ugly-button">Room DJ</div>
         <div id="learn-btn" class="ugly-button">Learn Piano</div>
         <div id="hacks-toggle-btn" class="ugly-button">Hacks ▼</div>
         <div id="sound-btn" class="ugly-button sound-btn">Sound Select</div>
@@ -355,6 +356,32 @@
     </div>
 </div>
 
+<div id="room-media-transport" class="room-media-transport" hidden>
+    <div class="room-media-transport-inner">
+        <span class="transport-label">Room DJ</span>
+        <span class="room-media-title">—</span>
+        <span class="room-media-dj"></span>
+        <span class="time-current">0:00</span><span class="time-sep">/</span><span class="time-total">0:00</span>
+        <input type="range" name="seek" min="0" max="1000" value="0" step="0.1" class="seek-slider" title="Seek"/>
+        <button type="button" class="tb-btn play" title="Play">▶</button>
+        <button type="button" class="tb-btn pause" title="Pause">⏸</button>
+        <button type="button" class="tb-btn stop" title="Stop">⏹</button>
+        <button type="button" class="tb-btn back" title="-10 sec">⏪</button>
+        <button type="button" class="tb-btn forward" title="+10 sec">⏩</button>
+        <span class="speed-label">Vol</span>
+        <input type="range" name="volume" min="0" max="1" step="0.01" value="0.85" class="volume-slider" title="Volume"/>
+        <button type="button" class="tb-btn room-media-sync" title="Request sync from room">Sync</button>
+    </div>
+</div>
+
+<div id="room-media-video-wrap" class="room-media-video-wrap" hidden>
+    <div class="room-media-video-head">
+        <span class="room-media-video-title">Video</span>
+        <button type="button" class="room-media-video-close" title="Hide video">✕</button>
+    </div>
+    <div id="room-media-video-mount" class="room-media-video-mount"></div>
+</div>
+
 <div id="modal">
     <div class="bg"></div>
     <div id="modals">
@@ -422,6 +449,23 @@
             <p class="sheet-row"><label>Text notation (one note per line):</label></p>
             <p class="sheet-row"><textarea name="notation" rows="5" placeholder="# sec  note  velocity&#10;0.0  c4  0.8&#10;0.5  d4"></textarea></p>
         </div>
+        <div id="room-media" class="dialog room-media-dialog">
+            <p class="room-media-dialog-title">Room DJ — shared music for everyone</p>
+            <p class="room-media-hint">Pick an MP3/song or video file, or paste a direct link. Everyone in the room hears it in sync (not played on the piano).</p>
+            <p class="room-media-row"><label>Audio / video file:
+                <input type="file" name="mediafile" accept="audio/*,video/*,.mp3,.m4a,.wav,.ogg,.mp4,.webm,.mov,.mkv"/>
+            </label></p>
+            <p class="room-media-row"><label>Or URL:
+                <input type="text" name="mediaurl" class="text room-media-url" placeholder="https://…/song.mp3 or video link" maxlength="480"/>
+            </label></p>
+            <p class="room-media-status">—</p>
+            <p class="room-media-row room-media-actions">
+                <button type="button" class="tb-btn room-media-load">Load &amp; share</button>
+                <button type="button" class="tb-btn play">▶ Play for room</button>
+                <button type="button" class="tb-btn stop">⏹ Stop</button>
+                <button type="button" class="tb-btn room-media-sync">Request sync</button>
+            </p>
+        </div>
         <div id="noob-kickban-block" class="dialog noob-kickban-dialog">
             <div class="noob-kickban-body">
                 <h2 class="noob-shield-title">Mammi Says Nope! 🙅‍♀️</h2>
@@ -475,6 +519,7 @@
 <script src="./lame.min.js"></script>
 <script src="./color.js"></script>
 <script src="./sheetPlayer.js"></script>
+<script src="./roomMedia.js"></script>
 <script src="./pianoLearn.js"></script>
 <script src="./chatLogger.js"></script>
 <!--<script src="/ebsprite.js"></script>-->

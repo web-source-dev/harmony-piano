@@ -3036,6 +3036,7 @@ Rect.prototype.contains = function(x, y) {
 			if($(evt.target).closest("#hacks-dock").length) return;
 			if($(evt.target).closest("#learn-panel").length) return;
 			if($(evt.target).closest("#midi-transport").length) return;
+			if($(evt.target).closest("#room-media-transport").length) return;
 			if($(evt.target).closest("#chat-input-bar").length) return;
 			if(!$("#chat").has(evt.target).length && !$("#chat-input-bar").has(evt.target).length) {
 				chat.blur();
@@ -3046,6 +3047,7 @@ Rect.prototype.contains = function(x, y) {
 				var touch = event.changedTouches[i];
 				if($(touch.target).closest("#learn-panel").length) continue;
 				if($(touch.target).closest("#midi-transport").length) continue;
+				if($(touch.target).closest("#room-media-transport").length) continue;
 				if(!$("#chat").has(touch.target).length && !$("#chat-input-bar").has(touch.target).length) {
 					chat.blur();
 				}
@@ -3128,6 +3130,7 @@ Rect.prototype.contains = function(x, y) {
 
 			receive: function(msg) {
 				if(gChatMutes.indexOf(msg.p._id) != -1) return;
+				if(typeof gRoomMedia !== "undefined" && gRoomMedia && gRoomMedia.tryHandleChat(msg)) return;
 
 				var li = $('<li><span class="name"/><span class="message"/>');
 
@@ -3433,6 +3436,107 @@ Rect.prototype.contains = function(x, y) {
 		_origPause();
 		showMidiTransport(true);
 	};
+
+	// Room DJ — shared audio/video (not piano)
+	var gRoomMedia;
+	var $roomMediaTransport = $("#room-media-transport");
+	var $roomMediaDialog = $("#room-media");
+	var $roomMediaVideoWrap = $("#room-media-video-wrap");
+	var $roomMediaVideoMount = $("#room-media-video-mount");
+
+	function showRoomMediaTransport(show) {
+		if(show) {
+			$roomMediaTransport.removeAttr("hidden");
+			document.body.classList.add("room-media-active");
+		} else {
+			$roomMediaTransport.attr("hidden", "hidden");
+			document.body.classList.remove("room-media-active");
+		}
+	}
+
+	function updateRoomMediaProgress(info) {
+		if(!info) return;
+		if(typeof RoomMedia !== "undefined") {
+			$roomMediaTransport.find(".time-current").text(RoomMedia.formatTime(info.current));
+			$roomMediaTransport.find(".time-total").text(RoomMedia.formatTime(info.duration));
+		}
+		var seek = $roomMediaTransport.find("input[name=seek]")[0];
+		if(seek) {
+			seek.max = Math.max(0.1, info.duration || 0.1);
+			if(!seek._dragging) seek.value = info.current || 0;
+		}
+		if(info.title) $roomMediaTransport.find(".room-media-title").text(info.title);
+		if(info.dj) $roomMediaTransport.find(".room-media-dj").text("DJ: " + info.dj);
+	}
+
+	function mountRoomMediaVideo(videoEl) {
+		if(!videoEl) return;
+		$roomMediaVideoMount.empty()[0].appendChild(videoEl);
+	}
+
+	if(typeof RoomMedia !== "undefined") {
+		gRoomMedia = new RoomMedia({
+			client: gClient,
+			onStatus: function(msg) {
+				$roomMediaDialog.find(".room-media-status").text(msg);
+				$("#status").text(msg);
+			},
+			onTrackChange: function(info) {
+				$roomMediaTransport.find(".room-media-title").text(info.title || "—");
+				$roomMediaTransport.find(".room-media-dj").text(info.dj ? ("DJ: " + info.dj) : "");
+				showRoomMediaTransport(true);
+			},
+			onProgress: updateRoomMediaProgress,
+			onTransport: function(info) {
+				if(info.visible) showRoomMediaTransport(true);
+				if(info.kind === "video" && info.videoEl) {
+					mountRoomMediaVideo(info.videoEl);
+					$roomMediaVideoWrap.removeAttr("hidden");
+					$roomMediaVideoWrap.find(".room-media-video-title").text(gRoomMedia.title || "Video");
+				} else {
+					$roomMediaVideoWrap.attr("hidden", "hidden");
+				}
+			}
+		});
+		$roomMediaTransport.find("input[name=volume]").val(gRoomMedia.volume);
+	}
+
+	function ensureRoomMediaReady() {
+		if(!gClient.isConnected()) {
+			alert("Connect to a room first.");
+			return false;
+		}
+		if(typeof gRoomMedia === "undefined") {
+			alert("Room DJ is not available.");
+			return false;
+		}
+		return true;
+	}
+
+	function loadRoomMediaSelection() {
+		if(!ensureRoomMediaReady()) return;
+		var fileInput = $roomMediaDialog.find("input[name=mediafile]")[0];
+		var urlInput = $roomMediaDialog.find("input[name=mediaurl]").val();
+		var file = fileInput && fileInput.files && fileInput.files[0];
+		if(file) {
+			gRoomMedia.loadAndShare(file).then(function() {
+				showRoomMediaTransport(true);
+			}).catch(function(err) {
+				alert(err.message || String(err));
+			});
+			return;
+		}
+		if(urlInput && urlInput.trim()) {
+			try {
+				gRoomMedia.loadUrlAndShare(urlInput.trim());
+				showRoomMediaTransport(true);
+			} catch(err) {
+				alert(err.message);
+			}
+			return;
+		}
+		alert("Choose a file or paste a direct audio/video URL.");
+	}
 
 	function funClearTimers() {
 		for(var i = 0; i < gFunTimers.length; i++) clearTimeout(gFunTimers[i]);
@@ -4103,6 +4207,104 @@ Rect.prototype.contains = function(x, y) {
 			e.preventDefault();
 			e.stopPropagation();
 			openModal("#sheet-play");
+		});
+
+		var roomMediaBtn = document.getElementById("room-media-btn");
+		if(roomMediaBtn) {
+			roomMediaBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				openModal("#room-media");
+			});
+		}
+
+		$roomMediaTransport.on("click", ".tb-btn", function(e) { e.stopPropagation(); });
+		$roomMediaTransport.on("mousedown touchstart", "input[name=seek]", function() {
+			this._dragging = true;
+		});
+		$roomMediaTransport.on("mouseup touchend", "input[name=seek]", function() {
+			this._dragging = false;
+		});
+		$roomMediaTransport.on("input", "input[name=seek]", function() {
+			if(!gRoomMedia) return;
+			var sec = parseFloat(this.value) || 0;
+			updateRoomMediaProgress({
+				current: sec,
+				duration: gRoomMedia.activeEl.duration || 0,
+				title: gRoomMedia.title,
+				dj: gRoomMedia.djName
+			});
+		});
+		$roomMediaTransport.on("change", "input[name=seek]", function() {
+			if(gRoomMedia) gRoomMedia.seekTo(parseFloat(this.value) || 0);
+		});
+		$roomMediaTransport.on("input", "input[name=volume]", function() {
+			if(gRoomMedia) gRoomMedia.setVolume(parseFloat(this.value) || 0);
+		});
+		$roomMediaTransport.on("click", ".play", function(e) {
+			e.preventDefault();
+			ensureAudioReady();
+			if(gRoomMedia) gRoomMedia.play(true);
+		});
+		$roomMediaTransport.on("click", ".pause", function(e) {
+			e.preventDefault();
+			if(gRoomMedia) gRoomMedia.pause(true);
+		});
+		$roomMediaTransport.on("click", ".stop", function(e) {
+			e.preventDefault();
+			if(gRoomMedia) gRoomMedia.stop(true);
+		});
+		$roomMediaTransport.on("click", ".back", function(e) {
+			e.preventDefault();
+			if(gRoomMedia) gRoomMedia.seekTo(Math.max(0, (gRoomMedia.activeEl.currentTime || 0) - 10));
+		});
+		$roomMediaTransport.on("click", ".forward", function(e) {
+			e.preventDefault();
+			if(gRoomMedia) {
+				var dur = gRoomMedia.activeEl.duration || 0;
+				gRoomMedia.seekTo(Math.min(dur, (gRoomMedia.activeEl.currentTime || 0) + 10));
+			}
+		});
+		$roomMediaTransport.on("click", ".room-media-sync", function(e) {
+			e.preventDefault();
+			if(ensureRoomMediaReady()) gRoomMedia.requestSync();
+		});
+		$roomMediaVideoWrap.on("click", ".room-media-video-close", function(e) {
+			e.preventDefault();
+			$roomMediaVideoWrap.attr("hidden", "hidden");
+		});
+
+		$("#room-media").on("click", ".room-media-load", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			loadRoomMediaSelection();
+		});
+		$("#room-media").on("click", ".play", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			if(!ensureRoomMediaReady()) return;
+			ensureAudioReady();
+			if(!gRoomMedia.url) {
+				loadRoomMediaSelection();
+				return;
+			}
+			gRoomMedia.play(true);
+			showRoomMediaTransport(true);
+			closeModal();
+		});
+		$("#room-media").on("click", ".stop", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			if(gRoomMedia) gRoomMedia.stop(true);
+		});
+		$("#room-media").on("click", ".room-media-sync", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			if(ensureRoomMediaReady()) gRoomMedia.requestSync();
+		});
+		$("#room-media").on("change", "input[name=mediafile]", function() {
+			var f = this.files && this.files[0];
+			if(f) $roomMediaDialog.find("input[name=mediaurl]").val("");
 		});
 
 		var learnBtn = document.getElementById("learn-btn");
@@ -4970,6 +5172,7 @@ Rect.prototype.contains = function(x, y) {
 		noteQuota: gNoteQuota,
 		soundSelector: gSoundSelector,
 		sheetPlayer: gSheetPlayer,
+		roomMedia: gRoomMedia,
 		Notification: Notification
 	};
 

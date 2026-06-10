@@ -1081,6 +1081,107 @@ body.hacks-open #hacks-dock {
 #learn-panel { z-index: 100010; }
 #midi-transport { z-index: 750; }
 
+/* Room DJ — shared audio/video transport */
+#room-media-transport {
+	position: fixed;
+	left: 50%;
+	top: 32%;
+	bottom: auto;
+	transform: translate(-50%, -50%);
+	width: min(96%, 820px);
+	z-index: 760;
+	display: none;
+	pointer-events: auto;
+}
+#room-media-transport:not([hidden]) { display: block; }
+.room-media-transport-inner {
+	margin: 0;
+	padding: 8px 14px;
+	background: rgba(38, 48, 72, 0.96);
+	border: 2px solid #89acf7;
+	border-radius: 8px;
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 6px 10px;
+	font-size: 12px;
+	color: #fff;
+	text-shadow: #111 1px 1px;
+}
+.room-media-transport .transport-label { font-weight: bold; color: #9cf; }
+.room-media-title {
+	max-width: 180px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: bold;
+	color: #ffd;
+}
+.room-media-dj {
+	font-size: 10px;
+	color: #bdf;
+	max-width: 100px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.room-media-transport .seek-slider { flex: 1; min-width: 80px; max-width: 220px; }
+.room-media-transport .volume-slider { width: 72px; }
+
+.room-media-video-wrap {
+	position: fixed;
+	right: 12px;
+	top: 100px;
+	width: min(420px, 42vw);
+	z-index: 740;
+	background: rgba(20, 24, 36, 0.95);
+	border: 2px solid #89acf7;
+	border-radius: 8px;
+	box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+	overflow: hidden;
+}
+.room-media-video-wrap:not([hidden]) { display: block; }
+.room-media-video-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 4px 8px;
+	background: rgba(50, 60, 90, 0.9);
+	font-size: 11px;
+	color: #cef;
+}
+.room-media-video-close {
+	background: transparent;
+	border: none;
+	color: #fff;
+	cursor: pointer;
+	font-size: 14px;
+	padding: 2px 6px;
+}
+.room-media-video-mount video {
+	display: block;
+	width: 100%;
+	max-height: 240px;
+	background: #000;
+}
+.room-media-dialog .room-media-hint {
+	font-size: 11px;
+	color: #ccc;
+	max-width: 420px;
+	line-height: 1.35;
+}
+.room-media-dialog .room-media-url {
+	width: min(360px, 90vw);
+}
+.room-media-dialog .room-media-status {
+	font-size: 11px;
+	color: #9cf;
+	min-height: 1.2em;
+}
+body.room-media-active #room-media-transport:not([hidden]) { display: block; }
+
 /* Learn panel must sit above fixed ads / social links (z-index 99999 in index.html) */
 body.learn-panel-open .ad1,
 body.learn-panel-open .botii-corner-banner,
