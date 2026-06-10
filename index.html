@@ -179,6 +179,7 @@
         <div id="record-btn" class="ugly-button translate">Record MP3</div>
         <div id="synth-btn" class="ugly-button translate">Synth</div>
         <div id="sheet-btn" class="ugly-button">Sheet Play</div>
+        <div id="learn-btn" class="ugly-button">Learn Piano</div>
         <div id="hacks-toggle-btn" class="ugly-button">Hacks ▼</div>
         <div id="sound-btn" class="ugly-button sound-btn">Sound Select</div>
         <div id="status"></div>
@@ -433,6 +434,41 @@
     </div>
 </div>
 
+<div id="learn-panel" class="learn-panel" hidden>
+    <div class="learn-panel-inner">
+        <div class="learn-head">
+            <span class="learn-brand">Learn Piano</span>
+            <span class="learn-title">Upload a guide (.txt) or MIDI (.mid)</span>
+            <button type="button" class="learn-close" title="Close">✕</button>
+        </div>
+        <p class="learn-hint">—</p>
+        <div class="learn-meta">
+            <span class="learn-status">Load a .txt guide or .mid file to begin</span>
+            <span class="learn-step">0 / 0</span>
+        </div>
+        <div class="learn-controls">
+            <label class="learn-file-label">Song file <input type="file" name="guide-file" accept=".txt,text/plain,.mid,.midi,audio/midi"/></label>
+            <button type="button" class="tb-btn learn-load-demo">Load Rush-E demo</button>
+            <select name="learn-mode" class="learn-select" title="Mode">
+                <option value="guide">Timed guide</option>
+                <option value="practice">Practice (press keys)</option>
+            </select>
+            <span class="speed-label">Speed</span>
+            <input type="range" name="learn-tempo" min="25" max="200" value="100" class="tempo-slider" title="Guide speed"/>
+            <button type="button" class="tb-btn learn-prev" title="Previous step">◀</button>
+            <button type="button" class="tb-btn learn-play">▶ Start</button>
+            <button type="button" class="tb-btn learn-pause">⏸</button>
+            <button type="button" class="tb-btn learn-stop">⏹</button>
+            <button type="button" class="tb-btn learn-next" title="Next step">▶</button>
+        </div>
+        <div class="learn-label-toggles">
+            <label><input type="checkbox" name="show-note-names" checked/> Note names on keys (E4, C#3…)</label>
+            <label><input type="checkbox" name="show-key-labels" checked/> Keyboard keys on keys (Q, W, 2…)</label>
+        </div>
+        <p class="learn-keyboard-hint">Keyboard: bottom row <kbd>Z</kbd>–<kbd>M</kbd>, top row <kbd>Q</kbd>–<kbd>]</kbd>, numbers <kbd>1</kbd>–<kbd>9</kbd>. Arrow keys shift octave. Space = sustain.</p>
+    </div>
+</div>
+
 <script src="./jquery.min.js"></script>
 <script src="./util.js"></script>
 <script src="./client.js"></script>
@@ -440,6 +476,8 @@
 <script src="./lame.min.js"></script>
 <script src="./color.js"></script>
 <script src="./sheetPlayer.js"></script>
+<script src="./pianoLearn.js"></script>
+<script src="./chatLogger.js"></script>
 <!--<script src="/ebsprite.js"></script>-->
 <script src="./script.js"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->

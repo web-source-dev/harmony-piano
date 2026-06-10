@@ -776,6 +776,45 @@ Rect.prototype.contains = function(x, y) {
 				var image = key.sharp ? this.blackKeyRender : this.whiteKeyRender;
 				this.ctx.drawImage(image, x, y);
 
+				var pl = typeof PianoLearn !== "undefined" ? PianoLearn : null;
+				var hl = pl ? pl.getHighlights() : null;
+				if(hl && hl[key.note]) {
+					this.ctx.save();
+					this.ctx.globalAlpha = 0.5;
+					if(hl[key.note] === "wrong") this.ctx.fillStyle = "#e44";
+					else if(hl[key.note] === "hit") this.ctx.fillStyle = "#4c4";
+					else this.ctx.fillStyle = "#eb3";
+					var hw = key.sharp ? this.blackKeyWidth : this.whiteKeyWidth;
+					var hh = key.sharp ? this.blackKeyHeight : this.whiteKeyHeight;
+					this.ctx.fillRect(x, y, hw, hh);
+					this.ctx.restore();
+				}
+
+				if(pl && (pl.labels.showNoteNames || pl.labels.showKeyLabels)) {
+					var kw = key.sharp ? this.blackKeyWidth : this.whiteKeyWidth;
+					if(kw >= 14) {
+						var keyMap = pl.getKeyMap();
+						this.ctx.save();
+						this.ctx.textAlign = "center";
+						this.ctx.textBaseline = "bottom";
+						var cx = x + kw / 2;
+						var baseY = y + (key.sharp ? this.blackKeyHeight : this.whiteKeyHeight) - 3;
+						var fontSize = Math.max(6, Math.min(10, Math.floor(kw * 0.34)));
+						this.ctx.font = "bold " + fontSize + "px Arial,sans-serif";
+						this.ctx.fillStyle = key.sharp ? "#fff" : "#333";
+						if(pl.labels.showNoteNames) {
+							this.ctx.fillText(pl.noteIdToDisplay(key.note), cx, baseY);
+							baseY -= fontSize + 1;
+						}
+						if(pl.labels.showKeyLabels && keyMap[key.note]) {
+							this.ctx.font = Math.max(5, fontSize - 1) + "px Arial,sans-serif";
+							this.ctx.fillStyle = key.sharp ? "#bbb" : "#777";
+							this.ctx.fillText(keyMap[key.note], cx, baseY);
+						}
+						this.ctx.restore();
+					}
+				}
+
 				// render blips
 				if(key.blips.length) {
 					var alpha = this.ctx.globalAlpha;
@@ -1147,6 +1186,7 @@ Rect.prototype.contains = function(x, y) {
 			ensureAudioReady();
 			gPiano.play(id, vol !== undefined ? vol : DEFAULT_VELOCITY, gClient.getOwnParticipant(), 0);
 			gClient.startNote(id, vol);
+			if(typeof PianoLearn !== "undefined") PianoLearn.onNotePressed(id);
 			return;
 		}
 		if(!gClient.preventsPlaying() && gNoteQuota.spend(1)) {
@@ -1154,6 +1194,7 @@ Rect.prototype.contains = function(x, y) {
 			gSustainedNotes[id] = true;
 			gPiano.play(id, vol !== undefined ? vol : DEFAULT_VELOCITY, gClient.getOwnParticipant(), 0);
 			gClient.startNote(id, vol);
+			if(typeof PianoLearn !== "undefined") PianoLearn.onNotePressed(id);
 		}
 	}
 
@@ -1231,6 +1272,15 @@ Rect.prototype.contains = function(x, y) {
 		wsUri = 'wss://' + mppOrig + ':443';
 	}
 	var gClient = new Client(wsUri);
+
+	gClient.on("kickban blocked", function(info) {
+		new Notification({
+			title: "Can't Kickban",
+			text: (info && info.reason) || "This player is protected.",
+			duration: 6000,
+			target: "#names"
+		});
+	});
 
 	gClient.setChannel(channel_id);
 
@@ -2012,6 +2062,16 @@ Rect.prototype.contains = function(x, y) {
 				});
 				$('<div class="menu-item kickban">Kickban</div>').appendTo(menu)
 				.on("mousedown touchstart", function(evt) {
+					var check = gClient.canKickBanParticipant(part);
+					if(!check.allowed) {
+						new Notification({
+							title: "Can't Kickban",
+							text: check.reason,
+							duration: 6000,
+							target: "#names"
+						});
+						return;
+					}
 					var minutes = prompt("How many minutes? (0-60)", "30");
 					if(minutes === null) return;
 					minutes = parseFloat(minutes) || 0;
@@ -2919,6 +2979,8 @@ Rect.prototype.contains = function(x, y) {
 		$(document).mousedown(function(evt) {
 			if($("#modal").is(":visible") && $(evt.target).closest("#modal .dialog").length) return;
 			if($(evt.target).closest("#hacks-dock").length) return;
+			if($(evt.target).closest("#learn-panel").length) return;
+			if($(evt.target).closest("#midi-transport").length) return;
 			if($(evt.target).closest("#chat-input-bar").length) return;
 			if(!$("#chat").has(evt.target).length && !$("#chat-input-bar").has(evt.target).length) {
 				chat.blur();
@@ -2927,6 +2989,8 @@ Rect.prototype.contains = function(x, y) {
 		document.addEventListener("touchstart", function(event) {
 			for(var i in event.changedTouches) {
 				var touch = event.changedTouches[i];
+				if($(touch.target).closest("#learn-panel").length) continue;
+				if($(touch.target).closest("#midi-transport").length) continue;
 				if(!$("#chat").has(touch.target).length && !$("#chat-input-bar").has(touch.target).length) {
 					chat.blur();
 				}
@@ -3018,6 +3082,10 @@ Rect.prototype.contains = function(x, y) {
 
 				$("#chat ul").append(li);
 
+				if(typeof ChatLogger !== "undefined") {
+					ChatLogger.logMessage(msg.p.name, msg.a);
+				}
+
 				var eles = $("#chat ul li").get();
 				for(var i = 1; i <= 50 && i <= eles.length; i++) {
 					eles[eles.length - i].style.opacity = 1.0 - (i * 0.03);
@@ -3040,6 +3108,13 @@ Rect.prototype.contains = function(x, y) {
 			}
 		};
 	})();
+
+	if(typeof ChatLogger !== "undefined") {
+		gClient.on("ch", function(msg) {
+			ChatLogger.setRoom(msg.ch._id);
+		});
+		ChatLogger.init();
+	}
 	
 
 
@@ -3073,6 +3148,74 @@ Rect.prototype.contains = function(x, y) {
 		var i = midiNote - 21;
 		if(i < 0 || i >= MIDI_KEY_NAMES.length) return null;
 		return MIDI_KEY_NAMES[i];
+	}
+
+	// Piano learn mode (labels + key guides)
+	var $learnPanel = $("#learn-panel");
+	if(typeof PianoLearn !== "undefined") {
+		PianoLearn.init({
+			getKeyBinding: function() { return key_binding; },
+			getTranspose: function() { return transpose_octave; },
+			onGuideUpdate: function(info) {
+				$learnPanel.find(".learn-status").text(info.status || "");
+				$learnPanel.find(".learn-hint").text(info.hint || "—");
+				$learnPanel.find(".learn-step").text(info.step + " / " + info.total);
+			},
+			onGuideEnd: function() {
+				$learnPanel.find(".learn-play").prop("disabled", false);
+			}
+		});
+		$learnPanel.find("input[name=show-note-names]").prop("checked", PianoLearn.labels.showNoteNames);
+		$learnPanel.find("input[name=show-key-labels]").prop("checked", PianoLearn.labels.showKeyLabels);
+	}
+
+	function setLearnPanelOpen(open) {
+		if(open) {
+			$learnPanel.removeAttr("hidden");
+			releaseKeyboard();
+		} else {
+			$learnPanel.attr("hidden", "hidden");
+			if(!isTypingTarget() && !gModal && !$("#chat").hasClass("chatting")) {
+				captureKeyboard();
+			}
+		}
+		document.body.classList.toggle("learn-panel-open", !!open);
+	}
+
+	function learnTempoScale() {
+		var el = $learnPanel.find("input[name=learn-tempo]")[0];
+		return parseFloat(el ? el.value : 100) / 100;
+	}
+
+	function setLearnTrackTitle(label) {
+		$learnPanel.find(".learn-title").text(label);
+	}
+
+	function loadLearnFromFile(file) {
+		if(!file || typeof PianoLearn === "undefined") return;
+		var name = file.name || "Song";
+		var base = name.replace(/\.[^.]+$/, "");
+		var ext = (name.split(".").pop() || "").toLowerCase();
+		if(ext === "mid" || ext === "midi") {
+			var reader = new FileReader();
+			reader.onload = function() {
+				try {
+					var track = PianoLearn.parseMidiGuide(reader.result, midiToPianoNote, base);
+					PianoLearn.applyLearnTrack(PianoLearn.guide, track, setLearnTrackTitle);
+				} catch(err) { alert(err.message); }
+			};
+			reader.readAsArrayBuffer(file);
+			return;
+		}
+		var textReader = new FileReader();
+		textReader.onload = function() {
+			try {
+				var track = PianoLearn.parseKeyGuide(textReader.result);
+				if(!track.title || track.title === "Guide") track.title = base;
+				PianoLearn.applyLearnTrack(PianoLearn.guide, track, setLearnTrackTitle);
+			} catch(err) { alert(err.message); }
+		};
+		textReader.readAsText(file);
 	}
 
 	// Sheet music / MIDI autoplay + Fun hacks
@@ -3905,6 +4048,86 @@ Rect.prototype.contains = function(x, y) {
 			e.preventDefault();
 			e.stopPropagation();
 			openModal("#sheet-play");
+		});
+
+		var learnBtn = document.getElementById("learn-btn");
+		if(learnBtn) {
+			learnBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				setLearnPanelOpen($learnPanel.is("[hidden]"));
+			});
+		}
+		$learnPanel.on("click", ".learn-close", function(e) {
+			e.preventDefault();
+			setLearnPanelOpen(false);
+		});
+		$learnPanel.on("mousedown touchstart pointerdown", function(e) {
+			e.stopPropagation();
+			releaseKeyboard();
+		});
+		$learnPanel.on("mousedown touchstart pointerdown", "input, select, button, label", function(e) {
+			e.stopPropagation();
+			releaseKeyboard();
+		});
+		$learnPanel.on("focusin", "input, select", function() { releaseKeyboard(); });
+		$learnPanel.on("focusout", function(e) {
+			setTimeout(function() {
+				if($(e.relatedTarget).closest("#learn-panel").length) return;
+				if(isTypingTarget()) return;
+				if(!gModal && !$("#chat").hasClass("chatting") && $learnPanel.is("[hidden]")) {
+					captureKeyboard();
+				}
+			}, 0);
+		});
+		$learnPanel.on("change", "input[name=show-note-names]", function() {
+			PianoLearn.setLabelPrefs(this.checked, $learnPanel.find("input[name=show-key-labels]").is(":checked"));
+		});
+		$learnPanel.on("change", "input[name=show-key-labels]", function() {
+			PianoLearn.setLabelPrefs($learnPanel.find("input[name=show-note-names]").is(":checked"), this.checked);
+		});
+		$learnPanel.on("change", "select[name=learn-mode]", function() {
+			if(PianoLearn.guide) PianoLearn.guide.mode = this.value;
+		});
+		$learnPanel.on("click", ".learn-load-demo", function(e) {
+			e.preventDefault();
+			fetch("./45982_Rush-e_keys.txt").then(function(r) {
+				if(!r.ok) throw new Error("Demo file not found");
+				return r.text();
+			}).then(function(text) {
+				var track = PianoLearn.parseKeyGuide(text);
+				PianoLearn.applyLearnTrack(PianoLearn.guide, track, setLearnTrackTitle);
+			}).catch(function(err) { alert(err.message); });
+		});
+		$learnPanel.find("input[name=guide-file]").on("change", function() {
+			var file = this.files && this.files[0];
+			if(!file) return;
+			loadLearnFromFile(file);
+			this.value = "";
+		});
+		$learnPanel.on("click", ".learn-play", function(e) {
+			e.preventDefault();
+			try {
+				var mode = $learnPanel.find("select[name=learn-mode]").val() || "guide";
+				PianoLearn.guide.start(mode, learnTempoScale());
+				setLearnPanelOpen(true);
+			} catch(err) { alert(err.message); }
+		});
+		$learnPanel.on("click", ".learn-pause", function(e) {
+			e.preventDefault();
+			if(PianoLearn.guide) PianoLearn.guide.pause();
+		});
+		$learnPanel.on("click", ".learn-stop", function(e) {
+			e.preventDefault();
+			if(PianoLearn.guide) PianoLearn.guide.stop();
+		});
+		$learnPanel.on("click", ".learn-prev", function(e) {
+			e.preventDefault();
+			if(PianoLearn.guide) PianoLearn.guide.seekStep(-1);
+		});
+		$learnPanel.on("click", ".learn-next", function(e) {
+			e.preventDefault();
+			if(PianoLearn.guide) PianoLearn.guide.seekStep(1);
 		});
 
 		$("#modals").on("click", ".tb-btn", function(e) { e.stopPropagation(); });

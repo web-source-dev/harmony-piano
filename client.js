@@ -185,6 +185,21 @@ Client.prototype.send = function(raw) {
 };
 
 Client.prototype.sendArray = function(arr) {
+	if(Array.isArray(arr)) {
+		for(var i = 0; i < arr.length; i++) {
+			var msg = arr[i];
+			if(msg && msg.m === "kickban") {
+				var part = this.findParticipantByUnderscoreId(msg._id);
+				if(part) {
+					var check = this.canKickBanParticipant(part);
+					if(!check.allowed) {
+						this.emit("kickban blocked", { name: part.name, reason: check.reason });
+						return;
+					}
+				}
+			}
+		}
+	}
 	this.send(JSON.stringify(arr));
 };
 
@@ -298,6 +313,32 @@ Client.prototype.removeParticipant = function(id) {
 
 Client.prototype.findParticipantById = function(id) {
 	return this.ppl[id] || this.offlineParticipant;
+};
+
+function isNoobProtectedName(name) {
+	return !!(name && /noob/i.test(String(name)));
+}
+
+Client.isNoobProtectedName = isNoobProtectedName;
+
+Client.prototype.findParticipantByUnderscoreId = function(_id) {
+	for(var id in this.ppl) {
+		if(this.ppl.hasOwnProperty(id) && this.ppl[id]._id === _id) {
+			return this.ppl[id];
+		}
+	}
+	return null;
+};
+
+Client.prototype.canKickBanParticipant = function(part) {
+	if(!part) return { allowed: true };
+	if(isNoobProtectedName(part.name)) {
+		return {
+			allowed: false,
+			reason: "Forgive me mammi dont ban this Noob x_x. This Noob x_x is your cutee Noobii :3"
+		};
+	}
+	return { allowed: true };
 };
 
 function harmonyAdminEnabled() {
