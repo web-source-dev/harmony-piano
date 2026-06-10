@@ -1291,20 +1291,13 @@ body.hacks-open #hacks-dock {
 #room-media-transport {
 	position: fixed;
 	left: 50%;
-	bottom: calc(var(--bottom-ui-h) + 12px);
-	top: auto;
+	top: 12px;
+	bottom: auto;
 	transform: translateX(-50%);
 	width: min(560px, 96vw);
 	z-index: 780;
 	display: none;
 	pointer-events: auto;
-}
-/* Video mode — controls at top 10% */
-body.room-dj-video #room-media-transport {
-	top: 10%;
-	bottom: auto;
-	transform: translate(-50%, -50%);
-	width: min(640px, 96vw);
 }
 #room-media-transport:not([hidden]) { display: block; }
 .room-media-player {
@@ -1437,18 +1430,6 @@ body.room-dj-playing .room-media-player-art {
 	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
 	overflow: hidden;
 }
-/* Video mode — player below top controls */
-body.room-dj-video .room-media-video-wrap {
-	left: 50%;
-	right: auto;
-	top: calc(10% + 52px);
-	transform: translateX(-50%);
-	width: min(640px, 96vw);
-	z-index: 775;
-}
-body.room-dj-video .room-media-video-mount video {
-	max-height: min(38vh, 320px);
-}
 .room-media-video-wrap:not([hidden]) { display: block; }
 .room-media-video-head {
 	display: flex;
@@ -1480,7 +1461,54 @@ body.room-dj-video .room-media-video-mount video {
 	max-height: 220px;
 	background: #000;
 }
+.room-media-youtube-mount {
+	display: none;
+	width: 100%;
+	background: #000;
+}
+.room-media-youtube-mount iframe {
+	display: block;
+	width: 100%;
+	border: none;
+}
+.room-media-video-wrap.mode-youtube .room-media-video-mount { display: none; }
+.room-media-video-wrap.mode-youtube .room-media-youtube-mount { display: block; }
+.room-media-video-wrap.mode-youtube:not(.youtube-shorts) .room-media-youtube-mount {
+	aspect-ratio: 16 / 9;
+	max-height: 280px;
+}
+.room-media-video-wrap.mode-youtube.youtube-shorts {
+	width: min(300px, 42vw);
+	right: auto;
+	left: 16px;
+	top: 120px;
+}
+.room-media-video-wrap.mode-youtube.youtube-shorts .room-media-youtube-mount {
+	aspect-ratio: 9 / 16;
+	max-height: min(520px, 55vh);
+}
+.room-media-youtube-block {
+	margin: 0 20px 12px;
+	padding: 12px;
+	border-radius: 12px;
+	background: rgba(255, 60, 60, 0.08);
+	border: 1px solid rgba(255, 100, 100, 0.25);
+}
+.room-media-or-yt { margin: 0 0 10px; }
+.room-media-or-yt span { color: rgba(255, 180, 180, 0.9); }
+.room-media-youtube-block .room-media-url {
+	width: 100%;
+	margin: 0;
+	box-sizing: border-box;
+}
+.room-media-youtube-hint {
+	margin: 8px 0 0;
+	font-size: 11px;
+	color: rgba(255, 200, 200, 0.75);
+	line-height: 1.35;
+}
 body.room-media-active #room-media-transport:not([hidden]) { display: block; }
+body.room-media-youtube .room-media-player-art { background: linear-gradient(135deg, #c4302b, #ff0000); }
 
 /* Learn panel must sit above fixed ads / social links (z-index 99999 in index.html) */
 body.learn-panel-open .ad1,

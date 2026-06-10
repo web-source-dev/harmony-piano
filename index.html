@@ -394,6 +394,7 @@
         <button type="button" class="room-media-video-close" title="Hide video">✕</button>
     </div>
     <div id="room-media-video-mount" class="room-media-video-mount"></div>
+    <div id="room-media-youtube-mount" class="room-media-youtube-mount"></div>
 </div>
 <div id="room-media-audio-mount" class="room-media-audio-mount" hidden aria-hidden="true"></div>
 
@@ -483,6 +484,11 @@
                 </label>
                 <div class="room-media-or"><span>or paste a link</span></div>
                 <input type="text" name="mediaurl" class="room-media-url" placeholder="https://example.com/song.mp3" maxlength="480"/>
+                <div class="room-media-youtube-block">
+                    <div class="room-media-or room-media-or-yt"><span>YouTube &amp; Shorts — watch together</span></div>
+                    <input type="text" name="youtubeurl" class="room-media-url room-media-youtube-url" placeholder="https://youtube.com/shorts/… or youtu.be/…" maxlength="480"/>
+                    <p class="room-media-youtube-hint">Paste a YouTube or Shorts link — everyone in the room sees the same reel in sync.</p>
+                </div>
                 <p class="room-media-status">Ready</p>
                 <div class="room-media-actions">
                     <button type="button" class="dj-btn primary room-media-load">Load &amp; share</button>

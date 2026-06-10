@@ -1540,7 +1540,7 @@ Rect.prototype.contains = function(x, y) {
 		});
 		gClient.on("disconnect", function() {
 			$("#room-media-btn").removeClass("room-dj-visible room-dj-playing");
-			document.body.classList.remove("room-dj-playing", "room-media-active", "room-dj-video");
+			document.body.classList.remove("room-dj-playing", "room-media-active");
 		});
 		$("#room-settings-btn").click(function(evt) {
 			if(gClient.channel && gClient.isOwner()) {
@@ -3473,7 +3473,7 @@ Rect.prototype.contains = function(x, y) {
 			document.body.classList.add("room-media-active");
 		} else {
 			$roomMediaTransport.attr("hidden", "hidden");
-			document.body.classList.remove("room-media-active", "room-dj-video");
+			document.body.classList.remove("room-media-active");
 			setRoomDjPlaying(false);
 		}
 	}
@@ -3518,14 +3518,20 @@ Rect.prototype.contains = function(x, y) {
 			onProgress: updateRoomMediaProgress,
 			onTransport: function(info) {
 				if(info.visible) showRoomMediaTransport(true);
-				if(info.kind === "video" && info.videoEl) {
-					document.body.classList.add("room-dj-video");
+				if(info.kind === "youtube") {
+					$roomMediaVideoWrap.removeClass("mode-youtube youtube-shorts");
+					$roomMediaVideoWrap.addClass("mode-youtube");
+					if(info.isShort) $roomMediaVideoWrap.addClass("youtube-shorts");
+					$roomMediaVideoWrap.removeAttr("hidden");
+					$roomMediaVideoWrap.find(".room-media-video-title").text(gRoomMedia.title || "YouTube");
+				} else if(info.kind === "video" && info.videoEl) {
+					$roomMediaVideoWrap.removeClass("mode-youtube youtube-shorts");
 					mountRoomMediaVideo(info.videoEl);
 					$roomMediaVideoWrap.removeAttr("hidden");
 					$roomMediaVideoWrap.find(".room-media-video-title").text(gRoomMedia.title || "Video");
-				} else {
-					document.body.classList.remove("room-dj-video");
+				} else if(info.kind !== "youtube") {
 					$roomMediaVideoWrap.attr("hidden", "hidden");
+					$roomMediaVideoWrap.removeClass("mode-youtube youtube-shorts");
 				}
 			}
 		});
@@ -3564,22 +3570,34 @@ Rect.prototype.contains = function(x, y) {
 
 	function loadRoomMediaSelection() {
 		if(!ensureRoomMediaReady()) return Promise.reject(new Error("Not ready"));
-		return ensureMediaServer().then(function() {
-			var fileInput = $roomMediaDialog.find("input[name=mediafile]")[0];
-			var urlInput = $roomMediaDialog.find("input[name=mediaurl]").val();
-			var file = fileInput && fileInput.files && fileInput.files[0];
-			if(file) {
+		var fileInput = $roomMediaDialog.find("input[name=mediafile]")[0];
+		var urlInput = ($roomMediaDialog.find("input[name=mediaurl]").val() || "").trim();
+		var ytInput = ($roomMediaDialog.find("input[name=youtubeurl]").val() || "").trim();
+		var file = fileInput && fileInput.files && fileInput.files[0];
+		var ytUrl = ytInput;
+		if(!ytUrl && urlInput && typeof RoomMedia !== "undefined" && RoomMedia.isYouTubeUrl(urlInput)) {
+			ytUrl = urlInput;
+		}
+		if(ytUrl) {
+			var ytTitle = ytUrl.indexOf("/shorts/") >= 0 ? "YouTube Short" : "YouTube";
+			gRoomMedia.loadUrlAndShare(ytUrl, ytTitle);
+			showRoomMediaTransport(true);
+			return Promise.resolve();
+		}
+		if(file) {
+			return ensureMediaServer().then(function() {
 				return gRoomMedia.loadAndShare(file).then(function() {
 					showRoomMediaTransport(true);
 				});
-			}
-			if(urlInput && urlInput.trim()) {
-				gRoomMedia.loadUrlAndShare(urlInput.trim());
+			});
+		}
+		if(urlInput) {
+			return ensureMediaServer().then(function() {
+				gRoomMedia.loadUrlAndShare(urlInput);
 				showRoomMediaTransport(true);
-				return Promise.resolve();
-			}
-			return Promise.reject(new Error("Choose a file or paste a direct audio/video URL."));
-		});
+			});
+		}
+		return Promise.reject(new Error("Choose a file, paste a direct URL, or paste a YouTube / Shorts link."));
 	}
 
 	function funClearTimers() {
@@ -4308,13 +4326,12 @@ Rect.prototype.contains = function(x, y) {
 		});
 		$roomMediaTransport.on("click", ".back", function(e) {
 			e.preventDefault();
-			if(gRoomMedia) gRoomMedia.seekTo(Math.max(0, (gRoomMedia.activeEl.currentTime || 0) - 10));
+			if(gRoomMedia) gRoomMedia.seekTo(Math.max(0, gRoomMedia.getCurrentTime() - 10));
 		});
 		$roomMediaTransport.on("click", ".forward", function(e) {
 			e.preventDefault();
 			if(gRoomMedia) {
-				var dur = gRoomMedia.activeEl.duration || 0;
-				gRoomMedia.seekTo(Math.min(dur, (gRoomMedia.activeEl.currentTime || 0) + 10));
+				gRoomMedia.seekTo(Math.min(gRoomMedia.getDuration(), gRoomMedia.getCurrentTime() + 10));
 			}
 		});
 		$roomMediaTransport.on("click", ".room-media-sync", function(e) {
