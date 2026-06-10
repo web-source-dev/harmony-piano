@@ -8,8 +8,13 @@
     <link rel="stylesheet" href="./screen.css"/>
     <link rel="canonical" href="https://multiplayerpiano.com/">
 
+    <script>
+      window.gDontShow = !!(window.location.hash && window.location.hash.match(/^(?:#.+)*#dontshow(?:#.+)*$/i));
+      if (window.gDontShow) document.documentElement.classList.add('dontshow');
+    </script>
 
     <script>
+      if (!window.gDontShow) {
       window.aiptag = window.aiptag || {cmd: []};
       aiptag.cmd.display = aiptag.cmd.display || [];
       aiptag.cmd.player = aiptag.cmd.player || [];
@@ -56,8 +61,16 @@
           alert("Ad Could not be loaded, load your content here");
         }
       }
+      }
     </script>
-    <script async src="//api.adinplay.com/libs/aiptag/pub/BTP/multiplayerpiano.com/tag.min.js"></script>
+    <script>
+      if (!window.gDontShow) {
+        var aipScript = document.createElement('script');
+        aipScript.async = true;
+        aipScript.src = '//api.adinplay.com/libs/aiptag/pub/BTP/multiplayerpiano.com/tag.min.js';
+        document.head.appendChild(aipScript);
+      }
+    </script>
 </head>
 <body>
 
@@ -74,14 +87,18 @@
 </style>
 
 <script>
-    setInterval(function(){
-      aiptag.cmd.display.push(function() { aipDisplayTag.display('multiplayerpiano-com_970x90'); });
-    }, 14 * 1000)
+    if (!window.gDontShow) {
+      setInterval(function(){
+        aiptag.cmd.display.push(function() { aipDisplayTag.display('multiplayerpiano-com_970x90'); });
+      }, 14 * 1000);
+    }
 </script>
 
 <div class='ad1' id='multiplayerpiano-com_970x90'>
     <script type='text/javascript'>
-      aiptag.cmd.display.push(function() { aipDisplayTag.display('multiplayerpiano-com_970x90'); });
+      if (!window.gDontShow) {
+        aiptag.cmd.display.push(function() { aipDisplayTag.display('multiplayerpiano-com_970x90'); });
+      }
     </script>
 </div>
 

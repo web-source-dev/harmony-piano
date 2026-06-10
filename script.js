@@ -5,7 +5,7 @@ $(function() {
 
 	var test_mode = (window.location.hash && window.location.hash.match(/^(?:#.+)*#test(?:#.+)*$/i));
 
-	var gDontShow = (window.location.hash && window.location.hash.match(/^(?:#.+)*#dontshow(?:#.+)*$/i));
+	var gDontShow = !!window.gDontShow;
 
 	var gSeeOwnCursor = (window.location.hash && window.location.hash.match(/^(?:#.+)*#seeowncursor(?:#.+)*$/i));
 
@@ -2230,7 +2230,7 @@ Rect.prototype.contains = function(x, y) {
 		setInterval(showCornerBanner, 45000);
 		showWelcomePopup();
 	} else {
-		$("#botii-corner-banner").hide();
+		$("#botii-corner-banner, .ad1, #social, #banner").hide();
 	}
 	function dismissWelcomePopup(evt) {
 		if(evt) {
@@ -5268,7 +5268,8 @@ _gaq.push(['_setAllowAnchor', true]);
 !function(d,s,id){var js,fjs=d.getElementsByTagName(s)[0];if(!d.getElementById(id)){js=d.createElement(s);js.id=id;
 	js.src="//platform.twitter.com/widgets.js";fjs.parentNode.insertBefore(js,fjs);}}(document,"script","twitter-wjs");
 
-// fb
+// fb (social widget — skip when #dontshow)
+if (!window.gDontShow) {
 (function(d, s, id) {
   var js, fjs = d.getElementsByTagName(s)[0];
   if (d.getElementById(id)) return;
@@ -5276,6 +5277,7 @@ _gaq.push(['_setAllowAnchor', true]);
   js.src = "//connect.facebook.net/en_US/sdk.js#xfbml=1&version=v2.8";
   fjs.parentNode.insertBefore(js, fjs);
 }(document, 'script', 'facebook-jssdk'));
+}
 
 // non-ad-free experience
 /*(function() {
