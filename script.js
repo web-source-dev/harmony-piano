@@ -3018,6 +3018,11 @@ Rect.prototype.contains = function(x, y) {
 			}
 		});
 		gClient.on("a", function(msg) {
+			var chatLine = msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
+			if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) {
+				if(typeof gRoomMedia !== "undefined" && gRoomMedia) gRoomMedia.tryHandleChat(msg);
+				return;
+			}
 			chat.receive(msg);
 		});
 
@@ -3130,7 +3135,8 @@ Rect.prototype.contains = function(x, y) {
 
 			receive: function(msg) {
 				if(gChatMutes.indexOf(msg.p._id) != -1) return;
-				if(typeof gRoomMedia !== "undefined" && gRoomMedia && gRoomMedia.tryHandleChat(msg)) return;
+				var chatLine = msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
+				if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) return;
 
 				var li = $('<li><span class="name"/><span class="message"/>');
 
@@ -3514,28 +3520,25 @@ Rect.prototype.contains = function(x, y) {
 	}
 
 	function loadRoomMediaSelection() {
-		if(!ensureRoomMediaReady()) return;
+		if(!ensureRoomMediaReady()) return Promise.reject(new Error("Not ready"));
 		var fileInput = $roomMediaDialog.find("input[name=mediafile]")[0];
 		var urlInput = $roomMediaDialog.find("input[name=mediaurl]").val();
 		var file = fileInput && fileInput.files && fileInput.files[0];
 		if(file) {
-			gRoomMedia.loadAndShare(file).then(function() {
+			return gRoomMedia.loadAndShare(file).then(function() {
 				showRoomMediaTransport(true);
-			}).catch(function(err) {
-				alert(err.message || String(err));
 			});
-			return;
 		}
 		if(urlInput && urlInput.trim()) {
 			try {
 				gRoomMedia.loadUrlAndShare(urlInput.trim());
 				showRoomMediaTransport(true);
+				return Promise.resolve();
 			} catch(err) {
-				alert(err.message);
+				return Promise.reject(err);
 			}
-			return;
 		}
-		alert("Choose a file or paste a direct audio/video URL.");
+		return Promise.reject(new Error("Choose a file or paste a direct audio/video URL."));
 	}
 
 	function funClearTimers() {
@@ -4244,7 +4247,11 @@ Rect.prototype.contains = function(x, y) {
 		$roomMediaTransport.on("click", ".play", function(e) {
 			e.preventDefault();
 			ensureAudioReady();
-			if(gRoomMedia) gRoomMedia.play(true);
+			if(!gRoomMedia || !gRoomMedia.url) {
+				alert("Load music from Room DJ first.");
+				return;
+			}
+			gRoomMedia.play(true);
 		});
 		$roomMediaTransport.on("click", ".pause", function(e) {
 			e.preventDefault();
@@ -4277,20 +4284,27 @@ Rect.prototype.contains = function(x, y) {
 		$("#room-media").on("click", ".room-media-load", function(e) {
 			e.preventDefault();
 			e.stopPropagation();
-			loadRoomMediaSelection();
+			loadRoomMediaSelection().catch(function(err) {
+				alert(err.message || String(err));
+			});
 		});
 		$("#room-media").on("click", ".play", function(e) {
 			e.preventDefault();
 			e.stopPropagation();
 			if(!ensureRoomMediaReady()) return;
 			ensureAudioReady();
+			function startPlay() {
+				gRoomMedia.play(true);
+				showRoomMediaTransport(true);
+				closeModal();
+			}
 			if(!gRoomMedia.url) {
-				loadRoomMediaSelection();
+				loadRoomMediaSelection().then(startPlay).catch(function(err) {
+					alert(err.message || String(err));
+				});
 				return;
 			}
-			gRoomMedia.play(true);
-			showRoomMediaTransport(true);
-			closeModal();
+			startPlay();
 		});
 		$("#room-media").on("click", ".stop", function(e) {
 			e.preventDefault();

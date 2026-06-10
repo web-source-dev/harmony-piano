@@ -4,7 +4,18 @@
 (function (global) {
 	"use strict";
 
-	var SYNC_PREFIX = "\u2063RM|";
+	var SYNC_PREFIX = "RM|";
+
+	function chatText(msg) {
+		if (!msg) return "";
+		return msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
+	}
+
+	function syncPayload(text) {
+		if (!text || typeof text !== "string") return null;
+		if (text.indexOf(SYNC_PREFIX) === 0) return text.slice(SYNC_PREFIX.length);
+		return null;
+	}
 	var API_MEDIA = "/api/media";
 	var MAX_TITLE = 120;
 
@@ -95,6 +106,17 @@
 		this.progressTimer = null;
 		this.scheduledTimer = null;
 
+		var mount = options.mountEl || document.getElementById("room-media-audio-mount");
+		if (mount) {
+			mount.appendChild(this.audio);
+			mount.appendChild(this.video);
+		} else {
+			this.audio.style.display = "none";
+			this.video.style.display = "none";
+			document.body.appendChild(this.audio);
+			document.body.appendChild(this.video);
+		}
+
 		var self = this;
 		this.audio.addEventListener("ended", function () { self._onEnded(); });
 		this.video.addEventListener("ended", function () { self._onEnded(); });
@@ -104,6 +126,7 @@
 
 	RoomMedia.SYNC_PREFIX = SYNC_PREFIX;
 	RoomMedia.formatTime = formatTime;
+	RoomMedia.isSyncText = function (text) { return syncPayload(text) !== null; };
 
 	RoomMedia.prototype._markServerMedia = function (url) {
 		this.serverMediaUrl = normalizeServerMediaUrl(url);
@@ -161,7 +184,7 @@
 	};
 
 	RoomMedia.prototype.isSyncMessage = function (text) {
-		return !!(text && text.indexOf(SYNC_PREFIX) === 0);
+		return syncPayload(text) !== null;
 	};
 
 	RoomMedia.prototype.ownParticipant = function () {
@@ -179,8 +202,10 @@
 	};
 
 	RoomMedia.prototype.tryHandleChat = function (msg) {
-		if (!msg || !this.isSyncMessage(msg.a)) return false;
-		var parts = msg.a.slice(SYNC_PREFIX.length).split("|");
+		var text = chatText(msg);
+		var payload = syncPayload(text);
+		if (payload === null) return false;
+		var parts = payload.split("|");
 		var cmd = parts[0];
 		var me = this.ownParticipant();
 		if (me && msg.p && msg.p._id === me._id) return true;
@@ -255,6 +280,8 @@
 		this._markServerMedia(url);
 		this.audio.src = this.kind === "audio" ? url : "";
 		this.video.src = this.kind === "video" ? url : "";
+		if (this.kind === "audio" && this.audio.src) this.audio.load();
+		if (this.kind === "video" && this.video.src) this.video.load();
 	};
 
 	RoomMedia.prototype._replaceServerMedia = function (nextUrl) {
@@ -334,22 +361,48 @@
 
 	RoomMedia.prototype._localPlay = function (broadcast) {
 		var self = this;
-		if (!this.url) return;
+		if (!this.url) {
+			this.onStatus("Load a file or URL first.");
+			return;
+		}
 		this.ignoreRemoteUntil = Date.now() + 300;
 		this.activeEl.volume = this.volume;
-		var p = this.activeEl.play();
-		if (p && p.catch) {
-			p.catch(function () {
-				self.onStatus("Tap Play again — browser blocked autoplay.");
-			});
+
+		function doPlay() {
+			var p = self.activeEl.play();
+			if (p && p.catch) {
+				p.catch(function (err) {
+					self.onStatus("Playback blocked — click Play again. (" + (err.message || "autoplay") + ")");
+					self.playing = false;
+				});
+			}
+			self.playing = true;
+			self.paused = false;
+			self._startProgress();
+			self.onTransport({ visible: true, kind: self.kind, videoEl: self.video });
+			if (broadcast) {
+				self.sendSync("p|" + self.serverTime() + "|" + (self.activeEl.currentTime || 0));
+			}
 		}
-		this.playing = true;
-		this.paused = false;
-		this._startProgress();
-		this.onTransport({ visible: true, kind: this.kind, videoEl: this.video });
-		if (broadcast) {
-			this.sendSync("p|" + this.serverTime() + "|" + (this.activeEl.currentTime || 0));
+
+		if (this.activeEl.readyState >= 2) {
+			doPlay();
+			return;
 		}
+		this.onStatus("Buffering…");
+		this.activeEl.load();
+		var onReady = function () {
+			self.activeEl.removeEventListener("canplay", onReady);
+			self.activeEl.removeEventListener("error", onErr);
+			doPlay();
+		};
+		var onErr = function () {
+			self.activeEl.removeEventListener("canplay", onReady);
+			self.activeEl.removeEventListener("error", onErr);
+			self.onStatus("Could not load media — check file upload or URL.");
+		};
+		this.activeEl.addEventListener("canplay", onReady);
+		this.activeEl.addEventListener("error", onErr);
 	};
 
 	RoomMedia.prototype._localPause = function (broadcast) {
