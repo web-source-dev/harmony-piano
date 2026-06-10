@@ -2222,19 +2222,17 @@ Rect.prototype.contains = function(x, y) {
 	
 	
 	
-	// warn user about loud noises before starting sound (no autoplay)
-	openModal("#sound-warning");
-	var user_interact = function(evt) {
-		document.removeEventListener("click", user_interact);
+	// funny welcome popup before starting sound (no autoplay)
+	showWelcomePopup();
+	function dismissWelcomePopup(evt) {
+		if(evt) {
+			evt.preventDefault();
+			evt.stopPropagation();
+		}
 		closeModal();
 		ensureAudioReady();
-	};
-	document.addEventListener("click", user_interact);
-	$("#sound-warning .submit").on("click", function(evt) {
-		evt.preventDefault();
-		evt.stopPropagation();
-		user_interact(evt);
-	});
+	}
+	$("#sound-warning .botii-welcome-ok, #sound-warning .botii-welcome-ok2").on("click", dismissWelcomePopup);
 
 
 
@@ -2742,6 +2740,7 @@ Rect.prototype.contains = function(x, y) {
 
 	function modalHandleEsc(evt) {
 		if(evt.keyCode == 27) {
+			if(gModal === "#sound-warning") return;
 			closeModal();
 			evt.preventDefault();
 			evt.stopPropagation();
@@ -2787,9 +2786,31 @@ Rect.prototype.contains = function(x, y) {
 		openModal("#noob-kickban-block");
 	}
 
+	function showWelcomePopup() {
+		var popup = (typeof Client !== "undefined" && Client.pickWelcomePopup)
+			? Client.pickWelcomePopup()
+			: {
+				title: "👀🚨 ALERT! ALERT! 🚨👀",
+				body: "Your favorite Noob has been waiting... 🥹😭💔\n\nWelcome back, Botii Mammi 🤖👩‍🍼💕",
+				button: "🔍 Find My Noob 🔍"
+			};
+		$("#sound-warning .botii-welcome-title").text(popup.title || "");
+		$("#sound-warning .botii-welcome-msg").text(popup.body || "");
+		$("#sound-warning .botii-welcome-ok").text(popup.button || "PLAY");
+		var $btn2 = $("#sound-warning .botii-welcome-ok2");
+		var btn2Text = popup.button2 ? String(popup.button2).trim() : "";
+		if(btn2Text) {
+			$btn2.text(btn2Text).show();
+		} else {
+			$btn2.text("").hide();
+		}
+		openModal("#sound-warning");
+	}
+
 	var modal_bg = $("#modal .bg")[0];
 	$(modal_bg).on("click", function(evt) {
 		if(evt.target != modal_bg) return;
+		if(gModal === "#sound-warning") return;
 		closeModal();
 	});
 
