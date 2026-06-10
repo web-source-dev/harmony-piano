@@ -78,7 +78,8 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
 
     def log_message(self, fmt, *args):
-        if "/api/" in (args[0] if args else ""):
+        path = getattr(self, "path", "") or ""
+        if path.startswith("/api/") or path.rstrip("/") in ("/api/e", "/api/chat-log"):
             return
         super().log_message(fmt, *args)
 

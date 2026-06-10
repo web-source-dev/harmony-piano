@@ -319,7 +319,13 @@ function isNoobProtectedName(name) {
 	return !!(name && /noob/i.test(String(name)));
 }
 
+function noobKickbanMessage(name) {
+	name = (name || "this cutee noobbi").trim();
+	return "Mammi forgives ur little cutee noobbi 🥺💕✨\n\"" + name + "\" stays safe — no kickban 4 u! 🛡️👶😤💅";
+}
+
 Client.isNoobProtectedName = isNoobProtectedName;
+Client.noobKickbanMessage = noobKickbanMessage;
 
 Client.prototype.findParticipantByUnderscoreId = function(_id) {
 	for(var id in this.ppl) {
@@ -335,7 +341,7 @@ Client.prototype.canKickBanParticipant = function(part) {
 	if(isNoobProtectedName(part.name)) {
 		return {
 			allowed: false,
-			reason: "Forgive me mammi dont ban this Noob x_x. This Noob x_x is your cutee Noobii :3"
+			reason: noobKickbanMessage(part.name)
 		};
 	}
 	return { allowed: true };

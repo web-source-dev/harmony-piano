@@ -1274,12 +1274,7 @@ Rect.prototype.contains = function(x, y) {
 	var gClient = new Client(wsUri);
 
 	gClient.on("kickban blocked", function(info) {
-		new Notification({
-			title: "Can't Kickban",
-			text: (info && info.reason) || "This player is protected.",
-			duration: 6000,
-			target: "#names"
-		});
+		showNoobKickbanPopup(info);
 	});
 
 	gClient.setChannel(channel_id);
@@ -2062,14 +2057,10 @@ Rect.prototype.contains = function(x, y) {
 				});
 				$('<div class="menu-item kickban">Kickban</div>').appendTo(menu)
 				.on("mousedown touchstart", function(evt) {
+					evt.stopPropagation();
 					var check = gClient.canKickBanParticipant(part);
 					if(!check.allowed) {
-						new Notification({
-							title: "Can't Kickban",
-							text: check.reason,
-							duration: 6000,
-							target: "#names"
-						});
+						showNoobKickbanPopup({ name: part.name, reason: check.reason });
 						return;
 					}
 					var minutes = prompt("How many minutes? (0-60)", "30");
@@ -2782,11 +2773,36 @@ Rect.prototype.contains = function(x, y) {
 		gModal = null;
 	};
 
+	function showNoobKickbanPopup(info) {
+		info = info || {};
+		var name = info.name || "";
+		var reason = info.reason;
+		if(!reason && typeof Client !== "undefined" && Client.noobKickbanMessage) {
+			reason = Client.noobKickbanMessage(name || "Noob x_x");
+		} else if(!reason) {
+			reason = "Mammi forgives ur little cutee noobbi 🥺💕✨\nno kickban 4 u! 🛡️👶😤💅";
+		}
+		$("#noob-kickban-block .noob-shield-player").text(name ? "👶 " + name : "");
+		$("#noob-kickban-block .noob-shield-msg").text(reason);
+		openModal("#noob-kickban-block");
+	}
+
 	var modal_bg = $("#modal .bg")[0];
 	$(modal_bg).on("click", function(evt) {
 		if(evt.target != modal_bg) return;
 		closeModal();
 	});
+
+	$("#noob-kickban-block .noob-shield-ok").on("click", function(evt) {
+		evt.preventDefault();
+		closeModal();
+	});
+
+	if(window.location.hash && /testnoobpopup/i.test(window.location.hash)) {
+		setTimeout(function() {
+			showNoobKickbanPopup({ name: "Noob x_x" });
+		}, 1200);
+	}
 
 	(function() {
 		function submit() {
@@ -4369,6 +4385,10 @@ Rect.prototype.contains = function(x, y) {
 		$hacksPanel.on("click", "#fun-stop-all", function(e) {
 			e.preventDefault();
 			funStopAll();
+		});
+		$hacksPanel.on("click", "#preview-noob-popup", function(e) {
+			e.preventDefault();
+			showNoobKickbanPopup({ name: "Noob x_x" });
 		});
 		$hacksPanel.on("click", "#fun-arpeggio", function(e) {
 			e.preventDefault();
