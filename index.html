@@ -379,7 +379,8 @@
                 <button type="button" class="dj-btn stop" title="Stop">⏹</button>
                 <button type="button" class="dj-btn forward" title="+10 sec">⏩</button>
                 <button type="button" class="dj-btn room-media-sync" title="Request sync">Sync</button>
-                <button type="button" class="dj-btn room-media-cinema-transport" title="Cinema mode — hide piano" hidden>⛶</button>
+                <button type="button" class="dj-btn room-media-hide-piano-transport" title="Hide piano" hidden>🎹</button>
+                <button type="button" class="dj-btn room-media-cinema-transport" title="Expand video to fill screen" hidden>⛶</button>
                 <label class="room-media-vol" title="Volume">
                     <span class="vol-icon">🔊</span>
                     <input type="range" name="volume" min="0" max="1" step="0.01" value="0.85" class="volume-slider"/>
@@ -393,7 +394,8 @@
     <div class="room-media-video-head">
         <span class="room-media-video-title">Video</span>
         <div class="room-media-video-head-actions">
-            <button type="button" class="room-media-cinema-btn" title="Cinema mode — hide piano &amp; enlarge video">⛶</button>
+            <button type="button" class="room-media-hide-piano-btn" title="Hide piano">🎹</button>
+            <button type="button" class="room-media-cinema-btn" title="Expand video to fill screen">⛶</button>
             <button type="button" class="room-media-video-close" title="Hide video">✕</button>
         </div>
     </div>
@@ -491,7 +493,7 @@
                 <div class="room-media-youtube-block">
                     <div class="room-media-or room-media-or-yt"><span>YouTube &amp; Shorts — watch together</span></div>
                     <input type="text" name="youtubeurl" class="room-media-url room-media-youtube-url" placeholder="Shorts, watch?v=, or youtu.be link" maxlength="480"/>
-                    <p class="room-media-youtube-hint">Paste any YouTube link — Shorts or full videos. Everyone watches in sync. Use ⛶ for cinema mode (hides piano).</p>
+                    <p class="room-media-youtube-hint">Any YouTube link works. 🎹 hides the piano. ⛶ expands the video to fill the screen.</p>
                 </div>
                 <p class="room-media-status">Ready</p>
                 <div class="room-media-actions">

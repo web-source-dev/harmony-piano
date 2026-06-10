@@ -3458,27 +3458,60 @@ Rect.prototype.contains = function(x, y) {
 	var $roomMediaVideoWrap = $("#room-media-video-wrap");
 	var $roomMediaVideoMount = $("#room-media-video-mount");
 	var gRoomMediaCinema = false;
+	var gRoomMediaHidePiano = false;
 
 	function roomMediaHasVideoPanel() {
 		return gRoomMedia && (gRoomMedia.kind === "youtube" || gRoomMedia.kind === "video");
 	}
 
-	function updateRoomMediaCinemaUi() {
-		var show = roomMediaHasVideoPanel() && !$roomMediaVideoWrap.is("[hidden]");
-		$roomMediaTransport.find(".room-media-cinema-transport").prop("hidden", !show);
+	function refreshRoomMediaLayout() {
+		requestAnimationFrame(function() {
+			requestAnimationFrame(function() {
+				if(gRoomMedia && gRoomMedia.fitYouTubePlayer) gRoomMedia.fitYouTubePlayer();
+			});
+		});
+		setTimeout(function() {
+			if(gRoomMedia && gRoomMedia.fitYouTubePlayer) gRoomMedia.fitYouTubePlayer();
+		}, 150);
+	}
+
+	function updateRoomMediaLayoutUi() {
+		var hasTrack = gRoomMedia && !!gRoomMedia.url;
+		var hasVideo = roomMediaHasVideoPanel() && !$roomMediaVideoWrap.is("[hidden]");
+		$roomMediaTransport.find(".room-media-hide-piano-transport").prop("hidden", !hasTrack);
+		$roomMediaTransport.find(".room-media-cinema-transport").prop("hidden", !hasVideo);
+	}
+
+	function setRoomMediaHidePiano(on) {
+		gRoomMediaHidePiano = !!on;
+		document.body.classList.toggle("room-media-hide-piano", gRoomMediaHidePiano);
+		var label = gRoomMediaHidePiano ? "Show piano again" : "Hide piano";
+		$roomMediaVideoWrap.find(".room-media-hide-piano-btn").toggleClass("active", gRoomMediaHidePiano).attr("title", label);
+		$roomMediaTransport.find(".room-media-hide-piano-transport").toggleClass("active", gRoomMediaHidePiano).attr("title", label);
+		refreshRoomMediaLayout();
+	}
+
+	function toggleRoomMediaHidePiano() {
+		setRoomMediaHidePiano(!gRoomMediaHidePiano);
 	}
 
 	function setRoomMediaCinema(on) {
 		gRoomMediaCinema = !!on;
 		document.body.classList.toggle("room-media-cinema", gRoomMediaCinema);
-		var label = gRoomMediaCinema ? "Exit cinema mode (Esc)" : "Cinema mode — hide piano & enlarge video";
+		var label = gRoomMediaCinema ? "Exit expanded view (Esc)" : "Expand video to fill screen";
 		$roomMediaVideoWrap.find(".room-media-cinema-btn").toggleClass("active", gRoomMediaCinema).attr("title", label);
 		$roomMediaTransport.find(".room-media-cinema-transport").toggleClass("active", gRoomMediaCinema).attr("title", label);
+		refreshRoomMediaLayout();
 	}
 
 	function toggleRoomMediaCinema() {
 		if(!roomMediaHasVideoPanel() || $roomMediaVideoWrap.is("[hidden]")) return;
 		setRoomMediaCinema(!gRoomMediaCinema);
+	}
+
+	function resetRoomMediaLayout() {
+		setRoomMediaCinema(false);
+		setRoomMediaHidePiano(false);
 	}
 
 	function setRoomDjPlaying(playing) {
@@ -3537,8 +3570,12 @@ Rect.prototype.contains = function(x, y) {
 				$roomMediaTransport.find(".room-media-title").text(info.title || "No track loaded");
 				$roomMediaTransport.find(".room-media-dj").text(info.dj ? ("DJ · " + info.dj) : "");
 				showRoomMediaTransport(true);
+				updateRoomMediaLayoutUi();
 			},
 			onProgress: updateRoomMediaProgress,
+			onLayoutChange: function() {
+				refreshRoomMediaLayout();
+			},
 			onTransport: function(info) {
 				if(info.visible) showRoomMediaTransport(true);
 				if(info.kind === "youtube") {
@@ -3556,9 +3593,10 @@ Rect.prototype.contains = function(x, y) {
 				} else {
 					$roomMediaVideoWrap.attr("hidden", "hidden");
 					$roomMediaVideoWrap.removeClass("mode-youtube mode-video youtube-shorts");
-					setRoomMediaCinema(false);
+					resetRoomMediaLayout();
 				}
-				updateRoomMediaCinemaUi();
+				updateRoomMediaLayoutUi();
+				refreshRoomMediaLayout();
 			}
 		});
 		$roomMediaTransport.find("input[name=volume]").val(gRoomMedia.volume);
@@ -4310,7 +4348,7 @@ Rect.prototype.contains = function(x, y) {
 		$roomMediaTransport.on("click", ".dj-btn", function(e) { e.stopPropagation(); });
 		$roomMediaTransport.on("click", ".room-media-player-close", function(e) {
 			e.preventDefault();
-			setRoomMediaCinema(false);
+			resetRoomMediaLayout();
 			showRoomMediaTransport(false);
 		});
 		$roomMediaTransport.on("mousedown touchstart", "input[name=seek]", function() {
@@ -4351,7 +4389,7 @@ Rect.prototype.contains = function(x, y) {
 		$roomMediaTransport.on("click", ".stop", function(e) {
 			e.preventDefault();
 			if(gRoomMedia) gRoomMedia.stop(true);
-			setRoomMediaCinema(false);
+			resetRoomMediaLayout();
 		});
 		$roomMediaTransport.on("click", ".back", function(e) {
 			e.preventDefault();
@@ -4369,12 +4407,20 @@ Rect.prototype.contains = function(x, y) {
 		});
 		$roomMediaVideoWrap.on("click", ".room-media-video-close", function(e) {
 			e.preventDefault();
-			setRoomMediaCinema(false);
+			resetRoomMediaLayout();
 			$roomMediaVideoWrap.attr("hidden", "hidden");
+		});
+		$roomMediaVideoWrap.on("click", ".room-media-hide-piano-btn", function(e) {
+			e.preventDefault();
+			toggleRoomMediaHidePiano();
 		});
 		$roomMediaVideoWrap.on("click", ".room-media-cinema-btn", function(e) {
 			e.preventDefault();
 			toggleRoomMediaCinema();
+		});
+		$roomMediaTransport.on("click", ".room-media-hide-piano-transport", function(e) {
+			e.preventDefault();
+			toggleRoomMediaHidePiano();
 		});
 		$roomMediaTransport.on("click", ".room-media-cinema-transport", function(e) {
 			e.preventDefault();

@@ -274,6 +274,9 @@
 		this.ytIsShort = false;
 		this.ytShareUrl = null;
 		this.ytMount = options.youtubeMountEl || document.getElementById("room-media-youtube-mount");
+		this._ytResizeObs = null;
+		this._ytResizeUnlisten = null;
+		this.onLayoutChange = options.onLayoutChange || function () {};
 
 		var mount = options.mountEl || document.getElementById("room-media-audio-mount");
 		if (mount) {
@@ -345,8 +348,73 @@
 		if (broadcast) this.sendSync("d|" + encodePart(url));
 	};
 
+	RoomMedia.prototype._unbindYouTubeResize = function () {
+		if (this._ytResizeObs) {
+			this._ytResizeObs.disconnect();
+			this._ytResizeObs = null;
+		}
+		if (this._ytResizeUnlisten) {
+			global.removeEventListener("resize", this._ytResizeUnlisten);
+			this._ytResizeUnlisten = null;
+		}
+	};
+
+	RoomMedia.prototype._youtubeMountSize = function () {
+		var mount = this.ytMount;
+		if (!mount) return { w: 640, h: 360 };
+		var w = mount.clientWidth;
+		var h = mount.clientHeight;
+		if (w < 20 || h < 20) {
+			var wrap = mount.closest("#room-media-video-wrap");
+			if (wrap && !wrap.hasAttribute("hidden")) {
+				var head = wrap.querySelector(".room-media-video-head");
+				w = wrap.clientWidth;
+				h = wrap.clientHeight - (head ? head.offsetHeight : 0);
+			}
+		}
+		if (w < 20) w = 640;
+		if (h < 20) h = this.ytIsShort ? Math.round(w * 16 / 9) : Math.round(w * 9 / 16);
+		return { w: Math.floor(w), h: Math.floor(h) };
+	};
+
+	RoomMedia.prototype.fitYouTubePlayer = function () {
+		if (!this.ytPlayer || !this.ytMount) return;
+		var size = this._youtubeMountSize();
+		try {
+			if (this.ytPlayer.setSize) this.ytPlayer.setSize(size.w, size.h);
+		} catch (e) {}
+		var inner = this.ytMount.querySelector("#room-media-yt-player");
+		if (inner) {
+			inner.style.width = size.w + "px";
+			inner.style.height = size.h + "px";
+		}
+		var iframe = this.ytMount.querySelector("iframe");
+		if (iframe) {
+			iframe.style.width = size.w + "px";
+			iframe.style.height = size.h + "px";
+		}
+	};
+
+	RoomMedia.prototype._bindYouTubeResize = function () {
+		var self = this;
+		this._unbindYouTubeResize();
+		if (!this.ytMount) return;
+		var wrap = this.ytMount.closest("#room-media-video-wrap") || this.ytMount;
+		var onResize = function () {
+			self.fitYouTubePlayer();
+		};
+		if (typeof global.ResizeObserver !== "undefined") {
+			this._ytResizeObs = new global.ResizeObserver(onResize);
+			this._ytResizeObs.observe(wrap);
+			this._ytResizeObs.observe(this.ytMount);
+		}
+		global.addEventListener("resize", onResize);
+		this._ytResizeUnlisten = onResize;
+	};
+
 	RoomMedia.prototype._destroyYouTube = function () {
 		this.ytReady = false;
+		this._unbindYouTubeResize();
 		if (this.ytPlayer && this.ytPlayer.destroy) {
 			try { this.ytPlayer.destroy(); } catch (e) {}
 		}
@@ -408,12 +476,13 @@
 			if (self.ytVideoId === videoId && self.ytPlayer) return;
 			self._destroyYouTube();
 			self.ytVideoId = videoId;
-			self.ytMount.innerHTML = '<div id="room-media-yt-player"></div>';
+			self.ytMount.innerHTML = '<div id="room-media-yt-player" class="room-media-yt-player"></div>';
+			var size = self._youtubeMountSize();
 			return new Promise(function (resolve) {
 				self.ytPlayer = new global.YT.Player("room-media-yt-player", {
 					videoId: videoId,
-					width: "100%",
-					height: "100%",
+					width: size.w,
+					height: size.h,
 					playerVars: {
 						autoplay: 0,
 						controls: 0,
@@ -430,7 +499,10 @@
 							if (self.ytPlayer.setVolume) {
 								self.ytPlayer.setVolume(Math.round(self.volume * 100));
 							}
+							self._bindYouTubeResize();
+							self.fitYouTubePlayer();
 							self._emitProgress();
+							self.onLayoutChange({ kind: "youtube" });
 							resolve();
 						},
 						onStateChange: function (ev) {
