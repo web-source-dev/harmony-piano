@@ -358,34 +358,36 @@
 
 <div id="room-media-transport" class="room-media-transport" hidden>
     <div class="room-media-player">
-        <div class="room-media-player-body">
-            <div class="room-media-player-top">
-                <div class="room-media-player-meta">
-                    <span class="room-media-title">No track loaded</span>
-                    <span class="room-media-dj"></span>
-                </div>
-                <button type="button" class="room-media-player-close">Close</button>
+        <div class="room-media-player-top">
+            <div class="room-media-player-meta">
+                <span class="room-media-title">No track loaded</span>
+                <span class="room-media-dj"></span>
             </div>
-            <div class="room-media-player-seek">
-                <span class="time-current">0:00</span>
-                <input type="range" name="seek" min="0" max="1000" value="0" step="0.1" class="seek-slider" title="Seek"/>
-                <span class="time-total">0:00</span>
-            </div>
-            <div class="room-media-player-controls">
+            <button type="button" class="room-media-player-close">Close</button>
+        </div>
+        <div class="room-media-player-seek">
+            <span class="time-current">0:00</span>
+            <input type="range" name="seek" min="0" max="1000" value="0" step="0.1" class="seek-slider" title="Seek"/>
+            <span class="time-total">0:00</span>
+        </div>
+        <div class="room-media-player-controls">
+            <div class="room-media-controls-group">
                 <button type="button" class="dj-btn back">-10s</button>
                 <button type="button" class="dj-btn play primary">Play</button>
-                <button type="button" class="dj-btn pause">Pause</button>
+                <button type="button" class="dj-btn pause" hidden>Pause</button>
                 <button type="button" class="dj-btn stop">Stop</button>
                 <button type="button" class="dj-btn forward">+10s</button>
+            </div>
+            <div class="room-media-controls-group">
                 <button type="button" class="dj-btn room-media-sync">Sync</button>
                 <button type="button" class="dj-btn room-media-hide-piano-transport" hidden>Hide piano</button>
                 <button type="button" class="dj-btn room-media-cinema-transport" hidden>Fullscreen</button>
                 <button type="button" class="dj-btn room-media-chat-transport" hidden>Chat</button>
-                <label class="room-media-vol" title="Volume">
-                    <span class="vol-label">Vol</span>
-                    <input type="range" name="volume" min="0" max="1" step="0.01" value="0.85" class="volume-slider"/>
-                </label>
             </div>
+            <label class="room-media-vol" title="Volume">
+                <span class="vol-label">Vol</span>
+                <input type="range" name="volume" min="0" max="1" step="0.01" value="0.85" class="volume-slider"/>
+            </label>
         </div>
     </div>
 </div>
@@ -477,33 +479,34 @@
         <div id="room-media" class="dialog room-media-dialog">
             <div class="room-media-dialog-inner">
                 <header class="room-media-dialog-header">
-                    <div class="room-media-dialog-icon" aria-hidden="true">🎧</div>
                     <div class="room-media-dialog-heading">
                         <h2 class="room-media-dialog-title">Room DJ</h2>
-                        <p class="room-media-dialog-sub">Share songs &amp; videos with everyone in the room</p>
+                        <p class="room-media-dialog-sub">Share audio, video, or YouTube with the room</p>
                     </div>
                 </header>
-                <p class="room-media-hint">Upload MP3, M4A, WAV, MP4, WebM and more. Files are hosted on this server — not played through the piano keys.</p>
-                <p class="room-media-server-badge" hidden></p>
-                <label class="room-media-drop">
-                    <input type="file" name="mediafile" accept="audio/*,video/*,.mp3,.m4a,.wav,.ogg,.mp4,.webm,.mov,.mkv"/>
-                    <span class="room-media-drop-icon">📁</span>
-                    <span class="room-media-drop-text">Choose audio or video file</span>
-                    <span class="room-media-drop-name"></span>
-                </label>
-                <div class="room-media-or"><span>or paste a link</span></div>
-                <input type="text" name="mediaurl" class="room-media-url" placeholder="https://example.com/song.mp3" maxlength="480"/>
-                <div class="room-media-youtube-block">
-                    <div class="room-media-or room-media-or-yt"><span>YouTube &amp; Shorts — watch together</span></div>
-                    <input type="text" name="youtubeurl" class="room-media-url room-media-youtube-url" placeholder="Shorts, watch?v=, or youtu.be link" maxlength="480"/>
-                    <p class="room-media-youtube-hint">Any YouTube link works. Hide piano keeps chat visible. Fullscreen expands the video. Chat button appears in fullscreen.</p>
-                </div>
-                <p class="room-media-status">Ready</p>
-                <div class="room-media-actions">
-                    <button type="button" class="dj-btn primary room-media-load">Load &amp; share</button>
-                    <button type="button" class="dj-btn play">▶ Play for room</button>
-                    <button type="button" class="dj-btn stop subtle">Stop</button>
-                    <button type="button" class="dj-btn room-media-sync subtle">Sync</button>
+                <div class="room-media-dialog-body">
+                    <p class="room-media-hint">Upload a file or paste a link. Playback is synced for everyone in the room.</p>
+                    <p class="room-media-server-badge" hidden></p>
+                    <label class="room-media-drop">
+                        <input type="file" name="mediafile" accept="audio/*,video/*,.mp3,.m4a,.wav,.ogg,.mp4,.webm,.mov,.mkv"/>
+                        <span class="room-media-drop-text">Choose audio or video file</span>
+                        <span class="room-media-drop-name"></span>
+                    </label>
+                    <div class="room-media-field">
+                        <label class="room-media-field-label">Direct link</label>
+                        <input type="text" name="mediaurl" class="room-media-url" placeholder="https://example.com/song.mp3" maxlength="480"/>
+                    </div>
+                    <div class="room-media-field room-media-youtube-block">
+                        <label class="room-media-field-label">YouTube</label>
+                        <input type="text" name="youtubeurl" class="room-media-url room-media-youtube-url" placeholder="youtube.com/watch, /shorts/, or youtu.be" maxlength="480"/>
+                    </div>
+                    <p class="room-media-status">Ready</p>
+                    <div class="room-media-actions">
+                        <button type="button" class="dj-btn primary room-media-load">Load and share</button>
+                        <button type="button" class="dj-btn play">Play for room</button>
+                        <button type="button" class="dj-btn stop subtle">Stop</button>
+                        <button type="button" class="dj-btn room-media-sync subtle">Sync</button>
+                    </div>
                 </div>
             </div>
         </div>
