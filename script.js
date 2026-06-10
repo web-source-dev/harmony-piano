@@ -3494,8 +3494,10 @@ Rect.prototype.contains = function(x, y) {
 		var transportH = (transport && !transport.hasAttribute("hidden") && !controlsHidden) ? transport.offsetHeight : 0;
 		var inputBar = document.getElementById("chat-input-bar");
 		var inputH = (gRoomMediaCinemaChat && inputBar) ? inputBar.offsetHeight : 0;
+		var chatW = gRoomMediaCinemaChat ? Math.min(360, Math.floor(window.innerWidth * 0.36)) : 0;
 		document.documentElement.style.setProperty("--room-media-transport-h", transportH + "px");
 		document.documentElement.style.setProperty("--room-media-input-h", inputH + "px");
+		document.documentElement.style.setProperty("--room-media-chat-w", chatW + "px");
 		requestAnimationFrame(function() {
 			requestAnimationFrame(function() {
 				if(gRoomMedia && gRoomMedia.fitYouTubePlayer) gRoomMedia.fitYouTubePlayer();
@@ -3521,7 +3523,7 @@ Rect.prototype.contains = function(x, y) {
 	function setRoomMediaHidePiano(on) {
 		gRoomMediaHidePiano = !!on;
 		document.body.classList.toggle("room-media-hide-piano", gRoomMediaHidePiano);
-		var label = gRoomMediaHidePiano ? "Show piano" : "Hide piano";
+		var label = gRoomMediaHidePiano ? "Show piano" : "Piano";
 		$roomMediaVideoWrap.find(".room-media-hide-piano-btn").toggleClass("active", gRoomMediaHidePiano).text(label);
 		$roomMediaTransport.find(".room-media-hide-piano-transport").toggleClass("active", gRoomMediaHidePiano).text(label);
 		refreshRoomMediaLayout();
@@ -3558,7 +3560,7 @@ Rect.prototype.contains = function(x, y) {
 		} else {
 			bumpRoomMediaControls();
 		}
-		var label = gRoomMediaCinema ? "Exit fullscreen" : "Fullscreen";
+		var label = gRoomMediaCinema ? "Exit" : "Full";
 		$roomMediaVideoWrap.find(".room-media-cinema-btn").toggleClass("active", gRoomMediaCinema).text(label);
 		$roomMediaTransport.find(".room-media-cinema-transport").toggleClass("active", gRoomMediaCinema).text(label);
 		updateRoomMediaLayoutUi();
@@ -3616,6 +3618,8 @@ Rect.prototype.contains = function(x, y) {
 		$roomMediaTransport.toggleClass("is-playing", !!info.playing);
 		$roomMediaTransport.find(".play").prop("hidden", !!info.playing);
 		$roomMediaTransport.find(".pause").prop("hidden", !info.playing);
+		$roomMediaTransport.find(".play").toggleClass("primary", !info.playing);
+		$roomMediaTransport.find(".pause").toggleClass("primary", !!info.playing);
 		if(info.playing && gRoomMediaCinema) bumpRoomMediaControls();
 	}
 
