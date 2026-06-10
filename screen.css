@@ -1419,15 +1419,29 @@ body.room-dj-playing .room-media-player-art {
 
 .room-media-video-wrap {
 	position: fixed;
-	right: 16px;
-	top: 90px;
-	width: min(380px, 40vw);
+	left: 50%;
+	top: calc(10% + 152px);
+	transform: translateX(-50%);
+	width: min(560px, 92vw);
 	z-index: 770;
 	background: linear-gradient(165deg, #1a2238, #0e1424);
 	border: 1px solid rgba(130, 170, 255, 0.35);
 	border-radius: 14px;
 	box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
 	overflow: hidden;
+}
+body.room-media-has-video #room-media-transport {
+	top: 10%;
+	bottom: auto;
+}
+body.room-media-has-video .room-media-video-wrap {
+	top: calc(10% + 152px);
+}
+.room-media-video-mount video {
+	display: block;
+	width: 100%;
+	max-height: min(42vh, 360px);
+	background: #000;
 }
 .room-media-video-wrap:not([hidden]) { display: block; }
 .room-media-video-head {
@@ -1454,12 +1468,6 @@ body.room-dj-playing .room-media-player-art {
 	line-height: 1;
 }
 .room-media-video-close:hover { background: rgba(255, 255, 255, 0.18); }
-.room-media-video-mount video {
-	display: block;
-	width: 100%;
-	max-height: 220px;
-	background: #000;
-}
 body.room-media-active #room-media-transport:not([hidden]) { display: block; }
 
 /* Learn panel must sit above fixed ads / social links (z-index 99999 in index.html) */
