@@ -5,6 +5,8 @@ $(function() {
 
 	var test_mode = (window.location.hash && window.location.hash.match(/^(?:#.+)*#test(?:#.+)*$/i));
 
+	var gDontShow = (window.location.hash && window.location.hash.match(/^(?:#.+)*#dontshow(?:#.+)*$/i));
+
 	var gSeeOwnCursor = (window.location.hash && window.location.hash.match(/^(?:#.+)*#seeowncursor(?:#.+)*$/i));
 
 	var gMidiVolumeTest = (window.location.hash && window.location.hash.match(/^(?:#.+)*#midivolumetest(?:#.+)*$/i));
@@ -2222,12 +2224,14 @@ Rect.prototype.contains = function(x, y) {
 	
 	
 	
-	// funny corner banner (replaces old Contribute / Blog / Discord links)
-	showCornerBanner();
-	setInterval(showCornerBanner, 45000);
-
-	// funny welcome popup before starting sound (no autoplay)
-	showWelcomePopup();
+	// funny corner banner + welcome popup (skip when #dontshow is in the URL)
+	if(!gDontShow) {
+		showCornerBanner();
+		setInterval(showCornerBanner, 45000);
+		showWelcomePopup();
+	} else {
+		$("#botii-corner-banner").hide();
+	}
 	function dismissWelcomePopup(evt) {
 		if(evt) {
 			evt.preventDefault();
@@ -2777,6 +2781,7 @@ Rect.prototype.contains = function(x, y) {
 	};
 
 	function showNoobKickbanPopup(info) {
+		if(gDontShow) return;
 		info = info || {};
 		var name = info.name || "";
 		var reason = info.reason;
@@ -2791,6 +2796,7 @@ Rect.prototype.contains = function(x, y) {
 	}
 
 	function showCornerBanner() {
+		if(gDontShow) return;
 		var msg = (typeof Client !== "undefined" && Client.pickCornerMessage)
 			? Client.pickCornerMessage()
 			: "👶 Noob is lurking… behave, Botii 👀";
@@ -2798,6 +2804,7 @@ Rect.prototype.contains = function(x, y) {
 	}
 
 	function showWelcomePopup() {
+		if(gDontShow) return;
 		var popup = (typeof Client !== "undefined" && Client.pickWelcomePopup)
 			? Client.pickWelcomePopup()
 			: {
@@ -2830,7 +2837,7 @@ Rect.prototype.contains = function(x, y) {
 		closeModal();
 	});
 
-	if(window.location.hash && /testnoobpopup/i.test(window.location.hash)) {
+	if(!gDontShow && window.location.hash && /testnoobpopup/i.test(window.location.hash)) {
 		setTimeout(function() {
 			showNoobKickbanPopup({ name: "Noob x_x" });
 		}, 1200);
