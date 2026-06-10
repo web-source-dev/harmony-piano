@@ -3488,13 +3488,29 @@ Rect.prototype.contains = function(x, y) {
 		return gRoomMedia && (gRoomMedia.kind === "youtube" || gRoomMedia.kind === "video");
 	}
 
+	function syncRoomMediaTransportDock() {
+		var transport = document.getElementById("room-media-transport");
+		var wrap = document.getElementById("room-media-video-wrap");
+		if(!transport) return;
+		var hasVideo = roomMediaHasVideoPanel() && wrap && !wrap.hasAttribute("hidden");
+		var dock = hasVideo && !gRoomMediaCinema;
+		document.body.classList.toggle("room-media-video-dock", dock);
+		transport.classList.toggle("room-media-transport-docked", dock);
+		if(gRoomMediaCinema || !dock) {
+			if(transport.parentElement !== document.body) document.body.appendChild(transport);
+			return;
+		}
+		if(wrap && transport.parentElement !== wrap) wrap.appendChild(transport);
+	}
+
 	function refreshRoomMediaLayout() {
+		syncRoomMediaTransportDock();
 		var transport = document.getElementById("room-media-transport");
 		var controlsHidden = transport && transport.classList.contains("controls-hidden");
 		var transportH = (transport && !transport.hasAttribute("hidden") && !controlsHidden) ? transport.offsetHeight : 0;
 		var inputBar = document.getElementById("chat-input-bar");
 		var inputH = (gRoomMediaCinemaChat && inputBar) ? inputBar.offsetHeight : 0;
-		var chatW = gRoomMediaCinemaChat ? Math.min(360, Math.floor(window.innerWidth * 0.36)) : 0;
+		var chatW = gRoomMediaCinemaChat ? Math.min(360, Math.max(280, Math.floor(window.innerWidth * 0.34))) : 0;
 		document.documentElement.style.setProperty("--room-media-transport-h", transportH + "px");
 		document.documentElement.style.setProperty("--room-media-input-h", inputH + "px");
 		document.documentElement.style.setProperty("--room-media-chat-w", chatW + "px");
@@ -3543,6 +3559,8 @@ Rect.prototype.contains = function(x, y) {
 			$("#chat").addClass("chatting");
 		}
 		refreshRoomMediaLayout();
+		setTimeout(refreshRoomMediaLayout, 80);
+		setTimeout(refreshRoomMediaLayout, 250);
 	}
 
 	function toggleRoomMediaCinemaChat() {
@@ -3564,7 +3582,9 @@ Rect.prototype.contains = function(x, y) {
 		$roomMediaVideoWrap.find(".room-media-cinema-btn").toggleClass("active", gRoomMediaCinema).text(label);
 		$roomMediaTransport.find(".room-media-cinema-transport").toggleClass("active", gRoomMediaCinema).text(label);
 		updateRoomMediaLayoutUi();
+		syncRoomMediaTransportDock();
 		refreshRoomMediaLayout();
+		setTimeout(refreshRoomMediaLayout, 100);
 	}
 
 	function toggleRoomMediaCinema() {
