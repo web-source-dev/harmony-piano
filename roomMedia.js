@@ -5,6 +5,106 @@
 	"use strict";
 
 	var SYNC_PREFIX = "RM|";
+	var DEFAULT_MEDIA_PORT = 8551;
+	var mediaServerBase = null;
+	var mediaServerReady = null;
+
+	function getParam(name) {
+		if (typeof window === "undefined" || !window.location) return null;
+		var m = window.location.search.match(new RegExp("[?&]" + name + "=([^&]*)"));
+		return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : null;
+	}
+
+	function normalizeBase(base) {
+		if (!base) return null;
+		base = String(base).trim().replace(/\/+$/, "");
+		if (/^\d+$/.test(base)) {
+			var host = (typeof window !== "undefined" && window.location && window.location.hostname) || "localhost";
+			return "http://" + host + ":" + base;
+		}
+		if (!/^https?:\/\//i.test(base)) base = "http://" + base;
+		return base.replace(/\/+$/, "");
+	}
+
+	function probeMediaServer(base) {
+		base = normalizeBase(base);
+		if (!base) return Promise.resolve(null);
+		return fetch(base + "/api/media/health", { method: "GET", cache: "no-store" })
+			.then(function (r) { return r.ok ? r.json() : null; })
+			.then(function (data) { return (data && data.ok) ? base : null; })
+			.catch(function () { return null; });
+	}
+
+	function detectMediaServerBases() {
+		var bases = [];
+		var param = getParam("media");
+		if (param) bases.push(normalizeBase(param));
+		try {
+			if (typeof localStorage !== "undefined" && localStorage.harmonyMediaServer) {
+				bases.push(normalizeBase(localStorage.harmonyMediaServer));
+			}
+		} catch (e) {}
+		if (typeof window !== "undefined" && window.location) {
+			bases.push(window.location.origin);
+			var host = window.location.hostname || "localhost";
+			bases.push("http://" + host + ":" + DEFAULT_MEDIA_PORT);
+			bases.push("http://localhost:" + DEFAULT_MEDIA_PORT);
+			bases.push("http://127.0.0.1:" + DEFAULT_MEDIA_PORT);
+		}
+		var seen = {};
+		var out = [];
+		for (var i = 0; i < bases.length; i++) {
+			if (bases[i] && !seen[bases[i]]) {
+				seen[bases[i]] = true;
+				out.push(bases[i]);
+			}
+		}
+		return out;
+	}
+
+	function initMediaServer() {
+		if (mediaServerReady) return mediaServerReady;
+		mediaServerReady = (function () {
+			var bases = detectMediaServerBases();
+			var chain = Promise.resolve(null);
+			bases.forEach(function (base) {
+				chain = chain.then(function (found) {
+					if (found) return found;
+					return probeMediaServer(base);
+				});
+			});
+			return chain.then(function (found) {
+				mediaServerBase = found;
+				try {
+					if (found && typeof localStorage !== "undefined") {
+						localStorage.harmonyMediaServer = found;
+					}
+				} catch (e) {}
+				return found;
+			});
+		})();
+		return mediaServerReady;
+	}
+
+	function getMediaServerBase() {
+		return mediaServerBase;
+	}
+
+	function publicMediaBase() {
+		var base = getMediaServerBase();
+		if (!base) return null;
+		if (typeof window === "undefined" || !window.location) return base;
+		var host = window.location.hostname;
+		if (!host) return base;
+		return base
+			.replace("://localhost:", "://" + host + ":")
+			.replace("://127.0.0.1:", "://" + host + ":");
+	}
+
+	function apiMediaUrl() {
+		var base = getMediaServerBase();
+		return base ? base + "/api/media" : "/api/media";
+	}
 
 	function chatText(msg) {
 		if (!msg) return "";
@@ -16,7 +116,6 @@
 		if (text.indexOf(SYNC_PREFIX) === 0) return text.slice(SYNC_PREFIX.length);
 		return null;
 	}
-	var API_MEDIA = "/api/media";
 	var MAX_TITLE = 120;
 
 	var AUDIO_EXT = /\.(mp3|m4a|wav|ogg|aac|flac|opus|weba)$/i;
@@ -61,8 +160,12 @@
 	function resolveMediaUrl(path) {
 		if (!path) return "";
 		if (/^https?:\/\//i.test(path) || path.indexOf("blob:") === 0) return path;
-		if (path.charAt(0) === "/") return path;
-		return "/" + path;
+		var base = publicMediaBase() || getMediaServerBase();
+		if (!base && typeof window !== "undefined" && window.location) {
+			base = window.location.origin;
+		}
+		if (path.charAt(0) === "/") return (base || "") + path;
+		return (base || "") + "/" + path;
 	}
 
 	function isServerMediaUrl(url) {
@@ -83,6 +186,7 @@
 		this.onTrackChange = options.onTrackChange || function () {};
 		this.onProgress = options.onProgress || function () {};
 		this.onTransport = options.onTransport || function () {};
+		this.onServerReady = options.onServerReady || function () {};
 
 		this.audio = document.createElement("audio");
 		this.audio.preload = "auto";
@@ -122,11 +226,18 @@
 		this.video.addEventListener("ended", function () { self._onEnded(); });
 		this.audio.addEventListener("loadedmetadata", function () { self._emitProgress(); });
 		this.video.addEventListener("loadedmetadata", function () { self._emitProgress(); });
+
+		initMediaServer().then(function (base) {
+			if (base) self.onServerReady(base);
+			else self.onStatus("Room DJ server offline — run: python media-server.py");
+		});
 	}
 
 	RoomMedia.SYNC_PREFIX = SYNC_PREFIX;
 	RoomMedia.formatTime = formatTime;
 	RoomMedia.isSyncText = function (text) { return syncPayload(text) !== null; };
+	RoomMedia.initMediaServer = initMediaServer;
+	RoomMedia.getMediaServerBase = getMediaServerBase;
 
 	RoomMedia.prototype._markServerMedia = function (url) {
 		this.serverMediaUrl = normalizeServerMediaUrl(url);
@@ -143,7 +254,7 @@
 		if (!url) return Promise.resolve(false);
 		if (this.serverDeletePending) return Promise.resolve(false);
 		this.serverDeletePending = true;
-		return fetch(API_MEDIA, {
+		return fetch(apiMediaUrl(), {
 			method: "DELETE",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ url: url }),
@@ -486,29 +597,25 @@
 		var kind = kindFromName(file.name);
 		var title = clampTitle(file.name.replace(/\.[^.]+$/, ""));
 
-		var fd = new FormData();
-		fd.append("file", file, file.name);
-
-		return fetch(API_MEDIA, { method: "POST", body: fd, cache: "no-store" })
-			.then(function (r) { return r.json(); })
-			.then(function (data) {
-				if (!data.ok) throw new Error(data.error || "Upload failed");
-				return {
-					url: data.url,
-					title: title,
-					kind: data.kind || kind,
-					serverHosted: true
-				};
-			})
-			.catch(function (err) {
-				// Fallback: local blob URL (this device only — still share metadata attempt)
-				if (global.URL && URL.createObjectURL) {
-					var blobUrl = URL.createObjectURL(file);
-					self.onStatus("Upload server unavailable — playing locally only. Run chat-save-server.py to share with room.");
-					return { url: blobUrl, title: title, kind: kind, localOnly: true };
-				}
-				throw err;
-			});
+		return initMediaServer().then(function (base) {
+			if (!base) {
+				throw new Error("Media server not running. Run: python media-server.py 8551\nOr double-click run-servers.bat");
+			}
+			var fd = new FormData();
+			fd.append("file", file, file.name);
+			return fetch(base + "/api/media", { method: "POST", body: fd, cache: "no-store" })
+				.then(function (r) { return r.json(); })
+				.then(function (data) {
+					if (!data.ok) throw new Error(data.error || "Upload failed");
+					var playUrl = data.absUrl || resolveMediaUrl(data.url);
+					return {
+						url: playUrl,
+						title: title,
+						kind: data.kind || kind,
+						serverHosted: true
+					};
+				});
+		});
 	};
 
 	RoomMedia.prototype.loadFromUrl = function (rawUrl, titleHint) {
@@ -535,6 +642,7 @@
 	};
 
 	RoomMedia.prototype.shareLoad = function (url, title, kind) {
+		url = resolveMediaUrl(url);
 		this.sendSync("l|" + encodePart(url) + "|" + encodePart(title) + "|" + (kind === "video" ? "v" : "a"));
 	};
 
@@ -570,8 +678,9 @@
 		if (!this.url) return;
 		var playing = this.playing ? "1" : "0";
 		var pos = this.activeEl.currentTime || 0;
+		var shareUrl = resolveMediaUrl(this.url);
 		this.sendSync(
-			"st|" + encodePart(this.url) + "|" + encodePart(this.title) + "|" +
+			"st|" + encodePart(shareUrl) + "|" + encodePart(this.title) + "|" +
 			(this.kind === "video" ? "v" : "a") + "|" + playing + "|" + pos.toFixed(2) + "|" + this.serverTime()
 		);
 	};
@@ -582,9 +691,7 @@
 		return this.uploadFile(file).then(function (info) {
 			self.loadFromUrl(info.url, info.title);
 			self._setActiveElement(info.kind);
-			if (!info.localOnly) {
-				self.shareLoad(info.url, info.title, info.kind);
-			}
+			self.shareLoad(info.url, info.title, info.kind);
 			return info;
 		});
 	};

@@ -1180,6 +1180,10 @@ body.hacks-open #hacks-dock {
 	color: #9cf;
 	min-height: 1.2em;
 }
+.room-media-server-ok {
+	color: #8f8;
+	font-size: 10px;
+}
 body.room-media-active #room-media-transport:not([hidden]) { display: block; }
 
 /* Learn panel must sit above fixed ads / social links (z-index 99999 in index.html) */

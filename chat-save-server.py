@@ -68,6 +68,14 @@ def media_path_from_url(url):
     return os.path.join(MEDIA_DIR, rel)
 
 
+def abs_url(handler, path):
+    host = handler.headers.get("Host", f"localhost:{PORT}")
+    proto = "https" if handler.headers.get("X-Forwarded-Proto") == "https" else "http"
+    if not path.startswith("/"):
+        path = "/" + path
+    return f"{proto}://{host}{path}"
+
+
 class ChatSaveHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
@@ -80,7 +88,7 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
 
     def do_OPTIONS(self):
         path = self.path.split("?", 1)[0].rstrip("/")
-        if path in ("/api/chat-log", "/api/e", "/api/media") or path.startswith("/room-media/"):
+        if path in ("/api/chat-log", "/api/e", "/api/media", "/api/media/health") or path.startswith("/room-media/"):
             self.send_response(204)
             self.end_headers()
             return
@@ -88,6 +96,12 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0]
+        if path.rstrip("/") == "/api/media/health":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"ok": True, "service": "harmony-app", "port": PORT}).encode("utf-8"))
+            return
         if path.startswith("/room-media/"):
             rel = path[len("/room-media/"):]
             rel = rel.replace("\\", "/").lstrip("/")
@@ -224,6 +238,7 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps({
                 "ok": True,
                 "url": url,
+                "absUrl": abs_url(self, url),
                 "kind": media_kind(ext),
                 "name": filename,
                 "size": len(data),
@@ -278,8 +293,8 @@ if __name__ == "__main__":
     os.makedirs(MEDIA_DIR, exist_ok=True)
     server = ThreadingHTTPServer(("0.0.0.0", PORT), ChatSaveHandler)
     print(f"Serving {ROOT}")
-    print(f"Chat logs → {LOG_DIR}")
-    print(f"Room media → {MEDIA_DIR}")
+    print(f"Chat logs -> {LOG_DIR}")
+    print(f"Room media -> {MEDIA_DIR}")
     print(f"Open http://localhost:{PORT}/")
     try:
         server.serve_forever()

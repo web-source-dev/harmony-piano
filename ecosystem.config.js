@@ -29,6 +29,19 @@ module.exports = {
 			}
 		},
 		{
+			name: "harmony-media",
+			script: "media-server.py",
+			args: "8551",
+			interpreter: "python3",
+			cwd: __dirname,
+			watch: false,
+			autorestart: true,
+			max_restarts: 10,
+			env: {
+				NODE_ENV: "production"
+			}
+		},
+		{
 			name: "piano-static",
 			script: "python3",
 			args: "-m http.server 8550",

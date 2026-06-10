@@ -452,7 +452,7 @@
         </div>
         <div id="room-media" class="dialog room-media-dialog">
             <p class="room-media-dialog-title">Room DJ — shared music for everyone</p>
-            <p class="room-media-hint">Pick an MP3/song or video file, or paste a direct link. Everyone in the room hears it in sync (not played on the piano).</p>
+            <p class="room-media-hint">Pick an MP3/song or video file. Requires the local media server — run <strong>run-servers.bat</strong> or <code>python media-server.py 8551</code>, then open <strong>http://localhost:8550/</strong>. MPP only handles piano/chat; files upload to your media server.</p>
             <p class="room-media-row"><label>Audio / video file:
                 <input type="file" name="mediafile" accept="audio/*,video/*,.mp3,.m4a,.wav,.ogg,.mp4,.webm,.mov,.mkv"/>
             </label></p>

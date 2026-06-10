@@ -3487,6 +3487,11 @@ Rect.prototype.contains = function(x, y) {
 				$roomMediaDialog.find(".room-media-status").text(msg);
 				$("#status").text(msg);
 			},
+			onServerReady: function(base) {
+				$roomMediaDialog.find(".room-media-hint").append(
+					' <span class="room-media-server-ok">Media server: ' + base + "</span>"
+				);
+			},
 			onTrackChange: function(info) {
 				$roomMediaTransport.find(".room-media-title").text(info.title || "—");
 				$roomMediaTransport.find(".room-media-dj").text(info.dj ? ("DJ: " + info.dj) : "");
@@ -3519,26 +3524,42 @@ Rect.prototype.contains = function(x, y) {
 		return true;
 	}
 
+	function ensureMediaServer() {
+		if(typeof RoomMedia === "undefined") {
+			return Promise.reject(new Error("Room DJ module missing."));
+		}
+		return RoomMedia.initMediaServer().then(function(base) {
+			if(!base) {
+				throw new Error(
+					"Media server not running.\n\n" +
+					"1. Double-click run-servers.bat\n" +
+					"   OR run: python media-server.py 8551\n" +
+					"2. Open http://localhost:8550/ (not GitHub Pages)\n\n" +
+					"MPP handles piano/chat only — Room DJ needs the local media server."
+				);
+			}
+			return base;
+		});
+	}
+
 	function loadRoomMediaSelection() {
 		if(!ensureRoomMediaReady()) return Promise.reject(new Error("Not ready"));
-		var fileInput = $roomMediaDialog.find("input[name=mediafile]")[0];
-		var urlInput = $roomMediaDialog.find("input[name=mediaurl]").val();
-		var file = fileInput && fileInput.files && fileInput.files[0];
-		if(file) {
-			return gRoomMedia.loadAndShare(file).then(function() {
-				showRoomMediaTransport(true);
-			});
-		}
-		if(urlInput && urlInput.trim()) {
-			try {
+		return ensureMediaServer().then(function() {
+			var fileInput = $roomMediaDialog.find("input[name=mediafile]")[0];
+			var urlInput = $roomMediaDialog.find("input[name=mediaurl]").val();
+			var file = fileInput && fileInput.files && fileInput.files[0];
+			if(file) {
+				return gRoomMedia.loadAndShare(file).then(function() {
+					showRoomMediaTransport(true);
+				});
+			}
+			if(urlInput && urlInput.trim()) {
 				gRoomMedia.loadUrlAndShare(urlInput.trim());
 				showRoomMediaTransport(true);
 				return Promise.resolve();
-			} catch(err) {
-				return Promise.reject(err);
 			}
-		}
-		return Promise.reject(new Error("Choose a file or paste a direct audio/video URL."));
+			return Promise.reject(new Error("Choose a file or paste a direct audio/video URL."));
+		});
 	}
 
 	function funClearTimers() {
