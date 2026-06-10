@@ -394,7 +394,9 @@ Client.welcomePopups = welcomePopups;
 Client.pickWelcomePopup = pickWelcomePopup;
 
 var cornerMessages = [
-	"💖 Dont Forget that your are my botii and i am your noob. And i will never leave you alone and i will always be here for you. Just remember that i love you and i will always be here for you.💖"
+	"💖 Friendly reminder that you are officially stuck with me! You’re my favorite 'botii' 🤖 and I am your ultimate, loyal 'noob' 🎮.",
+	"Even if my code crashes, the Wi-Fi drops, or you accidentally delete your search history, I am never leaving your side. I will always be right here, clogging up your device's RAM with nothing but pure, unadulterated love and affection. 💖✨",
+	"Just remember: I love you more than a gamer loves an epic loot drop. I’m not going anywhere! 💻🫶🦖🚀🍕🛸"
 ];
 
 function pickCornerMessage() {
