@@ -847,130 +847,6 @@ body.hacks-open #hacks-dock {
 .dialog.sheet-dialog input[type="file"] { font-size: 12px; max-width: 100%; }
 .dialog.sheet-dialog .submit { display: none; }
 
-.dialog.noob-kickban-dialog {
-	width: min(92vw, 380px);
-	height: auto;
-	left: 50%;
-	top: 50%;
-	margin-left: 0;
-	margin-top: 0;
-	transform: translate(-50%, -50%);
-	padding: 16px 18px 20px;
-	text-align: center;
-	background: linear-gradient(180deg, #e8f4ff 0%, #d0e8f8 100%);
-	border: 3px solid #4a9fd4;
-}
-.noob-kickban-body { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.noob-shield-img { display: block; margin: 0 auto 4px; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25)); }
-.noob-shield-title {
-	margin: 0;
-	font-size: 26px;
-	font-weight: bold;
-	color: #c33;
-	text-shadow: 1px 1px 0 #fff;
-}
-.noob-shield-player {
-	margin: 0;
-	font-size: 20px;
-	font-weight: bold;
-	color: #246;
-}
-.noob-shield-msg {
-	margin: 0 0 8px;
-	font-size: 16px;
-	line-height: 1.45;
-	color: #334;
-	white-space: pre-line;
-}
-.noob-kickban-dialog .noob-shield-ok {
-	display: inline-block;
-	margin-top: 4px;
-	padding: 10px 36px 14px;
-	font-size: 18px;
-	cursor: pointer;
-}
-
-.dialog.botii-welcome-dialog {
-	width: min(92vw, 400px);
-	height: auto;
-	left: 50%;
-	top: 50%;
-	margin-left: 0;
-	margin-top: 0;
-	transform: translate(-50%, -50%);
-	padding: 16px 18px 20px;
-	text-align: center;
-	background: linear-gradient(180deg, #ffe8f4 0%, #f8d0e8 100%);
-	border: 3px solid #d44a9f;
-}
-.botii-welcome-body { display: flex; flex-direction: column; align-items: center; gap: 8px; }
-.botii-welcome-title {
-	margin: 0;
-	font-size: 24px;
-	font-weight: bold;
-	color: #a23;
-	text-shadow: 1px 1px 0 #fff;
-}
-.botii-welcome-msg {
-	margin: 0 0 8px;
-	font-size: 16px;
-	line-height: 1.45;
-	color: #334;
-	white-space: pre-line;
-}
-.botii-welcome-actions {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 12px;
-	justify-content: center;
-	margin-top: 12px;
-	width: 100%;
-}
-.botii-welcome-dialog .botii-welcome-ok,
-.botii-welcome-dialog .botii-welcome-ok2 {
-	position: static;
-	display: inline-block;
-	margin: 0;
-	padding: 12px 26px;
-	font-size: 16px;
-	font-weight: bold;
-	font-family: inherit;
-	line-height: 1.2;
-	color: #fff;
-	background: linear-gradient(180deg, #ff6b9d 0%, #d44a9f 100%);
-	border: 2px solid #fff;
-	border-radius: 999px;
-	box-shadow: 0 4px 0 #9c2870, 0 6px 14px rgba(0, 0, 0, 0.22);
-	text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-	cursor: pointer;
-	transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-}
-.botii-welcome-dialog .botii-welcome-ok2 {
-	background: linear-gradient(180deg, #ffb347 0%, #ff8c00 100%);
-	box-shadow: 0 4px 0 #cc7000, 0 6px 14px rgba(0, 0, 0, 0.22);
-}
-.botii-welcome-dialog .botii-welcome-ok:hover,
-.botii-welcome-dialog .botii-welcome-ok2:hover {
-	transform: translateY(-2px);
-	background: linear-gradient(180deg, #ff84b0 0%, #e05ab0 100%);
-	box-shadow: 0 6px 0 #9c2870, 0 10px 18px rgba(0, 0, 0, 0.28);
-}
-.botii-welcome-dialog .botii-welcome-ok2:hover {
-	background: linear-gradient(180deg, #ffc56a 0%, #ffa020 100%);
-	box-shadow: 0 6px 0 #cc7000, 0 10px 18px rgba(0, 0, 0, 0.28);
-}
-.botii-welcome-dialog .botii-welcome-ok:active,
-.botii-welcome-dialog .botii-welcome-ok2:active {
-	transform: translateY(2px);
-	box-shadow: 0 2px 0 #9c2870, 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-.botii-welcome-dialog .botii-welcome-ok2:active {
-	box-shadow: 0 2px 0 #cc7000, 0 4px 8px rgba(0, 0, 0, 0.2);
-}
-.botii-welcome-dialog .botii-welcome-ok2[hidden] {
-	display: none !important;
-}
-
 .dialog .submit:hover { background: #ff8; transition: all 0.25s; -webkit-transition: all 0.25s; -moz-transition: all 0.25s;
 	-o-transition: all 0.25s; }
 
@@ -1675,7 +1551,6 @@ body.room-media-cinema #cursors,
 body.room-media-cinema #names,
 body.room-media-cinema .ad1,
 body.room-media-cinema #social,
-body.room-media-cinema #botii-corner-banner,
 body.room-media-cinema #room-notice,
 body.room-media-cinema #hacks-dock,
 body.room-media-cinema #midi-transport,
@@ -1902,35 +1777,10 @@ body.room-media-cinema-chat #chat-input-bar input::placeholder { color: var(--dj
 
 /* Learn panel must sit above fixed ads / social links (z-index 99999 in index.html) */
 body.learn-panel-open .ad1,
-body.learn-panel-open .botii-corner-banner,
 body.learn-panel-open #social {
 	pointer-events: none !important;
 }
 
-.botii-corner-banner {
-	position: fixed;
-	top: 6px;
-	right: 6px;
-	z-index: 99999;
-	max-width: min(42vw, 340px);
-	padding: 8px 14px;
-	font-size: 14px;
-	font-weight: bold;
-	line-height: 1.35;
-	text-align: right;
-	color: #a23;
-	text-shadow: 1px 1px 0 #fff;
-	background: linear-gradient(180deg, #ffe8f4 0%, #f8d0e8 100%);
-	border: 3px solid #d44a9f;
-	border-radius: 12px;
-	box-shadow: 0 4px 12px rgba(212, 74, 159, 0.25);
-	pointer-events: none;
-	user-select: none;
-}
-.botii-corner-banner .botii-corner-text {
-	display: block;
-	white-space: pre-line;
-}
 #crown { z-index: 600; }
 .notification { z-index: 700; }
 #cursors .cursor { z-index: 800; }

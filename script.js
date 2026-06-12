@@ -6,7 +6,6 @@ $(function() {
 	var test_mode = (window.location.hash && window.location.hash.match(/^(?:#.+)*#test(?:#.+)*$/i));
 
 	var gDontShow = !!window.gDontShow;
-	var gAllowed = !!window.gAllowed;
 
 	var gSeeOwnCursor = (window.location.hash && window.location.hash.match(/^(?:#.+)*#seeowncursor(?:#.+)*$/i));
 
@@ -1277,7 +1276,7 @@ Rect.prototype.contains = function(x, y) {
 	var gClient = new Client(wsUri);
 
 	gClient.on("kickban blocked", function(info) {
-		showNoobKickbanPopup(info);
+		$("#status").text((info && info.reason) || "Kickban not allowed.");
 	});
 
 	gClient.setChannel(channel_id);
@@ -2071,7 +2070,7 @@ Rect.prototype.contains = function(x, y) {
 					evt.stopPropagation();
 					var check = gClient.canKickBanParticipant(part);
 					if(!check.allowed) {
-						showNoobKickbanPopup({ name: part.name, reason: check.reason });
+						$("#status").text(check.reason || "Kickban not allowed.");
 						return;
 					}
 					var minutes = prompt("How many minutes? (0-60)", "30");
@@ -2233,23 +2232,9 @@ Rect.prototype.contains = function(x, y) {
 	
 	
 	
-	// funny corner banner + welcome popup (skip when #dontshow is in the URL)
-	if(!gDontShow) {
-		showCornerBanner();
-		setInterval(showCornerBanner, 45000);
-		showWelcomePopup();
-	} else {
-		$("#botii-corner-banner, .ad1, #social, #banner").hide();
+	if(gDontShow) {
+		$(".ad1, #social, #banner").hide();
 	}
-	function dismissWelcomePopup(evt) {
-		if(evt) {
-			evt.preventDefault();
-			evt.stopPropagation();
-		}
-		closeModal();
-		ensureAudioReady();
-	}
-	$("#sound-warning .botii-welcome-ok, #sound-warning .botii-welcome-ok2").on("click", dismissWelcomePopup);
 
 
 
@@ -2757,7 +2742,6 @@ Rect.prototype.contains = function(x, y) {
 
 	function modalHandleEsc(evt) {
 		if(evt.keyCode == 27) {
-			if(gModal === "#sound-warning") return;
 			closeModal();
 			evt.preventDefault();
 			evt.stopPropagation();
@@ -2789,70 +2773,11 @@ Rect.prototype.contains = function(x, y) {
 		gModal = null;
 	};
 
-	function showNoobKickbanPopup(info) {
-		if(gDontShow) return;
-		info = info || {};
-		var name = info.name || "";
-		var reason = info.reason;
-		if(!reason && typeof Client !== "undefined" && Client.noobKickbanMessage) {
-			reason = Client.noobKickbanMessage(name || "Noob x_x");
-		} else if(!reason) {
-			reason = "Mammi forgives ur little cutee noobbi 🥺💕✨\nno kickban 4 u! 🛡️👶😤💅";
-		}
-		$("#noob-kickban-block .noob-shield-player").text(name ? "👶 " + name : "");
-		$("#noob-kickban-block .noob-shield-msg").text(reason);
-		openModal("#noob-kickban-block");
-	}
-
-	function showCornerBanner() {
-		if(gDontShow) return;
-		var msg = (typeof Client !== "undefined" && Client.pickCornerMessage)
-			? Client.pickCornerMessage()
-			: "👶 Noob is lurking… behave, Botii 👀";
-		$("#botii-corner-banner .botii-corner-text").text(msg);
-	}
-
-	function showWelcomePopup(popup) {
-		if(gDontShow) return;
-		if(!popup) {
-			popup = (typeof Client !== "undefined" && Client.pickWelcomePopup)
-				? Client.pickWelcomePopup()
-				: {
-					title: "👀🚨 ALERT! ALERT! 🚨👀",
-					body: "Your favorite Noob has been waiting... 🥹😭💔\n\nWelcome back, Botii Mammi 🤖👩‍🍼💕",
-					button: "🔍 Find My Noob 🔍"
-				};
-		}
-		$("#sound-warning .botii-welcome-title").text(popup.title || "");
-		$("#sound-warning .botii-welcome-msg").text(popup.body || "");
-		$("#sound-warning .botii-welcome-ok").text(popup.button || "PLAY");
-		var $btn2 = $("#sound-warning .botii-welcome-ok2");
-		var btn2Text = popup.button2 ? String(popup.button2).trim() : "";
-		if(btn2Text) {
-			$btn2.text(btn2Text).show();
-		} else {
-			$btn2.text("").hide();
-		}
-		openModal("#sound-warning");
-	}
-
 	var modal_bg = $("#modal .bg")[0];
 	$(modal_bg).on("click", function(evt) {
 		if(evt.target != modal_bg) return;
-		if(gModal === "#sound-warning") return;
 		closeModal();
 	});
-
-	$("#noob-kickban-block .noob-shield-ok").on("click", function(evt) {
-		evt.preventDefault();
-		closeModal();
-	});
-
-	if(!gDontShow && window.location.hash && /testnoobpopup/i.test(window.location.hash)) {
-		setTimeout(function() {
-			showNoobKickbanPopup({ name: "Noob x_x" });
-		}, 1200);
-	}
 
 	(function() {
 		function submit() {
@@ -3034,13 +2959,6 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof gRoomMedia !== "undefined" && gRoomMedia) gRoomMedia.tryHandleChat(msg);
 				return;
 			}
-			if(typeof Client !== "undefined" && Client.isFunnyWelcomeText(chatLine)) {
-				if(!gDontShow) {
-					var idx = Client.parseFunnyWelcomeIndex(chatLine);
-					showWelcomePopup(Client.welcomePopupByIndex(idx));
-				}
-				return;
-			}
 			chat.receive(msg);
 		});
 
@@ -3155,7 +3073,6 @@ Rect.prototype.contains = function(x, y) {
 				if(gChatMutes.indexOf(msg.p._id) != -1) return;
 				var chatLine = msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
 				if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) return;
-				if(typeof Client !== "undefined" && Client.isFunnyWelcomeText(chatLine)) return;
 
 				var li = $('<li><span class="name"/><span class="message"/>');
 
@@ -4925,29 +4842,6 @@ Rect.prototype.contains = function(x, y) {
 		$hacksPanel.on("click", "#fun-stop-all", function(e) {
 			e.preventDefault();
 			funStopAll();
-		});
-		$hacksPanel.on("click", "#preview-noob-popup", function(e) {
-			e.preventDefault();
-			showNoobKickbanPopup({ name: "Noob x_x" });
-		});
-		if(gAllowed) {
-			$("#broadcast-funny-welcome").removeAttr("hidden");
-		}
-		var gFunnyWelcomeCooldownUntil = 0;
-		$hacksPanel.on("click", "#broadcast-funny-welcome", function(e) {
-			e.preventDefault();
-			if(!gAllowed) return;
-			if(!MPP.client.isConnected()) {
-				alert("Connect to a room first.");
-				return;
-			}
-			if(Date.now() < gFunnyWelcomeCooldownUntil) {
-				alert("Wait a few seconds before sending another welcome popup.");
-				return;
-			}
-			if(typeof Client === "undefined" || !Client.buildFunnyWelcomeBroadcast) return;
-			gFunnyWelcomeCooldownUntil = Date.now() + 15000;
-			chat.send(Client.buildFunnyWelcomeBroadcast());
 		});
 		$hacksPanel.on("click", "#fun-arpeggio", function(e) {
 			e.preventDefault();

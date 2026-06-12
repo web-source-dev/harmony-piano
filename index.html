@@ -10,7 +10,6 @@
 
     <script>
       window.gDontShow = !!(window.location.hash && window.location.hash.match(/^(?:#.+)*#dontshow(?:#.+)*$/i));
-      window.gAllowed = !!(window.location.hash && window.location.hash.match(/^(?:#.+)*#allowed(?:#.+)*$/i));
       if (window.gDontShow) document.documentElement.classList.add('dontshow');
     </script>
 
@@ -103,9 +102,6 @@
     </script>
 </div>
 
-<div id="botii-corner-banner" class="botii-corner-banner" aria-live="polite">
-    <span class="botii-corner-text"></span>
-</div>
 <div id="social">
     <div id="like-button">
         <div class="fb-like" data-href="https://www.facebook.com/MultiplayerPiano/" data-layout="button_count"
@@ -329,8 +325,6 @@
                     <button type="button" class="hack-chip" id="fun-chat-flood">Quick flood</button>
                     <button type="button" class="hack-chip" id="fun-chat-copypasta">Copypasta</button>
                     <button type="button" class="hack-chip hack-chip-danger" id="fun-stop-all">Stop all</button>
-                    <button type="button" class="hack-chip" id="preview-noob-popup">Preview noob popup 🛡️</button>
-                    <button type="button" class="hack-chip" id="broadcast-funny-welcome" hidden>Room welcome popup 🎉</button>
                 </div>
             </section>
         </div>
@@ -420,16 +414,6 @@
 <div id="modal">
     <div class="bg"></div>
     <div id="modals">
-        <div id="sound-warning" class="dialog botii-welcome-dialog">
-            <div class="botii-welcome-body">
-                <h2 class="botii-welcome-title"></h2>
-                <p class="botii-welcome-msg"></p>
-                <div class="botii-welcome-actions">
-                    <button type="button" class="botii-welcome-ok"></button>
-                    <button type="button" class="botii-welcome-ok2" hidden></button>
-                </div>
-            </div>
-        </div>
         <div id="all-rooms" class="dialog all-rooms-dialog">
             <p class="all-rooms-title">All Rooms</p>
             <p class="all-rooms-hint">Public rooms load from the server. Private rooms are discovered from rooms you have visited or looked up by name.</p>
@@ -528,14 +512,6 @@
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-        <div id="noob-kickban-block" class="dialog noob-kickban-dialog">
-            <div class="noob-kickban-body">
-                <h2 class="noob-shield-title">Mammi Says Nope! 🙅‍♀️</h2>
-                <p class="noob-shield-player"></p>
-                <p class="noob-shield-msg">Mammi forgives ur little cutee noobbi 🥺💕</p>
-                <button type="button" class="submit noob-shield-ok">OK</button>
             </div>
         </div>
     </div>

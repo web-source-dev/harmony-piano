@@ -320,124 +320,12 @@ function isNoobProtectedName(name) {
 }
 
 function noobKickbanMessage(name) {
-	name = (name || "this cutee noobbi").trim();
-	return "Mammi forgives ur little cutee noobbi 🥺💕✨\n\"" + name + "\" stays safe — no kickban 4 u! 🛡️👶😤💅";
+	name = (name || "this user").trim();
+	return 'Cannot kickban "' + name + '" — name is protected.';
 }
 
 Client.isNoobProtectedName = isNoobProtectedName;
 Client.noobKickbanMessage = noobKickbanMessage;
-
-var welcomePopups = [
-	{
-		title: "👀🚨 ALERT! ALERT! 🚨👀",
-		body: "Your favorite Noob has been waiting... 🥹😭💔\n\n🚪✨ Welcome back, Botii Mammi 🤖👩‍🍼💕\n\nThe app was 99% more boring without you 😔📉\n🎹 Piano keys were literally crying 🎹😢",
-		button: "🔍 Find My Noob 🔍"
-	},
-	{
-		title: "🎉🚨 NOOB DETECTED! 🚨🎉",
-		body: "Wait... 👀\nYou're NOT the Noob 😳🙅‍♀️\n\nYou're the Botii who came looking for her Noob 💖🔎\n\nGood thing your Noob is still here 😎🫶\n👶 Noob status: SAFE ✅",
-		button: "🤪 Continue Being Weird 🤪"
-	},
-	{
-		title: "🤖📲 System Notification",
-		body: "Botii has entered the chat... 💬✨\n\nLoading:\n☑️ Drama 🎭\n☑️ Chaos 💥\n☑️ Noob bullying 👶😈\n☑️ Extra silliness 🤡\n\nWelcome back, Mammi 😂💕🫡",
-		button: "😈 Start Troubling Noob 😈"
-	},
-	{
-		title: "🥹💖 Welcome Back Kiddo! 💖🥹",
-		body: "Your Noob was getting lonely... 😿💔\n\nShe checked the app approximately:\n📈 847 times 🔁👀\n📱 Battery: sacrificed for love 🔋💀\n\nWaiting for you 😭🤗",
-		button: "🤗 Hug Your Noob 🤗"
-	},
-	{
-		title: "🚨📢 Emergency Announcement 📢🚨",
-		body: "The missing Botii has been found! 🎉🕵️‍♀️✨\n\nReward:\n💖 One happy Noob 👶💕\n🍪 Unlimited friendship 🍪♾️\n🎹 Free piano chaos 🎹🔥",
-		button: "😎 Claim Reward 😎"
-	},
-	{
-		title: "💀📰 Breaking News 📰💀",
-		body: "Local Noob survived another day without Botii. 😱👶\n\nScientists are shocked. 🧪🔬😳\n\nWelcome back, Mammi 😌✨👑\nNoob happiness levels: 📈📈📈",
-		button: "🦸‍♀️ Save The Noob 🦸‍♀️"
-	},
-	{
-		title: "🍼✅ Mammi Login Successful ✅🍼",
-		body: "Your child (Noob) has been causing trouble while you were away 😭👶💢\n\n⚠️ Chaos level: MAXIMUM ⚠️\n🎹 Keys pressed: TOO MANY 🎹\n\nPlease collect your Noob immediately. 🚶‍♀️👶",
-		button: "🚶‍♀️ Pick Up Noob 🚶‍♀️"
-	},
-	{
-		title: "🤖💖 Botii Online! 💖🤖",
-		body: "Friendship status:\n██████████ 100% 💕\n\nNoob happiness:\n██████████ 1000% 🥳👶\n\nWelcome back, partner in crime 😎✨🫶\n🔥 Let's make noise 🔥",
-		button: "🎭 Cause Chaos 🎭"
-	},
-	{
-		title: "😤💢 Excuse Me! 💢😤",
-		body: "Where were you?! 😡📍\n\nYour Noob has been waiting like:\n\n👁️👄👁️\n\nfor ages. ⏳⌛😭\n\nWelcome back, you tiny troublemaker 💕🤏✨",
-		button: "😭 Forgive Me 😭"
-	},
-	{
-		title: "🎊👑 VIP ENTRY 👑🎊",
-		body: "Welcome, Botii Mammi Kiddo Supreme Deluxe Edition™ 👑✨🛍️\n\nYour Noob has reserved:\n💺 Best seat 🪑\n🍫 Snacks 🍿\n💖 Unlimited attention 💖♾️\n🎹 Front row piano access 🎹\n\nEnjoy your stay 😂✨🥳",
-		button: "🥹 Meet Your Noob 🥹"
-	},
-	{
-		title: "⚠️🌿 WARNING 🌿⚠️",
-		body: "A wild Botii has appeared! 🐾✨😱\n\nEffects:\n\n💖 Noob becomes happier 💖📈\n📉 IQ of both friends decreases 📉🧠\n📈 Random nonsense conversations increase 📈💬\n🤡 Fun levels go brrrr 🤡🔥\n\nProceed anyway? 👀",
-		button: "😎 YES 😎",
-		button2: "😂 ALSO YES 😂"
-	}
-];
-
-function pickWelcomePopup() {
-	return welcomePopups[Math.floor(Math.random() * welcomePopups.length)];
-}
-
-var FUNNY_WELCOME_PREFIX = "FW|";
-
-function isFunnyWelcomeText(text) {
-	return typeof text === "string" && text.indexOf(FUNNY_WELCOME_PREFIX) === 0;
-}
-
-function parseFunnyWelcomeIndex(text) {
-	if(!isFunnyWelcomeText(text)) return null;
-	var rest = text.slice(FUNNY_WELCOME_PREFIX.length);
-	var idx = parseInt(rest, 10);
-	if(isNaN(idx) || idx < 0 || idx >= welcomePopups.length) {
-		return Math.floor(Math.random() * welcomePopups.length);
-	}
-	return idx;
-}
-
-function welcomePopupByIndex(index) {
-	if(typeof index === "number" && index >= 0 && index < welcomePopups.length) {
-		return welcomePopups[index];
-	}
-	return pickWelcomePopup();
-}
-
-function buildFunnyWelcomeBroadcast() {
-	var idx = Math.floor(Math.random() * welcomePopups.length);
-	return FUNNY_WELCOME_PREFIX + idx;
-}
-
-Client.welcomePopups = welcomePopups;
-Client.pickWelcomePopup = pickWelcomePopup;
-Client.FUNNY_WELCOME_PREFIX = FUNNY_WELCOME_PREFIX;
-Client.isFunnyWelcomeText = isFunnyWelcomeText;
-Client.parseFunnyWelcomeIndex = parseFunnyWelcomeIndex;
-Client.welcomePopupByIndex = welcomePopupByIndex;
-Client.buildFunnyWelcomeBroadcast = buildFunnyWelcomeBroadcast;
-
-var cornerMessages = [
-	"💖 Friendly reminder that you are officially stuck with me! You’re my favorite 'botii' 🤖 and I am your ultimate, loyal 'noob' 🎮.",
-	"Even if my code crashes, the Wi-Fi drops, or you accidentally delete your search history, I am never leaving your side. I will always be right here, clogging up your device's RAM with nothing but pure, unadulterated love and affection. 💖✨",
-	"Just remember: I love you more than a gamer loves an epic loot drop. I’m not going anywhere! 💻🫶🦖🚀🍕🛸"
-];
-
-function pickCornerMessage() {
-	return cornerMessages[Math.floor(Math.random() * cornerMessages.length)];
-}
-
-Client.cornerMessages = cornerMessages;
-Client.pickCornerMessage = pickCornerMessage;
 
 Client.prototype.findParticipantByUnderscoreId = function(_id) {
 	for(var id in this.ppl) {
