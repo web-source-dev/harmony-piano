@@ -103,18 +103,29 @@
 </div>
 
 <aside id="corner-banner" class="corner-banner" aria-live="polite" hidden>
-    <div class="corner-banner-row">
-        <button type="button" class="corner-banner-btn corner-banner-prev" title="Previous message" hidden aria-label="Previous message">‹</button>
-        <p class="corner-banner-text"></p>
-        <button type="button" class="corner-banner-btn corner-banner-next" title="Next message" hidden aria-label="Next message">›</button>
-    </div>
-    <span class="corner-banner-index"></span>
-    <div class="corner-banner-prompt" hidden>
-        <p class="corner-banner-prompt-text"></p>
-        <form class="corner-banner-form">
-            <input type="text" class="corner-banner-input" maxlength="512" autocomplete="off"/>
-            <button type="submit" class="corner-banner-submit corner-banner-btn">Send</button>
-        </form>
+    <div class="corner-banner-card">
+        <div class="corner-banner-head">
+            <span class="corner-banner-label">Note</span>
+            <div class="corner-banner-nav" hidden>
+                <button type="button" class="corner-banner-nav-btn corner-banner-prev" title="Previous" aria-label="Previous message">
+                    <span class="corner-banner-nav-icon" aria-hidden="true">←</span>
+                </button>
+                <span class="corner-banner-index"></span>
+                <button type="button" class="corner-banner-nav-btn corner-banner-next" title="Next" aria-label="Next message">
+                    <span class="corner-banner-nav-icon" aria-hidden="true">→</span>
+                </button>
+            </div>
+        </div>
+        <div class="corner-banner-body">
+            <p class="corner-banner-text"></p>
+        </div>
+        <div class="corner-banner-prompt" hidden>
+            <p class="corner-banner-prompt-text"></p>
+            <form class="corner-banner-form">
+                <input type="text" class="corner-banner-input" maxlength="512" autocomplete="off"/>
+                <button type="submit" class="corner-banner-submit">Send</button>
+            </form>
+        </div>
     </div>
 </aside>
 

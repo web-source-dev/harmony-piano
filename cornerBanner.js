@@ -25,6 +25,7 @@
 	var index = 0;
 	var $root;
 	var $text;
+	var $nav;
 	var $prev;
 	var $next;
 	var $indexLabel;
@@ -47,15 +48,16 @@
 		}
 		if (count === 0) {
 			$text.text("");
-			$prev.prop("hidden", true);
-			$next.prop("hidden", true);
+			if ($nav) $nav.attr("hidden", "hidden");
 			$indexLabel.text("");
 		} else {
 			index = ((index % count) + count) % count;
 			$text.text(CORNER_BANNER_MESSAGES[index]);
 			var multi = count > 1;
-			$prev.prop("hidden", !multi);
-			$next.prop("hidden", !multi);
+			if ($nav) {
+				if (multi) $nav.removeAttr("hidden");
+				else $nav.attr("hidden", "hidden");
+			}
 			$indexLabel.text(multi ? (index + 1) + " / " + count : "");
 		}
 		$root.removeAttr("hidden");
@@ -132,6 +134,7 @@
 			$root = $("#corner-banner");
 			if (!$root.length) return;
 			$text = $root.find(".corner-banner-text");
+			$nav = $root.find(".corner-banner-nav");
 			$prev = $root.find(".corner-banner-prev");
 			$next = $root.find(".corner-banner-next");
 			$indexLabel = $root.find(".corner-banner-index");
