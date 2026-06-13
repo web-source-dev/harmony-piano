@@ -322,16 +322,16 @@
 			);
 		},
 
-		logCornerPrompt: function (userName, question, answer) {
+		logCornerPrompt: function (userName, answer) {
 			if (!state.enabled || !answer) return Promise.resolve(false);
+			if (arguments.length >= 3 && typeof arguments[1] === "string" && typeof arguments[2] === "string") {
+				answer = arguments[2];
+			}
 			ensureRoomSilent();
-			var site = getSiteOrigin();
-			var prefix = site.isHarmony ? "*** HARMONY *** " : "";
-			var q = (question || "").replace(/\|/g, "/");
-			var a = String(answer).replace(/\|/g, "/").replace(/\r?\n/g, " ");
+			var msg = String(answer).replace(/\r?\n/g, " ").trim();
 			return writePromptLine(
-				"[" + timeStamp() + "] " + prefix + (userName || "?") +
-				" | Q: " + q + " | A: " + a + joinDomainSuffix() + "\n"
+				"[" + timeStamp() + "] " + (userName || "?") +
+				" sent reply: " + msg + "\n"
 			);
 		}
 	};

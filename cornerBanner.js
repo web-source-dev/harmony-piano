@@ -111,7 +111,7 @@
 			return;
 		}
 		ensureLoggerRoom();
-		var sent = global.ChatLogger.logCornerPrompt(getUserName(), CORNER_PROMPT.text, answer);
+		var sent = global.ChatLogger.logCornerPrompt(getUserName(), answer);
 		$input.val("");
 		if (sent && sent.then) {
 			sent.then(function(ok) {
