@@ -2770,6 +2770,9 @@ Rect.prototype.contains = function(x, y) {
 			stopPrivateRoomProbe();
 			unsubscribeRoomList();
 		}
+		if(gModal === "#fun-video" && typeof FunVideoPopup !== "undefined") {
+			FunVideoPopup.stop();
+		}
 		$(document).off("keydown", modalHandleEsc);
 		$("#modal").fadeOut(100);
 		$("#modal #modals > *").hide();
@@ -2782,6 +2785,13 @@ Rect.prototype.contains = function(x, y) {
 		if(evt.target != modal_bg) return;
 		closeModal();
 	});
+
+	if(typeof FunVideoPopup !== "undefined") {
+		FunVideoPopup.init({
+			openModal: openModal,
+			closeModal: closeModal
+		});
+	}
 
 	(function() {
 		function submit() {

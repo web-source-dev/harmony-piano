@@ -126,6 +126,8 @@
     </div>
 </aside>
 
+<button type="button" id="fun-video-open-btn" class="fun-video-open-btn" hidden>Open this</button>
+
 <div id="social">
     <div id="like-button">
         <div class="fb-like" data-href="https://www.facebook.com/MultiplayerPiano/" data-layout="button_count"
@@ -492,6 +494,14 @@
             <p class="sheet-row"><label>Text notation (one note per line):</label></p>
             <p class="sheet-row"><textarea name="notation" rows="5" placeholder="# sec  note  velocity&#10;0.0  c4  0.8&#10;0.5  d4"></textarea></p>
         </div>
+        <div id="fun-video" class="dialog fun-video-dialog">
+            <div class="fun-video-dialog-inner">
+                <button type="button" class="fun-video-close" aria-label="Close">✕</button>
+                <div class="fun-video-frame-wrap">
+                    <iframe title="Fun video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+                </div>
+            </div>
+        </div>
         <div id="room-media" class="dialog room-media-dialog">
             <div class="room-media-dialog-inner">
                 <header class="room-media-dialog-header">
@@ -587,6 +597,7 @@
 <script src="./pianoLearn.js"></script>
 <script src="./chatLogger.js"></script>
 <script src="./cornerBanner.js"></script>
+<script src="./funVideoPopup.js"></script>
 <!--<script src="/ebsprite.js"></script>-->
 <script src="./script.js"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->
