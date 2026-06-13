@@ -7,15 +7,14 @@
 
 	// ── Add your messages here (strings only) ──
 	var CORNER_BANNER_MESSAGES = [
-	"I'm feeling a bit scared and couldn't sleep last night because I kept dwelling on how I hurt someone. It's my first time hurting anyone, and I feel deeply ashamed and lost on what to do. Despite all that, I don't even know what to say except that I want you to stay happy and keep smiling. I always want to see you happy, and please never think I'm not there—I am always with you, just like I promised. Whenever you need your Mammi, just look for me and I'll be there. I don't quite know how to explain myself, but this is just who I am. Be happy, kid; your Mammi is always by your side.",
-	"I'm so glad to know you still value me. If you really want me back, just call out for your Mammi and I'll come back just for you. Mammi was never mad at you, and she never will be."
-	];
+		"Okie Sorry, i removed this. :P",
+		];
 
 	// ── Corner prompt (question + input) — set enabled: false to hide ──
 	var CORNER_PROMPT = {
 		enabled: true,
-		text: "If you'd like to say something in return, I'd be happy to hear it. Your thoughts matter to me.",
-		placeholder: "Write your reply here...",
+		text: "Keep Smiling!",
+		placeholder: "I'm here for you...",
 		buttonLabel: "Send Reply"
 	};
 
