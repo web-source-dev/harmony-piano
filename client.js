@@ -164,11 +164,22 @@ Client.prototype.bindEventListeners = function() {
 		self.desiredChannelSettings = msg.ch.settings;
 		self.channel = msg.ch;
 		if(msg.p) self.participantId = msg.p;
+		self.emit("room participants sync", msg.ppl || []);
 		self.setParticipants(msg.ppl);
 	});
 	this.on("p", function(msg) {
+		var part = self.ppl[msg.id];
+		var oldName = part ? part.name : null;
 		self.participantUpdate(msg);
-		self.emit("participant update", self.findParticipantById(msg.id));
+		var updated = self.findParticipantById(msg.id);
+		if(part && msg.name && oldName !== msg.name) {
+			self.emit("participant renamed", {
+				part: updated,
+				oldName: oldName,
+				newName: msg.name
+			});
+		}
+		self.emit("participant update", updated);
 	});
 	this.on("m", function(msg) {
 		if(self.ppl.hasOwnProperty(msg.id)) {

@@ -76,6 +76,15 @@ def abs_url(handler, path):
     return f"{proto}://{host}{path}"
 
 
+def sanitize_log_filename(name):
+    name = os.path.basename(name or "")
+    name = re.sub(r'[\\/:*?"<>|]', "_", name)
+    name = re.sub(r"\s+", "_", name.strip())
+    if not name.endswith(".txt"):
+        name += ".txt"
+    return (name[:120] or "room.txt")
+
+
 class ChatSaveHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=ROOT, **kwargs)
@@ -165,14 +174,31 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
             if not line.endswith("\n"):
                 line += "\n"
             os.makedirs(LOG_DIR, exist_ok=True)
-            path = os.path.join(LOG_DIR, f"{room}_{date}.txt")
+            custom_file = data.get("file")
+            if custom_file:
+                log_name = sanitize_log_filename(custom_file)
+            else:
+                log_name = f"{room}_{date}.txt"
+            path = os.path.join(LOG_DIR, log_name)
             is_new = not os.path.exists(path)
             with open(path, "a", encoding="utf-8") as f:
                 if is_new:
-                    f.write(
-                        f"=== Room: {data.get('room', room)} | Date: {date} | "
-                        f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n"
-                    )
+                    if "_joins" in log_name:
+                        header = (
+                            f"=== Join log: {data.get('room', room)} | Date: {date} | "
+                            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n"
+                        )
+                    elif "_prompts" in log_name:
+                        header = (
+                            f"=== Corner prompts: {data.get('room', room)} | Date: {date} | "
+                            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n"
+                        )
+                    else:
+                        header = (
+                            f"=== Chat: {data.get('room', room)} | Date: {date} | "
+                            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n"
+                        )
+                    f.write(header)
                 f.write(line)
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -293,7 +319,7 @@ if __name__ == "__main__":
     os.makedirs(MEDIA_DIR, exist_ok=True)
     server = ThreadingHTTPServer(("0.0.0.0", PORT), ChatSaveHandler)
     print(f"Serving {ROOT}")
-    print(f"Chat logs -> {LOG_DIR}")
+    print(f"Chat logs -> {LOG_DIR} (*_joins.txt, *_prompts.txt)")
     print(f"Room media -> {MEDIA_DIR}")
     print(f"Open http://localhost:{PORT}/")
     try:

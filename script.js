@@ -2233,7 +2233,11 @@ Rect.prototype.contains = function(x, y) {
 	
 	
 	if(gDontShow) {
-		$(".ad1, #social, #banner").hide();
+		$(".ad1, #social, #banner, #corner-banner").hide();
+	}
+
+	if(typeof CornerBanner !== "undefined" && !gDontShow) {
+		CornerBanner.init();
 	}
 
 
@@ -3110,8 +3114,40 @@ Rect.prototype.contains = function(x, y) {
 	})();
 
 	if(typeof ChatLogger !== "undefined") {
+		var gLoggedParticipants = {};
+
+		function syncLoggedParticipants(ppl) {
+			gLoggedParticipants = {};
+			if(!ppl) return;
+			for(var i = 0; i < ppl.length; i++) {
+				gLoggedParticipants[ppl[i].id] = ppl[i].name || "";
+			}
+		}
+
+		gClient.on("room participants sync", function(ppl) {
+			syncLoggedParticipants(ppl);
+		});
 		gClient.on("ch", function(msg) {
 			ChatLogger.setRoom(msg.ch._id);
+		});
+		gClient.on("participant added", function(part) {
+			if(!part || part.id == null) return;
+			if(gLoggedParticipants.hasOwnProperty(part.id)) {
+				gLoggedParticipants[part.id] = part.name || "";
+				return;
+			}
+			gLoggedParticipants[part.id] = part.name || "";
+			ChatLogger.logJoin(part.name || "?");
+		});
+		gClient.on("participant removed", function(part) {
+			if(part && part.id != null) delete gLoggedParticipants[part.id];
+		});
+		gClient.on("participant renamed", function(info) {
+			if(!info) return;
+			if(info.part && info.part.id != null) {
+				gLoggedParticipants[info.part.id] = info.newName || "";
+			}
+			ChatLogger.logRename(info.oldName, info.newName);
 		});
 		ChatLogger.init();
 	}

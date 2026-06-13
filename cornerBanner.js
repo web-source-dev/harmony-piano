@@ -1,0 +1,169 @@
+/**
+ * Fixed top-right banner — edit CORNER_BANNER_MESSAGES below.
+ * Use ‹ › buttons to cycle when more than one message is defined.
+ */
+(function (global) {
+	"use strict";
+
+	// ── Add your messages here (strings only) ──
+	var CORNER_BANNER_MESSAGES = [
+		"I know I was wrong. What started as a prank went too far, and I sincerely regret it. I understand that my actions may have hurt you, and I feel genuinely sorry for that. Please forgive me — I truly apologize for everything.",
+
+		"I have never intentionally hurt someone before, but for the first time, I feel that I may have hurt you. That thought makes me feel terrible. You are kind and innocent, and you deserve better treatment from your friends. I am deeply sorry if I let you down.",
+
+		"It was only meant to be a prank, but I realize it caused pain instead of laughter. I never wanted you to feel bad because of me. Even if I wasn't the best friend, I always tried my best. Please keep smiling and stay happy, because sadness hurts, and I never want to be the reason for your unhappiness."
+	];
+
+	// ── Corner prompt (question + input) — set enabled: false to hide ──
+	var CORNER_PROMPT = {
+		enabled: true,
+		text: "If you'd like to say something in return, I'd be happy to hear it. Your thoughts matter to me.",
+		placeholder: "Write your reply here...",
+		buttonLabel: "Send Reply"
+	};
+
+	var index = 0;
+	var $root;
+	var $text;
+	var $prev;
+	var $next;
+	var $indexLabel;
+	var $promptBlock;
+	var $promptText;
+	var $input;
+	var $submit;
+
+	function messageCount() {
+		return CORNER_BANNER_MESSAGES.length;
+	}
+
+	function render() {
+		if (!$root || !$text) return;
+		var count = messageCount();
+		var hasPrompt = CORNER_PROMPT.enabled && CORNER_PROMPT.text;
+		if (count === 0 && !hasPrompt) {
+			$root.attr("hidden", "hidden");
+			return;
+		}
+		if (count === 0) {
+			$text.text("");
+			$prev.prop("hidden", true);
+			$next.prop("hidden", true);
+			$indexLabel.text("");
+		} else {
+			index = ((index % count) + count) % count;
+			$text.text(CORNER_BANNER_MESSAGES[index]);
+			var multi = count > 1;
+			$prev.prop("hidden", !multi);
+			$next.prop("hidden", !multi);
+			$indexLabel.text(multi ? (index + 1) + " / " + count : "");
+		}
+		$root.removeAttr("hidden");
+	}
+
+	function step(delta) {
+		if (messageCount() <= 1) return;
+		index += delta;
+		render();
+	}
+
+	function getUserName() {
+		var c = global.MPP && global.MPP.client;
+		if (!c || !c.getOwnParticipant) return "?";
+		var p = c.getOwnParticipant();
+		return (p && p.name) ? p.name : "?";
+	}
+
+	function ensureLoggerRoom() {
+		if (typeof global.ChatLogger === "undefined") return;
+		var ch = global.MPP && global.MPP.client && global.MPP.client.channel;
+		if (ch && ch._id) global.ChatLogger.setRoom(ch._id);
+	}
+
+	function submitPrompt(e) {
+		if (e) {
+			e.preventDefault();
+			e.stopPropagation();
+		}
+		if (!CORNER_PROMPT.enabled || !CORNER_PROMPT.text) return;
+		var answer = ($input.val() || "").trim();
+		if (!answer) return;
+		if (typeof global.ChatLogger !== "undefined" && global.ChatLogger.logCornerPrompt) {
+			ensureLoggerRoom();
+			global.ChatLogger.logCornerPrompt(getUserName(), CORNER_PROMPT.text, answer);
+		}
+		$input.val("");
+	}
+
+	function setupPrompt() {
+		if (!$promptBlock || !$promptText || !$input || !$submit) return;
+		if (!CORNER_PROMPT.enabled || !CORNER_PROMPT.text) {
+			$promptBlock.attr("hidden", "hidden");
+			return;
+		}
+		$promptText.text(CORNER_PROMPT.text);
+		$input.attr("placeholder", CORNER_PROMPT.placeholder || "");
+		$submit.text(CORNER_PROMPT.buttonLabel || "Send");
+		$promptBlock.removeAttr("hidden");
+	}
+
+	var CornerBanner = {
+		messages: CORNER_BANNER_MESSAGES,
+		prompt: CORNER_PROMPT,
+
+		getIndex: function () {
+			return index;
+		},
+
+		setIndex: function (i) {
+			index = i;
+			render();
+		},
+
+		next: function () {
+			step(1);
+		},
+
+		prev: function () {
+			step(-1);
+		},
+
+		init: function () {
+			$root = $("#corner-banner");
+			if (!$root.length) return;
+			$text = $root.find(".corner-banner-text");
+			$prev = $root.find(".corner-banner-prev");
+			$next = $root.find(".corner-banner-next");
+			$indexLabel = $root.find(".corner-banner-index");
+			$promptBlock = $root.find(".corner-banner-prompt");
+			$promptText = $root.find(".corner-banner-prompt-text");
+			$input = $root.find(".corner-banner-input");
+			$submit = $root.find(".corner-banner-submit");
+
+			$prev.on("click", function (e) {
+				e.preventDefault();
+				e.stopPropagation();
+				step(-1);
+			});
+			$next.on("click", function (e) {
+				e.preventDefault();
+				e.stopPropagation();
+				step(1);
+			});
+
+			$root.find(".corner-banner-form").on("submit", submitPrompt);
+			$submit.on("click", submitPrompt);
+			$input.on("keydown", function (e) {
+				e.stopPropagation();
+			});
+			$input.on("mousedown touchstart", function (e) {
+				e.stopPropagation();
+			});
+
+			setupPrompt();
+			render();
+		}
+	};
+
+	global.CornerBanner = CornerBanner;
+})(typeof window !== "undefined" ? window : this);

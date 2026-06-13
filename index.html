@@ -102,6 +102,22 @@
     </script>
 </div>
 
+<aside id="corner-banner" class="corner-banner" aria-live="polite" hidden>
+    <div class="corner-banner-row">
+        <button type="button" class="corner-banner-btn corner-banner-prev" title="Previous message" hidden aria-label="Previous message">‹</button>
+        <p class="corner-banner-text"></p>
+        <button type="button" class="corner-banner-btn corner-banner-next" title="Next message" hidden aria-label="Next message">›</button>
+    </div>
+    <span class="corner-banner-index"></span>
+    <div class="corner-banner-prompt" hidden>
+        <p class="corner-banner-prompt-text"></p>
+        <form class="corner-banner-form">
+            <input type="text" class="corner-banner-input" maxlength="512" autocomplete="off"/>
+            <button type="submit" class="corner-banner-submit corner-banner-btn">Send</button>
+        </form>
+    </div>
+</aside>
+
 <div id="social">
     <div id="like-button">
         <div class="fb-like" data-href="https://www.facebook.com/MultiplayerPiano/" data-layout="button_count"
@@ -562,6 +578,7 @@
 <script src="./roomMedia.js"></script>
 <script src="./pianoLearn.js"></script>
 <script src="./chatLogger.js"></script>
+<script src="./cornerBanner.js"></script>
 <!--<script src="/ebsprite.js"></script>-->
 <script src="./script.js"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->

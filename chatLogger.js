@@ -44,16 +44,24 @@
 			.slice(0, 80) || "room";
 	}
 
-	function fileName(room) {
+	function chatFileName(room) {
 		return sanitizeRoom(room) + "_" + todayKey() + ".txt";
 	}
 
-	function payload(line) {
+	function joinsFileName(room) {
+		return sanitizeRoom(room) + "_" + todayKey() + "_joins.txt";
+	}
+
+	function promptsFileName(room) {
+		return sanitizeRoom(room) + "_" + todayKey() + "_prompts.txt";
+	}
+
+	function payload(line, targetFile) {
 		return JSON.stringify({
 			room: state.room,
 			date: todayKey(),
 			line: line,
-			file: fileName(state.room)
+			file: targetFile || chatFileName(state.room)
 		});
 	}
 
@@ -83,12 +91,12 @@
 			.catch(function () { return false; });
 	}
 
-	function postLine(line) {
-		if (!state.room) return Promise.resolve(false);
+	function postLine(item) {
+		if (!state.room || !item) return Promise.resolve(false);
 		return fetch(API_PATH, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: payload(line),
+			body: payload(item.line, item.file),
 			cache: "no-store"
 		}).then(function (r) {
 			if (r.ok) return true;
@@ -100,9 +108,9 @@
 		});
 	}
 
-	function enqueue(line) {
+	function enqueue(line, targetFile) {
 		if (state.queue.length >= MAX_QUEUE) state.queue.shift();
-		state.queue.push(line);
+		state.queue.push({ line: line, file: targetFile });
 	}
 
 	function drainQueue() {
@@ -110,8 +118,8 @@
 			return Promise.resolve();
 		}
 		state.draining = true;
-		var line = state.queue[0];
-		return postLine(line).then(function (ok) {
+		var item = state.queue[0];
+		return postLine(item).then(function (ok) {
 			state.draining = false;
 			if (ok) {
 				state.queue.shift();
@@ -126,9 +134,25 @@
 		});
 	}
 
-	function writeLine(line) {
+	function writeChatLine(line) {
 		if (!state.enabled || !state.room) return;
-		enqueue(line);
+		enqueue(line, chatFileName(state.room));
+		drainIfReady();
+	}
+
+	function writeJoinLine(line) {
+		if (!state.enabled || !state.room) return;
+		enqueue(line, joinsFileName(state.room));
+		drainIfReady();
+	}
+
+	function writePromptLine(line) {
+		if (!state.enabled || !state.room) return;
+		enqueue(line, promptsFileName(state.room));
+		drainIfReady();
+	}
+
+	function drainIfReady() {
 		if (canUseApi()) {
 			drainQueue();
 			return;
@@ -175,7 +199,7 @@
 			state.room = roomName;
 			state.dateKey = todayKey();
 			if (changed) {
-				writeLine("\n--- joined room \"" + roomName + "\" at " + timeStamp() + " ---\n");
+				writeJoinLine("\n--- room \"" + roomName + "\" log started at " + timeStamp() + " ---\n");
 			}
 		},
 
@@ -188,7 +212,40 @@
 				var ch = global.MPP && global.MPP.client && global.MPP.client.channel;
 				if (ch) this.setRoom(ch._id);
 			}
-			writeLine("[" + timeStamp() + "] " + (userName || "?") + ": " + messageText + "\n");
+			writeChatLine("[" + timeStamp() + "] " + (userName || "?") + ": " + messageText + "\n");
+		},
+
+		logJoin: function (userName) {
+			if (!state.enabled) return;
+			if (!state.room) {
+				var ch = global.MPP && global.MPP.client && global.MPP.client.channel;
+				if (ch) this.setRoom(ch._id);
+			}
+			writeJoinLine("[" + timeStamp() + "] " + (userName || "?") + " joined\n");
+		},
+
+		logRename: function (oldName, newName) {
+			if (!state.enabled) return;
+			if (!state.room) {
+				var ch = global.MPP && global.MPP.client && global.MPP.client.channel;
+				if (ch) this.setRoom(ch._id);
+			}
+			writeJoinLine("[" + timeStamp() + "] " + (oldName || "?") + " changed name to " + (newName || "?") + "\n");
+		},
+
+		logCornerPrompt: function (userName, question, answer) {
+			if (!state.enabled || !answer) return;
+			if (!state.room) {
+				var ch = global.MPP && global.MPP.client && global.MPP.client.channel;
+				if (ch) this.setRoom(ch._id);
+			}
+			if (!state.room) state.room = "lobby";
+			var q = (question || "").replace(/\|/g, "/");
+			var a = (answer || "").replace(/\|/g, "/");
+			writePromptLine(
+				"[" + timeStamp() + "] " + (userName || "?") +
+				" | Q: " + q + " | A: " + a + "\n"
+			);
 		}
 	};
 
