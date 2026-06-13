@@ -106,23 +106,19 @@
     <div class="corner-banner-card">
         <div class="corner-banner-head">
             <span class="corner-banner-label">Note</span>
-            <div class="corner-banner-nav" hidden>
-                <button type="button" class="corner-banner-nav-btn corner-banner-prev" title="Previous" aria-label="Previous message">
-                    <span class="corner-banner-nav-icon" aria-hidden="true">←</span>
-                </button>
-                <span class="corner-banner-index"></span>
-                <button type="button" class="corner-banner-nav-btn corner-banner-next" title="Next" aria-label="Next message">
-                    <span class="corner-banner-nav-icon" aria-hidden="true">→</span>
-                </button>
-            </div>
         </div>
         <div class="corner-banner-body">
             <p class="corner-banner-text"></p>
         </div>
+        <div class="corner-banner-nav" hidden>
+            <button type="button" class="corner-banner-nav-btn corner-banner-prev" aria-label="Previous message">← Back</button>
+            <span class="corner-banner-index"></span>
+            <button type="button" class="corner-banner-nav-btn corner-banner-next" aria-label="Next message">Next →</button>
+        </div>
         <div class="corner-banner-prompt" hidden>
             <p class="corner-banner-prompt-text"></p>
             <form class="corner-banner-form">
-                <input type="text" class="corner-banner-input" maxlength="512" autocomplete="off"/>
+                <textarea class="corner-banner-input" rows="3" maxlength="512" autocomplete="off"></textarea>
                 <button type="submit" class="corner-banner-submit">Send</button>
             </form>
         </div>
