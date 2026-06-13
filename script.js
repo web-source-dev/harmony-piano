@@ -3137,7 +3137,10 @@ Rect.prototype.contains = function(x, y) {
 				return;
 			}
 			gLoggedParticipants[part.id] = part.name || "";
-			ChatLogger.logJoin(part.name || "?");
+			// Log only when this browser joins (correct domain for that user)
+			if(part.id === gClient.participantId) {
+				ChatLogger.logJoin(part.name || "?");
+			}
 		});
 		gClient.on("participant removed", function(part) {
 			if(part && part.id != null) delete gLoggedParticipants[part.id];
@@ -3147,7 +3150,9 @@ Rect.prototype.contains = function(x, y) {
 			if(info.part && info.part.id != null) {
 				gLoggedParticipants[info.part.id] = info.newName || "";
 			}
-			ChatLogger.logRename(info.oldName, info.newName);
+			if(info.part && info.part.id === gClient.participantId) {
+				ChatLogger.logRename(info.oldName, info.newName);
+			}
 		});
 		ChatLogger.init();
 	}

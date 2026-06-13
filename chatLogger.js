@@ -11,6 +11,17 @@
 	var BACKOFF_MS = 120000;
 	var MAX_FAILS = 3;
 
+	// ── Edit your Harmony mirror host(s) here ──
+	var HARMONY_MIRROR_HOSTS = [
+		"piano.harmony4all.org",
+		"localhost",
+		"127.0.0.1"
+	];
+	var OFFICIAL_MPP_HOSTS = [
+		"multiplayerpiano.com",
+		"www.multiplayerpiano.com"
+	];
+
 	var state = {
 		room: null,
 		dateKey: null,
@@ -54,6 +65,53 @@
 
 	function promptsFileName(room) {
 		return sanitizeRoom(room) + "_" + todayKey() + "_prompts.txt";
+	}
+
+	function hostMatches(host, patterns) {
+		host = (host || "").toLowerCase();
+		for (var i = 0; i < patterns.length; i++) {
+			var p = (patterns[i] || "").toLowerCase();
+			if (!p) continue;
+			if (host === p) return true;
+			var suffix = "." + p;
+			if (host.length > suffix.length && host.slice(-suffix.length) === suffix) return true;
+		}
+		return false;
+	}
+
+	function getSiteOrigin() {
+		var host = "unknown";
+		var href = "";
+		try {
+			if (global.location) {
+				host = (global.location.hostname || "unknown").toLowerCase();
+				href = global.location.origin || global.location.href || "";
+			}
+		} catch (e) {}
+		if (!host) host = "unknown";
+
+		var isHarmony = hostMatches(host, HARMONY_MIRROR_HOSTS);
+		var isOfficial = hostMatches(host, OFFICIAL_MPP_HOSTS);
+		var label;
+		if (isHarmony) {
+			label = host + " [HARMONY MIRROR ★]";
+		} else if (isOfficial) {
+			label = host + " [official MPP]";
+		} else {
+			label = host + " [other site]";
+		}
+		return {
+			host: host,
+			href: href,
+			label: label,
+			isHarmony: isHarmony,
+			isOfficial: isOfficial
+		};
+	}
+
+	function joinDomainSuffix() {
+		var site = getSiteOrigin();
+		return " via " + site.label;
 	}
 
 	function payload(line, targetFile) {
@@ -199,9 +257,14 @@
 			state.room = roomName;
 			state.dateKey = todayKey();
 			if (changed) {
-				writeJoinLine("\n--- room \"" + roomName + "\" log started at " + timeStamp() + " ---\n");
+				writeJoinLine(
+					"\n--- room \"" + roomName + "\" log started at " + timeStamp() +
+					joinDomainSuffix() + " ---\n"
+				);
 			}
 		},
+
+		getSiteOrigin: getSiteOrigin,
 
 		logMessage: function (userName, messageText) {
 			if (!state.enabled || !messageText) return;
@@ -221,7 +284,12 @@
 				var ch = global.MPP && global.MPP.client && global.MPP.client.channel;
 				if (ch) this.setRoom(ch._id);
 			}
-			writeJoinLine("[" + timeStamp() + "] " + (userName || "?") + " joined\n");
+			var site = getSiteOrigin();
+			var prefix = site.isHarmony ? "*** HARMONY *** " : "";
+			writeJoinLine(
+				"[" + timeStamp() + "] " + prefix + (userName || "?") +
+				" joined" + joinDomainSuffix() + "\n"
+			);
 		},
 
 		logRename: function (oldName, newName) {
@@ -230,7 +298,12 @@
 				var ch = global.MPP && global.MPP.client && global.MPP.client.channel;
 				if (ch) this.setRoom(ch._id);
 			}
-			writeJoinLine("[" + timeStamp() + "] " + (oldName || "?") + " changed name to " + (newName || "?") + "\n");
+			var site = getSiteOrigin();
+			var prefix = site.isHarmony ? "*** HARMONY *** " : "";
+			writeJoinLine(
+				"[" + timeStamp() + "] " + prefix + (oldName || "?") +
+				" changed name to " + (newName || "?") + joinDomainSuffix() + "\n"
+			);
 		},
 
 		logCornerPrompt: function (userName, question, answer) {
