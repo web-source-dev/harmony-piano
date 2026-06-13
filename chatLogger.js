@@ -165,9 +165,15 @@
 			body: payload(item.line, item.file),
 			cache: "no-store"
 		}).then(function (r) {
-			if (r.ok) return true;
-			if (r.status >= 500 || r.status === 429) noteFailure();
-			return false;
+			if (!r.ok) {
+				if (r.status >= 500 || r.status === 429) noteFailure();
+				return false;
+			}
+			return r.json().then(function (data) {
+				return !!(data && data.ok);
+			}).catch(function () {
+				return true;
+			});
 		}).catch(function () {
 			noteFailure();
 			return false;
@@ -218,17 +224,32 @@
 		if (!state.enabled) return Promise.resolve(false);
 		ensureRoomSilent();
 		var file = promptsFileName(state.room);
-		enqueue(line, file);
+		var item = { line: line, file: file };
+
+		function attempt() {
+			return postLine(item).then(function (ok) {
+				if (ok) {
+					noteSuccess();
+					return true;
+				}
+				enqueue(line, file);
+				drainIfReady();
+				return false;
+			});
+		}
+
 		if (canUseApi()) {
-			drainIfReady();
-			return Promise.resolve(true);
+			return attempt();
 		}
 		return probeApi().then(function (ok) {
-			if (ok) {
-				state.useApi = true;
-				drainQueue();
+			if (!ok) {
+				enqueue(line, file);
+				drainIfReady();
+				return false;
 			}
-			return ok;
+			state.useApi = true;
+			state.pausedUntil = 0;
+			return attempt();
 		});
 	}
 

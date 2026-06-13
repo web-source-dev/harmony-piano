@@ -120,6 +120,8 @@
 				} else {
 					showPromptFeedback("Could not save reply. Check that chat-save-server is running.", true);
 				}
+			}).catch(function() {
+				showPromptFeedback("Could not save reply. Check that chat-save-server is running.", true);
 			});
 		} else {
 			showPromptFeedback("Thank you — your reply was sent.");
