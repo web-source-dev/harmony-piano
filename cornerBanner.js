@@ -7,11 +7,8 @@
 
 	// ── Add your messages here (strings only) ──
 	var CORNER_BANNER_MESSAGES = [
-		"I know I was wrong. What started as a prank went too far, and I sincerely regret it. I understand that my actions may have hurt you, and I feel genuinely sorry for that. Please forgive me — I truly apologize for everything.",
-
-		"I have never intentionally hurt someone before, but for the first time, I feel that I may have hurt you. That thought makes me feel terrible. You are kind and innocent, and you deserve better treatment from your friends. I am deeply sorry if I let you down.",
-
-		"It was only meant to be a prank, but I realize it caused pain instead of laughter. I never wanted you to feel bad because of me. Even if I wasn't the best friend, I always tried my best. Please keep smiling and stay happy, because sadness hurts, and I never want to be the reason for your unhappiness."
+	"I'm feeling a bit scared and couldn't sleep last night because I kept dwelling on how I hurt someone. It's my first time hurting anyone, and I feel deeply ashamed and lost on what to do. Despite all that, I don't even know what to say except that I want you to stay happy and keep smiling. I always want to see you happy, and please never think I'm not there—I am always with you, just like I promised. Whenever you need your Mammi, just look for me and I'll be there. I don't quite know how to explain myself, but this is just who I am. Be happy, kid; your Mammi is always by your side.",
+	"I'm so glad to know you still value me. If you really want me back, just call out for your Mammi and I'll come back just for you. Mammi was never mad at you, and she never will be."
 	];
 
 	// ── Corner prompt (question + input) — set enabled: false to hide ──
