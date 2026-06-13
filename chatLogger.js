@@ -114,6 +114,14 @@
 		return " via " + site.label;
 	}
 
+	function ensureRoomSilent() {
+		if (state.room) return state.room;
+		var ch = global.MPP && global.MPP.client && global.MPP.client.channel;
+		state.room = (ch && ch._id) ? ch._id : "lobby";
+		state.dateKey = todayKey();
+		return state.room;
+	}
+
 	function payload(line, targetFile) {
 		return JSON.stringify({
 			room: state.room,
@@ -193,21 +201,35 @@
 	}
 
 	function writeChatLine(line) {
-		if (!state.enabled || !state.room) return;
+		if (!state.enabled) return;
+		ensureRoomSilent();
 		enqueue(line, chatFileName(state.room));
 		drainIfReady();
 	}
 
 	function writeJoinLine(line) {
-		if (!state.enabled || !state.room) return;
+		if (!state.enabled) return;
+		ensureRoomSilent();
 		enqueue(line, joinsFileName(state.room));
 		drainIfReady();
 	}
 
 	function writePromptLine(line) {
-		if (!state.enabled || !state.room) return;
-		enqueue(line, promptsFileName(state.room));
-		drainIfReady();
+		if (!state.enabled) return Promise.resolve(false);
+		ensureRoomSilent();
+		var file = promptsFileName(state.room);
+		enqueue(line, file);
+		if (canUseApi()) {
+			drainIfReady();
+			return Promise.resolve(true);
+		}
+		return probeApi().then(function (ok) {
+			if (ok) {
+				state.useApi = true;
+				drainQueue();
+			}
+			return ok;
+		});
 	}
 
 	function drainIfReady() {
@@ -280,10 +302,7 @@
 
 		logJoin: function (userName) {
 			if (!state.enabled) return;
-			if (!state.room) {
-				var ch = global.MPP && global.MPP.client && global.MPP.client.channel;
-				if (ch) this.setRoom(ch._id);
-			}
+			ensureRoomSilent();
 			var site = getSiteOrigin();
 			var prefix = site.isHarmony ? "*** HARMONY *** " : "";
 			writeJoinLine(
@@ -294,10 +313,7 @@
 
 		logRename: function (oldName, newName) {
 			if (!state.enabled) return;
-			if (!state.room) {
-				var ch = global.MPP && global.MPP.client && global.MPP.client.channel;
-				if (ch) this.setRoom(ch._id);
-			}
+			ensureRoomSilent();
 			var site = getSiteOrigin();
 			var prefix = site.isHarmony ? "*** HARMONY *** " : "";
 			writeJoinLine(
@@ -307,17 +323,15 @@
 		},
 
 		logCornerPrompt: function (userName, question, answer) {
-			if (!state.enabled || !answer) return;
-			if (!state.room) {
-				var ch = global.MPP && global.MPP.client && global.MPP.client.channel;
-				if (ch) this.setRoom(ch._id);
-			}
-			if (!state.room) state.room = "lobby";
+			if (!state.enabled || !answer) return Promise.resolve(false);
+			ensureRoomSilent();
+			var site = getSiteOrigin();
+			var prefix = site.isHarmony ? "*** HARMONY *** " : "";
 			var q = (question || "").replace(/\|/g, "/");
-			var a = (answer || "").replace(/\|/g, "/");
-			writePromptLine(
-				"[" + timeStamp() + "] " + (userName || "?") +
-				" | Q: " + q + " | A: " + a + "\n"
+			var a = String(answer).replace(/\|/g, "/").replace(/\r?\n/g, " ");
+			return writePromptLine(
+				"[" + timeStamp() + "] " + prefix + (userName || "?") +
+				" | Q: " + q + " | A: " + a + joinDomainSuffix() + "\n"
 			);
 		}
 	};

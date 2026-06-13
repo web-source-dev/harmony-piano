@@ -3115,13 +3115,24 @@ Rect.prototype.contains = function(x, y) {
 
 	if(typeof ChatLogger !== "undefined") {
 		var gLoggedParticipants = {};
+		var gLoggedSelfJoinRoom = null;
 
 		function syncLoggedParticipants(ppl) {
 			gLoggedParticipants = {};
 			if(!ppl) return;
 			for(var i = 0; i < ppl.length; i++) {
-				gLoggedParticipants[ppl[i].id] = ppl[i].name || "";
+				if(ppl[i].id !== gClient.participantId) {
+					gLoggedParticipants[ppl[i].id] = ppl[i].name || "";
+				}
 			}
+		}
+
+		function logSelfJoin(roomId) {
+			if(!roomId || gLoggedSelfJoinRoom === roomId) return;
+			var me = gClient.findParticipantById(gClient.participantId);
+			if(!me || !gClient.participantId) return;
+			gLoggedSelfJoinRoom = roomId;
+			ChatLogger.logJoin(me.name || "?");
 		}
 
 		gClient.on("room participants sync", function(ppl) {
@@ -3129,6 +3140,7 @@ Rect.prototype.contains = function(x, y) {
 		});
 		gClient.on("ch", function(msg) {
 			ChatLogger.setRoom(msg.ch._id);
+			logSelfJoin(msg.ch._id);
 		});
 		gClient.on("participant added", function(part) {
 			if(!part || part.id == null) return;
@@ -3137,13 +3149,12 @@ Rect.prototype.contains = function(x, y) {
 				return;
 			}
 			gLoggedParticipants[part.id] = part.name || "";
-			// Log only when this browser joins (correct domain for that user)
-			if(part.id === gClient.participantId) {
-				ChatLogger.logJoin(part.name || "?");
-			}
 		});
 		gClient.on("participant removed", function(part) {
 			if(part && part.id != null) delete gLoggedParticipants[part.id];
+		});
+		gClient.on("disconnect", function() {
+			gLoggedSelfJoinRoom = null;
 		});
 		gClient.on("participant renamed", function(info) {
 			if(!info) return;

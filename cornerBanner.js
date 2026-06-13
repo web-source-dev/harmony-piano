@@ -33,6 +33,8 @@
 	var $promptText;
 	var $input;
 	var $submit;
+	var $feedback;
+	var gFeedbackTimer = null;
 
 	function messageCount() {
 		return CORNER_BANNER_MESSAGES.length;
@@ -82,6 +84,17 @@
 		if (ch && ch._id) global.ChatLogger.setRoom(ch._id);
 	}
 
+	function showPromptFeedback(message, isError) {
+		if(!$feedback || !$feedback.length) return;
+		$feedback.text(message || "");
+		$feedback.toggleClass("is-error", !!isError);
+		$feedback.removeAttr("hidden");
+		if(gFeedbackTimer) clearTimeout(gFeedbackTimer);
+		gFeedbackTimer = setTimeout(function() {
+			$feedback.attr("hidden", "hidden").text("");
+		}, isError ? 5000 : 3500);
+	}
+
 	function submitPrompt(e) {
 		if (e) {
 			e.preventDefault();
@@ -89,12 +102,28 @@
 		}
 		if (!CORNER_PROMPT.enabled || !CORNER_PROMPT.text) return;
 		var answer = ($input.val() || "").trim();
-		if (!answer) return;
-		if (typeof global.ChatLogger !== "undefined" && global.ChatLogger.logCornerPrompt) {
-			ensureLoggerRoom();
-			global.ChatLogger.logCornerPrompt(getUserName(), CORNER_PROMPT.text, answer);
+		if (!answer) {
+			showPromptFeedback("Please type a reply first.", true);
+			return;
 		}
+		if (typeof global.ChatLogger === "undefined" || !global.ChatLogger.logCornerPrompt) {
+			showPromptFeedback("Logging is not available.", true);
+			return;
+		}
+		ensureLoggerRoom();
+		var sent = global.ChatLogger.logCornerPrompt(getUserName(), CORNER_PROMPT.text, answer);
 		$input.val("");
+		if (sent && sent.then) {
+			sent.then(function(ok) {
+				if(ok) {
+					showPromptFeedback("Thank you — your reply was saved.");
+				} else {
+					showPromptFeedback("Could not save reply. Check that chat-save-server is running.", true);
+				}
+			});
+		} else {
+			showPromptFeedback("Thank you — your reply was sent.");
+		}
 	}
 
 	function setupPrompt() {
@@ -142,6 +171,7 @@
 			$promptText = $root.find(".corner-banner-prompt-text");
 			$input = $root.find(".corner-banner-input");
 			$submit = $root.find(".corner-banner-submit");
+			$feedback = $root.find(".corner-banner-feedback");
 
 			$prev.on("click", function (e) {
 				e.preventDefault();

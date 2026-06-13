@@ -1946,6 +1946,23 @@ body.learn-panel-open #social {
 .corner-banner-submit:active {
 	transform: scale(0.98);
 }
+.corner-banner-feedback {
+	margin: 8px 0 0;
+	padding: 8px 10px;
+	font-size: 12px;
+	line-height: 1.4;
+	text-align: left;
+	color: var(--dj-success, #69db7c);
+	background: rgba(105, 219, 124, 0.1);
+	border: 1px solid rgba(105, 219, 124, 0.35);
+	border-radius: 6px;
+}
+.corner-banner-feedback.is-error {
+	color: #ff8787;
+	background: rgba(255, 135, 135, 0.1);
+	border-color: rgba(255, 135, 135, 0.35);
+}
+.corner-banner-feedback[hidden] { display: none !important; }
 .corner-banner[hidden] { display: none !important; }
 
 @media (max-width: 480px) {
