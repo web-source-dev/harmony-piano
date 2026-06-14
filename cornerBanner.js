@@ -7,7 +7,7 @@
 
 	// ── Add your messages here (strings only) ──
 	var CORNER_BANNER_MESSAGES = [
-		"Why Are You Smiling? 😊",
+		"Noob is lost or what happened to Noob idk Noob is happy just fulfulling the promises. \n 1st promise i gave you that ur mammi will never leave you always with you and i am trying my best. \n 2nd promise i gave you last day i will never come back and i am trying to fulfill that too and i am not joining any game i am just getting ur msgs in email and replying you through codes. \n Dont Be Sad i am always with you, but i will never go againest my promises",
 		];
 
 	// ── Corner prompt (question + input) — set enabled: false to hide ──
