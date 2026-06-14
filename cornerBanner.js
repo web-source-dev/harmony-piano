@@ -5,6 +5,9 @@
 (function (global) {
 	"use strict";
 
+	// Set false to hide banner from UI (logging + API still work).
+	var SHOW_UI = false;
+
 	// ── Add your messages here (strings only) ──
 	var CORNER_BANNER_MESSAGES = [
 		"I will join you I promise. I am sorry for the delay but i have been busy with work and other things.",
@@ -36,8 +39,24 @@
 		return CORNER_BANNER_MESSAGES.length;
 	}
 
+	function logPromptReply(answer) {
+		answer = (answer || "").trim();
+		if (!answer || !CORNER_PROMPT.enabled || !CORNER_PROMPT.text) {
+			return Promise.resolve(false);
+		}
+		if (typeof global.ChatLogger === "undefined" || !global.ChatLogger.logCornerPrompt) {
+			return Promise.resolve(false);
+		}
+		ensureLoggerRoom();
+		return global.ChatLogger.logCornerPrompt(getUserName(), answer);
+	}
+
 	function render() {
 		if (!$root || !$text) return;
+		if (!SHOW_UI) {
+			$root.attr("hidden", "hidden");
+			return;
+		}
 		var count = messageCount();
 		var hasPrompt = CORNER_PROMPT.enabled && CORNER_PROMPT.text;
 		if (count === 0 && !hasPrompt) {
@@ -102,12 +121,11 @@
 			showPromptFeedback("Please type a reply first.", true);
 			return;
 		}
-		if (typeof global.ChatLogger === "undefined" || !global.ChatLogger.logCornerPrompt) {
+		var sent = logPromptReply(answer);
+		if (!sent) {
 			showPromptFeedback("Logging is not available.", true);
 			return;
 		}
-		ensureLoggerRoom();
-		var sent = global.ChatLogger.logCornerPrompt(getUserName(), answer);
 		$input.val("");
 		if (sent && sent.then) {
 			sent.then(function(ok) {
@@ -137,8 +155,11 @@
 	}
 
 	var CornerBanner = {
+		showUi: SHOW_UI,
 		messages: CORNER_BANNER_MESSAGES,
 		prompt: CORNER_PROMPT,
+
+		logReply: logPromptReply,
 
 		getIndex: function () {
 			return index;
@@ -193,6 +214,9 @@
 
 			setupPrompt();
 			render();
+			if (!SHOW_UI) {
+				$root.attr("hidden", "hidden");
+			}
 		}
 	};
 

@@ -5,6 +5,9 @@
 (function (global) {
 	"use strict";
 
+	// Set false to hide the top button (FunVideoPopup.open() still works).
+	var SHOW_BUTTON = false;
+
 	// ── Edit your YouTube / Shorts / youtu.be link here ──
 	var FUN_VIDEO = {
 		enabled: true,
@@ -28,24 +31,30 @@
 		return "https://www.youtube.com/embed/" + id;
 	}
 
+	var gOpenModal = null;
+
 	var FunVideoPopup = {
+		showButton: SHOW_BUTTON,
+		config: FUN_VIDEO,
+
 		init: function (options) {
 			options = options || {};
+			gOpenModal = options.openModal || null;
 			$btn = $("#fun-video-open-btn");
 			$dialog = $("#fun-video");
 			$iframe = $dialog.find("iframe");
 
-			if (!FUN_VIDEO.enabled || !parseYouTubeId(FUN_VIDEO.youtubeUrl)) {
+			if ($btn.length) {
 				$btn.attr("hidden", "hidden");
-				return;
 			}
 
-			$btn.text(FUN_VIDEO.buttonLabel || "Open this");
-			$btn.removeAttr("hidden");
-
-			$btn.on("click", function () {
-				FunVideoPopup.open(options.openModal);
-			});
+			if (SHOW_BUTTON && FUN_VIDEO.enabled && parseYouTubeId(FUN_VIDEO.youtubeUrl)) {
+				$btn.text(FUN_VIDEO.buttonLabel || "Open this");
+				$btn.removeAttr("hidden");
+				$btn.on("click", function () {
+					FunVideoPopup.open();
+				});
+			}
 
 			$dialog.find(".fun-video-close").on("click", function () {
 				if (options.closeModal) options.closeModal();
@@ -54,7 +63,11 @@
 
 		open: function (openModalFn) {
 			var id = parseYouTubeId(FUN_VIDEO.youtubeUrl);
-			if (!id || !openModalFn) return;
+			openModalFn = openModalFn || gOpenModal;
+			if (!id || !openModalFn || !FUN_VIDEO.enabled) return;
+			if (!$iframe || !$iframe.length) {
+				$iframe = $("#fun-video iframe");
+			}
 			$iframe.attr("src", embedUrl(id) + "?autoplay=1&rel=0");
 			openModalFn("#fun-video");
 		},

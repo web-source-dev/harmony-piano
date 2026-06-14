@@ -2236,7 +2236,7 @@ Rect.prototype.contains = function(x, y) {
 		$(".ad1, #social, #banner, #corner-banner").hide();
 	}
 
-	if(typeof CornerBanner !== "undefined" && !gDontShow) {
+	if(typeof CornerBanner !== "undefined") {
 		CornerBanner.init();
 	}
 
