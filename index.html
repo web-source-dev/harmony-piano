@@ -626,7 +626,8 @@
             <span class="metronome-vol-label">70%</span>
             <button type="button" class="tb-btn metronome-sync-guide" title="Use BPM from loaded learn guide">Sync guide BPM</button>
         </div>
-        <p class="metronome-hint">Shortcut: <kbd>Shift</kbd>+<kbd>T</kbd> tap · <kbd>Shift</kbd>+<kbd>M</kbd> start/stop · <kbd>Ctrl</kbd>+<kbd>[</kbd> / <kbd>]</kbd> BPM ±5</p>
+        <p class="metronome-room-note" hidden>Crown controls tempo — everyone in the room hears the same synced clicks.</p>
+        <p class="metronome-hint">Room sync: crown starts/stops for everyone. Volume is personal. <kbd>Shift</kbd>+<kbd>M</kbd> toggle (crown) or view panel (others).</p>
     </div>
 </aside>
 
@@ -634,6 +635,7 @@
     <span class="metronome-hud-bpm">120</span>
     <span class="metronome-hud-unit">BPM</span>
     <span class="metronome-hud-dot"></span>
+    <span class="metronome-hud-host" hidden></span>
 </div>
 
 <div id="learn-panel" class="learn-panel" hidden>

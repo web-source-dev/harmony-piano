@@ -654,6 +654,12 @@ body.hacks-open #hacks-dock {
 	color: #89a;
 	line-height: 1.4;
 }
+.metronome-room-note {
+	margin: 0 0 4px;
+	font-size: 10px;
+	color: #bdc;
+	line-height: 1.35;
+}
 .metronome-hint kbd {
 	display: inline-block;
 	padding: 0 3px;
@@ -695,6 +701,18 @@ body.hacks-open #hacks-dock {
 	background: #ffe566;
 	transform: scale(1.3);
 	box-shadow: 0 0 8px rgba(255, 229, 102, 0.8);
+}
+.metronome-hud-host {
+	font-size: 9px;
+	color: #c9b;
+	max-width: 72px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.metronome-panel.metronome-readonly .metronome-visual,
+.metronome-panel.metronome-readonly .metronome-bpm-value {
+	opacity: 1;
 }
 
 #learn-panel {

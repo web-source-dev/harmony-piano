@@ -1795,30 +1795,35 @@ Rect.prototype.contains = function(x, y) {
 		if(typeof gMetronome !== "undefined" && gMetronome) {
 			if((evt.ctrlKey || evt.metaKey) && !evt.altKey) {
 				if(code === 219) {
+					if(!canControlRoomMetronome()) return;
 					gMetronome.nudgeBpm(-5);
-					syncMetronomeUI();
+					syncMetronomeControlsFromEngine();
 					evt.preventDefault();
 					return false;
 				}
 				if(code === 221) {
+					if(!canControlRoomMetronome()) return;
 					gMetronome.nudgeBpm(5);
-					syncMetronomeUI();
+					syncMetronomeControlsFromEngine();
 					evt.preventDefault();
 					return false;
 				}
 			}
 			if(evt.shiftKey && !evt.ctrlKey && !evt.metaKey && !evt.altKey) {
 				if(code === 77) {
-					ensureAudioReady();
-					gMetronome.toggle();
-					syncMetronomeUI();
+					if(gClient && gClient.isConnected() && !canControlRoomMetronome()) {
+						setMetronomePanelOpen(true);
+					} else {
+						ensureAudioReady();
+						toggleRoomMetronome();
+					}
 					evt.preventDefault();
 					return false;
 				}
-				if(code === 84) {
+				if(code === 84 && canControlRoomMetronome()) {
 					ensureAudioReady();
 					gMetronome.tap();
-					syncMetronomeUI();
+					syncMetronomeControlsFromEngine();
 					evt.preventDefault();
 					return false;
 				}
@@ -3001,6 +3006,11 @@ Rect.prototype.contains = function(x, y) {
 		});
 		gClient.on("a", function(msg) {
 			var chatLine = msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
+			if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
+				chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) {
+				if(typeof gRoomMetronome !== "undefined" && gRoomMetronome) gRoomMetronome.tryHandleChat(msg);
+				return;
+			}
 			if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) {
 				if(typeof gRoomMedia !== "undefined" && gRoomMedia) gRoomMedia.tryHandleChat(msg);
 				return;
@@ -3022,6 +3032,8 @@ Rect.prototype.contains = function(x, y) {
 			if($("#modal").is(":visible") && $(evt.target).closest("#modal .dialog").length) return;
 			if($(evt.target).closest("#hacks-dock").length) return;
 			if($(evt.target).closest("#learn-panel").length) return;
+			if($(evt.target).closest("#metronome-panel").length) return;
+			if($(evt.target).closest("#metronome-hud").length) return;
 			if($(evt.target).closest("#midi-transport").length) return;
 			if($(evt.target).closest("#room-media-transport").length) return;
 			if($(evt.target).closest("#chat-input-bar").length) return;
@@ -3033,6 +3045,8 @@ Rect.prototype.contains = function(x, y) {
 			for(var i in event.changedTouches) {
 				var touch = event.changedTouches[i];
 				if($(touch.target).closest("#learn-panel").length) continue;
+				if($(touch.target).closest("#metronome-panel").length) continue;
+				if($(touch.target).closest("#metronome-hud").length) continue;
 				if($(touch.target).closest("#midi-transport").length) continue;
 				if($(touch.target).closest("#room-media-transport").length) continue;
 				if(!$("#chat").has(touch.target).length && !$("#chat-input-bar").has(touch.target).length) {
@@ -3119,6 +3133,8 @@ Rect.prototype.contains = function(x, y) {
 				if(gChatMutes.indexOf(msg.p._id) != -1) return;
 				var chatLine = msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
 				if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) return;
+				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
+					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
 
 				var li = $('<li><span class="name"/><span class="message"/>');
 
@@ -3318,14 +3334,37 @@ Rect.prototype.contains = function(x, y) {
 
 	// Metronome
 	var gMetronome;
+	var gRoomMetronome;
+	var gMetroCanControl = true;
+	var gMetroOwnerName = "";
 	var $metronomePanel = $("#metronome-panel");
 	var $metronomeHud = $("#metronome-hud");
 	var gMetroPendulumSide = 1;
+
+	function canControlRoomMetronome() {
+		if(typeof gRoomMetronome !== "undefined" && gRoomMetronome) return gRoomMetronome.canControl();
+		if(gClient && gClient.isConnected()) return gClient.hasCrown();
+		return true;
+	}
+
+	function setMetronomeControlsEnabled(enabled) {
+		gMetroCanControl = !!enabled;
+		$metronomePanel.toggleClass("metronome-readonly", !enabled);
+		var $crownOnly = $metronomePanel.find(
+			"input[name=metro-bpm], input[name=metro-bpm-num], select, input[name=metro-accent], " +
+			".metronome-tap, .metronome-play, .metronome-stop, .metronome-nudge, .metronome-sync-guide"
+		);
+		$crownOnly.prop("disabled", !enabled);
+		if(!enabled && gMetronome && gMetronome.running) {
+			$metronomePanel.find(".metronome-play").prop("disabled", true);
+		}
+	}
 
 	function setMetronomePanelOpen(open) {
 		if(open) {
 			$metronomePanel.removeAttr("hidden");
 			releaseKeyboard();
+			setMetronomeControlsEnabled(canControlRoomMetronome());
 		} else {
 			$metronomePanel.attr("hidden", "hidden");
 			if(!isTypingTarget() && !gModal && !$("#chat").hasClass("chatting")) {
@@ -3338,9 +3377,21 @@ Rect.prototype.contains = function(x, y) {
 
 	function updateMetronomeHudVisibility() {
 		if(!gMetronome) return;
-		var showHud = gMetronome.running && $metronomePanel.is("[hidden]");
-		if(showHud) $metronomeHud.removeAttr("hidden");
-		else $metronomeHud.attr("hidden", "hidden");
+		var showHud = gMetronome.running;
+		var $host = $metronomeHud.find(".metronome-hud-host");
+		if(showHud) {
+			$metronomeHud.removeAttr("hidden");
+			if(gMetroOwnerName && gClient && gClient.isConnected()) {
+				$host.text(gMetroOwnerName).removeAttr("hidden");
+				$metronomeHud.attr("title", "Room metronome — " + gMetroOwnerName);
+			} else {
+				$host.attr("hidden", "hidden").text("");
+				$metronomeHud.removeAttr("title");
+			}
+		} else {
+			$metronomeHud.attr("hidden", "hidden");
+			$host.attr("hidden", "hidden");
+		}
 	}
 
 	function renderMetronomeBeatDots() {
@@ -3373,19 +3424,49 @@ Rect.prototype.contains = function(x, y) {
 		renderMetronomeBeatDots();
 	}
 
+	function updateMetronomeStatusText() {
+		var $status = $metronomePanel.find(".metronome-status");
+		if(gMetronome.countingIn) {
+			return;
+		}
+		if(gMetronome.running) {
+			if(gClient && gClient.isConnected() && gMetroOwnerName && !canControlRoomMetronome()) {
+				$status.text("Room sync · " + gMetroOwnerName).addClass("running").removeClass("counting");
+			} else if(gClient && gClient.isConnected()) {
+				$status.text("Room sync · running").addClass("running").removeClass("counting");
+			} else {
+				$status.text("Running").addClass("running").removeClass("counting");
+			}
+		} else {
+			if(gClient && gClient.isConnected() && !canControlRoomMetronome()) {
+				$status.text("Room metronome — crown controls").removeClass("running counting");
+			} else if(gClient && gClient.isConnected()) {
+				$status.text("Stopped — syncs to room").removeClass("running counting");
+			} else {
+				$status.text("Stopped").removeClass("running counting");
+			}
+		}
+	}
+
 	function updateMetronomeUI(state) {
 		if(!gMetronome) return;
 		syncMetronomeControlsFromEngine();
-		var $status = $metronomePanel.find(".metronome-status");
 		var $play = $metronomePanel.find(".metronome-play");
 		if(gMetronome.countingIn) {
-			$status.text("Count-in…").addClass("counting").removeClass("running");
-		} else if(gMetronome.running) {
-			$status.text("Running").addClass("running").removeClass("counting");
-			$play.text("▶ Running").prop("disabled", true);
+			$metronomePanel.find(".metronome-status").text("Count-in…").addClass("counting").removeClass("running");
 		} else {
-			$status.text("Stopped").removeClass("running counting");
-			$play.text("▶ Start").prop("disabled", false);
+			updateMetronomeStatusText();
+		}
+		if(gMetronome.running) {
+			$play.text(canControlRoomMetronome() ? "▶ Running" : "▶ Synced").prop("disabled", true);
+		} else {
+			$play.text("▶ Start").prop("disabled", !canControlRoomMetronome());
+		}
+		setMetronomeControlsEnabled(canControlRoomMetronome());
+		if(gClient && gClient.isConnected() && !canControlRoomMetronome()) {
+			$metronomePanel.find(".metronome-room-note").removeAttr("hidden");
+		} else {
+			$metronomePanel.find(".metronome-room-note").attr("hidden", "hidden");
 		}
 		document.body.classList.toggle("metronome-running", !!gMetronome.running);
 		updateMetronomeHudVisibility();
@@ -3423,7 +3504,50 @@ Rect.prototype.contains = function(x, y) {
 		$metronomePanel.find(".metronome-status").text("Count-in " + info.bar + "/" + info.totalBars);
 	}
 
+	function startRoomMetronome() {
+		if(!gMetronome) return;
+		if(gClient && gClient.isConnected() && !canControlRoomMetronome()) {
+			alert("Only the room owner (crown) can start the room metronome.");
+			return;
+		}
+		ensureAudioReady();
+		if(gRoomMetronome) {
+			gRoomMetronome.startRoom();
+		} else {
+			gMetronome.start(true);
+		}
+		updateMetronomeUI();
+	}
+
+	function stopRoomMetronome() {
+		if(!gMetronome) return;
+		if(gClient && gClient.isConnected() && gMetronome.running && !canControlRoomMetronome()) {
+			alert("Only the room owner (crown) can stop the room metronome.");
+			return;
+		}
+		if(gRoomMetronome) {
+			gRoomMetronome.stopRoom();
+		} else {
+			gMetronome.stop();
+		}
+		updateMetronomeUI({ stopped: true });
+	}
+
+	function toggleRoomMetronome() {
+		if(!gMetronome) return false;
+		if(gMetronome.running) {
+			stopRoomMetronome();
+			return false;
+		}
+		startRoomMetronome();
+		return true;
+	}
+
 	function applyMetronomeFromGuide() {
+		if(!canControlRoomMetronome()) {
+			alert("Only the room owner (crown) can change metronome settings.");
+			return;
+		}
 		if(typeof PianoLearn === "undefined" || !PianoLearn.guide || !PianoLearn.guide.track) {
 			alert("Load a learn guide with BPM first (e.g. Rush-E demo).");
 			return;
@@ -3444,9 +3568,39 @@ Rect.prototype.contains = function(x, y) {
 			onStateChange: updateMetronomeUI,
 			onCountIn: onMetronomeCountIn
 		});
+		if(typeof RoomMetronomeSync !== "undefined") {
+			gRoomMetronome = new RoomMetronomeSync({
+				client: gClient,
+				metronome: gMetronome,
+				onRoomState: function(info) {
+					gMetroOwnerName = info.ownerName || "";
+					updateMetronomeUI();
+				}
+			});
+		}
 		syncMetronomeControlsFromEngine();
 		updateMetronomeUI();
 	}
+
+	gClient.on("ch", function() {
+		setTimeout(function() {
+			if(gRoomMetronome && (!gMetronome || !gMetronome.running || !gRoomMetronome.canControl())) {
+				gRoomMetronome.requestSync();
+			}
+			updateMetronomeUI();
+		}, 400);
+	});
+	gClient.on("participant removed", function(part) {
+		if(gRoomMetronome && gRoomMetronome.ownerId && part.id === gRoomMetronome.ownerId) {
+			gRoomMetronome.ownerId = null;
+			gRoomMetronome.ownerName = "";
+			gMetroOwnerName = "";
+			if(gMetronome && gMetronome.running) {
+				gMetronome.stop();
+				updateMetronomeUI({ stopped: true });
+			}
+		}
+	});
 
 	// Sheet music / MIDI autoplay + Fun hacks
 	var gSheetPlayer;
@@ -3941,7 +4095,10 @@ Rect.prototype.contains = function(x, y) {
 		releaseAllKeysHack();
 		$("#piano").removeClass("spin");
 		if(gSheetPlayer) gSheetPlayer.stop();
-		if(gMetronome && gMetronome.running) gMetronome.stop();
+		if(gMetronome && gMetronome.running) {
+			if(gRoomMetronome) gRoomMetronome.stopRoom();
+			else gMetronome.stop();
+		}
 		if(typeof updateMetronomeUI === "function") updateMetronomeUI({ stopped: true });
 		setSpamStatus("idle", false);
 	}
@@ -4870,36 +5027,36 @@ Rect.prototype.contains = function(x, y) {
 			}, 0);
 		});
 		$metronomePanel.on("input", "input[name=metro-bpm]", function() {
-			if(!gMetronome) return;
+			if(!gMetronome || !canControlRoomMetronome()) return;
 			gMetronome.setBpm(this.value);
 			syncMetronomeControlsFromEngine();
 		});
 		$metronomePanel.on("change input", "input[name=metro-bpm-num]", function() {
-			if(!gMetronome) return;
+			if(!gMetronome || !canControlRoomMetronome()) return;
 			gMetronome.setBpm(this.value);
 			syncMetronomeControlsFromEngine();
 		});
 		$metronomePanel.on("click", ".metronome-nudge-down", function(e) {
 			e.preventDefault();
-			if(gMetronome) { gMetronome.nudgeBpm(-1); syncMetronomeControlsFromEngine(); }
+			if(gMetronome && canControlRoomMetronome()) { gMetronome.nudgeBpm(-1); syncMetronomeControlsFromEngine(); }
 		});
 		$metronomePanel.on("click", ".metronome-nudge-up", function(e) {
 			e.preventDefault();
-			if(gMetronome) { gMetronome.nudgeBpm(1); syncMetronomeControlsFromEngine(); }
+			if(gMetronome && canControlRoomMetronome()) { gMetronome.nudgeBpm(1); syncMetronomeControlsFromEngine(); }
 		});
 		$metronomePanel.on("click", ".metronome-tap", function(e) {
 			e.preventDefault();
+			if(!canControlRoomMetronome()) return;
 			ensureAudioReady();
 			if(gMetronome) { gMetronome.tap(); syncMetronomeControlsFromEngine(); }
 		});
 		$metronomePanel.on("click", ".metronome-play", function(e) {
 			e.preventDefault();
-			ensureAudioReady();
-			if(gMetronome) { gMetronome.start(); updateMetronomeUI(); }
+			startRoomMetronome();
 		});
 		$metronomePanel.on("click", ".metronome-stop", function(e) {
 			e.preventDefault();
-			if(gMetronome) { gMetronome.stop(); updateMetronomeUI({ stopped: true }); }
+			stopRoomMetronome();
 		});
 		$metronomePanel.on("change", "select[name=metro-timesig]", function() {
 			if(!gMetronome) return;
