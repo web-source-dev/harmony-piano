@@ -1791,9 +1791,41 @@ Rect.prototype.contains = function(x, y) {
 	
 	function handleKeyDown(evt) {
 		if(isTypingTarget()) return;
+		var code = parseInt(evt.keyCode);
+		if(typeof gMetronome !== "undefined" && gMetronome) {
+			if((evt.ctrlKey || evt.metaKey) && !evt.altKey) {
+				if(code === 219) {
+					gMetronome.nudgeBpm(-5);
+					syncMetronomeUI();
+					evt.preventDefault();
+					return false;
+				}
+				if(code === 221) {
+					gMetronome.nudgeBpm(5);
+					syncMetronomeUI();
+					evt.preventDefault();
+					return false;
+				}
+			}
+			if(evt.shiftKey && !evt.ctrlKey && !evt.metaKey && !evt.altKey) {
+				if(code === 77) {
+					ensureAudioReady();
+					gMetronome.toggle();
+					syncMetronomeUI();
+					evt.preventDefault();
+					return false;
+				}
+				if(code === 84) {
+					ensureAudioReady();
+					gMetronome.tap();
+					syncMetronomeUI();
+					evt.preventDefault();
+					return false;
+				}
+			}
+		}
 		if(isModifierShortcut(evt)) return;
 		//console.log(evt);
-		var code = parseInt(evt.keyCode);
 		if(key_binding[code] !== undefined) {
 			var binding = key_binding[code];
 			if(!binding.held) {
@@ -3275,9 +3307,145 @@ Rect.prototype.contains = function(x, y) {
 				var track = PianoLearn.parseKeyGuide(textReader.result);
 				if(!track.title || track.title === "Guide") track.title = base;
 				PianoLearn.applyLearnTrack(PianoLearn.guide, track, setLearnTrackTitle);
+				if(gMetronome && track.bpm) {
+					gMetronome.applyFromGuide(track.bpm);
+					syncMetronomeControlsFromEngine();
+				}
 			} catch(err) { alert(err.message); }
 		};
 		textReader.readAsText(file);
+	}
+
+	// Metronome
+	var gMetronome;
+	var $metronomePanel = $("#metronome-panel");
+	var $metronomeHud = $("#metronome-hud");
+	var gMetroPendulumSide = 1;
+
+	function setMetronomePanelOpen(open) {
+		if(open) {
+			$metronomePanel.removeAttr("hidden");
+			releaseKeyboard();
+		} else {
+			$metronomePanel.attr("hidden", "hidden");
+			if(!isTypingTarget() && !gModal && !$("#chat").hasClass("chatting")) {
+				captureKeyboard();
+			}
+		}
+		document.body.classList.toggle("metronome-panel-open", !!open);
+		updateMetronomeHudVisibility();
+	}
+
+	function updateMetronomeHudVisibility() {
+		if(!gMetronome) return;
+		var showHud = gMetronome.running && $metronomePanel.is("[hidden]");
+		if(showHud) $metronomeHud.removeAttr("hidden");
+		else $metronomeHud.attr("hidden", "hidden");
+	}
+
+	function renderMetronomeBeatDots() {
+		var beats = gMetronome ? gMetronome.beatsPerBar : 4;
+		var $wrap = $metronomePanel.find(".metronome-beats");
+		if($wrap.children().length !== beats) {
+			$wrap.empty();
+			for(var i = 0; i < beats; i++) {
+				$wrap.append($("<span/>", {
+					"class": "metronome-beat-dot" + (i === 0 ? " accent" : ""),
+					"data-beat": i
+				}));
+			}
+		}
+	}
+
+	function syncMetronomeControlsFromEngine() {
+		if(!gMetronome) return;
+		$metronomePanel.find("input[name=metro-bpm]").val(gMetronome.bpm);
+		$metronomePanel.find("input[name=metro-bpm-num]").val(gMetronome.bpm);
+		$metronomePanel.find(".metronome-bpm-value").text(gMetronome.bpm);
+		$metronomeHud.find(".metronome-hud-bpm").text(gMetronome.bpm);
+		$metronomePanel.find("select[name=metro-timesig]").val(String(gMetronome.beatsPerBar));
+		$metronomePanel.find("select[name=metro-subdiv]").val(String(gMetronome.subdivision));
+		$metronomePanel.find("select[name=metro-sound]").val(gMetronome.sound);
+		$metronomePanel.find("select[name=metro-countin]").val(String(gMetronome.countIn));
+		$metronomePanel.find("input[name=metro-accent]").prop("checked", gMetronome.accentBeat1);
+		$metronomePanel.find("input[name=metro-volume]").val(gMetronome.volume);
+		$metronomePanel.find(".metronome-vol-label").text(Math.round(gMetronome.volume * 100) + "%");
+		renderMetronomeBeatDots();
+	}
+
+	function updateMetronomeUI(state) {
+		if(!gMetronome) return;
+		syncMetronomeControlsFromEngine();
+		var $status = $metronomePanel.find(".metronome-status");
+		var $play = $metronomePanel.find(".metronome-play");
+		if(gMetronome.countingIn) {
+			$status.text("Count-in…").addClass("counting").removeClass("running");
+		} else if(gMetronome.running) {
+			$status.text("Running").addClass("running").removeClass("counting");
+			$play.text("▶ Running").prop("disabled", true);
+		} else {
+			$status.text("Stopped").removeClass("running counting");
+			$play.text("▶ Start").prop("disabled", false);
+		}
+		document.body.classList.toggle("metronome-running", !!gMetronome.running);
+		updateMetronomeHudVisibility();
+		if(state && state.stopped) {
+			$metronomePanel.find(".metronome-beat-dot").removeClass("active");
+			$metronomePanel.find(".metronome-pendulum").removeClass("swing-left swing-right accent");
+			$metronomeHud.find(".metronome-hud-dot").removeClass("pulse");
+		}
+	}
+
+	function onMetronomeBeat(info) {
+		if(!info || info.stopped) {
+			updateMetronomeUI({ stopped: true });
+			return;
+		}
+		if(!info.isBeat) return;
+		var beat = info.beatInBar;
+		$metronomePanel.find(".metronome-beat-dot").removeClass("active");
+		$metronomePanel.find('.metronome-beat-dot[data-beat="' + beat + '"]').addClass("active");
+		var $pend = $metronomePanel.find(".metronome-pendulum");
+		gMetroPendulumSide = -gMetroPendulumSide;
+		$pend.removeClass("swing-left swing-right accent");
+		$pend.addClass(gMetroPendulumSide < 0 ? "swing-left" : "swing-right");
+		if(info.accent) $pend.addClass("accent");
+		var $hudDot = $metronomeHud.find(".metronome-hud-dot");
+		$hudDot.addClass("pulse");
+		setTimeout(function() { $hudDot.removeClass("pulse"); }, 80);
+	}
+
+	function onMetronomeCountIn(info) {
+		if(!info) {
+			updateMetronomeUI();
+			return;
+		}
+		$metronomePanel.find(".metronome-status").text("Count-in " + info.bar + "/" + info.totalBars);
+	}
+
+	function applyMetronomeFromGuide() {
+		if(typeof PianoLearn === "undefined" || !PianoLearn.guide || !PianoLearn.guide.track) {
+			alert("Load a learn guide with BPM first (e.g. Rush-E demo).");
+			return;
+		}
+		var bpm = PianoLearn.guide.track.bpm;
+		if(!bpm) {
+			alert("This guide has no BPM in the file header.");
+			return;
+		}
+		gMetronome.applyFromGuide(bpm);
+		syncMetronomeControlsFromEngine();
+	}
+
+	if(typeof Metronome !== "undefined") {
+		gMetronome = new Metronome({
+			getContext: function() { return gPiano && gPiano.audio ? gPiano.audio.context : null; },
+			onBeat: onMetronomeBeat,
+			onStateChange: updateMetronomeUI,
+			onCountIn: onMetronomeCountIn
+		});
+		syncMetronomeControlsFromEngine();
+		updateMetronomeUI();
 	}
 
 	// Sheet music / MIDI autoplay + Fun hacks
@@ -3773,6 +3941,8 @@ Rect.prototype.contains = function(x, y) {
 		releaseAllKeysHack();
 		$("#piano").removeClass("spin");
 		if(gSheetPlayer) gSheetPlayer.stop();
+		if(gMetronome && gMetronome.running) gMetronome.stop();
+		if(typeof updateMetronomeUI === "function") updateMetronomeUI({ stopped: true });
 		setSpamStatus("idle", false);
 	}
 	function pressAllKeysHack() {
@@ -4632,6 +4802,10 @@ Rect.prototype.contains = function(x, y) {
 			}).then(function(text) {
 				var track = PianoLearn.parseKeyGuide(text);
 				PianoLearn.applyLearnTrack(PianoLearn.guide, track, setLearnTrackTitle);
+				if(gMetronome && track.bpm) {
+					gMetronome.applyFromGuide(track.bpm);
+					syncMetronomeControlsFromEngine();
+				}
 			}).catch(function(err) { alert(err.message); });
 		});
 		$learnPanel.find("input[name=guide-file]").on("change", function() {
@@ -4664,6 +4838,97 @@ Rect.prototype.contains = function(x, y) {
 			e.preventDefault();
 			if(PianoLearn.guide) PianoLearn.guide.seekStep(1);
 		});
+
+		var metroBtn = document.getElementById("metronome-btn");
+		if(metroBtn) {
+			metroBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				setMetronomePanelOpen($metronomePanel.is("[hidden]"));
+			});
+		}
+		$metronomePanel.on("click", ".metronome-close", function(e) {
+			e.preventDefault();
+			setMetronomePanelOpen(false);
+		});
+		$metronomeHud.on("click", function(e) {
+			e.preventDefault();
+			setMetronomePanelOpen(true);
+		});
+		$metronomePanel.on("mousedown touchstart pointerdown", function(e) {
+			e.stopPropagation();
+			releaseKeyboard();
+		});
+		$metronomePanel.on("focusin", "input, select", function() { releaseKeyboard(); });
+		$metronomePanel.on("focusout", function(e) {
+			setTimeout(function() {
+				if($(e.relatedTarget).closest("#metronome-panel").length) return;
+				if(isTypingTarget()) return;
+				if(!gModal && !$("#chat").hasClass("chatting") && $metronomePanel.is("[hidden]") && $learnPanel.is("[hidden]")) {
+					captureKeyboard();
+				}
+			}, 0);
+		});
+		$metronomePanel.on("input", "input[name=metro-bpm]", function() {
+			if(!gMetronome) return;
+			gMetronome.setBpm(this.value);
+			syncMetronomeControlsFromEngine();
+		});
+		$metronomePanel.on("change input", "input[name=metro-bpm-num]", function() {
+			if(!gMetronome) return;
+			gMetronome.setBpm(this.value);
+			syncMetronomeControlsFromEngine();
+		});
+		$metronomePanel.on("click", ".metronome-nudge-down", function(e) {
+			e.preventDefault();
+			if(gMetronome) { gMetronome.nudgeBpm(-1); syncMetronomeControlsFromEngine(); }
+		});
+		$metronomePanel.on("click", ".metronome-nudge-up", function(e) {
+			e.preventDefault();
+			if(gMetronome) { gMetronome.nudgeBpm(1); syncMetronomeControlsFromEngine(); }
+		});
+		$metronomePanel.on("click", ".metronome-tap", function(e) {
+			e.preventDefault();
+			ensureAudioReady();
+			if(gMetronome) { gMetronome.tap(); syncMetronomeControlsFromEngine(); }
+		});
+		$metronomePanel.on("click", ".metronome-play", function(e) {
+			e.preventDefault();
+			ensureAudioReady();
+			if(gMetronome) { gMetronome.start(); updateMetronomeUI(); }
+		});
+		$metronomePanel.on("click", ".metronome-stop", function(e) {
+			e.preventDefault();
+			if(gMetronome) { gMetronome.stop(); updateMetronomeUI({ stopped: true }); }
+		});
+		$metronomePanel.on("change", "select[name=metro-timesig]", function() {
+			if(!gMetronome) return;
+			gMetronome.setBeatsPerBar(parseInt(this.value, 10));
+			syncMetronomeControlsFromEngine();
+		});
+		$metronomePanel.on("change", "select[name=metro-subdiv]", function() {
+			if(!gMetronome) return;
+			gMetronome.setSubdivision(parseInt(this.value, 10));
+		});
+		$metronomePanel.on("change", "select[name=metro-sound]", function() {
+			if(gMetronome) gMetronome.setSound(this.value);
+		});
+		$metronomePanel.on("change", "select[name=metro-countin]", function() {
+			if(gMetronome) gMetronome.setCountIn(parseInt(this.value, 10));
+		});
+		$metronomePanel.on("change", "input[name=metro-accent]", function() {
+			if(gMetronome) gMetronome.setAccentBeat1(this.checked);
+		});
+		$metronomePanel.on("input", "input[name=metro-volume]", function() {
+			if(!gMetronome) return;
+			gMetronome.setVolume(this.value);
+			$metronomePanel.find(".metronome-vol-label").text(Math.round(gMetronome.volume * 100) + "%");
+		});
+		$metronomePanel.on("click", ".metronome-sync-guide", function(e) {
+			e.preventDefault();
+			applyMetronomeFromGuide();
+		});
+		$metronomePanel.on("click", ".tb-btn", function(e) { e.stopPropagation(); });
 
 		$("#modals").on("click", ".tb-btn", function(e) { e.stopPropagation(); });
 		$midiTransport.on("click", ".tb-btn", function(e) { e.stopPropagation(); });

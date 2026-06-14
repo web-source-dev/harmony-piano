@@ -188,6 +188,7 @@
         <div id="synth-btn" class="ugly-button translate">Synth</div>
         <div id="sheet-btn" class="ugly-button">Sheet Play</div>
         <div id="learn-btn" class="ugly-button">Learn Piano</div>
+        <div id="metronome-btn" class="ugly-button">Metronome</div>
         <div id="hacks-toggle-btn" class="ugly-button">Hacks ▼</div>
         <div id="sound-btn" class="ugly-button sound-btn">Sound Select</div>
         <div id="status"></div>
@@ -551,6 +552,90 @@
     </div>
 </div>
 
+<aside id="metronome-panel" class="metronome-panel" hidden>
+    <div class="metronome-panel-inner">
+        <div class="metronome-head">
+            <span class="metronome-brand">Metronome</span>
+            <span class="metronome-status">Stopped</span>
+            <button type="button" class="metronome-close" title="Close panel">✕</button>
+        </div>
+        <div class="metronome-visual">
+            <div class="metronome-pendulum-wrap">
+                <img src="./arrow.png" alt="" class="metronome-pendulum" draggable="false"/>
+            </div>
+            <div class="metronome-bpm-display">
+                <button type="button" class="metronome-nudge metronome-nudge-down" title="BPM −1">−</button>
+                <span class="metronome-bpm-value">120</span>
+                <span class="metronome-bpm-unit">BPM</span>
+                <button type="button" class="metronome-nudge metronome-nudge-up" title="BPM +1">+</button>
+            </div>
+            <div class="metronome-beats" aria-label="Beat indicator"></div>
+        </div>
+        <div class="metronome-controls">
+            <label class="metronome-field metronome-bpm-field">Tempo
+                <input type="range" name="metro-bpm" min="20" max="300" value="120" class="metronome-bpm-slider" title="BPM"/>
+            </label>
+            <label class="metronome-field">BPM
+                <input type="number" name="metro-bpm-num" min="20" max="300" value="120" class="metronome-bpm-num"/>
+            </label>
+            <button type="button" class="tb-btn metronome-tap" title="Tap tempo (T)">Tap</button>
+            <button type="button" class="tb-btn metronome-play primary">▶ Start</button>
+            <button type="button" class="tb-btn metronome-stop">⏹ Stop</button>
+        </div>
+        <div class="metronome-controls metronome-controls-row2">
+            <label class="metronome-field">Time
+                <select name="metro-timesig" class="metronome-select" title="Time signature">
+                    <option value="2">2/4</option>
+                    <option value="3">3/4</option>
+                    <option value="4" selected>4/4</option>
+                    <option value="5">5/4</option>
+                    <option value="6">6/8</option>
+                    <option value="7">7/8</option>
+                </select>
+            </label>
+            <label class="metronome-field">Subdiv
+                <select name="metro-subdiv" class="metronome-select" title="Subdivision">
+                    <option value="1" selected>Quarter</option>
+                    <option value="2">Eighth</option>
+                    <option value="3">Triplet</option>
+                    <option value="4">Sixteenth</option>
+                </select>
+            </label>
+            <label class="metronome-field">Sound
+                <select name="metro-sound" class="metronome-select" title="Click sound">
+                    <option value="click" selected>Click</option>
+                    <option value="wood">Wood</option>
+                    <option value="beep">Beep</option>
+                    <option value="hihat">Hi-hat</option>
+                </select>
+            </label>
+            <label class="metronome-field">Count-in
+                <select name="metro-countin" class="metronome-select" title="Bars before start">
+                    <option value="0" selected>Off</option>
+                    <option value="1">1 bar</option>
+                    <option value="2">2 bars</option>
+                    <option value="4">4 bars</option>
+                </select>
+            </label>
+            <label class="metronome-field metronome-check"><input type="checkbox" name="metro-accent" checked/> Accent beat 1</label>
+        </div>
+        <div class="metronome-controls metronome-controls-row3">
+            <label class="metronome-field metronome-vol-field">Volume
+                <input type="range" name="metro-volume" min="0" max="1" step="0.01" value="0.7" class="metronome-vol-slider"/>
+            </label>
+            <span class="metronome-vol-label">70%</span>
+            <button type="button" class="tb-btn metronome-sync-guide" title="Use BPM from loaded learn guide">Sync guide BPM</button>
+        </div>
+        <p class="metronome-hint">Shortcut: <kbd>Shift</kbd>+<kbd>T</kbd> tap · <kbd>Shift</kbd>+<kbd>M</kbd> start/stop · <kbd>Ctrl</kbd>+<kbd>[</kbd> / <kbd>]</kbd> BPM ±5</p>
+    </div>
+</aside>
+
+<div id="metronome-hud" class="metronome-hud" hidden aria-live="polite">
+    <span class="metronome-hud-bpm">120</span>
+    <span class="metronome-hud-unit">BPM</span>
+    <span class="metronome-hud-dot"></span>
+</div>
+
 <div id="learn-panel" class="learn-panel" hidden>
     <div class="learn-panel-inner">
         <div class="learn-head">
@@ -595,6 +680,7 @@
 <script src="./sheetPlayer.js"></script>
 <script src="./roomMedia.js"></script>
 <script src="./pianoLearn.js"></script>
+<script src="./metronome.js"></script>
 <script src="./chatLogger.js"></script>
 <script src="./cornerBanner.js"></script>
 <script src="./funVideoPopup.js"></script>
