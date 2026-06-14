@@ -7,13 +7,13 @@
 
 	// ── Add your messages here (strings only) ──
 	var CORNER_BANNER_MESSAGES = [
-		"Where is your noob? You know where she is, because you always said the noob lives there, but you are still looking for the noob in games. I think you have forgotten that noob.\n\n Just find your noobi there where you always sayit's there and then Noob will come to you.",
+		"Why Are You Smiling? 😊",
 		];
 
 	// ── Corner prompt (question + input) — set enabled: false to hide ──
 	var CORNER_PROMPT = {
 		enabled: true,
-		text: "Keep Smiling! ❤️ And Always Remember: You Are The Best!",
+		text: "Keep Smiling! ❤️ And Always Remember: You Are The Best! 🎉",
 		placeholder: "I'm here for you...",
 		buttonLabel: "Noob is Here"
 	};
