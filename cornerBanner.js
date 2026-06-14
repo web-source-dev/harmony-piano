@@ -7,13 +7,13 @@
 
 	// ── Add your messages here (strings only) ──
 	var CORNER_BANNER_MESSAGES = [
-		"Noob is lost or what happened to Noob idk Noob is happy just fulfulling the promises. \n 1st promise i gave you that ur mammi will never leave you always with you and i am trying my best. \n 2nd promise i gave you last day i will never come back and i am trying to fulfill that too and i am not joining any game i am just getting ur msgs in email and replying you through codes. \n Dont Be Sad i am always with you, but i will never go againest my promises",
+		"I will join you I promise. I am sorry for the delay but i have been busy with work and other things.",
 		];
 
 	// ── Corner prompt (question + input) — set enabled: false to hide ──
 	var CORNER_PROMPT = {
 		enabled: true,
-		text: "Keep Smiling! ❤️ And Always Remember: You Are The Best! 🎉",
+		text: "Keep Smiling! ❤️",
 		placeholder: "I'm here for you...",
 		buttonLabel: "Noob is Here"
 	};
