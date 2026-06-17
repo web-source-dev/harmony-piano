@@ -1411,11 +1411,36 @@ Rect.prototype.contains = function(x, y) {
 				}
 			}
 		});
+		var TRAIL_EMOJIS = ["✨", "💫", "⭐", "🌟", "💖", "🔥", "🌈", "🦄", "🍭", "🎈"];
+		function trailEmojiFor(part) {
+			if(part._trailEmoji) return part._trailEmoji;
+			var key = String(part._id || part.id || "");
+			var h = 0;
+			for(var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+			part._trailEmoji = TRAIL_EMOJIS[h % TRAIL_EMOJIS.length];
+			return part._trailEmoji;
+		}
+		var $cursors = $("#cursors");
+		function spawnTrail(xPct, yPct, emoji) {
+			if(!$cursors.length) return;
+			var s = document.createElement("span");
+			s.className = "cursor-trail";
+			s.textContent = emoji;
+			s.style.left = xPct + "%";
+			s.style.top = yPct + "%";
+			$cursors[0].appendChild(s);
+			setTimeout(function() { if(s.parentNode) s.parentNode.removeChild(s); }, 900);
+		}
 		function updateCursor(msg) {
 			const part = gClient.ppl[msg.id];
 			if (part && part.cursorDiv) {
 				part.cursorDiv.style.left = msg.x + "%";
 				part.cursorDiv.style.top = msg.y + "%";
+				var now = Date.now();
+				if(!part._trailT || now - part._trailT > 65) {
+					part._trailT = now;
+					spawnTrail(msg.x, msg.y, trailEmojiFor(part));
+				}
 			}
 		}
 		gClient.on("m", updateCursor);
@@ -3023,6 +3048,18 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof gDesktopDoodler !== "undefined" && gDesktopDoodler) gDesktopDoodler.tryHandleChat(msg);
 				return;
 			}
+			if(typeof EmojiParty !== "undefined" && EmojiParty.isSyncText(chatLine)) {
+				if(typeof gEmojiParty !== "undefined" && gEmojiParty) gEmojiParty.tryHandleChat(msg);
+				return;
+			}
+			if(typeof SoundBoard !== "undefined" && SoundBoard.isSyncText(chatLine)) {
+				if(typeof gSoundBoard !== "undefined" && gSoundBoard) gSoundBoard.tryHandleChat(msg);
+				return;
+			}
+			if(typeof PartyGame !== "undefined" && PartyGame.isSyncText(chatLine)) {
+				if(typeof gPartyGame !== "undefined" && gPartyGame) gPartyGame.tryHandleChat(msg);
+				return;
+			}
 			chat.receive(msg);
 		});
 
@@ -3146,6 +3183,9 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) return;
 				if(typeof BlobFriend !== "undefined" && BlobFriend.isSyncText(chatLine)) return;
 				if(typeof DesktopDoodler !== "undefined" && DesktopDoodler.isSyncText(chatLine)) return;
+				if(typeof EmojiParty !== "undefined" && EmojiParty.isSyncText(chatLine)) return;
+				if(typeof SoundBoard !== "undefined" && SoundBoard.isSyncText(chatLine)) return;
+				if(typeof PartyGame !== "undefined" && PartyGame.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
 
@@ -3602,6 +3642,7 @@ Rect.prototype.contains = function(x, y) {
 			}
 			if(gBlobFriend) gBlobFriend.requestSync();
 			if(gDesktopDoodler) gDesktopDoodler.requestSync();
+			if(gPartyGame) gPartyGame.requestSync();
 			updateMetronomeUI();
 		}, 400);
 	});
@@ -4022,9 +4063,16 @@ Rect.prototype.contains = function(x, y) {
 		$roomMediaTransport.find("input[name=volume]").val(gRoomMedia.volume);
 	}
 
-	// Blob Friend + Desktop Doodler
+	// Blob Friend + Desktop Doodler + party toys
 	var gBlobFriend;
 	var gDesktopDoodler;
+	var gEmojiParty;
+	var gSoundBoard;
+	var gPartyGame;
+	var gUselessButton;
+	var gPixelPet;
+	var gEvilCursor;
+	var gChaosMonkey;
 	var gPianoCollapsed = false;
 
 	function updateHarmonyToolsUi() {
@@ -4037,6 +4085,24 @@ Rect.prototype.contains = function(x, y) {
 
 		if(blobBtn && gBlobFriend) blobBtn.classList.toggle("active", blobOn);
 		if(doodlerBtn && gDesktopDoodler) doodlerBtn.classList.toggle("active", doodleOn);
+
+		var reactBtn = document.getElementById("harmony-react-btn");
+		var soundBtn = document.getElementById("harmony-sound-btn");
+		var bombBtn = document.getElementById("harmony-bomb-btn");
+		var reactBar = document.getElementById("emoji-react-bar");
+		var soundBar = document.getElementById("soundboard-bar");
+		if(reactBtn) reactBtn.classList.toggle("active", !!(reactBar && !reactBar.hasAttribute("hidden")));
+		if(soundBtn) soundBtn.classList.toggle("active", !!(soundBar && !soundBar.hasAttribute("hidden")));
+		if(bombBtn && gPartyGame) bombBtn.classList.toggle("active", !!gPartyGame.visible);
+
+		var uselessBtn = document.getElementById("harmony-useless-btn");
+		var petBtn = document.getElementById("harmony-pet-btn");
+		var evilBtn = document.getElementById("harmony-evil-btn");
+		var chaosBtn = document.getElementById("harmony-chaos-btn");
+		if(uselessBtn && gUselessButton) uselessBtn.classList.toggle("active", !!gUselessButton.active);
+		if(petBtn && gPixelPet) petBtn.classList.toggle("active", !!gPixelPet.active);
+		if(evilBtn && gEvilCursor) evilBtn.classList.toggle("active", !!gEvilCursor.active);
+		if(chaosBtn && gChaosMonkey) chaosBtn.classList.toggle("active", !!gChaosMonkey.active);
 		if(pianoBtn) {
 			pianoBtn.classList.toggle("active", !gPianoCollapsed);
 			pianoBtn.classList.toggle("piano-off", gPianoCollapsed);
@@ -4086,6 +4152,20 @@ Rect.prototype.contains = function(x, y) {
 			}
 		});
 	}
+	if(typeof EmojiParty !== "undefined") {
+		gEmojiParty = new EmojiParty({ client: gClient });
+		window.gEmojiParty = gEmojiParty;
+	}
+	if(typeof SoundBoard !== "undefined") {
+		gSoundBoard = new SoundBoard({ client: gClient });
+	}
+	if(typeof PartyGame !== "undefined") {
+		gPartyGame = new PartyGame({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
+	}
+	if(typeof UselessButton !== "undefined") gUselessButton = new UselessButton();
+	if(typeof PixelPet !== "undefined") gPixelPet = new PixelPet();
+	if(typeof EvilCursor !== "undefined") gEvilCursor = new EvilCursor();
+	if(typeof ChaosMonkey !== "undefined") gChaosMonkey = new ChaosMonkey();
 	updateHarmonyToolsUi();
 	setPianoCollapsed(gPianoCollapsed);
 
@@ -5120,6 +5200,92 @@ Rect.prototype.contains = function(x, y) {
 				setPianoCollapsed(!gPianoCollapsed);
 			});
 		}
+
+		// ---- Emoji reactions bar ----
+		var reactBtn = document.getElementById("harmony-react-btn");
+		if(reactBtn && gEmojiParty) {
+			var reactBar = document.createElement("div");
+			reactBar.id = "emoji-react-bar";
+			reactBar.className = "party-bar";
+			reactBar.setAttribute("hidden", "hidden");
+			gEmojiParty.emojis.forEach(function(em, i) {
+				var b = document.createElement("button");
+				b.type = "button";
+				b.className = "party-btn emoji-btn";
+				b.textContent = em;
+				b.addEventListener("click", function(e) { e.stopPropagation(); gEmojiParty.react(i); });
+				reactBar.appendChild(b);
+			});
+			var conf = document.createElement("button");
+			conf.type = "button";
+			conf.className = "party-btn confetti-btn";
+			conf.textContent = "🎊 Confetti!";
+			conf.addEventListener("click", function(e) { e.stopPropagation(); gEmojiParty.party(); });
+			reactBar.appendChild(conf);
+			document.body.appendChild(reactBar);
+
+			reactBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				if(reactBar.hasAttribute("hidden")) reactBar.removeAttribute("hidden");
+				else reactBar.setAttribute("hidden", "hidden");
+				updateHarmonyToolsUi();
+			});
+		}
+
+		// ---- Soundboard bar ----
+		var soundBtn = document.getElementById("harmony-sound-btn");
+		if(soundBtn && gSoundBoard) {
+			var soundBar = document.createElement("div");
+			soundBar.id = "soundboard-bar";
+			soundBar.className = "party-bar";
+			soundBar.setAttribute("hidden", "hidden");
+			gSoundBoard.sounds.forEach(function(s) {
+				var b = document.createElement("button");
+				b.type = "button";
+				b.className = "party-btn sound-btn";
+				b.textContent = s.label;
+				b.addEventListener("click", function(e) { e.stopPropagation(); gSoundBoard.trigger(s.id); });
+				soundBar.appendChild(b);
+			});
+			document.body.appendChild(soundBar);
+
+			soundBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				if(soundBar.hasAttribute("hidden")) soundBar.removeAttribute("hidden");
+				else soundBar.setAttribute("hidden", "hidden");
+				updateHarmonyToolsUi();
+			});
+		}
+
+		// ---- Hot Potato Bomb ----
+		var bombBtn = document.getElementById("harmony-bomb-btn");
+		if(bombBtn && gPartyGame) {
+			bombBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				gPartyGame.setVisible(!gPartyGame.visible);
+				updateHarmonyToolsUi();
+			});
+		}
+
+		// ---- Local goof toys (useless button, pixel pet, evil cursor, chaos monkey) ----
+		function wireToyToggle(btnId, toy) {
+			var btn = document.getElementById(btnId);
+			if(btn && toy) {
+				btn.addEventListener("click", function(e) {
+					e.preventDefault();
+					e.stopPropagation();
+					toy.setActive(!toy.active);
+					updateHarmonyToolsUi();
+				});
+			}
+		}
+		wireToyToggle("harmony-useless-btn", gUselessButton);
+		wireToyToggle("harmony-pet-btn", gPixelPet);
+		wireToyToggle("harmony-evil-btn", gEvilCursor);
+		wireToyToggle("harmony-chaos-btn", gChaosMonkey);
 		var $harmonyTools = $("#harmony-tools");
 		$harmonyTools.on("mousedown touchstart pointerdown click", ".play-widget-btn, .doodler-color-btn, .doodler-brush-btn", function(e) {
 			e.stopPropagation();
