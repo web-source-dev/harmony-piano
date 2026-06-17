@@ -1137,8 +1137,8 @@ body.hacks-open #hacks-dock {
 }
 #chat, #chat li, #chat li * { user-select: text; -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; }
 #chat ul { list-style: none; margin: 0; padding: 0; width: 100%; }
-#chat li { padding: 3px 2px; line-height: 1.35; }
-#chat:not(.chatting) li { opacity: 0; }
+#chat li { padding: 3px 2px; line-height: 1.35; opacity: 1; }
+#chat:not(.chatting) li { opacity: 1; text-shadow: #000 1px 1px 2px, #333 0 0 4px; }
 #chat li .name { font-weight: bold; margin-right: 8px; }
 #chat li .message { margin-right: 6px; }
 #chat li .quote { color: #789922; }
@@ -1790,13 +1790,260 @@ body.room-media-hide-piano #cursors {
 	display: none !important;
 }
 
-/* —— Fullscreen cinema —— */
+/* —— Piano collapsed (hide from easy access) —— */
+body.piano-collapsed #piano,
+body.piano-collapsed #cursors {
+	display: none !important;
+}
+body.piano-collapsed #play-area {
+	/* panels float in harmony-tools dock */
+}
+#harmony-piano-btn.piano-off { background: rgba(255, 180, 60, 0.22); border-color: rgba(255, 200, 80, 0.45); }
+
+/* —— Top-right Play tools dock —— */
+.harmony-tools {
+	position: fixed;
+	top: 10px;
+	right: 10px;
+	z-index: 100015;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 8px;
+	max-width: min(94vw, 520px);
+	pointer-events: none;
+}
+html:not(.dontshow) .harmony-tools {
+	top: 52px;
+}
+.harmony-tools-bar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 5px;
+	padding: 6px 8px;
+	pointer-events: auto;
+	background: linear-gradient(145deg, rgba(22, 30, 42, 0.94) 0%, rgba(14, 18, 28, 0.96) 100%);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 12px;
+	box-shadow: 0 8px 28px rgba(0, 0, 0, 0.38), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+}
+.harmony-tools-label {
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: rgba(140, 190, 255, 0.85);
+	padding: 0 4px 0 2px;
+	margin-right: 2px;
+}
+.harmony-tool-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	background: rgba(255, 255, 255, 0.06);
+	color: #e8f0fa;
+	font-size: 12px;
+	font-weight: 500;
+	padding: 5px 10px;
+	border-radius: 8px;
+	cursor: pointer;
+	line-height: 1.2;
+	transition: background 0.15s, border-color 0.15s, transform 0.1s;
+	white-space: nowrap;
+}
+.harmony-tool-icon {
+	font-size: 11px;
+	opacity: 0.85;
+}
+.harmony-tool-btn:hover {
+	background: rgba(255, 255, 255, 0.14);
+	border-color: rgba(255, 255, 255, 0.22);
+}
+.harmony-tool-btn:active { transform: scale(0.97); }
+.harmony-tool-btn.active {
+	background: rgba(77, 171, 247, 0.28);
+	border-color: rgba(77, 171, 247, 0.55);
+	color: #fff;
+	box-shadow: 0 0 12px rgba(77, 171, 247, 0.2);
+}
+
+/* —— Play area panels (inside top-right dock) —— */
+.harmony-tools .play-area {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 8px;
+	width: min(94vw, 500px);
+	pointer-events: auto;
+}
+.harmony-tools .play-area[hidden] { display: none !important; }
+.play-widget {
+	pointer-events: auto;
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex-direction: column;
+	background: linear-gradient(160deg, rgba(24, 34, 48, 0.95) 0%, rgba(14, 20, 30, 0.97) 100%);
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 12px;
+	box-shadow: 0 10px 32px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+	overflow: hidden;
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	animation: harmony-panel-in 0.2s ease-out;
+}
+@keyframes harmony-panel-in {
+	from { opacity: 0; transform: translateY(-6px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+.play-widget-head {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 6px 8px;
+	background: rgba(0, 0, 0, 0.28);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	flex-shrink: 0;
+	min-height: 28px;
+}
+.play-widget-title {
+	font-size: 12px;
+	font-weight: 600;
+	color: #e8f4ff;
+	white-space: nowrap;
+}
+.play-widget-sub {
+	font-size: 10px;
+	color: rgba(255, 255, 255, 0.45);
+	margin-right: auto;
+}
+.play-widget-btn {
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	background: rgba(255, 255, 255, 0.08);
+	color: #dde;
+	font-size: 11px;
+	padding: 4px 9px;
+	border-radius: 6px;
+	cursor: pointer;
+	line-height: 1.3;
+	flex-shrink: 0;
+	pointer-events: auto;
+	touch-action: manipulation;
+}
+.doodler-widget .play-widget-head .play-widget-btn { margin-left: 0; }
+.doodler-widget .doodler-toolbar { margin-left: auto; }
+.blob-widget .blob-add-btn { margin-left: auto; font-weight: 700; }
+.blob-widget .blob-add-btn:hover { background: rgba(140, 230, 170, 0.28); }
+.play-widget-btn:hover { background: rgba(255, 255, 255, 0.18); }
+.blob-widget {
+	width: 100%;
+	min-height: 0;
+}
+.blob-widget.blob-hidden { display: none; }
+.blob-canvas {
+	width: 100%;
+	height: 260px;
+	min-height: 220px;
+	max-height: 42vh;
+	cursor: grab;
+	touch-action: none;
+	display: block;
+}
+.blob-canvas:active { cursor: grabbing; }
+.doodler-widget {
+	width: 100%;
+}
+.doodler-widget.doodler-hidden { display: none; }
+.doodler-widget.doodler-minimized .doodler-canvas,
+.doodler-widget.doodler-minimized .doodler-palette { display: none; }
+.doodler-toolbar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 5px;
+	margin-left: auto;
+	margin-right: 4px;
+}
+.doodler-palette {
+	display: flex;
+	gap: 4px;
+	flex-wrap: wrap;
+}
+.doodler-brush-group {
+	display: flex;
+	gap: 3px;
+}
+.doodler-brush-btn {
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	background: rgba(255, 255, 255, 0.06);
+	color: rgba(255, 255, 255, 0.75);
+	font-size: 10px;
+	padding: 2px 6px;
+	border-radius: 999px;
+	cursor: pointer;
+	line-height: 1.2;
+}
+.doodler-brush-btn.active {
+	background: rgba(77, 171, 247, 0.35);
+	border-color: rgba(77, 171, 247, 0.6);
+	color: #fff;
+}
+.doodler-color-btn {
+	width: 18px;
+	height: 18px;
+	border: 1px solid rgba(255, 255, 255, 0.35);
+	border-radius: 50%;
+	padding: 0;
+	cursor: pointer;
+	flex-shrink: 0;
+	touch-action: manipulation;
+}
+.doodler-color-btn.active {
+	box-shadow: 0 0 0 2px #fff;
+	transform: scale(1.15);
+}
+.doodler-clear-btn { margin-left: 0; }
+.doodler-canvas {
+	width: 100%;
+	height: 320px;
+	min-height: 240px;
+	max-height: 50vh;
+	background: rgba(0, 0, 0, 0.35);
+	cursor: crosshair;
+	touch-action: none;
+	display: block;
+}
+@media (max-width: 720px) {
+	.harmony-tools {
+		top: 8px;
+		right: 8px;
+		max-width: calc(100vw - 16px);
+	}
+	.harmony-tools-bar { padding: 5px 6px; gap: 4px; }
+	.harmony-tool-btn { padding: 4px 8px; font-size: 11px; }
+	.harmony-tools .play-area { width: min(94vw, calc(100vw - 16px)); }
+	.blob-canvas { height: 200px; min-height: 180px; }
+	.doodler-canvas { height: 220px; min-height: 180px; }
+}
+body.corner-banner-open .harmony-tools {
+	top: auto;
+	bottom: calc(var(--ui-stack-h) + 12px);
+	right: 10px;
+}
 body.room-media-cinema #piano,
 body.room-media-cinema #cursors,
 body.room-media-cinema #names,
 body.room-media-cinema .ad1,
 body.room-media-cinema #social,
 body.room-media-cinema #corner-banner,
+body.room-media-cinema .harmony-tools,
 body.room-media-cinema #room-notice,
 body.room-media-cinema #hacks-dock,
 body.room-media-cinema #midi-transport,

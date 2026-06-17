@@ -126,6 +126,49 @@
     </div>
 </aside>
 
+<aside id="harmony-tools" class="harmony-tools" aria-label="Play tools">
+    <div class="harmony-tools-bar">
+        <span class="harmony-tools-label">Play</span>
+        <button type="button" id="harmony-blob-btn" class="harmony-tool-btn" title="Blob Friend — poke, stretch, throw">
+            <span class="harmony-tool-icon" aria-hidden="true">◉</span> Blob
+        </button>
+        <button type="button" id="harmony-doodle-btn" class="harmony-tool-btn" title="Desktop Doodler — shared sketch pad">
+            <span class="harmony-tool-icon" aria-hidden="true">✎</span> Doodle
+        </button>
+        <button type="button" id="harmony-piano-btn" class="harmony-tool-btn" title="Show or hide the piano">
+            <span class="harmony-tool-icon" aria-hidden="true">♫</span> Piano
+        </button>
+    </div>
+    <div id="play-area" class="play-area" hidden>
+        <div id="blob-friend" class="play-widget blob-widget blob-hidden">
+            <header class="play-widget-head">
+                <span class="play-widget-title">Blob Buddy</span>
+                <span class="play-widget-sub">poke · yeet · pop</span>
+                <button type="button" class="blob-add-btn play-widget-btn" title="Add a blob (max 5)">＋ Blob</button>
+                <button type="button" class="blob-toggle-btn play-widget-btn" title="Close">×</button>
+            </header>
+            <canvas class="blob-canvas" aria-label="Squishy blob friends"></canvas>
+        </div>
+        <div id="desktop-doodler" class="play-widget doodler-widget doodler-hidden">
+            <header class="play-widget-head">
+                <span class="play-widget-title">Doodler</span>
+                <div class="doodler-palette"></div>
+                <div class="doodler-toolbar">
+                    <div class="doodler-brush-group">
+                        <button type="button" class="doodler-brush-btn" data-width="2" title="Thin pen">●</button>
+                        <button type="button" class="doodler-brush-btn active" data-width="4" title="Medium pen">●</button>
+                        <button type="button" class="doodler-brush-btn" data-width="8" title="Thick pen">●</button>
+                    </div>
+                    <button type="button" class="doodler-clear-btn play-widget-btn" title="Clear for everyone">Clear</button>
+                    <button type="button" class="doodler-minimize-btn play-widget-btn" title="Minimize">−</button>
+                    <button type="button" class="doodler-toggle-btn play-widget-btn" title="Close">×</button>
+                </div>
+            </header>
+            <canvas class="doodler-canvas" aria-label="Shared sketch pad"></canvas>
+        </div>
+    </div>
+</aside>
+
 <button type="button" id="fun-video-open-btn" class="fun-video-open-btn" hidden>Open this</button>
 
 <div id="social">
@@ -683,6 +726,8 @@
 <script src="./roomMedia.js"></script>
 <script src="./pianoLearn.js"></script>
 <script src="./metronome.js"></script>
+<script src="./blobFriend.js"></script>
+<script src="./desktopDoodler.js"></script>
 <script src="./chatLogger.js"></script>
 <script src="./cornerBanner.js"></script>
 <script src="./funVideoPopup.js"></script>

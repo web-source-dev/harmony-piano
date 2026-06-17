@@ -3015,6 +3015,14 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof gRoomMedia !== "undefined" && gRoomMedia) gRoomMedia.tryHandleChat(msg);
 				return;
 			}
+			if(typeof BlobFriend !== "undefined" && BlobFriend.isSyncText(chatLine)) {
+				if(typeof gBlobFriend !== "undefined" && gBlobFriend) gBlobFriend.tryHandleChat(msg);
+				return;
+			}
+			if(typeof DesktopDoodler !== "undefined" && DesktopDoodler.isSyncText(chatLine)) {
+				if(typeof gDesktopDoodler !== "undefined" && gDesktopDoodler) gDesktopDoodler.tryHandleChat(msg);
+				return;
+			}
 			chat.receive(msg);
 		});
 
@@ -3036,6 +3044,7 @@ Rect.prototype.contains = function(x, y) {
 			if($(evt.target).closest("#metronome-hud").length) return;
 			if($(evt.target).closest("#midi-transport").length) return;
 			if($(evt.target).closest("#room-media-transport").length) return;
+			if($(evt.target).closest("#harmony-tools").length) return;
 			if($(evt.target).closest("#chat-input-bar").length) return;
 			if(!$("#chat").has(evt.target).length && !$("#chat-input-bar").has(evt.target).length) {
 				chat.blur();
@@ -3049,6 +3058,8 @@ Rect.prototype.contains = function(x, y) {
 				if($(touch.target).closest("#metronome-hud").length) continue;
 				if($(touch.target).closest("#midi-transport").length) continue;
 				if($(touch.target).closest("#room-media-transport").length) continue;
+				if($(touch.target).closest("#harmony-tools").length) continue;
+				if($(touch.target).closest("#hacks-dock").length) continue;
 				if(!$("#chat").has(touch.target).length && !$("#chat-input-bar").has(touch.target).length) {
 					chat.blur();
 				}
@@ -3133,6 +3144,8 @@ Rect.prototype.contains = function(x, y) {
 				if(gChatMutes.indexOf(msg.p._id) != -1) return;
 				var chatLine = msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
 				if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) return;
+				if(typeof BlobFriend !== "undefined" && BlobFriend.isSyncText(chatLine)) return;
+				if(typeof DesktopDoodler !== "undefined" && DesktopDoodler.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
 
@@ -3587,6 +3600,8 @@ Rect.prototype.contains = function(x, y) {
 			if(gRoomMetronome && (!gMetronome || !gMetronome.running || !gRoomMetronome.canControl())) {
 				gRoomMetronome.requestSync();
 			}
+			if(gBlobFriend) gBlobFriend.requestSync();
+			if(gDesktopDoodler) gDesktopDoodler.requestSync();
 			updateMetronomeUI();
 		}, 400);
 	});
@@ -4006,6 +4021,73 @@ Rect.prototype.contains = function(x, y) {
 		});
 		$roomMediaTransport.find("input[name=volume]").val(gRoomMedia.volume);
 	}
+
+	// Blob Friend + Desktop Doodler
+	var gBlobFriend;
+	var gDesktopDoodler;
+	var gPianoCollapsed = false;
+
+	function updateHarmonyToolsUi() {
+		var blobBtn = document.getElementById("harmony-blob-btn");
+		var doodlerBtn = document.getElementById("harmony-doodle-btn");
+		var pianoBtn = document.getElementById("harmony-piano-btn");
+		var playArea = document.getElementById("play-area");
+		var blobOn = gBlobFriend && gBlobFriend.visible;
+		var doodleOn = gDesktopDoodler && gDesktopDoodler.visible;
+
+		if(blobBtn && gBlobFriend) blobBtn.classList.toggle("active", blobOn);
+		if(doodlerBtn && gDesktopDoodler) doodlerBtn.classList.toggle("active", doodleOn);
+		if(pianoBtn) {
+			pianoBtn.classList.toggle("active", !gPianoCollapsed);
+			pianoBtn.classList.toggle("piano-off", gPianoCollapsed);
+			pianoBtn.title = gPianoCollapsed ? "Show the piano" : "Hide the piano";
+		}
+		if(playArea) {
+			if(blobOn || doodleOn) playArea.removeAttribute("hidden");
+			else playArea.setAttribute("hidden", "hidden");
+		}
+	}
+
+	function setPianoCollapsed(on) {
+		gPianoCollapsed = !!on;
+		document.body.classList.toggle("piano-collapsed", gPianoCollapsed);
+		updateHarmonyToolsUi();
+		try {
+			if(typeof localStorage !== "undefined") {
+				localStorage.harmonyPianoCollapsed = gPianoCollapsed ? "1" : "0";
+			}
+		} catch (e) {}
+	}
+
+	try {
+		if(typeof localStorage !== "undefined" && localStorage.harmonyPianoCollapsed === "1") {
+			gPianoCollapsed = true;
+			document.body.classList.add("piano-collapsed");
+		}
+	} catch (e) {}
+
+	if(typeof BlobFriend !== "undefined") {
+		gBlobFriend = new BlobFriend({
+			client: gClient,
+			mountEl: document.getElementById("blob-friend"),
+			onLayoutChange: function() {
+				if(gBlobFriend && gBlobFriend.canvas) gBlobFriend._resize();
+				updateHarmonyToolsUi();
+			}
+		});
+	}
+	if(typeof DesktopDoodler !== "undefined") {
+		gDesktopDoodler = new DesktopDoodler({
+			client: gClient,
+			mountEl: document.getElementById("desktop-doodler"),
+			onLayoutChange: function() {
+				if(gDesktopDoodler && gDesktopDoodler.canvas) gDesktopDoodler._resize();
+				updateHarmonyToolsUi();
+			}
+		});
+	}
+	updateHarmonyToolsUi();
+	setPianoCollapsed(gPianoCollapsed);
 
 	function ensureRoomMediaReady() {
 		if(!gClient.isConnected()) {
@@ -5004,6 +5086,61 @@ Rect.prototype.contains = function(x, y) {
 				setMetronomePanelOpen($metronomePanel.is("[hidden]"));
 			});
 		}
+
+		var blobBtn = document.getElementById("harmony-blob-btn");
+		if(blobBtn && gBlobFriend) {
+			blobBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				gBlobFriend.setVisible(!gBlobFriend.visible);
+				if(gBlobFriend.visible && gBlobFriend.canvas) {
+					setTimeout(function() { gBlobFriend._resize(); }, 0);
+				}
+				updateHarmonyToolsUi();
+			});
+		}
+		var doodlerBtn = document.getElementById("harmony-doodle-btn");
+		if(doodlerBtn && gDesktopDoodler) {
+			doodlerBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				gDesktopDoodler.setVisible(!gDesktopDoodler.visible);
+				if(gDesktopDoodler.visible) {
+					gDesktopDoodler.setMinimized(false);
+					if(gDesktopDoodler.canvas) setTimeout(function() { gDesktopDoodler._resize(); }, 0);
+				}
+				updateHarmonyToolsUi();
+			});
+		}
+		var pianoToggleBtn = document.getElementById("harmony-piano-btn");
+		if(pianoToggleBtn) {
+			pianoToggleBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				setPianoCollapsed(!gPianoCollapsed);
+			});
+		}
+		var $harmonyTools = $("#harmony-tools");
+		$harmonyTools.on("mousedown touchstart pointerdown click", ".play-widget-btn, .doodler-color-btn, .doodler-brush-btn", function(e) {
+			e.stopPropagation();
+		});
+		$harmonyTools.on("mousedown touchstart pointerdown", function(e) {
+			e.stopPropagation();
+			releaseKeyboard();
+		});
+		$harmonyTools.on("click", ".blob-toggle-btn", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			if(gBlobFriend) gBlobFriend.setVisible(false);
+			updateHarmonyToolsUi();
+		});
+		$harmonyTools.on("click", ".doodler-toggle-btn", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			if(gDesktopDoodler) gDesktopDoodler.setVisible(false);
+			updateHarmonyToolsUi();
+		});
+
 		$metronomePanel.on("click", ".metronome-close", function(e) {
 			e.preventDefault();
 			setMetronomePanelOpen(false);
@@ -5869,6 +6006,8 @@ Rect.prototype.contains = function(x, y) {
 		soundSelector: gSoundSelector,
 		sheetPlayer: gSheetPlayer,
 		roomMedia: gRoomMedia,
+		blobFriend: gBlobFriend,
+		desktopDoodler: gDesktopDoodler,
 		Notification: Notification
 	};
 
