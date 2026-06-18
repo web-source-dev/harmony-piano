@@ -1323,12 +1323,19 @@ Rect.prototype.contains = function(x, y) {
 		$("#status").text((info && info.reason) || "Kickban not allowed.");
 	});
 
-	// Keep the relay channel mirrored to whatever room the MPP client is in.
+	// Keep the relay channel mirrored to the room the USER asked for — NOT the
+	// _id the public MPP server hands back. That server shards popular rooms
+	// (e.g. "lobby" -> "lobby", "lobby2", ...), so two browsers opening the same
+	// link can be put in different MPP rooms and would then sit on different
+	// relay channels and never sync. desiredChannelId is identical for everyone
+	// on the same URL, which is exactly what we want for shared blob/fun sync.
 	gClient.on("ch", function(msg) {
-		if(gRoomSync && msg && msg.ch && msg.ch._id) gRoomSync.setChannel(msg.ch._id);
+		var ch = (gClient && gClient.desiredChannelId) || (msg && msg.ch && msg.ch._id);
+		if(gRoomSync && ch) gRoomSync.setChannel(ch);
 	});
 
 	gClient.setChannel(channel_id);
+	if(gRoomSync) gRoomSync.setChannel(channel_id);
 
 	gClient.start();
 
