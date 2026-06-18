@@ -1982,6 +1982,30 @@ html:not(.dontshow) .harmony-tools {
 	display: flex;
 	gap: 3px;
 }
+.doodler-tool-group, .doodler-stamp-group {
+	display: flex;
+	gap: 3px;
+	flex-wrap: wrap;
+}
+.doodler-tool-btn, .doodler-stamp-btn {
+	border: 1px solid rgba(255, 255, 255, 0.22);
+	background: rgba(255, 255, 255, 0.06);
+	font-size: 13px;
+	line-height: 1;
+	padding: 3px 5px;
+	border-radius: 6px;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+.doodler-tool-btn.active, .doodler-stamp-btn.active {
+	background: rgba(77, 171, 247, 0.4);
+	border-color: rgba(77, 171, 247, 0.7);
+	box-shadow: 0 0 0 1px rgba(77, 171, 247, 0.5);
+}
+.doodler-tool-btn:hover, .doodler-stamp-btn:hover { background: rgba(255, 255, 255, 0.18); }
+.doodler-canvas.doodler-erasing { cursor: cell; }
+.doodler-widget.doodler-minimized .doodler-stamp-group,
+.doodler-widget.doodler-minimized .doodler-tool-group { display: none; }
 .doodler-brush-btn {
 	border: 1px solid rgba(255, 255, 255, 0.22);
 	background: rgba(255, 255, 255, 0.06);
