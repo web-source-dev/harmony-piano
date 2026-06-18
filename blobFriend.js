@@ -118,6 +118,9 @@
 		this.animId = null;
 		this.visible = false;
 		this._lastBcast = 0;         // last continuous owned-state broadcast
+		this._lastHud = 0;           // last sync-status HUD refresh
+		this._rx = 0;                // blob messages received from peers (debug)
+		this._tx = 0;                // blob messages sent (debug)
 
 		this._bindDom();
 		this.setVisible(false);
@@ -183,6 +186,7 @@
 		var msg = SYNC_PREFIX + payload;
 		if (msg.length > 512) return;
 		this.ignoreSelfUntil = Date.now() + 400;
+		this._tx++;
 		this.client.broadcastRoom(msg);
 	};
 
@@ -289,6 +293,8 @@
 				return true;
 			}
 		}
+
+		this._rx++;   // a peer's blob message we're about to process (debug)
 
 		if (cmd === "m") {
 			// batched authoritative state from a blob owner
@@ -528,8 +534,27 @@
 		}
 	};
 
+	// How many other live clients we've heard from recently.
+	BlobFriend.prototype._peerCount = function (now) {
+		now = now || Date.now();
+		var n = 0, me = this._ownTag();
+		for (var cid in this._owners) {
+			if (this._owners.hasOwnProperty(cid) && cid !== me && now - this._owners[cid] < OWNER_DEAD_AFTER) n++;
+		}
+		return n;
+	};
+
+	// Short, human-readable sync state shown on the widget so it's obvious at a
+	// glance whether real-time sync is actually live.
+	BlobFriend.prototype._syncStatus = function (now) {
+		var relay = this.client && this.client.roomSync && this.client.roomSync.isConnected();
+		if (!relay) return this._canBroadcast() ? "sync: chat-only" : "sync: offline";
+		var p = this._peerCount(now);
+		return p > 0 ? ("synced · " + p + (p === 1 ? " other" : " others")) : "synced · waiting…";
+	};
+
 	BlobFriend.prototype._updateHud = function () {
-		if (this.subEl) this.subEl.textContent = this.blobs.length + "/" + MAX_BLOBS + " blobs · poke · pop";
+		if (this.subEl) this.subEl.textContent = this.blobs.length + "/" + MAX_BLOBS + " · " + this._syncStatus();
 	};
 
 	BlobFriend.prototype.setVisible = function (on) {
@@ -740,6 +765,7 @@
 			last = now;
 			self._step(dt, now);
 			self._broadcastOwned(now);   // stream the blobs I own to the room
+			if (now - self._lastHud > 1000) { self._lastHud = now; self._updateHud(); }
 			self._draw();
 		}
 		tick();
