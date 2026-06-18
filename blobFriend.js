@@ -225,6 +225,21 @@
 	BlobFriend.prototype._iOwn = function (b) {
 		return !!b && b.ownerTag === this._ownTag();
 	};
+	// The per-tab tag of whoever sent a message, read from its embedded field.
+	// Every outgoing message stamps _ownTag() in a known slot; this lets us tell
+	// our own echo from a genuine peer without trusting the shared MPP id.
+	BlobFriend.prototype._senderTagOf = function (cmd, parts) {
+		switch (cmd) {
+			case "m":   return parts[3] || null;   // m|time|entries|sender
+			case "add": return parts[5] || null;   // add|id|x|y|hue|sender
+			case "k":   return parts[2] || null;   // k|id|sender
+			case "tp":  return parts[3] || null;   // tp|id|n|sender
+			case "pop": return parts[2] || null;   // pop|id|sender
+			case "r":   return parts[2] || null;   // r|entries|sender
+			case "q":   return parts[1] || null;   // q|sender
+			default:    return null;
+		}
+	};
 	// A blob may only be moved locally by physics/drag if I own it (or I'm dragging it).
 	BlobFriend.prototype._movable = function (b) {
 		return !b.popping && (b === this.dragBlob || this._iOwn(b));
@@ -286,7 +301,7 @@
 		this.sendSync("m|" + this.serverTime() + "|" + entries.join(";") + "|" + this._ownTag());
 	};
 
-	BlobFriend.prototype.requestSync = function () { this.sendSync("q"); };
+	BlobFriend.prototype.requestSync = function () { this.sendSync("q|" + this._ownTag()); };
 
 	BlobFriend.prototype._replyRoster = function () {
 		var parts = [];
@@ -294,7 +309,7 @@
 			var b = this.blobs[i];
 			parts.push(b.id + "," + this._enc(b.x) + "," + this._enc(b.y) + "," + Math.round(b.hue));
 		}
-		this.sendSync("r|" + parts.join(";"));
+		this.sendSync("r|" + parts.join(";") + "|" + this._ownTag());
 	};
 
 	BlobFriend.prototype.tryHandleChat = function (msg) {
@@ -303,15 +318,20 @@
 
 		var parts = text.slice(SYNC_PREFIX.length).split("|");
 		var cmd = parts[0];
-		// Drop our own echo — but ONLY on the chat fallback. The relay never
-		// echoes a message back to its sender, so anything that arrives over the
-		// relay is genuinely from another browser. Critically, msg.p._id is the
-		// MPP id, which is shared by everyone on the same IP — so on the relay we
-		// must NOT use it to detect "self", or two browsers on one connection
-		// (the common test setup) would discard each other's updates and never
-		// sync. Identity for ownership comes from the per-tab client id instead.
+		// Drop our OWN echo by the per-tab sender tag stamped on every message —
+		// never by msg.p._id. On the chat fallback the MPP id is shared by every
+		// browser on the same connection/IP, so two tabs we actually want to sync
+		// look identical under it: using it made each tab discard the other's
+		// continuous updates (movement never synced) while only sporadic add/pop
+		// slipped through its 400ms window. The per-tab tag is unique to this tab,
+		// so it identifies a real self-echo on EITHER transport.
 		var relayLive = this.client.roomSync && this.client.roomSync.isConnected();
-		if (!relayLive) {
+		var senderTag = this._senderTagOf(cmd, parts);
+		if (senderTag) {
+			if (senderTag === this._ownTag()) return true;   // our own message, echoed back
+		} else if (!relayLive) {
+			// Legacy/untagged message on the chat fallback: fall back to the old
+			// (imperfect) check so a half-upgraded room still suppresses self-echo.
 			var me = this.client.getOwnParticipant();
 			if (me && msg.p && msg.p._id === me._id && Date.now() < this.ignoreSelfUntil) {
 				return true;
@@ -682,7 +702,7 @@
 			self._updateHud();
 		}, 60);
 
-		if (!fromNet) this.sendSync("pop|" + blob.id);
+		if (!fromNet) this.sendSync("pop|" + blob.id + "|" + this._ownTag());
 	};
 
 	BlobFriend.prototype._spawnParticles = function (x, y, hue, count, emoji) {
@@ -712,7 +732,7 @@
 		this.lastPointer = p;
 		if (typeof window !== "undefined" && window.funSound) window.funSound("boing", { throttle: 120 });
 		this._broadcastOwned(Date.now(), true);   // tell everyone immediately
-		this.sendSync("k|" + blob.id);            // everyone hears/sees the poke
+		this.sendSync("k|" + blob.id + "|" + this._ownTag());   // everyone hears/sees the poke
 		blob.setExpr("surprised", 600);
 		blob.say(pick(QUIPS.poke), 1100);
 	};
@@ -779,7 +799,7 @@
 		blob.setExpr(blob.tapCount >= 3 ? "scared" : (blob.tapCount === 2 ? "angry" : "surprised"), 900);
 		if (blob.tapCount >= 3) this._spawnParticles(blob.x + rand(-0.02, 0.02), blob.y - 0.04, 200, 2, "💦");
 		this._fx("blip", { throttle: 60 });
-		this.sendSync("tp|" + blob.id + "|" + blob.tapCount);   // everyone sees it grow + reacts
+		this.sendSync("tp|" + blob.id + "|" + blob.tapCount + "|" + this._ownTag());   // everyone sees it grow + reacts
 	};
 
 	// ---- main loop -------------------------------------------------------
