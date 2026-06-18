@@ -11,6 +11,7 @@
 	var MAX_BLOBS = 5;
 	var POP_CLICKS = 5;              // rapid clicks before a blob blows up
 	var TAP_WINDOW = 850;           // ms window to chain rapid clicks
+	var OWNER_DEAD_AFTER = 5000;    // ms of silence before an owner is "gone"
 	var EXPR = {
 		idle: "i", happy: "h", surprised: "s", dizzy: "d", sad: "a", love: "l",
 		angry: "g", silly: "y", sleepy: "z", scared: "f", laughing: "j", cool: "c"
@@ -103,6 +104,10 @@
 		this.particles = [];
 		this._idSeq = 0;
 		this._tag = null;
+		// Other clients we've heard from: clientId -> last-seen time. Used to
+		// reconcile the blob set and to pick a single deterministic adopter for
+		// orphaned blobs (no dueling owners).
+		this._owners = {};
 
 		this.dragBlob = null;
 		this.dragStart = null;
@@ -130,14 +135,22 @@
 		return Date.now() + (this.client.serverTimeOffset || 0);
 	};
 
+	// A stable per-client id used for blob ownership. Deliberately NOT derived
+	// from the MPP participant list (which is a separate, unreliable transport we
+	// don't control) — that coupling made ownership collapse after the first
+	// interaction and broke sync. We mint our own id and keep it for the tab.
 	BlobFriend.prototype._ownTag = function () {
 		if (this._tag) return this._tag;
 		var tag = "";
 		try {
-			var me = this.client && this.client.getOwnParticipant();
-			if (me && me._id) tag = String(me._id).replace(/[^a-zA-Z0-9]/g, "").slice(-4);
+			if (typeof sessionStorage !== "undefined") {
+				tag = sessionStorage.getItem("harmonyBlobClientId") || "";
+			}
 		} catch (e) {}
-		if (!tag) tag = Math.floor(rand(1000, 9999)).toString(36);
+		if (!tag) {
+			tag = (Math.floor(rand(0, 1e9)).toString(36) + Math.floor(rand(0, 1e9)).toString(36)).slice(0, 8);
+			try { if (typeof sessionStorage !== "undefined") sessionStorage.setItem("harmonyBlobClientId", tag); } catch (e) {}
+		}
 		this._tag = tag;
 		return tag;
 	};
@@ -188,12 +201,15 @@
 	BlobFriend.prototype._movable = function (b) {
 		return !b.popping && (b === this.dragBlob || this._iOwn(b));
 	};
-	// numeric seed from my tag, so different clients adopt orphaned blobs at
-	// slightly different times instead of all at once.
-	BlobFriend.prototype._adoptJitter = function () {
-		var t = this._ownTag(), s = 0;
-		for (var i = 0; i < t.length; i++) s += t.charCodeAt(i);
-		return (s % 1000);
+	// Am I the lowest-id client still alive? Only that one client adopts an
+	// orphaned blob, so two clients never grab the same orphan and fight over it.
+	BlobFriend.prototype._isSmallestAlive = function (now) {
+		var me = this._ownTag();
+		for (var cid in this._owners) {
+			if (!this._owners.hasOwnProperty(cid)) continue;
+			if (now - this._owners[cid] < OWNER_DEAD_AFTER && cid < me) return false;
+		}
+		return true;
 	};
 	// Take ownership of a blob locally (broadcaster implicitly owns it, so the
 	// next continuous broadcast tells everyone else).
@@ -223,9 +239,19 @@
 				Math.round(b.sx * 100) + "," + Math.round(b.sy * 100) + "," +
 				(EXPR[b.expr] || "i") + "," + Math.round(b.hue) + "," + Math.round(b.inflate * 100));
 		}
-		if (!entries.length) return;
+		if (!entries.length) {
+			// Heartbeat with an empty roster (~1 Hz) so peers know we're still
+			// here and own nothing — that lets them reconcile away blobs we just
+			// popped, even when it was the last blob we owned.
+			if (force || now - this._lastBcast > 1000) {
+				this._lastBcast = now;
+				this.sendSync("m|" + this.serverTime() + "|" + this._ownTag() + "|");
+			}
+			return;
+		}
 		this._lastBcast = now;
-		this.sendSync("m|" + this.serverTime() + "|" + entries.join(";"));
+		// Format: m|<serverTime>|<ownerClientId>|id,x,y,vx,vy,sx,sy,expr,hue,inflate;...
+		this.sendSync("m|" + this.serverTime() + "|" + this._ownTag() + "|" + entries.join(";"));
 	};
 
 	BlobFriend.prototype.requestSync = function () { this.sendSync("q"); };
@@ -278,16 +304,50 @@
 		return true;
 	};
 
-	// Batched continuous update: "m|<serverTime>|id,x,y,vx,vy,sx,sy,expr,hue;..."
+	// Batched continuous update:
+	//   new: "m|<serverTime>|<ownerClientId>|id,x,y,vx,vy,sx,sy,expr,hue,inflate;..."
+	//   old: "m|<serverTime>|id,x,y,...;..."   (owner taken from msg.p — fallback)
 	// The broadcaster is, by definition, the current owner of these blobs.
 	BlobFriend.prototype._applyBatch = function (parts, msg) {
-		var ownerTag = (msg && msg.p) ? this._tagOf(msg.p._id) : null;
-		var entries = (parts[2] || "").split(";");
+		var ownerTag, entriesStr;
+		// If field 2 has no comma/semicolon it's the new explicit owner id.
+		if (parts[2] != null && parts[2].indexOf(",") === -1 && parts[2].indexOf(";") === -1) {
+			ownerTag = parts[2] || ((msg && msg.p) ? this._tagOf(msg.p._id) : null);
+			entriesStr = parts[3] || "";
+		} else {
+			ownerTag = (msg && msg.p) ? this._tagOf(msg.p._id) : null;
+			entriesStr = parts[2] || "";
+		}
+		var now = Date.now();
+		var liveIds = [];
+		var entries = entriesStr ? entriesStr.split(";") : [];
 		for (var i = 0; i < entries.length; i++) {
 			var f = entries[i].split(",");
 			if (f.length < 9) continue;
+			liveIds.push(f[0]);
 			this._applyEntry(f, ownerTag);
 		}
+		// Reconcile: this owner just told us exactly which blobs it owns. Any
+		// blob we still show as owned by them but that they DIDN'T list was
+		// popped/removed — drop it so the set converges and never drifts.
+		this._reconcileOwner(ownerTag, liveIds, now);
+	};
+
+	// Record an owner's liveness + current roster, and remove stale blobs they
+	// no longer own. Keeps every client's blob set identical over time.
+	BlobFriend.prototype._reconcileOwner = function (cid, liveIds, now) {
+		if (!cid || cid === this._ownTag()) return;
+		now = now || Date.now();
+		this._owners[cid] = now;
+		var live = {};
+		for (var i = 0; i < liveIds.length; i++) live[liveIds[i]] = true;
+		for (var j = this.blobs.length - 1; j >= 0; j--) {
+			var b = this.blobs[j];
+			if (b.ownerTag === cid && !b.popping && !live[b.id] && b !== this.dragBlob) {
+				this.blobs.splice(j, 1);
+			}
+		}
+		this._updateHud();
 	};
 
 	// Legacy single update: "u|id|x|y|vx|vy|sx|sy|expr|hue|t"
@@ -305,9 +365,17 @@
 		var ny = this._dec(f[2]);
 		var b = this._byId(id);
 		if (!b) {
-			if (this.blobs.length >= MAX_BLOBS) return;
+			// Accept remote blobs even past the local cap — the cap only limits
+			// how many YOU spawn. This keeps every client's set identical.
 			b = this.addBlob({ id: id, x: nx, y: ny, hue: parseInt(f[8], 10) || 0, ownerTag: ownerTag, fromNet: true });
 			if (!b) return;
+		}
+		// If I'm dragging this blob I'm the local authority — ignore the remote
+		// state so we don't fight, unless the remote owner outranks me (smaller
+		// id wins a simultaneous grab), in which case I yield and drop my drag.
+		if (b === this.dragBlob) {
+			if (ownerTag && ownerTag < this._ownTag()) { this.dragBlob = null; this.dragStart = null; this.lastPointer = null; }
+			else return;
 		}
 		// the sender owns it; stop simulating it locally
 		if (ownerTag) b.ownerTag = ownerTag;
@@ -473,8 +541,8 @@
 
 	BlobFriend.prototype.addBlob = function (opts) {
 		opts = opts || {};
-		if (this.blobs.length >= MAX_BLOBS) {
-			if (!opts.fromNet) this._toast("too crowded! (max " + MAX_BLOBS + ")");
+		if (this.blobs.length >= MAX_BLOBS && !opts.fromNet) {
+			this._toast("too crowded! (max " + MAX_BLOBS + ")");
 			return null;
 		}
 		var id = opts.id || this._newId();
@@ -671,7 +739,8 @@
 	BlobFriend.prototype._step = function (dt, now) {
 		var blobs = this.blobs;
 		var i, b;
-		var adoptAfter = 2500 + this._adoptJitter();
+		// Only the lowest-id surviving client adopts orphans (computed once/frame).
+		var canAdopt = this._isSmallestAlive(now);
 
 		for (i = 0; i < blobs.length; i++) {
 			b = blobs[i];
@@ -690,8 +759,9 @@
 				b.sx += (b.netSx - b.sx) * ke;
 				b.sy += (b.netSy - b.sy) * ke;
 				b.inflate += (b.netInflate - b.inflate) * ke;   // balloon size from clicking
-				// owner went silent (left the room?) → adopt the orphan so it lives on
-				if (b.ownerTag !== this._ownTag() && now - b.lastNetAt > adoptAfter) this._claim(b);
+				// owner went silent (left the room?) → the lowest-id survivor
+				// adopts the orphan so it lives on, and only that one client does.
+				if (b.ownerTag !== this._ownTag() && now - b.lastNetAt > OWNER_DEAD_AFTER && canAdopt) this._claim(b);
 				continue;
 			}
 
