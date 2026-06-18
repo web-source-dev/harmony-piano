@@ -42,6 +42,21 @@ module.exports = {
 			}
 		},
 		{
+			// Real-time room sync relay for the custom features (Node + ws).
+			// Browser connects via wss://<host>/relay (see nginx example).
+			name: "harmony-relay",
+			script: "relay-server.js",
+			args: "8552",
+			interpreter: "node",
+			cwd: __dirname,
+			watch: false,
+			autorestart: true,
+			max_restarts: 10,
+			env: {
+				NODE_ENV: "production"
+			}
+		},
+		{
 			name: "piano-static",
 			script: "python3",
 			args: "-m http.server 8550",

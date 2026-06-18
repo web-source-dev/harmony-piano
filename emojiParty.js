@@ -59,7 +59,7 @@
 		var msg = SYNC_PREFIX + payload;
 		if (msg.length > 512) return;
 		this.ignoreSelfUntil = Date.now() + 400;
-		this.client.sendArray([{ m: "a", message: msg }]);
+		this.client.broadcastRoom(msg);
 	};
 
 	EmojiParty.prototype.tryHandleChat = function (msg) {
@@ -100,6 +100,7 @@
 	// ---- effects ---------------------------------------------------------
 
 	EmojiParty.prototype.launchEmoji = function (index, normX) {
+		if (global.funSound) global.funSound("pop", { throttle: 60 });
 		var emoji = this.emojis[index] || this.emojis[0];
 		var baseX = normX * this.w;
 		var n = 3;
@@ -116,6 +117,7 @@
 	};
 
 	EmojiParty.prototype.emojiRain = function (index) {
+		if (global.funSound) global.funSound("shower");
 		var emoji = this.emojis[index] || this.emojis[0];
 		for (var i = 0; i < 26; i++) {
 			this.particles.push({
@@ -130,6 +132,7 @@
 	};
 
 	EmojiParty.prototype.blastConfetti = function () {
+		if (global.funSound) global.funSound("sparkle");
 		var count = 150;
 		for (var i = 0; i < count; i++) {
 			this.particles.push({

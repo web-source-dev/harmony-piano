@@ -50,7 +50,7 @@
 		var msg = SYNC_PREFIX + payload;
 		if (msg.length > 512) return;
 		this.ignoreSelfUntil = Date.now() + 400;
-		this.client.sendArray([{ m: "a", message: msg }]);
+		this.client.broadcastRoom(msg);
 	};
 
 	SoundBoard.prototype.tryHandleChat = function (msg) {

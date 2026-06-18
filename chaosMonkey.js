@@ -91,6 +91,7 @@
 		} else {
 			this._moveTo(rand(20, window.innerWidth - 60), rand(60, window.innerHeight - 80));
 		}
+		if (global.funSound) global.funSound("monkey");
 		this._say(pick(MONKEY_SAYS));
 	};
 

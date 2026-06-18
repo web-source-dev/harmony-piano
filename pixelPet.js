@@ -50,6 +50,7 @@
 		if (this.active) {
 			this.canvas.removeAttribute("hidden");
 			this.hunger = 0.25;
+			if (window.funSound) window.funSound("chirp");
 			this._say("hi! 🐾", 1600);
 			this.lastT = Date.now();
 			this._start();
@@ -61,6 +62,7 @@
 
 	PixelPet.prototype.feed = function () {
 		this.hunger = clamp(this.hunger - 0.45, 0, 1);
+		if (window.funSound) { window.funSound("nom"); window.funSound("coin", { gain: 0.7 }); }
 		this._say(pick(["yum!", "nom nom", "❤️", "more?", "tasty!", "thank u!"]), 1300);
 		for (var i = 0; i < 5; i++) {
 			this.hearts.push({ x: (Math.random() - 0.5) * 30, y: 0, vy: -0.8 - Math.random(), life: 1 });

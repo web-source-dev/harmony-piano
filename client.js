@@ -214,6 +214,18 @@ Client.prototype.sendArray = function(arr) {
 	this.send(JSON.stringify(arr));
 };
 
+// Broadcast a room-sync payload to everyone in the channel. Prefers the
+// dedicated relay (real-time, no rate limiting); falls back to the chat
+// transport when the relay is unavailable so the feature still works on plain
+// static hosting. Senders apply their own effect locally before calling this.
+Client.prototype.broadcastRoom = function(text) {
+	if(typeof text !== "string") return;
+	if(this.roomSync && this.roomSync.isConnected() && this.roomSync.broadcast(text)) {
+		return;
+	}
+	this.sendArray([{m: "a", message: text}]);
+};
+
 Client.prototype.setChannel = function(id, set) {
 	this.desiredChannelId = id || this.desiredChannelId || "lobby";
 	this.desiredChannelSettings = set || this.desiredChannelSettings || undefined;

@@ -1275,8 +1275,51 @@ Rect.prototype.contains = function(x, y) {
 	}
 	var gClient = new Client(wsUri);
 
+	// Real-time room sync for the custom features (Blob Friend, Doodler, Emoji
+	// Party, Sound Board, Party Game, room metronome, Room DJ controls). These
+	// broadcast through a dedicated relay (relay-server.js) instead of abusing
+	// the rate-limited public chat. Resolve the relay URL:
+	//   ?relay=off            disable (chat fallback only)
+	//   ?relay=ws://host:port explicit override
+	//   default               wss://<host>/relay over https, else ws://<host>:8552
+	var gRoomSync = null;
+	(function() {
+		var relayParam = getParameterByName('relay');
+		var relayUri;
+		if(relayParam === 'off') {
+			relayUri = null;
+		} else if(relayParam) {
+			relayUri = relayParam;
+		} else if(window.location.protocol === 'https:') {
+			relayUri = 'wss://' + window.location.host + '/relay';
+		} else if(window.location.protocol === 'http:' && window.location.hostname) {
+			var rPort = parseInt(getParameterByName('relayport'), 10) || 8552;
+			relayUri = 'ws://' + window.location.hostname + ':' + rPort;
+		} else {
+			relayUri = null; // file:// — no relay reachable
+		}
+		if(typeof RoomSync !== "undefined" && relayUri) {
+			gRoomSync = new RoomSync({
+				uri: relayUri,
+				channel: channel_id,
+				getIdentity: function() {
+					var me = gClient.getOwnParticipant();
+					return { _id: (me && me._id) || "", name: (me && me.name) || "" };
+				},
+				onText: function(msg) { routeRoomSync(msg); }
+			});
+			gClient.roomSync = gRoomSync;
+			gRoomSync.start();
+		}
+	})();
+
 	gClient.on("kickban blocked", function(info) {
 		$("#status").text((info && info.reason) || "Kickban not allowed.");
+	});
+
+	// Keep the relay channel mirrored to whatever room the MPP client is in.
+	gClient.on("ch", function(msg) {
+		if(gRoomSync && msg && msg.ch && msg.ch._id) gRoomSync.setChannel(msg.ch._id);
 	});
 
 	gClient.setChannel(channel_id);
@@ -3010,6 +3053,42 @@ Rect.prototype.contains = function(x, y) {
 
 ////////////////////////////////////////////////////////////////
 
+	// Routes a room-sync message (from the relay OR the chat fallback) to the
+	// owning feature by prefix. Returns true if a feature claimed it.
+	function routeRoomSync(msg) {
+		var chatLine = msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
+		if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
+			chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) {
+			if(typeof gRoomMetronome !== "undefined" && gRoomMetronome) gRoomMetronome.tryHandleChat(msg);
+			return true;
+		}
+		if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) {
+			if(typeof gRoomMedia !== "undefined" && gRoomMedia) gRoomMedia.tryHandleChat(msg);
+			return true;
+		}
+		if(typeof BlobFriend !== "undefined" && BlobFriend.isSyncText(chatLine)) {
+			if(typeof gBlobFriend !== "undefined" && gBlobFriend) gBlobFriend.tryHandleChat(msg);
+			return true;
+		}
+		if(typeof DesktopDoodler !== "undefined" && DesktopDoodler.isSyncText(chatLine)) {
+			if(typeof gDesktopDoodler !== "undefined" && gDesktopDoodler) gDesktopDoodler.tryHandleChat(msg);
+			return true;
+		}
+		if(typeof EmojiParty !== "undefined" && EmojiParty.isSyncText(chatLine)) {
+			if(typeof gEmojiParty !== "undefined" && gEmojiParty) gEmojiParty.tryHandleChat(msg);
+			return true;
+		}
+		if(typeof SoundBoard !== "undefined" && SoundBoard.isSyncText(chatLine)) {
+			if(typeof gSoundBoard !== "undefined" && gSoundBoard) gSoundBoard.tryHandleChat(msg);
+			return true;
+		}
+		if(typeof PartyGame !== "undefined" && PartyGame.isSyncText(chatLine)) {
+			if(typeof gPartyGame !== "undefined" && gPartyGame) gPartyGame.tryHandleChat(msg);
+			return true;
+		}
+		return false;
+	}
+
 	var chat = (function() {
 		gClient.on("ch", function(msg) {
 			if(msg.ch.settings.chat) {
@@ -3030,36 +3109,9 @@ Rect.prototype.contains = function(x, y) {
 			}
 		});
 		gClient.on("a", function(msg) {
-			var chatLine = msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
-			if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
-				chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) {
-				if(typeof gRoomMetronome !== "undefined" && gRoomMetronome) gRoomMetronome.tryHandleChat(msg);
-				return;
-			}
-			if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) {
-				if(typeof gRoomMedia !== "undefined" && gRoomMedia) gRoomMedia.tryHandleChat(msg);
-				return;
-			}
-			if(typeof BlobFriend !== "undefined" && BlobFriend.isSyncText(chatLine)) {
-				if(typeof gBlobFriend !== "undefined" && gBlobFriend) gBlobFriend.tryHandleChat(msg);
-				return;
-			}
-			if(typeof DesktopDoodler !== "undefined" && DesktopDoodler.isSyncText(chatLine)) {
-				if(typeof gDesktopDoodler !== "undefined" && gDesktopDoodler) gDesktopDoodler.tryHandleChat(msg);
-				return;
-			}
-			if(typeof EmojiParty !== "undefined" && EmojiParty.isSyncText(chatLine)) {
-				if(typeof gEmojiParty !== "undefined" && gEmojiParty) gEmojiParty.tryHandleChat(msg);
-				return;
-			}
-			if(typeof SoundBoard !== "undefined" && SoundBoard.isSyncText(chatLine)) {
-				if(typeof gSoundBoard !== "undefined" && gSoundBoard) gSoundBoard.tryHandleChat(msg);
-				return;
-			}
-			if(typeof PartyGame !== "undefined" && PartyGame.isSyncText(chatLine)) {
-				if(typeof gPartyGame !== "undefined" && gPartyGame) gPartyGame.tryHandleChat(msg);
-				return;
-			}
+			// Sync messages arriving over chat are the fallback path (relay off
+			// or unreachable); route them the same way as relay messages.
+			if(routeRoomSync(msg)) return;
 			chat.receive(msg);
 		});
 

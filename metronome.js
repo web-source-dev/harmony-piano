@@ -519,7 +519,7 @@
 		var msg = SYNC_PREFIX + payload;
 		if (msg.length > 512) return;
 		this.ignoreSelfUntil = Date.now() + 500;
-		this.client.sendArray([{ m: "a", message: msg }]);
+		this.client.broadcastRoom(msg);
 	};
 
 	RoomMetronomeSync.prototype._settingsPayload = function () {

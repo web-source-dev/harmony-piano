@@ -149,7 +149,7 @@
 		var msg = SYNC_PREFIX + payload;
 		if (msg.length > 512) return;
 		this.ignoreSelfUntil = Date.now() + 400;
-		this.client.sendArray([{ m: "a", message: msg }]);
+		this.client.broadcastRoom(msg);
 	};
 
 	BlobFriend.prototype._enc = function (n) { return Math.round(clamp(n, 0, 1) * 1000); };
@@ -371,6 +371,7 @@
 		var y = opts.y != null ? opts.y : rand(0.25, 0.65);
 		var blob = new Blob({ id: id, x: x, y: y, hue: opts.hue, vx: rand(-1, 1), vy: rand(-0.6, 0) });
 		this.blobs.push(blob);
+		if (typeof window !== "undefined" && window.funSound) window.funSound("pop", { throttle: 50 });
 		this._spawnParticles(x, y, blob.hue, 8, "✨");
 		blob.say(pick(["hi!!", "i'm new!", "boop", "more of me!", "hello world"]), 1500);
 		this._updateHud();
@@ -404,6 +405,7 @@
 	BlobFriend.prototype.popBlob = function (blob, fromNet) {
 		if (!blob || blob.popping) return;
 		blob.popping = true;
+		if (typeof window !== "undefined" && window.funSound) window.funSound("splat");
 		this._spawnParticles(blob.x, blob.y, blob.hue, 22, null);
 		this._spawnParticles(blob.x, blob.y, blob.hue, 6, pick([["💥"], ["🎉"], ["✨"], ["💦"]])[0]);
 		this.particles.push({
@@ -461,6 +463,7 @@
 		this.dragBlob = blob;
 		this.dragStart = { x: p.x, y: p.y, t: p.t, bx: blob.x, by: blob.y, moved: 0 };
 		this.lastPointer = p;
+		if (typeof window !== "undefined" && window.funSound) window.funSound("boing", { throttle: 120 });
 		blob.setExpr("surprised", 600);
 		blob.say(pick(QUIPS.poke), 1100);
 	};

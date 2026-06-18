@@ -599,7 +599,7 @@
 			this.onStatus("Sync message too long — use a shorter title or upload the file.");
 			return;
 		}
-		this.client.sendArray([{ m: "a", message: msg }]);
+		this.client.broadcastRoom(msg);
 	};
 
 	RoomMedia.prototype.tryHandleChat = function (msg) {

@@ -81,6 +81,7 @@
 		if (!this.active || this.tired) return;
 		this.cooldownUntil = Date.now() + 200;
 		this.dodges++;
+		if (window.funSound) window.funSound("blip", { throttle: 90 });
 		this._say(pick(QUIPS));
 		this._moveTo(0.06 + Math.random() * 0.86, 0.12 + Math.random() * 0.74);
 		if (this.dodges >= GIVEUP) {
@@ -98,6 +99,7 @@
 	};
 
 	UselessButton.prototype._caught = function () {
+		if (window.funSound) window.funSound("fanfare");
 		this._say("🎉 YOU GOT ME! 🎉");
 		if (global.gEmojiParty) global.gEmojiParty.blastConfetti();
 		this.tired = false; this.dodges = 0;

@@ -59,6 +59,7 @@
 	};
 
 	EvilCursor.prototype._say = function (text) {
+		if (global.funSound) global.funSound("spooky", { throttle: 800, gain: 0.7 });
 		this.bubble.textContent = text;
 		this.bubble.removeAttribute("hidden");
 		clearTimeout(this._bubbleT);

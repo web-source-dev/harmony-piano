@@ -16,6 +16,18 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
     }
 
+    # Real-time room sync relay (WebSocket). The client connects to
+    # wss://<host>/relay by default for the custom fun features.
+    location /relay {
+        proxy_pass http://127.0.0.1:8552;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 3600s;   # keep long-lived sockets open
+    }
+
     # Optional: dedicated media server on 8551 instead of 8550
     # location /room-media/ {
     #     proxy_pass http://127.0.0.1:8551;

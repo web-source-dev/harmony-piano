@@ -63,7 +63,7 @@
 		var msg = SYNC_PREFIX + payload;
 		if (msg.length > 512) return;
 		this.ignoreSelfUntil = Date.now() + 400;
-		this.client.sendArray([{ m: "a", message: msg }]);
+		this.client.broadcastRoom(msg);
 	};
 
 	PartyGame.prototype.tryHandleChat = function (msg) {
@@ -82,6 +82,7 @@
 			this.fuseEnd = parseFloat(parts[2]) || (this.serverTime() + MAX_FUSE);
 			this.fuseLen = parseFloat(parts[3]) || this.fuseLen;
 			if (!this.visible) this.setVisible(true);
+			if (global.funSound) global.funSound(cmd === "p" ? "whoosh" : "fuse");
 			if (cmd === "p") this._flash(this._name(this.holderId) + " caught it! 💣");
 		} else if (cmd === "x") {
 			this._showBoom(parts[1]);
@@ -107,6 +108,7 @@
 		this.holderId = this._selfId();
 		this.fuseLen = rand(MIN_FUSE, MAX_FUSE);
 		this.fuseEnd = this.serverTime() + this.fuseLen;
+		if (global.funSound) global.funSound("fuse");
 		this._flash("you lit the fuse! 🔥 PASS IT!");
 		this.sendSync("s|" + this.holderId + "|" + Math.round(this.fuseEnd) + "|" + Math.round(this.fuseLen));
 	};
@@ -118,6 +120,7 @@
 		if (!others.length) { this._flash("nobody to pass to... uh oh 😬"); return; }
 		var next = others[Math.floor(rand(0, others.length))];
 		this.holderId = next;
+		if (global.funSound) global.funSound("whoosh");
 		this._flash("passed to " + this._name(next) + "! 💨");
 		this.sendSync("p|" + next + "|" + Math.round(this.fuseEnd) + "|" + Math.round(this.fuseLen));
 	};
@@ -134,6 +137,7 @@
 		this.active = false;
 		this.exploded = true;
 		this.holderId = null;
+		if (global.funSound) global.funSound("boom");
 		var isMe = id === this._selfId();
 		this._flash(isMe ? "💥 YOU exploded! 💥 lol" : "💥 " + this._name(id) + " exploded! 💥");
 		// celebrate with confetti if the emoji party module is around
@@ -211,6 +215,10 @@
 		}
 		if (this.elEmoji) this.elEmoji.style.transform = "scale(" + (1 + (1 - frac) * 0.5) + ")";
 
+		if (holdingMe && global.funSound) {
+			// tick faster as the fuse burns down
+			global.funSound("tick", { throttle: frac < 0.3 ? 200 : 550 });
+		}
 		if (holdingMe) this._flash("💣 YOU have it! " + (remain / 1000).toFixed(1) + "s — PASS!");
 		else this._flash(this._name(this.holderId) + " has it… " + (remain / 1000).toFixed(1) + "s 😬");
 

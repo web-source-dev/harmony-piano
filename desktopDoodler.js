@@ -50,7 +50,7 @@
 		var msg = SYNC_PREFIX + payload;
 		if (msg.length > 512) return;
 		this.ignoreSelfUntil = Date.now() + 400;
-		this.client.sendArray([{ m: "a", message: msg }]);
+		this.client.broadcastRoom(msg);
 	};
 
 	DesktopDoodler.prototype._bindDom = function () {
@@ -188,10 +188,16 @@
 	DesktopDoodler.prototype._startStroke = function (p) {
 		this.drawing = true;
 		this.lastPt = p;
+		if (typeof window !== "undefined" && window.funSound) window.funSound("scribble", { throttle: 70 });
+	};
+
+	DesktopDoodler.prototype._extendScribbleSound = function () {
+		if (typeof window !== "undefined" && window.funSound) window.funSound("scribble", { throttle: 110, gain: 0.7 });
 	};
 
 	DesktopDoodler.prototype._extendStroke = function (p) {
 		if (!this.lastPt) return;
+		this._extendScribbleSound();
 		var seg = {
 			x1: this.lastPt.x, y1: this.lastPt.y,
 			x2: p.x, y2: p.y,
