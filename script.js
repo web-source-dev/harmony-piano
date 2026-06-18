@@ -3107,6 +3107,14 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gCarDodge !== "undefined" && gCarDodge) gCarDodge.tryHandleChat(msg);
 			return true;
 		}
+		if(typeof ReactionRoyale !== "undefined" && ReactionRoyale.isSyncText(chatLine)) {
+			if(typeof gReactionRoyale !== "undefined" && gReactionRoyale) gReactionRoyale.tryHandleChat(msg);
+			return true;
+		}
+		if(typeof TugOfWar !== "undefined" && TugOfWar.isSyncText(chatLine)) {
+			if(typeof gTugOfWar !== "undefined" && gTugOfWar) gTugOfWar.tryHandleChat(msg);
+			return true;
+		}
 		return false;
 	}
 
@@ -3261,6 +3269,8 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof PartyGame !== "undefined" && PartyGame.isSyncText(chatLine)) return;
 				if(typeof BalloonPop !== "undefined" && BalloonPop.isSyncText(chatLine)) return;
 				if(typeof CarDodge !== "undefined" && CarDodge.isSyncText(chatLine)) return;
+				if(typeof ReactionRoyale !== "undefined" && ReactionRoyale.isSyncText(chatLine)) return;
+				if(typeof TugOfWar !== "undefined" && TugOfWar.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
 
@@ -3720,6 +3730,8 @@ Rect.prototype.contains = function(x, y) {
 			if(gPartyGame) gPartyGame.requestSync();
 			if(gBalloonPop) gBalloonPop.requestSync();
 			if(gCarDodge) gCarDodge.requestSync();
+			if(gReactionRoyale) gReactionRoyale.requestSync();
+			if(gTugOfWar) gTugOfWar.requestSync();
 			updateMetronomeUI();
 		}, 400);
 	});
@@ -4148,6 +4160,8 @@ Rect.prototype.contains = function(x, y) {
 	var gPartyGame;
 	var gBalloonPop;
 	var gCarDodge;
+	var gReactionRoyale;
+	var gTugOfWar;
 	var gUselessButton;
 	var gPixelPet;
 	var gEvilCursor;
@@ -4174,9 +4188,13 @@ Rect.prototype.contains = function(x, y) {
 		if(reactBtn) reactBtn.classList.toggle("active", !!(reactBar && !reactBar.hasAttribute("hidden")));
 		if(soundBtn) soundBtn.classList.toggle("active", !!(soundBar && !soundBar.hasAttribute("hidden")));
 		var cardodgeBtn = document.getElementById("harmony-cardodge-btn");
+		var reactionBtn = document.getElementById("harmony-reaction-btn");
+		var tugBtn = document.getElementById("harmony-tug-btn");
 		if(bombBtn && gPartyGame) bombBtn.classList.toggle("active", !!gPartyGame.visible);
 		if(balloonBtn && gBalloonPop) balloonBtn.classList.toggle("active", !!gBalloonPop.visible);
 		if(cardodgeBtn && gCarDodge) cardodgeBtn.classList.toggle("active", !!gCarDodge.visible);
+		if(reactionBtn && gReactionRoyale) reactionBtn.classList.toggle("active", !!gReactionRoyale.visible);
+		if(tugBtn && gTugOfWar) tugBtn.classList.toggle("active", !!gTugOfWar.visible);
 
 		var uselessBtn = document.getElementById("harmony-useless-btn");
 		var petBtn = document.getElementById("harmony-pet-btn");
@@ -4252,6 +4270,14 @@ Rect.prototype.contains = function(x, y) {
 	if(typeof CarDodge !== "undefined") {
 		gCarDodge = new CarDodge({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
 		window.gCarDodge = gCarDodge;
+	}
+	if(typeof ReactionRoyale !== "undefined") {
+		gReactionRoyale = new ReactionRoyale({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
+		window.gReactionRoyale = gReactionRoyale;
+	}
+	if(typeof TugOfWar !== "undefined") {
+		gTugOfWar = new TugOfWar({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
+		window.gTugOfWar = gTugOfWar;
 	}
 	if(typeof UselessButton !== "undefined") gUselessButton = new UselessButton();
 	if(typeof PixelPet !== "undefined") gPixelPet = new PixelPet();
@@ -5379,6 +5405,28 @@ Rect.prototype.contains = function(x, y) {
 				e.preventDefault();
 				e.stopPropagation();
 				gCarDodge.setVisible(!gCarDodge.visible);
+				updateHarmonyToolsUi();
+			});
+		}
+
+		// ---- Reaction Royale ----
+		var reactionBtn = document.getElementById("harmony-reaction-btn");
+		if(reactionBtn && gReactionRoyale) {
+			reactionBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				gReactionRoyale.setVisible(!gReactionRoyale.visible);
+				updateHarmonyToolsUi();
+			});
+		}
+
+		// ---- Tug of War ----
+		var tugBtn = document.getElementById("harmony-tug-btn");
+		if(tugBtn && gTugOfWar) {
+			tugBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				gTugOfWar.setVisible(!gTugOfWar.visible);
 				updateHarmonyToolsUi();
 			});
 		}

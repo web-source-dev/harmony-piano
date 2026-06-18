@@ -2818,6 +2818,98 @@ body.learn-panel-open #social {
 	.cardodge-steer { width: 72px; height: 72px; font-size: 28px; }
 }
 
+/* ---- Reaction Royale game ---- */
+.reaction-canvas {
+	position: fixed; left: 0; top: 0;
+	width: 100vw; height: 100vh;
+	z-index: 9050; pointer-events: none;
+}
+.reaction-canvas[hidden] { display: none; }
+.reaction-canvas.reaction-live { pointer-events: auto; cursor: pointer; touch-action: manipulation; }
+
+.reaction-bar { bottom: 294px; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.reaction-bar .reaction-emoji { font-size: 22px; }
+.reaction-bar .reaction-status { color: #fff; font-size: 12px; min-width: 130px; text-align: center; }
+.reaction-bar .reaction-info { color: #ffe27a; font-weight: 700; font-size: 12px; min-width: 70px; text-align: center; }
+.reaction-bar .reaction-start { font-weight: 700; background: linear-gradient(90deg, #ff5a7a, #ffd93d); color: #1a1a1a; border: none; }
+
+/* ---- Tug of War game ---- */
+.tug-canvas {
+	position: fixed; left: 0; top: 0;
+	width: 100vw; height: 100vh;
+	z-index: 9050; pointer-events: none;
+}
+.tug-canvas[hidden] { display: none; }
+.tug-canvas.tug-live { pointer-events: auto; cursor: pointer; touch-action: manipulation; }
+
+.tug-bar { bottom: 350px; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.tug-bar .tug-emoji { font-size: 22px; }
+.tug-bar .tug-status { color: #fff; font-size: 12px; min-width: 130px; text-align: center; }
+.tug-bar .tug-info { color: #ffe27a; font-weight: 700; font-size: 12px; min-width: 76px; text-align: center; }
+.tug-bar .tug-switch { font-weight: 700; }
+.tug-bar .tug-start { font-weight: 700; background: linear-gradient(90deg, #4ad6ff, #8fe6a3); color: #0c1626; border: none; }
+
+.tug-mash {
+	position: fixed;
+	left: 50%; bottom: 30px;
+	transform: translateX(-50%);
+	z-index: 9120;
+	min-width: 220px; padding: 22px 34px;
+	border-radius: 18px;
+	border: 3px solid rgba(255, 255, 255, 0.45);
+	background: linear-gradient(90deg, #ff7a5a, #ffd93d);
+	color: #1a1a1a;
+	font-size: 26px; font-weight: 800;
+	letter-spacing: 1px;
+	user-select: none; touch-action: none;
+	-webkit-tap-highlight-color: transparent;
+	box-shadow: 0 8px 26px rgba(0, 0, 0, 0.4);
+}
+.tug-mash:active { transform: translateX(-50%) scale(0.93); filter: brightness(1.1); }
+.tug-mash[hidden] { display: none; }
+
+/* shared results panel styling for the two new games */
+.reaction-results, .tug-results {
+	position: fixed; inset: 0; z-index: 9300;
+	display: flex; align-items: center; justify-content: center;
+	background: rgba(8, 12, 22, 0.55); backdrop-filter: blur(3px);
+}
+.reaction-results[hidden], .tug-results[hidden] { display: none; }
+.reaction-results-card, .tug-results-card {
+	width: min(92vw, 420px); max-height: 86vh; overflow: auto;
+	background: rgba(20, 28, 44, 0.98);
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 18px; box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+	padding: 22px; color: #fff; text-align: center;
+}
+.reaction-results-title, .tug-results-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+.reaction-winner, .tug-winner { font-size: 16px; margin-bottom: 14px; line-height: 1.4; }
+.reaction-winner b, .tug-winner b { color: #ffd93d; }
+.tug-tally { font-size: 15px; margin-bottom: 8px; }
+.tug-mvp { font-size: 14px; color: #ffd93d; margin-bottom: 16px; }
+.reaction-scoreboard { list-style: none; margin: 0 0 16px; padding: 0; text-align: left; }
+.reaction-scoreboard li {
+	display: flex; align-items: center; gap: 9px;
+	padding: 7px 10px; border-radius: 10px;
+	background: rgba(255, 255, 255, 0.05); margin-bottom: 6px; font-size: 14px;
+}
+.reaction-scoreboard li.rr-me { background: rgba(143, 230, 163, 0.16); border: 1px solid rgba(143, 230, 163, 0.4); }
+.reaction-scoreboard .rr-rank { width: 22px; text-align: center; }
+.reaction-scoreboard .rr-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; }
+.reaction-scoreboard .rr-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reaction-scoreboard .rr-you { color: #8fe6a3; font-size: 11px; }
+.reaction-scoreboard .rr-score { font-weight: 700; color: #ffd93d; }
+.reaction-results-actions, .tug-results-actions { display: flex; gap: 8px; justify-content: center; }
+.reaction-again { font-weight: 700; background: linear-gradient(90deg, #ff5a7a, #ffd93d); color: #1a1a1a; border: none; }
+.tug-again { font-weight: 700; background: linear-gradient(90deg, #4ad6ff, #8fe6a3); color: #0c1626; border: none; }
+
+@media (max-width: 600px) {
+	.reaction-bar { bottom: 240px; }
+	.tug-bar { bottom: 286px; }
+	.reaction-bar .reaction-status, .tug-bar .tug-status { min-width: 84px; }
+	.tug-mash { min-width: 160px; padding: 18px 24px; font-size: 22px; }
+}
+
 /* fading sparkle trail behind each friend's cursor */
 .cursor-trail {
 	position: absolute;
