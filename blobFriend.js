@@ -245,13 +245,17 @@
 			// popped, even when it was the last blob we owned.
 			if (force || now - this._lastBcast > 1000) {
 				this._lastBcast = now;
-				this.sendSync("m|" + this.serverTime() + "|" + this._ownTag() + "|");
+				this.sendSync("m|" + this.serverTime() + "||" + this._ownTag());
 			}
 			return;
 		}
 		this._lastBcast = now;
-		// Format: m|<serverTime>|<ownerClientId>|id,x,y,vx,vy,sx,sy,expr,hue,inflate;...
-		this.sendSync("m|" + this.serverTime() + "|" + this._ownTag() + "|" + entries.join(";"));
+		// Format: m|<serverTime>|<entries>|<ownerClientId>
+		//   entries = id,x,y,vx,vy,sx,sy,expr,hue,inflate;...
+		// The owner id goes AFTER the entries so older clients (which read the
+		// entries from field 2 and ignore the rest) still parse position/size —
+		// this keeps a half-upgraded room in sync instead of splitting it.
+		this.sendSync("m|" + this.serverTime() + "|" + entries.join(";") + "|" + this._ownTag());
 	};
 
 	BlobFriend.prototype.requestSync = function () { this.sendSync("q"); };
@@ -305,19 +309,14 @@
 	};
 
 	// Batched continuous update:
-	//   new: "m|<serverTime>|<ownerClientId>|id,x,y,vx,vy,sx,sy,expr,hue,inflate;..."
-	//   old: "m|<serverTime>|id,x,y,...;..."   (owner taken from msg.p — fallback)
-	// The broadcaster is, by definition, the current owner of these blobs.
+	//   "m|<serverTime>|<entries>|<ownerClientId>"
+	//   entries = id,x,y,vx,vy,sx,sy,expr,hue,inflate;...
+	// Field 2 is ALWAYS the entries (old + new clients agree on this). Field 3,
+	// when present, is the explicit owner id; older messages omit it, so we fall
+	// back to the MPP-derived tag from msg.p for those.
 	BlobFriend.prototype._applyBatch = function (parts, msg) {
-		var ownerTag, entriesStr;
-		// If field 2 has no comma/semicolon it's the new explicit owner id.
-		if (parts[2] != null && parts[2].indexOf(",") === -1 && parts[2].indexOf(";") === -1) {
-			ownerTag = parts[2] || ((msg && msg.p) ? this._tagOf(msg.p._id) : null);
-			entriesStr = parts[3] || "";
-		} else {
-			ownerTag = (msg && msg.p) ? this._tagOf(msg.p._id) : null;
-			entriesStr = parts[2] || "";
-		}
+		var entriesStr = parts[2] || "";
+		var ownerTag = parts[3] || ((msg && msg.p) ? this._tagOf(msg.p._id) : null);
 		var now = Date.now();
 		var liveIds = [];
 		var entries = entriesStr ? entriesStr.split(";") : [];
