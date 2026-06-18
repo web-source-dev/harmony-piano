@@ -145,14 +145,22 @@
 	};
 
 	DesktopDoodler.prototype._resize = function () {
-		if (!this.canvas) return;
-		var rect = this.canvas.getBoundingClientRect();
-		var dpr = window.devicePixelRatio || 1;
-		this.canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-		this.canvas.height = Math.max(1, Math.floor(rect.height * dpr));
-		this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-		this._redraw();
-		this.onLayoutChange();
+		// Re-entrancy guard: onLayoutChange() may call back into _resize()
+		// (the host's callback does), which would recurse forever. Skip the
+		// nested call — the outer one has already done the resize.
+		if (!this.canvas || this._resizing) return;
+		this._resizing = true;
+		try {
+			var rect = this.canvas.getBoundingClientRect();
+			var dpr = window.devicePixelRatio || 1;
+			this.canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+			this.canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+			this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+			this._redraw();
+			this.onLayoutChange();
+		} finally {
+			this._resizing = false;
+		}
 	};
 
 	DesktopDoodler.prototype.setVisible = function (on) {
