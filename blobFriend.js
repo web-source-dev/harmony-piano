@@ -73,6 +73,7 @@
 		this.netX = this.x; this.netY = this.y;   // authoritative target (remote)
 		this.netVx = 0; this.netVy = 0;
 		this.netSx = 1; this.netSy = 1;
+		this.netInflate = 0;
 	}
 
 	Blob.prototype.radius = function () {
@@ -206,7 +207,7 @@
 				b.id + "," + this._enc(b.x) + "," + this._enc(b.y) + "," +
 				Math.round(b.vx * 100) + "," + Math.round(b.vy * 100) + "," +
 				Math.round(b.sx * 100) + "," + Math.round(b.sy * 100) + "," +
-				(EXPR[b.expr] || "i") + "," + Math.round(b.hue));
+				(EXPR[b.expr] || "i") + "," + Math.round(b.hue) + "," + Math.round(b.inflate * 100));
 		}
 		if (!entries.length) return;
 		this._lastBcast = now;
@@ -243,6 +244,10 @@
 		} else if (cmd === "add") {
 			var ownerTag = parts[5] || (msg && msg.p ? this._tagOf(msg.p._id) : null);
 			this.addBlob({ id: parts[1], x: this._dec(parts[2]), y: this._dec(parts[3]), hue: parseInt(parts[4], 10) || 0, ownerTag: ownerTag, fromNet: true });
+		} else if (cmd === "k") {
+			this._remotePoke(parts[1]);
+		} else if (cmd === "tp") {
+			this._remoteTap(parts[1], parseInt(parts[2], 10) || 1);
 		} else if (cmd === "pop") {
 			var victim = this._byId(parts[1]);
 			if (victim) this.popBlob(victim, true);
@@ -301,8 +306,9 @@
 		b.netSy = (parseInt(f[6], 10) || 100) / 100;
 		b.expr = EXPR_REV[f[7]] || b.expr;
 		b.exprUntil = Date.now() + 500;
+		if (f.length > 9) b.netInflate = (parseInt(f[9], 10) || 0) / 100;
 		// first time we hear about it, snap so it doesn't fly in from a stale spot
-		if (b._netInit !== true) { b.x = nx; b.y = ny; b.sx = b.netSx; b.sy = b.netSy; b._netInit = true; }
+		if (b._netInit !== true) { b.x = nx; b.y = ny; b.sx = b.netSx; b.sy = b.netSy; b.inflate = b.netInflate; b._netInit = true; }
 	};
 
 	BlobFriend.prototype._applyRoster = function (data) {
@@ -313,6 +319,30 @@
 			if (!f[0] || this._byId(f[0])) continue;
 			this.addBlob({ id: f[0], x: this._dec(f[1]), y: this._dec(f[2]), hue: parseInt(f[3], 10) || 0, fromNet: true });
 		}
+	};
+
+	BlobFriend.prototype._fx = function (name, opts) {
+		if (typeof window !== "undefined" && window.funSound) window.funSound(name, opts);
+	};
+
+	// Someone poked/grabbed a blob — replicate the reaction + sound for everyone.
+	BlobFriend.prototype._remotePoke = function (id) {
+		var b = this._byId(id);
+		if (!b) return;
+		b.setExpr("surprised", 600);
+		b.say(pick(QUIPS.poke), 1100);
+		this._fx("boing", { throttle: 120 });
+	};
+
+	// Someone clicked a blob to inflate it — replicate the bubble/particles/sound.
+	BlobFriend.prototype._remoteTap = function (id, n) {
+		var b = this._byId(id);
+		if (!b) return;
+		var idx = clamp(n - 1, 0, QUIPS.inflate.length - 1);
+		b.say(QUIPS.inflate[idx], 1100);
+		b.setExpr(n >= 3 ? "scared" : (n === 2 ? "angry" : "surprised"), 900);
+		if (n >= 3) this._spawnParticles(b.x + rand(-0.02, 0.02), b.y - 0.04, 200, 2, "💦");
+		this._fx("blip", { throttle: 60 });
 	};
 
 	// ---- DOM / input -----------------------------------------------------
@@ -529,6 +559,7 @@
 		this.lastPointer = p;
 		if (typeof window !== "undefined" && window.funSound) window.funSound("boing", { throttle: 120 });
 		this._broadcastOwned(Date.now(), true);   // tell everyone immediately
+		this.sendSync("k|" + blob.id);            // everyone hears/sees the poke
 		blob.setExpr("surprised", 600);
 		blob.say(pick(QUIPS.poke), 1100);
 	};
@@ -594,6 +625,8 @@
 		blob.say(QUIPS.inflate[idx], 1100);
 		blob.setExpr(blob.tapCount >= 3 ? "scared" : (blob.tapCount === 2 ? "angry" : "surprised"), 900);
 		if (blob.tapCount >= 3) this._spawnParticles(blob.x + rand(-0.02, 0.02), blob.y - 0.04, 200, 2, "💦");
+		this._fx("blip", { throttle: 60 });
+		this.sendSync("tp|" + blob.id + "|" + blob.tapCount);   // everyone sees it grow + reacts
 	};
 
 	// ---- main loop -------------------------------------------------------
@@ -634,6 +667,7 @@
 				b.y += (b.netY - b.y) * ke;
 				b.sx += (b.netSx - b.sx) * ke;
 				b.sy += (b.netSy - b.sy) * ke;
+				b.inflate += (b.netInflate - b.inflate) * ke;   // balloon size from clicking
 				// owner went silent (left the room?) → adopt the orphan so it lives on
 				if (b.ownerTag !== this._ownTag() && now - b.lastNetAt > adoptAfter) this._claim(b);
 				continue;

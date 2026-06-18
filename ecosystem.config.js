@@ -1,25 +1,28 @@
 /**
  * PM2 deployment for Harmony Piano
  *
- * USE THIS (chat logging + static files):
  *   pm2 start ecosystem.config.js
  *
- * Plain static only (NO chat save):
- *   pm2 start ecosystem.config.js --only piano-static
+ * harmony-app  = Node server: static files + real-time relay (/relay) + chat
+ *                logs, all on port 8550. The relay is same-origin, so the
+ *                browser always reaches it and the fun features sync in real
+ *                time. THE APP MUST BE SERVED FROM THIS (not a plain static
+ *                host) for moving/clicking/size to sync.
+ * harmony-media = Python media-server.py on 8551 for Room DJ uploads.
  *
  * Commands:
- *   pm2 logs harmony-piano
- *   pm2 restart harmony-piano
- *   pm2 stop harmony-piano
+ *   pm2 logs harmony-app
+ *   pm2 restart harmony-app
  *   pm2 save && pm2 startup   (keep running after reboot)
  */
 module.exports = {
 	apps: [
 		{
-			name: "harmony-piano",
-			script: "chat-save-server.py",
+			// app + real-time relay + chat logging, one origin
+			name: "harmony-app",
+			script: "relay-server.js",
 			args: "8550",
-			interpreter: "python3",
+			interpreter: "node",
 			cwd: __dirname,
 			watch: false,
 			autorestart: true,
@@ -33,33 +36,6 @@ module.exports = {
 			script: "media-server.py",
 			args: "8551",
 			interpreter: "python3",
-			cwd: __dirname,
-			watch: false,
-			autorestart: true,
-			max_restarts: 10,
-			env: {
-				NODE_ENV: "production"
-			}
-		},
-		{
-			// Real-time room sync relay for the custom features (Node + ws).
-			// Browser connects via wss://<host>/relay (see nginx example).
-			name: "harmony-relay",
-			script: "relay-server.js",
-			args: "8552",
-			interpreter: "node",
-			cwd: __dirname,
-			watch: false,
-			autorestart: true,
-			max_restarts: 10,
-			env: {
-				NODE_ENV: "production"
-			}
-		},
-		{
-			name: "piano-static",
-			script: "python3",
-			args: "-m http.server 8550",
 			cwd: __dirname,
 			watch: false,
 			autorestart: true,

@@ -1281,7 +1281,10 @@ Rect.prototype.contains = function(x, y) {
 	// the rate-limited public chat. Resolve the relay URL:
 	//   ?relay=off            disable (chat fallback only)
 	//   ?relay=ws://host:port explicit override
-	//   default               wss://<host>/relay over https, else ws://<host>:8552
+	//   default               same origin as the page: ws(s)://<host>/relay
+	// The relay is served by relay-server.js on the SAME port as the app, so the
+	// default always matches wherever the page was loaded from. (Serve the app
+	// with `node relay-server.js` — run-servers.bat does this — for full sync.)
 	var gRoomSync = null;
 	(function() {
 		var relayParam = getParameterByName('relay');
@@ -1290,13 +1293,13 @@ Rect.prototype.contains = function(x, y) {
 			relayUri = null;
 		} else if(relayParam) {
 			relayUri = relayParam;
-		} else if(window.location.protocol === 'https:') {
-			relayUri = 'wss://' + window.location.host + '/relay';
-		} else if(window.location.protocol === 'http:' && window.location.hostname) {
-			var rPort = parseInt(getParameterByName('relayport'), 10) || 8552;
-			relayUri = 'ws://' + window.location.hostname + ':' + rPort;
+		} else if(window.location.protocol === 'https:' || window.location.protocol === 'http:') {
+			// same-origin relay path (host already includes the port)
+			var rProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+			var rHost = getParameterByName('relayhost') || window.location.host;
+			relayUri = rProto + '://' + rHost + '/relay';
 		} else {
-			relayUri = null; // file:// — no relay reachable
+			relayUri = null; // file:// — no relay reachable; open via the local server instead
 		}
 		if(typeof RoomSync !== "undefined" && relayUri) {
 			gRoomSync = new RoomSync({
