@@ -275,9 +275,19 @@
 
 		var parts = text.slice(SYNC_PREFIX.length).split("|");
 		var cmd = parts[0];
-		var me = this.client.getOwnParticipant();
-		if (me && msg.p && msg.p._id === me._id && Date.now() < this.ignoreSelfUntil) {
-			return true;
+		// Drop our own echo — but ONLY on the chat fallback. The relay never
+		// echoes a message back to its sender, so anything that arrives over the
+		// relay is genuinely from another browser. Critically, msg.p._id is the
+		// MPP id, which is shared by everyone on the same IP — so on the relay we
+		// must NOT use it to detect "self", or two browsers on one connection
+		// (the common test setup) would discard each other's updates and never
+		// sync. Identity for ownership comes from the per-tab client id instead.
+		var relayLive = this.client.roomSync && this.client.roomSync.isConnected();
+		if (!relayLive) {
+			var me = this.client.getOwnParticipant();
+			if (me && msg.p && msg.p._id === me._id && Date.now() < this.ignoreSelfUntil) {
+				return true;
+			}
 		}
 
 		if (cmd === "m") {
