@@ -2640,6 +2640,90 @@ body.learn-panel-open #social {
 	50% { box-shadow: 0 0 26px 6px rgba(255, 70, 70, 0.7); }
 }
 
+/* ---- Balloon Pop game ---- */
+.balloon-canvas {
+	position: fixed;
+	left: 0; top: 0;
+	width: 100vw; height: 100vh;
+	z-index: 9050;
+	pointer-events: none;
+}
+.balloon-canvas[hidden] { display: none; }
+.balloon-canvas.balloon-live { pointer-events: auto; cursor: crosshair; }
+
+.balloon-bar {
+	bottom: 182px;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: nowrap;
+}
+.balloon-bar .balloon-emoji { font-size: 24px; }
+.balloon-bar .balloon-status { color: #fff; font-size: 12px; min-width: 120px; text-align: center; }
+.balloon-bar .balloon-timer {
+	font-variant-numeric: tabular-nums;
+	font-weight: 700; color: #ffe27a; font-size: 15px;
+	min-width: 44px; text-align: center;
+}
+.balloon-bar .balloon-timer.balloon-urgent { color: #ff5a5a; animation: balloonPulse 0.6s ease-in-out infinite; }
+.balloon-bar .balloon-score { color: #8fe6a3; font-weight: 700; font-size: 13px; min-width: 56px; text-align: center; }
+.balloon-bar .balloon-start { font-weight: 700; background: linear-gradient(90deg, #ff5a7a, #ffd93d); color: #1a1a1a; border: none; }
+@keyframes balloonPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+
+.balloon-results {
+	position: fixed;
+	inset: 0;
+	z-index: 9300;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(8, 12, 22, 0.55);
+	backdrop-filter: blur(3px);
+}
+.balloon-results[hidden] { display: none; }
+.balloon-results-card {
+	width: min(92vw, 420px);
+	max-height: 86vh;
+	overflow: auto;
+	background: rgba(20, 28, 44, 0.98);
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 18px;
+	box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+	padding: 22px 22px 18px;
+	color: #fff;
+	text-align: center;
+}
+.balloon-results-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+.balloon-winner { font-size: 16px; margin-bottom: 14px; line-height: 1.4; }
+.balloon-winner b { color: #ffd93d; }
+.balloon-scoreboard {
+	list-style: none;
+	margin: 0 0 16px;
+	padding: 0;
+	text-align: left;
+}
+.balloon-scoreboard li {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 7px 10px;
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.05);
+	margin-bottom: 6px;
+	font-size: 14px;
+}
+.balloon-scoreboard li.bs-me { background: rgba(143, 230, 163, 0.16); border: 1px solid rgba(143, 230, 163, 0.4); }
+.balloon-scoreboard .bs-rank { width: 22px; text-align: center; }
+.balloon-scoreboard .bs-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.balloon-scoreboard .bs-you { color: #8fe6a3; font-size: 11px; }
+.balloon-scoreboard .bs-count { font-weight: 700; color: #ffd93d; }
+.balloon-results-actions { display: flex; gap: 8px; justify-content: center; }
+.balloon-again { font-weight: 700; background: linear-gradient(90deg, #ff5a7a, #ffd93d); color: #1a1a1a; border: none; }
+
+@media (max-width: 600px) {
+	.balloon-bar { bottom: 150px; }
+	.balloon-bar .balloon-status { min-width: 88px; }
+}
+
 /* fading sparkle trail behind each friend's cursor */
 .cursor-trail {
 	position: absolute;

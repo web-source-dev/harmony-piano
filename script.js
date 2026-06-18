@@ -3099,6 +3099,10 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gPartyGame !== "undefined" && gPartyGame) gPartyGame.tryHandleChat(msg);
 			return true;
 		}
+		if(typeof BalloonPop !== "undefined" && BalloonPop.isSyncText(chatLine)) {
+			if(typeof gBalloonPop !== "undefined" && gBalloonPop) gBalloonPop.tryHandleChat(msg);
+			return true;
+		}
 		return false;
 	}
 
@@ -3251,6 +3255,7 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof EmojiParty !== "undefined" && EmojiParty.isSyncText(chatLine)) return;
 				if(typeof SoundBoard !== "undefined" && SoundBoard.isSyncText(chatLine)) return;
 				if(typeof PartyGame !== "undefined" && PartyGame.isSyncText(chatLine)) return;
+				if(typeof BalloonPop !== "undefined" && BalloonPop.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
 
@@ -3708,6 +3713,7 @@ Rect.prototype.contains = function(x, y) {
 			if(gBlobFriend) gBlobFriend.requestSync();
 			if(gDesktopDoodler) gDesktopDoodler.requestSync();
 			if(gPartyGame) gPartyGame.requestSync();
+			if(gBalloonPop) gBalloonPop.requestSync();
 			updateMetronomeUI();
 		}, 400);
 	});
@@ -4134,6 +4140,7 @@ Rect.prototype.contains = function(x, y) {
 	var gEmojiParty;
 	var gSoundBoard;
 	var gPartyGame;
+	var gBalloonPop;
 	var gUselessButton;
 	var gPixelPet;
 	var gEvilCursor;
@@ -4154,11 +4161,13 @@ Rect.prototype.contains = function(x, y) {
 		var reactBtn = document.getElementById("harmony-react-btn");
 		var soundBtn = document.getElementById("harmony-sound-btn");
 		var bombBtn = document.getElementById("harmony-bomb-btn");
+		var balloonBtn = document.getElementById("harmony-balloon-btn");
 		var reactBar = document.getElementById("emoji-react-bar");
 		var soundBar = document.getElementById("soundboard-bar");
 		if(reactBtn) reactBtn.classList.toggle("active", !!(reactBar && !reactBar.hasAttribute("hidden")));
 		if(soundBtn) soundBtn.classList.toggle("active", !!(soundBar && !soundBar.hasAttribute("hidden")));
 		if(bombBtn && gPartyGame) bombBtn.classList.toggle("active", !!gPartyGame.visible);
+		if(balloonBtn && gBalloonPop) balloonBtn.classList.toggle("active", !!gBalloonPop.visible);
 
 		var uselessBtn = document.getElementById("harmony-useless-btn");
 		var petBtn = document.getElementById("harmony-pet-btn");
@@ -4226,6 +4235,10 @@ Rect.prototype.contains = function(x, y) {
 	}
 	if(typeof PartyGame !== "undefined") {
 		gPartyGame = new PartyGame({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
+	}
+	if(typeof BalloonPop !== "undefined") {
+		gBalloonPop = new BalloonPop({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
+		window.gBalloonPop = gBalloonPop;
 	}
 	if(typeof UselessButton !== "undefined") gUselessButton = new UselessButton();
 	if(typeof PixelPet !== "undefined") gPixelPet = new PixelPet();
@@ -5331,6 +5344,17 @@ Rect.prototype.contains = function(x, y) {
 				e.preventDefault();
 				e.stopPropagation();
 				gPartyGame.setVisible(!gPartyGame.visible);
+				updateHarmonyToolsUi();
+			});
+		}
+
+		// ---- Balloon Pop ----
+		var balloonBtn = document.getElementById("harmony-balloon-btn");
+		if(balloonBtn && gBalloonPop) {
+			balloonBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				gBalloonPop.setVisible(!gBalloonPop.visible);
 				updateHarmonyToolsUi();
 			});
 		}
