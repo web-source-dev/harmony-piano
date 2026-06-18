@@ -155,8 +155,18 @@
 
 	// ---- networking ------------------------------------------------------
 
+	// We can broadcast if EITHER transport is up: the real-time relay (the
+	// primary path in production) or the MPP socket (chat fallback). The relay
+	// is independent of MPP, so blob sync must not hinge on the MPP connection
+	// or its participant list.
+	BlobFriend.prototype._canBroadcast = function () {
+		if (!this.client) return false;
+		if (this.client.roomSync && this.client.roomSync.isConnected()) return true;
+		return !!this.client.isConnected();
+	};
+
 	BlobFriend.prototype.sendSync = function (payload) {
-		if (!this.client || !this.client.isConnected()) return;
+		if (!this._canBroadcast()) return;
 		var msg = SYNC_PREFIX + payload;
 		if (msg.length > 512) return;
 		this.ignoreSelfUntil = Date.now() + 400;
@@ -195,10 +205,14 @@
 
 	// ---- continuous broadcast of blobs I own -----------------------------
 	BlobFriend.prototype._broadcastOwned = function (now, force) {
-		if (!this.client || !this.client.isConnected()) return;
+		if (!this._canBroadcast()) return;
 		if (!force && now - this._lastBcast < 66) return;   // ~15 Hz
-		// nobody else to sync with → save the bandwidth
-		if (this.client.countParticipants && this.client.countParticipants() <= 1) return;
+		// Bandwidth save: only skip when we have NO relay (chat-fallback mode)
+		// and the MPP room shows nobody else. With the relay up, its peers are
+		// not in the MPP participant list, so never gate the stream on that —
+		// otherwise position/size/inflate never sync (only discrete clicks do).
+		var relayLive = this.client.roomSync && this.client.roomSync.isConnected();
+		if (!relayLive && this.client.countParticipants && this.client.countParticipants() <= 1) return;
 		var entries = [];
 		for (var i = 0; i < this.blobs.length; i++) {
 			var b = this.blobs[i];
