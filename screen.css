@@ -2807,7 +2807,8 @@ body.learn-panel-open #social {
 .cardodge-scoreboard .cd-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cardodge-scoreboard .cd-you { color: #8fe6a3; font-size: 11px; }
 .cardodge-scoreboard .cd-alive { color: #4ad6ff; font-size: 11px; }
-.cardodge-scoreboard .cd-time { font-weight: 700; color: #ffd93d; }
+.cardodge-scoreboard .cd-stats { font-size: 11px; color: rgba(255, 255, 255, 0.6); white-space: nowrap; }
+.cardodge-scoreboard .cd-time { font-weight: 700; color: #ffd93d; min-width: 34px; text-align: right; }
 .cardodge-results-actions { display: flex; gap: 8px; justify-content: center; }
 .cardodge-again { font-weight: 700; background: linear-gradient(90deg, #4ad6ff, #8fe6a3); color: #0c1626; border: none; }
 

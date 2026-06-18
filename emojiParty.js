@@ -7,7 +7,7 @@
 	"use strict";
 
 	var SYNC_PREFIX = "EP|";
-	var EMOJIS = ["😂", "❤️", "🎉", "👍", "🔥", "😮", "😎", "💀", "🙌", "✨", "🤣", "🥳", "🤡", "💩"];
+	var EMOJIS = ["😂", "❤️", "🎉", "👍", "🔥", "😮", "😎", "💀", "🙌", "✨", "🤣", "🥳", "🤡"];
 	var CONFETTI_COLORS = ["#ff5a7a", "#ffd93d", "#6bcb77", "#4d96ff", "#c77dff", "#ff924d", "#5ad1e6"];
 
 	function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
