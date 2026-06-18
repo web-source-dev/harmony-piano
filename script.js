@@ -1310,6 +1310,9 @@ Rect.prototype.contains = function(x, y) {
 			});
 			gClient.roomSync = gRoomSync;
 			gRoomSync.start();
+			try { console.info("[Harmony] real-time sync via relay:", relayUri, "(open the same room/?c= on each client)"); } catch(e) {}
+		} else {
+			try { console.warn("[Harmony] relay disabled (" + (relayParam === 'off' ? "?relay=off" : "no reachable host") + ") — fun features fall back to rate-limited chat sync."); } catch(e) {}
 		}
 	})();
 

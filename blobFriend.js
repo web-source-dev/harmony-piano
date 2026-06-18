@@ -64,6 +64,15 @@
 		// rest position drifts a little so blobs don't all stack
 		this.restX = clamp(opts.x, 0.18, 0.82);
 		this.restY = clamp(opts.y, 0.2, 0.78);
+
+		// ---- networking / ownership ----
+		// Exactly one client (the "owner") simulates a blob and broadcasts its
+		// state; everyone else interpolates toward the authoritative target.
+		this.ownerTag = opts.ownerTag || null;
+		this.lastNetAt = 0;          // when we last heard from the owner
+		this.netX = this.x; this.netY = this.y;   // authoritative target (remote)
+		this.netVx = 0; this.netVy = 0;
+		this.netSx = 1; this.netSy = 1;
 	}
 
 	Blob.prototype.radius = function () {
@@ -102,6 +111,7 @@
 		this.pendingSync = {};
 		this.animId = null;
 		this.visible = false;
+		this._lastBcast = 0;         // last continuous owned-state broadcast
 
 		this._bindDom();
 		this.setVisible(false);
@@ -155,27 +165,52 @@
 	BlobFriend.prototype._enc = function (n) { return Math.round(clamp(n, 0, 1) * 1000); };
 	BlobFriend.prototype._dec = function (s) { return clamp(parseInt(s, 10) || 0, 0, 1000) / 1000; };
 
-	BlobFriend.prototype._queueSync = function (blob) {
-		if (!blob) return;
-		var self = this;
-		this.pendingSync[blob.id] = blob;
-		if (this.syncThrottle) return;
-		this.syncThrottle = setTimeout(function () {
-			self.syncThrottle = null;
-			var ids = Object.keys(self.pendingSync);
-			self.pendingSync = {};
-			for (var i = 0; i < ids.length; i++) {
-				var b = self._byId(ids[i]);
-				if (b) self._sendUpdate(b);
-			}
-		}, 60);
+	// ---- ownership -------------------------------------------------------
+	// Derive a short stable tag from a participant id (same scheme as _ownTag).
+	BlobFriend.prototype._tagOf = function (id) {
+		return String(id == null ? "" : id).replace(/[^a-zA-Z0-9]/g, "").slice(-4);
+	};
+	BlobFriend.prototype._iOwn = function (b) {
+		return !!b && b.ownerTag === this._ownTag();
+	};
+	// A blob may only be moved locally by physics/drag if I own it (or I'm dragging it).
+	BlobFriend.prototype._movable = function (b) {
+		return !b.popping && (b === this.dragBlob || this._iOwn(b));
+	};
+	// numeric seed from my tag, so different clients adopt orphaned blobs at
+	// slightly different times instead of all at once.
+	BlobFriend.prototype._adoptJitter = function () {
+		var t = this._ownTag(), s = 0;
+		for (var i = 0; i < t.length; i++) s += t.charCodeAt(i);
+		return (s % 1000);
+	};
+	// Take ownership of a blob locally (broadcaster implicitly owns it, so the
+	// next continuous broadcast tells everyone else).
+	BlobFriend.prototype._claim = function (b) {
+		if (!b) return;
+		b.ownerTag = this._ownTag();
+		b.lastNetAt = 0;
 	};
 
-	BlobFriend.prototype._sendUpdate = function (b) {
-		this.sendSync("u|" + b.id + "|" + this._enc(b.x) + "|" + this._enc(b.y) + "|" +
-			Math.round(b.vx * 100) + "|" + Math.round(b.vy * 100) + "|" +
-			Math.round(b.sx * 100) + "|" + Math.round(b.sy * 100) + "|" +
-			(EXPR[b.expr] || "i") + "|" + Math.round(b.hue) + "|" + this.serverTime());
+	// ---- continuous broadcast of blobs I own -----------------------------
+	BlobFriend.prototype._broadcastOwned = function (now, force) {
+		if (!this.client || !this.client.isConnected()) return;
+		if (!force && now - this._lastBcast < 66) return;   // ~15 Hz
+		// nobody else to sync with → save the bandwidth
+		if (this.client.countParticipants && this.client.countParticipants() <= 1) return;
+		var entries = [];
+		for (var i = 0; i < this.blobs.length; i++) {
+			var b = this.blobs[i];
+			if (b.popping || !this._iOwn(b)) continue;
+			entries.push(
+				b.id + "," + this._enc(b.x) + "," + this._enc(b.y) + "," +
+				Math.round(b.vx * 100) + "," + Math.round(b.vy * 100) + "," +
+				Math.round(b.sx * 100) + "," + Math.round(b.sy * 100) + "," +
+				(EXPR[b.expr] || "i") + "," + Math.round(b.hue));
+		}
+		if (!entries.length) return;
+		this._lastBcast = now;
+		this.sendSync("m|" + this.serverTime() + "|" + entries.join(";"));
 	};
 
 	BlobFriend.prototype.requestSync = function () { this.sendSync("q"); };
@@ -200,10 +235,14 @@
 			return true;
 		}
 
-		if (cmd === "u") {
-			this._applyUpdate(parts);
+		if (cmd === "m") {
+			// batched authoritative state from a blob owner
+			this._applyBatch(parts, msg);
+		} else if (cmd === "u") {
+			this._applyUpdate(parts, msg);   // legacy single-blob update
 		} else if (cmd === "add") {
-			this.addBlob({ id: parts[1], x: this._dec(parts[2]), y: this._dec(parts[3]), hue: parseInt(parts[4], 10) || 0, fromNet: true });
+			var ownerTag = parts[5] || (msg && msg.p ? this._tagOf(msg.p._id) : null);
+			this.addBlob({ id: parts[1], x: this._dec(parts[2]), y: this._dec(parts[3]), hue: parseInt(parts[4], 10) || 0, ownerTag: ownerTag, fromNet: true });
 		} else if (cmd === "pop") {
 			var victim = this._byId(parts[1]);
 			if (victim) this.popBlob(victim, true);
@@ -220,29 +259,50 @@
 		return true;
 	};
 
-	BlobFriend.prototype._applyUpdate = function (parts) {
-		var id = parts[1];
+	// Batched continuous update: "m|<serverTime>|id,x,y,vx,vy,sx,sy,expr,hue;..."
+	// The broadcaster is, by definition, the current owner of these blobs.
+	BlobFriend.prototype._applyBatch = function (parts, msg) {
+		var ownerTag = (msg && msg.p) ? this._tagOf(msg.p._id) : null;
+		var entries = (parts[2] || "").split(";");
+		for (var i = 0; i < entries.length; i++) {
+			var f = entries[i].split(",");
+			if (f.length < 9) continue;
+			this._applyEntry(f, ownerTag);
+		}
+	};
+
+	// Legacy single update: "u|id|x|y|vx|vy|sx|sy|expr|hue|t"
+	BlobFriend.prototype._applyUpdate = function (parts, msg) {
+		var ownerTag = (msg && msg.p) ? this._tagOf(msg.p._id) : null;
+		this._applyEntry([parts[1], parts[2], parts[3], parts[4], parts[5], parts[6], parts[7], parts[8], parts[9]], ownerTag);
+	};
+
+	// Apply one authoritative blob state. We don't snap the rendered position;
+	// instead we set the interpolation target and let the loop ease toward it,
+	// so remote blobs move smoothly between the ~15 Hz updates.
+	BlobFriend.prototype._applyEntry = function (f, ownerTag) {
+		var id = f[0];
+		var nx = this._dec(f[1]);
+		var ny = this._dec(f[2]);
 		var b = this._byId(id);
 		if (!b) {
 			if (this.blobs.length >= MAX_BLOBS) return;
-			b = this.addBlob({ id: id, x: this._dec(parts[2]), y: this._dec(parts[3]), hue: parseInt(parts[9], 10) || 0, fromNet: true });
+			b = this.addBlob({ id: id, x: nx, y: ny, hue: parseInt(f[8], 10) || 0, ownerTag: ownerTag, fromNet: true });
 			if (!b) return;
 		}
-		var at = parseFloat(parts[10]) || 0;
-		var delay = at ? Math.max(0, at - this.serverTime()) : 0;
-		var self = this;
-		var apply = function () {
-			b.x = self._dec(parts[2]);
-			b.y = self._dec(parts[3]);
-			b.vx = (parseInt(parts[4], 10) || 0) / 100;
-			b.vy = (parseInt(parts[5], 10) || 0) / 100;
-			b.sx = (parseInt(parts[6], 10) || 100) / 100;
-			b.sy = (parseInt(parts[7], 10) || 100) / 100;
-			b.expr = EXPR_REV[parts[8]] || "idle";
-			b.exprUntil = Date.now() + 500;
-		};
-		if (delay > 20 && delay < 2000) setTimeout(apply, delay);
-		else apply();
+		// the sender owns it; stop simulating it locally
+		if (ownerTag) b.ownerTag = ownerTag;
+		b.lastNetAt = Date.now();
+		b.netX = nx;
+		b.netY = ny;
+		b.netVx = (parseInt(f[3], 10) || 0) / 100;
+		b.netVy = (parseInt(f[4], 10) || 0) / 100;
+		b.netSx = (parseInt(f[5], 10) || 100) / 100;
+		b.netSy = (parseInt(f[6], 10) || 100) / 100;
+		b.expr = EXPR_REV[f[7]] || b.expr;
+		b.exprUntil = Date.now() + 500;
+		// first time we hear about it, snap so it doesn't fly in from a stale spot
+		if (b._netInit !== true) { b.x = nx; b.y = ny; b.sx = b.netSx; b.sy = b.netSy; b._netInit = true; }
 	};
 
 	BlobFriend.prototype._applyRoster = function (data) {
@@ -369,13 +429,16 @@
 		if (this._byId(id)) return this._byId(id);
 		var x = opts.x != null ? opts.x : rand(0.25, 0.75);
 		var y = opts.y != null ? opts.y : rand(0.25, 0.65);
-		var blob = new Blob({ id: id, x: x, y: y, hue: opts.hue, vx: rand(-1, 1), vy: rand(-0.6, 0) });
+		// I own blobs I spawn; blobs spawned over the network are owned by their spawner.
+		var ownerTag = opts.fromNet ? (opts.ownerTag || null) : this._ownTag();
+		var blob = new Blob({ id: id, x: x, y: y, hue: opts.hue, vx: rand(-1, 1), vy: rand(-0.6, 0), ownerTag: ownerTag });
+		if (opts.fromNet) { blob.lastNetAt = Date.now(); blob._netInit = true; }
 		this.blobs.push(blob);
 		if (typeof window !== "undefined" && window.funSound) window.funSound("pop", { throttle: 50 });
 		this._spawnParticles(x, y, blob.hue, 8, "✨");
 		blob.say(pick(["hi!!", "i'm new!", "boop", "more of me!", "hello world"]), 1500);
 		this._updateHud();
-		if (!opts.fromNet) this.sendSync("add|" + id + "|" + this._enc(x) + "|" + this._enc(y) + "|" + Math.round(blob.hue));
+		if (!opts.fromNet) this.sendSync("add|" + id + "|" + this._enc(x) + "|" + this._enc(y) + "|" + Math.round(blob.hue) + "|" + this._ownTag());
 		return blob;
 	};
 
@@ -460,10 +523,12 @@
 	BlobFriend.prototype._pointerDown = function (p) {
 		var blob = this._blobAt(p.x, p.y);
 		if (!blob) return;
+		this._claim(blob);   // grabbing a blob makes me its authority
 		this.dragBlob = blob;
 		this.dragStart = { x: p.x, y: p.y, t: p.t, bx: blob.x, by: blob.y, moved: 0 };
 		this.lastPointer = p;
 		if (typeof window !== "undefined" && window.funSound) window.funSound("boing", { throttle: 120 });
+		this._broadcastOwned(Date.now(), true);   // tell everyone immediately
 		blob.setExpr("surprised", 600);
 		blob.say(pick(QUIPS.poke), 1100);
 	};
@@ -483,7 +548,7 @@
 		blob.vx = (p.x - this.lastPointer.x) / dt * 16;
 		blob.vy = (p.y - this.lastPointer.y) / dt * 16;
 		this.lastPointer = p;
-		this._queueSync(blob);
+		this._broadcastOwned(Date.now());   // ~15 Hz while dragging
 	};
 
 	BlobFriend.prototype._pointerUp = function () {
@@ -502,7 +567,7 @@
 			blob.setExpr("dizzy", 1200);
 			blob.say(pick(QUIPS.yeet), 1400);
 			blob.tapCount = 0;
-			this._queueSync(blob);
+			this._broadcastOwned(Date.now(), true);   // send the throw instantly
 		} else {
 			// a tap → counts toward inflating/popping like a balloon
 			this._tapBlob(blob);
@@ -542,6 +607,7 @@
 			var dt = Math.min(32, now - last) / 16.67;
 			last = now;
 			self._step(dt, now);
+			self._broadcastOwned(now);   // stream the blobs I own to the room
 			self._draw();
 		}
 		tick();
@@ -550,11 +616,30 @@
 	BlobFriend.prototype._step = function (dt, now) {
 		var blobs = this.blobs;
 		var i, b;
+		var adoptAfter = 2500 + this._adoptJitter();
 
 		for (i = 0; i < blobs.length; i++) {
 			b = blobs[i];
 			b.wobble += b.wobbleSpeed * dt;
+			if (now > b.bubbleUntil) b.bubble = null;
 
+			if (!this._movable(b)) {
+				// ---- remote blob: smoothly follow the owner's authoritative state ----
+				// extrapolate the target with its last velocity so motion stays fluid
+				// between the ~15 Hz updates, then ease the rendered position toward it.
+				b.netX = clamp(b.netX + b.netVx * 0.016 * dt, 0.06, 0.94);
+				b.netY = clamp(b.netY + b.netVy * 0.016 * dt, 0.06, 0.9);
+				var ke = clamp(0.35 * dt, 0, 1);
+				b.x += (b.netX - b.x) * ke;
+				b.y += (b.netY - b.y) * ke;
+				b.sx += (b.netSx - b.sx) * ke;
+				b.sy += (b.netSy - b.sy) * ke;
+				// owner went silent (left the room?) → adopt the orphan so it lives on
+				if (b.ownerTag !== this._ownTag() && now - b.lastNetAt > adoptAfter) this._claim(b);
+				continue;
+			}
+
+			// ---- blobs I own: full local simulation ----
 			// ease inflation toward target; expire the tap window
 			if (now > b.tapUntil) b.inflateTarget = 0;
 			b.inflate += (b.inflateTarget - b.inflate) * 0.18 * dt;
@@ -594,8 +679,6 @@
 			if (b.x > 0.94) { b.x = 0.94; b.vx = -Math.abs(b.vx) * 0.6; b.setExpr("angry", 400); b.say(pick(QUIPS.wall), 1000); }
 			if (b.y < 0.06) { b.y = 0.06; b.vy = Math.abs(b.vy) * 0.6; }
 			if (b.y > 0.9) { b.y = 0.9; b.vy = -Math.abs(b.vy) * 0.6; b.setExpr("sad", 500); b.say("help im falling", 1100); }
-
-			if (now > b.bubbleUntil) b.bubble = null;
 		}
 
 		this._collide(dt);
@@ -614,7 +697,9 @@
 				if (dist < minD) {
 					var nx = dx / dist, ny = dy / dist;
 					var overlap = (minD - dist);
-					var aFixed = (a === this.dragBlob), bFixed = (b === this.dragBlob);
+					// Only blobs I own/drag may be moved by collisions; remote blobs
+					// are positioned by their own owner, so treat them as fixed.
+					var aFixed = !this._movable(a), bFixed = !this._movable(b);
 					if (!aFixed) { a.x -= nx * overlap * (bFixed ? 1 : 0.5); a.y -= ny * overlap * (bFixed ? 1 : 0.5); }
 					if (!bFixed) { b.x += nx * overlap * (aFixed ? 1 : 0.5); b.y += ny * overlap * (aFixed ? 1 : 0.5); }
 					// exchange a little velocity → a shove

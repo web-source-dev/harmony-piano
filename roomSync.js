@@ -64,6 +64,7 @@
 			self._send({ m: "hi", ch: self.channel, p: self.getIdentity() });
 			clearInterval(self.pingTimer);
 			self.pingTimer = setInterval(function () { self._send({ m: "ping" }); }, 25000);
+			try { console.info("[RoomSync] real-time relay connected:", self.uri); } catch (e) {}
 		});
 
 		sock.addEventListener("message", function (evt) {
@@ -81,6 +82,7 @@
 		sock.addEventListener("close", function () {
 			clearInterval(self.pingTimer);
 			if (self.ws === sock) self.ws = null;
+			try { console.warn("[RoomSync] relay disconnected — using chat fallback until it returns:", self.uri); } catch (e) {}
 			self._scheduleReconnect();
 		});
 
