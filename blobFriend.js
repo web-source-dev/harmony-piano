@@ -144,24 +144,20 @@
 		return Date.now() + (this.client.serverTimeOffset || 0);
 	};
 
-	// A stable per-client id used for blob ownership. Deliberately NOT derived
-	// from the MPP participant list (which is a separate, unreliable transport we
-	// don't control) — that coupling made ownership collapse after the first
-	// interaction and broke sync. We mint our own id and keep it for the tab.
+	// A per-client id used for blob ownership AND self-echo detection, so it MUST
+	// be globally unique per live client. Deliberately NOT derived from the MPP
+	// participant list (shared across browsers on one IP) and NOT persisted in
+	// sessionStorage: duplicating a tab — the common way to test "another user"
+	// locally — copies sessionStorage, so both tabs would read back the same id,
+	// collapsing ownership and making each tab discard the other's messages as
+	// its own echo (nothing syncs). A fresh random id minted per instance, kept
+	// only in memory, guarantees two clients are always distinct.
 	BlobFriend.prototype._ownTag = function () {
 		if (this._tag) return this._tag;
-		var tag = "";
-		try {
-			if (typeof sessionStorage !== "undefined") {
-				tag = sessionStorage.getItem("harmonyBlobClientId") || "";
-			}
-		} catch (e) {}
-		if (!tag) {
-			tag = (Math.floor(rand(0, 1e9)).toString(36) + Math.floor(rand(0, 1e9)).toString(36)).slice(0, 8);
-			try { if (typeof sessionStorage !== "undefined") sessionStorage.setItem("harmonyBlobClientId", tag); } catch (e) {}
-		}
-		this._tag = tag;
-		return tag;
+		this._tag = (Math.floor(rand(0, 1e9)).toString(36) +
+			Math.floor(rand(0, 1e9)).toString(36) +
+			(this._idSeq + 1).toString(36)).slice(0, 10);
+		return this._tag;
 	};
 
 	BlobFriend.prototype._newId = function () {
