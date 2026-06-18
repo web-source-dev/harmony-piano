@@ -12,6 +12,7 @@
 	var POP_CLICKS = 5;              // rapid clicks before a blob blows up
 	var TAP_WINDOW = 850;           // ms window to chain rapid clicks
 	var OWNER_DEAD_AFTER = 5000;    // ms of silence before an owner is "gone"
+	var TOMBSTONE_TTL = 15000;      // ms a popped/removed blob id is refused re-creation
 	var EXPR = {
 		idle: "i", happy: "h", surprised: "s", dizzy: "d", sad: "a", love: "l",
 		angry: "g", silly: "y", sleepy: "z", scared: "f", laughing: "j", cool: "c"
@@ -108,6 +109,11 @@
 		// reconcile the blob set and to pick a single deterministic adopter for
 		// orphaned blobs (no dueling owners).
 		this._owners = {};
+		// Ids of blobs that were popped/removed. A blob id is never reused, so a
+		// live "m|" position packet that arrives just after a pop must NOT be
+		// allowed to recreate the blob (which then orphans and gets re-adopted,
+		// resurrecting it on every screen). Tombstones block that for a while.
+		this._tombstones = {};
 
 		this.dragBlob = null;
 		this.dragStart = null;
@@ -169,6 +175,24 @@
 		return null;
 	};
 
+	// ---- tombstones (block resurrection of popped blobs) -----------------
+	BlobFriend.prototype._tombstone = function (id) {
+		if (id == null) return;
+		this._tombstones[id] = Date.now() + TOMBSTONE_TTL;
+	};
+	BlobFriend.prototype._isTombstoned = function (id) {
+		var until = this._tombstones[id];
+		if (!until) return false;
+		if (Date.now() > until) { delete this._tombstones[id]; return false; }
+		return true;
+	};
+	BlobFriend.prototype._pruneTombstones = function (now) {
+		now = now || Date.now();
+		for (var id in this._tombstones) {
+			if (this._tombstones.hasOwnProperty(id) && now > this._tombstones[id]) delete this._tombstones[id];
+		}
+	};
+
 	// ---- networking ------------------------------------------------------
 
 	// We can broadcast if EITHER transport is up: the real-time relay (the
@@ -227,12 +251,12 @@
 	BlobFriend.prototype._broadcastOwned = function (now, force) {
 		if (!this._canBroadcast()) return;
 		if (!force && now - this._lastBcast < 66) return;   // ~15 Hz
-		// Bandwidth save: only skip when we have NO relay (chat-fallback mode)
-		// and the MPP room shows nobody else. With the relay up, its peers are
-		// not in the MPP participant list, so never gate the stream on that —
-		// otherwise position/size/inflate never sync (only discrete clicks do).
-		var relayLive = this.client.roomSync && this.client.roomSync.isConnected();
-		if (!relayLive && this.client.countParticipants && this.client.countParticipants() <= 1) return;
+		// Always stream owned state whenever we can broadcast — exactly like the
+		// discrete add/pop messages do. We must NOT gate this on the MPP
+		// participant count: on the chat fallback two browsers sharing one
+		// connection/IP report each other as a single participant (countParticipants
+		// <= 1), so gating here made movement/size/inflate silently never sync while
+		// add/pop still did. Correctness beats the tiny idle-bandwidth saving.
 		var entries = [];
 		for (var i = 0; i < this.blobs.length; i++) {
 			var b = this.blobs[i];
@@ -359,6 +383,7 @@
 		for (var j = this.blobs.length - 1; j >= 0; j--) {
 			var b = this.blobs[j];
 			if (b.ownerTag === cid && !b.popping && !live[b.id] && b !== this.dragBlob) {
+				this._tombstone(b.id);   // owner dropped it — don't let a stale packet re-add it
 				this.blobs.splice(j, 1);
 			}
 		}
@@ -581,6 +606,9 @@
 		}
 		var id = opts.id || this._newId();
 		if (this._byId(id)) return this._byId(id);
+		// A network spawn for an id we just popped is a stale/echoed packet — refuse
+		// it so popped blobs stay dead instead of being resurrected on every screen.
+		if (opts.fromNet && this._isTombstoned(id)) return null;
 		var x = opts.x != null ? opts.x : rand(0.25, 0.75);
 		var y = opts.y != null ? opts.y : rand(0.25, 0.65);
 		// I own blobs I spawn; blobs spawned over the network are owned by their spawner.
@@ -622,6 +650,7 @@
 	BlobFriend.prototype.popBlob = function (blob, fromNet) {
 		if (!blob || blob.popping) return;
 		blob.popping = true;
+		this._tombstone(blob.id);   // keep it dead even if a late position packet arrives
 		if (typeof window !== "undefined" && window.funSound) window.funSound("splat");
 		this._spawnParticles(blob.x, blob.y, blob.hue, 22, null);
 		this._spawnParticles(blob.x, blob.y, blob.hue, 6, pick([["💥"], ["🎉"], ["✨"], ["💦"]])[0]);
@@ -765,7 +794,7 @@
 			last = now;
 			self._step(dt, now);
 			self._broadcastOwned(now);   // stream the blobs I own to the room
-			if (now - self._lastHud > 1000) { self._lastHud = now; self._updateHud(); }
+			if (now - self._lastHud > 1000) { self._lastHud = now; self._updateHud(); self._pruneTombstones(now); }
 			self._draw();
 		}
 		tick();
