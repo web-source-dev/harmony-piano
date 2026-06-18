@@ -3103,6 +3103,10 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gBalloonPop !== "undefined" && gBalloonPop) gBalloonPop.tryHandleChat(msg);
 			return true;
 		}
+		if(typeof CarDodge !== "undefined" && CarDodge.isSyncText(chatLine)) {
+			if(typeof gCarDodge !== "undefined" && gCarDodge) gCarDodge.tryHandleChat(msg);
+			return true;
+		}
 		return false;
 	}
 
@@ -3256,6 +3260,7 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof SoundBoard !== "undefined" && SoundBoard.isSyncText(chatLine)) return;
 				if(typeof PartyGame !== "undefined" && PartyGame.isSyncText(chatLine)) return;
 				if(typeof BalloonPop !== "undefined" && BalloonPop.isSyncText(chatLine)) return;
+				if(typeof CarDodge !== "undefined" && CarDodge.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
 
@@ -3714,6 +3719,7 @@ Rect.prototype.contains = function(x, y) {
 			if(gDesktopDoodler) gDesktopDoodler.requestSync();
 			if(gPartyGame) gPartyGame.requestSync();
 			if(gBalloonPop) gBalloonPop.requestSync();
+			if(gCarDodge) gCarDodge.requestSync();
 			updateMetronomeUI();
 		}, 400);
 	});
@@ -4141,6 +4147,7 @@ Rect.prototype.contains = function(x, y) {
 	var gSoundBoard;
 	var gPartyGame;
 	var gBalloonPop;
+	var gCarDodge;
 	var gUselessButton;
 	var gPixelPet;
 	var gEvilCursor;
@@ -4166,8 +4173,10 @@ Rect.prototype.contains = function(x, y) {
 		var soundBar = document.getElementById("soundboard-bar");
 		if(reactBtn) reactBtn.classList.toggle("active", !!(reactBar && !reactBar.hasAttribute("hidden")));
 		if(soundBtn) soundBtn.classList.toggle("active", !!(soundBar && !soundBar.hasAttribute("hidden")));
+		var cardodgeBtn = document.getElementById("harmony-cardodge-btn");
 		if(bombBtn && gPartyGame) bombBtn.classList.toggle("active", !!gPartyGame.visible);
 		if(balloonBtn && gBalloonPop) balloonBtn.classList.toggle("active", !!gBalloonPop.visible);
+		if(cardodgeBtn && gCarDodge) cardodgeBtn.classList.toggle("active", !!gCarDodge.visible);
 
 		var uselessBtn = document.getElementById("harmony-useless-btn");
 		var petBtn = document.getElementById("harmony-pet-btn");
@@ -4239,6 +4248,10 @@ Rect.prototype.contains = function(x, y) {
 	if(typeof BalloonPop !== "undefined") {
 		gBalloonPop = new BalloonPop({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
 		window.gBalloonPop = gBalloonPop;
+	}
+	if(typeof CarDodge !== "undefined") {
+		gCarDodge = new CarDodge({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
+		window.gCarDodge = gCarDodge;
 	}
 	if(typeof UselessButton !== "undefined") gUselessButton = new UselessButton();
 	if(typeof PixelPet !== "undefined") gPixelPet = new PixelPet();
@@ -5355,6 +5368,17 @@ Rect.prototype.contains = function(x, y) {
 				e.preventDefault();
 				e.stopPropagation();
 				gBalloonPop.setVisible(!gBalloonPop.visible);
+				updateHarmonyToolsUi();
+			});
+		}
+
+		// ---- Car Dodge ----
+		var cardodgeBtn = document.getElementById("harmony-cardodge-btn");
+		if(cardodgeBtn && gCarDodge) {
+			cardodgeBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				gCarDodge.setVisible(!gCarDodge.visible);
 				updateHarmonyToolsUi();
 			});
 		}

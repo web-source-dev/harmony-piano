@@ -2724,6 +2724,99 @@ body.learn-panel-open #social {
 	.balloon-bar .balloon-status { min-width: 88px; }
 }
 
+/* ---- Car Dodge game ---- */
+.cardodge-canvas {
+	position: fixed;
+	left: 0; top: 0;
+	width: 100vw; height: 100vh;
+	z-index: 9050;
+	pointer-events: none;
+	background: rgba(10, 14, 22, 0.35);
+}
+.cardodge-canvas[hidden] { display: none; }
+.cardodge-canvas.cardodge-live { pointer-events: auto; cursor: none; touch-action: none; }
+
+.cardodge-bar {
+	bottom: 238px;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: nowrap;
+}
+.cardodge-bar .cardodge-emoji { font-size: 22px; }
+.cardodge-bar .cardodge-status { color: #fff; font-size: 12px; min-width: 120px; text-align: center; }
+.cardodge-bar .cardodge-info { color: #ffe27a; font-weight: 700; font-size: 12px; min-width: 78px; text-align: center; }
+.cardodge-bar .cardodge-join { font-weight: 700; }
+.cardodge-bar .cardodge-start { font-weight: 700; background: linear-gradient(90deg, #4ad6ff, #8fe6a3); color: #0c1626; border: none; }
+
+.cardodge-steer {
+	position: fixed;
+	bottom: 24px;
+	z-index: 9120;
+	width: 84px; height: 84px;
+	border-radius: 50%;
+	border: 2px solid rgba(255, 255, 255, 0.35);
+	background: rgba(20, 28, 44, 0.62);
+	color: #fff;
+	font-size: 34px;
+	line-height: 1;
+	display: flex; align-items: center; justify-content: center;
+	user-select: none;
+	touch-action: none;
+	-webkit-tap-highlight-color: transparent;
+}
+.cardodge-steer:active { background: rgba(74, 214, 255, 0.5); transform: scale(0.94); }
+.cardodge-steer[hidden] { display: none; }
+.cardodge-steer-l { left: 22px; }
+.cardodge-steer-r { right: 22px; }
+
+.cardodge-results {
+	position: fixed;
+	inset: 0;
+	z-index: 9300;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(8, 12, 22, 0.55);
+	backdrop-filter: blur(3px);
+}
+.cardodge-results[hidden] { display: none; }
+.cardodge-results-card {
+	width: min(92vw, 440px);
+	max-height: 86vh;
+	overflow: auto;
+	background: rgba(20, 28, 44, 0.98);
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 18px;
+	box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+	padding: 22px;
+	color: #fff;
+	text-align: center;
+}
+.cardodge-results-title { font-size: 18px; font-weight: 700; margin-bottom: 10px; }
+.cardodge-winner { font-size: 16px; margin-bottom: 14px; line-height: 1.4; }
+.cardodge-winner b { color: #ffd93d; }
+.cardodge-scoreboard { list-style: none; margin: 0 0 16px; padding: 0; text-align: left; }
+.cardodge-scoreboard li {
+	display: flex; align-items: center; gap: 9px;
+	padding: 7px 10px; border-radius: 10px;
+	background: rgba(255, 255, 255, 0.05); margin-bottom: 6px; font-size: 14px;
+}
+.cardodge-scoreboard li.cd-me { background: rgba(143, 230, 163, 0.16); border: 1px solid rgba(143, 230, 163, 0.4); }
+.cardodge-scoreboard .cd-rank { width: 22px; text-align: center; }
+.cardodge-scoreboard .cd-dot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; }
+.cardodge-scoreboard .cd-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cardodge-scoreboard .cd-you { color: #8fe6a3; font-size: 11px; }
+.cardodge-scoreboard .cd-alive { color: #4ad6ff; font-size: 11px; }
+.cardodge-scoreboard .cd-time { font-weight: 700; color: #ffd93d; }
+.cardodge-results-actions { display: flex; gap: 8px; justify-content: center; }
+.cardodge-again { font-weight: 700; background: linear-gradient(90deg, #4ad6ff, #8fe6a3); color: #0c1626; border: none; }
+
+@media (max-width: 600px) {
+	.cardodge-bar { bottom: 196px; }
+	.cardodge-bar .cardodge-status { min-width: 84px; }
+	.cardodge-steer { width: 72px; height: 72px; font-size: 28px; }
+}
+
 /* fading sparkle trail behind each friend's cursor */
 .cursor-trail {
 	position: absolute;
