@@ -558,14 +558,19 @@
                                                      class="color"></label></p>
         </div>
         <div id="rename" class="dialog">
-            <p><input type="text" name="name" placeholder="My Fancy New Name" maxlength="40" class="text"/></p>
-            <p class="rename-color-row">
-                <label class="rename-color-label" for="rename-color-input">Name color:</label>
+            <div class="rename-head">
+                <div class="rename-title">Your name &amp; color</div>
+                <div class="rename-sub">Pick any color — everyone in the room sees it</div>
+            </div>
+            <p class="rename-field">
+                <input type="text" name="name" placeholder="My Fancy New Name" maxlength="40" class="text"/>
+            </p>
+            <div class="rename-color-row">
                 <input type="color" name="color" id="rename-color-input" value="#3b82f6" class="color"
                        title="Pick any color for your username"/>
                 <span class="rename-color-value">#3B82F6</span>
                 <span class="rename-color-preview">Your Name</span>
-            </p>
+            </div>
             <div class="color-swatches" aria-label="Preset name colors">
                 <button type="button" class="swatch" data-color="#ef4444" style="background:#ef4444" title="#ef4444"></button>
                 <button type="button" class="swatch" data-color="#f97316" style="background:#f97316" title="#f97316"></button>
@@ -586,7 +591,7 @@
                 <button type="button" class="swatch" data-color="#1f2937" style="background:#1f2937" title="#1f2937"></button>
                 <button type="button" class="swatch" data-color="#000000" style="background:#000000" title="#000000"></button>
             </div>
-            <button class="submit">USER SET</button>
+            <button class="submit">Save</button>
         </div>
         <div id="sheet-play" class="dialog sheet-dialog">
             <p class="sheet-title">Sheet / MIDI — load music</p>
