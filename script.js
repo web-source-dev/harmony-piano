@@ -1138,7 +1138,7 @@ Rect.prototype.contains = function(x, y) {
 		if(gMidiOutTest) gMidiOutTest(key.note, vol * 100, delay_ms);
 		var self = this;
 		setTimeout(function() {
-			self.renderer.visualize(key, participant.color);
+			self.renderer.visualize(key, resolveNameColor(participant));
 			if(lyric) {
 
 			}

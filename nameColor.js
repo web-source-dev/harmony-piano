@@ -68,17 +68,28 @@
 
 	NameColor.prototype.getMyColor = function () { return this.myColor; };
 
-	// Resolved color for a participant: their custom override, else their MPP
-	// color, else a neutral default.
+	// Is this participant the local user?
+	NameColor.prototype._isMe = function (part) {
+		if (!part || !part._id || !this.client) return false;
+		var me = this.client.getOwnParticipant();
+		return !!(me && me._id && me._id === part._id);
+	};
+
+	// Resolved color for a participant: their custom override, else (for the
+	// local user) our remembered color even before the broadcast round-trip,
+	// else their MPP color, else a neutral default.
 	NameColor.prototype.colorFor = function (part) {
 		if (!part) return "#777777";
 		if (part._id && this.colors[part._id]) return this.colors[part._id];
+		if (this.myColor && this._isMe(part)) return this.myColor;
 		return part.color || "#777777";
 	};
 
 	// Does this participant have a custom (self-hosted) color?
 	NameColor.prototype.hasCustom = function (part) {
-		return !!(part && part._id && this.colors[part._id]);
+		if (!part || !part._id) return false;
+		if (this.colors[part._id]) return true;
+		return !!(this.myColor && this._isMe(part));
 	};
 
 	// Local user picks a color: remember it, apply locally, tell the room.
