@@ -3092,6 +3092,20 @@ body.learn-panel-open #social {
 	opacity: 0.8;
 	min-width: 64px;
 }
+#rename .rename-color-preview {
+	margin-left: auto;
+	padding: 3px 10px;
+	border-radius: 4px;
+	font-size: 13px;
+	font-weight: bold;
+	line-height: 16px;
+	max-width: 120px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	background: #3b82f6;
+	color: #fff;
+}
 #rename .color-swatches {
 	display: flex;
 	flex-wrap: wrap;

@@ -1358,6 +1358,41 @@ Rect.prototype.contains = function(x, y) {
 		});
 	})();
 
+	// Resolve a participant's name-tag color: a custom (self-hosted) color from
+	// NameColor when present, otherwise the built-in MPP color.
+	function resolveNameColor(part) {
+		if(typeof gNameColor !== "undefined" && gNameColor) return gNameColor.colorFor(part);
+		return (part && part.color) || "#777";
+	}
+
+	// Paint one participant's name tag + cursor label with their resolved color,
+	// choosing a readable text color for custom colors.
+	function applyNameColorTo(part) {
+		if(!part) return;
+		var color = resolveNameColor(part);
+		var hasCustom = (typeof gNameColor !== "undefined" && gNameColor && gNameColor.hasCustom(part));
+		var textColor = hasCustom && NameColor.contrastText ? NameColor.contrastText(color) : "";
+		if(part.nameDiv) {
+			part.nameDiv.style.backgroundColor = color;
+			part.nameDiv.style.color = textColor;
+		}
+		if(part.cursorDiv) {
+			var cn = part.cursorDiv.querySelector(".name");
+			if(cn) {
+				cn.style.backgroundColor = color;
+				if(textColor) cn.style.color = textColor;
+			}
+		}
+	}
+
+	// Repaint every known participant (used when colors sync in).
+	function applyAllNameColors() {
+		if(!gClient || !gClient.ppl) return;
+		for(var id in gClient.ppl) {
+			if(gClient.ppl.hasOwnProperty(id)) applyNameColorTo(gClient.ppl[id]);
+		}
+	}
+
 	// Handle changes to participants
 	(function() {
 		gClient.on("participant added", function(part) {
@@ -1370,7 +1405,7 @@ Rect.prototype.contains = function(x, y) {
 			div.className = "name";
 			div.participantId = part.id;
 			div.textContent = part.name || "";
-			div.style.backgroundColor = part.color || "#777";
+			div.style.backgroundColor = resolveNameColor(part);
 			if(gClient.participantId === part.id) {
 				$(div).addClass("me");
 			}
@@ -1385,6 +1420,7 @@ Rect.prototype.contains = function(x, y) {
 			}
 			div.style.display = "none";
 			part.nameDiv = $("#names")[0].appendChild(div);
+			applyNameColorTo(part);
 			$(part.nameDiv).fadeIn(2000);
 
 			// sort names
@@ -1408,9 +1444,10 @@ Rect.prototype.contains = function(x, y) {
 
 				var div = document.createElement("div");
 				div.className = "name";
-				div.style.backgroundColor = part.color || "#777"
+				div.style.backgroundColor = resolveNameColor(part);
 				div.textContent = part.name || "";
 				part.cursorDiv.appendChild(div);
+				applyNameColorTo(part);
 
 			} else {
 				part.cursorDiv = undefined;
@@ -1430,13 +1467,9 @@ Rect.prototype.contains = function(x, y) {
 		});
 		gClient.on("participant update", function(part) {
 			var name = part.name || "";
-			var color = part.color || "#777";
-			part.nameDiv.style.backgroundColor = color;
 			part.nameDiv.textContent = name;
-			$(part.cursorDiv)
-			.find(".name")
-			.text(name)
-			.css("background-color", color);
+			$(part.cursorDiv).find(".name").text(name);
+			applyNameColorTo(part);
 		});
 		gClient.on("ch", function(msg) {
 			for(var id in gClient.ppl) {
@@ -2063,7 +2096,8 @@ Rect.prototype.contains = function(x, y) {
 					setTimeout(function() {
 						var cur = gClient.ppl[gClient.participantId];
 						$("#rename input[name=name]").val(cur.name);
-						var curColor = cur.color || "#3b82f6";
+						var curColor = (typeof gNameColor !== "undefined" && gNameColor && gNameColor.getMyColor())
+							|| cur.color || "#3b82f6";
 						$("#rename input[name=color]").val(curColor);
 						if(window.syncRenameColorUI) window.syncRenameColorUI(curColor);
 					}, 100);
@@ -3025,19 +3059,30 @@ Rect.prototype.contains = function(x, y) {
 ////////////////////////////////////////////////////////////////
 
 (function() {
-		// Keep the hex readout and selected swatch in sync with the color input.
+		// Keep the hex readout, selected swatch, and live preview in sync with the
+		// color input.
 		function syncColorUI(val) {
 			val = (val || "#000000").toLowerCase();
 			$("#rename .rename-color-value").text(val.toUpperCase());
 			$("#rename .swatch").each(function() {
 				$(this).toggleClass("selected", this.getAttribute("data-color").toLowerCase() === val);
 			});
+			var preview = $("#rename .rename-color-preview");
+			if(preview.length) {
+				var nm = $("#rename input[name=name]").val() || "Your Name";
+				var textColor = (typeof NameColor !== "undefined" && NameColor.contrastText)
+					? NameColor.contrastText(val) : "#fff";
+				preview.text(nm).css({ "background-color": val, "color": textColor });
+			}
 		}
 		// expose so the dialog-open handler can refresh the UI to the user's current color
 		window.syncRenameColorUI = syncColorUI;
 
 		$("#rename input[name=color]").on("input change", function() {
 			syncColorUI(this.value);
+		});
+		$("#rename input[name=name]").on("input", function() {
+			syncColorUI($("#rename input[name=color]").val());
 		});
 		// preset swatches: clicking one picks that color
 		$("#rename .swatch").click(function(evt) {
@@ -3048,13 +3093,19 @@ Rect.prototype.contains = function(x, y) {
 		});
 
 		function submit() {
+			var color = $("#rename input[name=color]").val();
 			var set = {
 				name: $("#rename input[name=name]").val(),
-				color: $("#rename input[name=color]").val()
+				color: color
 			};
 			//$("#rename .text[name=name]").val("");
 			closeModal();
 			gClient.sendArray([{m: "userset", set: set}]);
+			// Self-hosted username color: syncs to everyone on this domain via the
+			// Harmony relay, independent of the MPP server (which ignores it).
+			if(typeof gNameColor !== "undefined" && gNameColor) {
+				gNameColor.setMyColor(color);
+			}
 		};
 		$("#rename .submit").click(function(evt) {
 			submit();
@@ -3138,6 +3189,10 @@ Rect.prototype.contains = function(x, y) {
 		}
 		if(typeof TugOfWar !== "undefined" && TugOfWar.isSyncText(chatLine)) {
 			if(typeof gTugOfWar !== "undefined" && gTugOfWar) gTugOfWar.tryHandleChat(msg);
+			return true;
+		}
+		if(typeof NameColor !== "undefined" && NameColor.isSyncText(chatLine)) {
+			if(typeof gNameColor !== "undefined" && gNameColor) gNameColor.tryHandleChat(msg);
 			return true;
 		}
 		return false;
@@ -3296,6 +3351,7 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof CarDodge !== "undefined" && CarDodge.isSyncText(chatLine)) return;
 				if(typeof ReactionRoyale !== "undefined" && ReactionRoyale.isSyncText(chatLine)) return;
 				if(typeof TugOfWar !== "undefined" && TugOfWar.isSyncText(chatLine)) return;
+				if(typeof NameColor !== "undefined" && NameColor.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
 
@@ -3303,7 +3359,9 @@ Rect.prototype.contains = function(x, y) {
 
 				li.find(".name").text(msg.p.name + ":");
 				li.find(".message").text(msg.a);
-				li.css("color", msg.p.color || "white");
+				var chatColor = (typeof gNameColor !== "undefined" && gNameColor)
+					? gNameColor.colorFor(msg.p) : (msg.p.color || "white");
+				li.css("color", chatColor || "white");
 
 				$("#chat ul").append(li);
 
@@ -4187,6 +4245,7 @@ Rect.prototype.contains = function(x, y) {
 	var gCarDodge;
 	var gReactionRoyale;
 	var gTugOfWar;
+	var gNameColor;
 	var gUselessButton;
 	var gPixelPet;
 	var gEvilCursor;
@@ -4281,6 +4340,19 @@ Rect.prototype.contains = function(x, y) {
 	if(typeof EmojiParty !== "undefined") {
 		gEmojiParty = new EmojiParty({ client: gClient });
 		window.gEmojiParty = gEmojiParty;
+	}
+	if(typeof NameColor !== "undefined") {
+		gNameColor = new NameColor({
+			client: gClient,
+			onChange: function() { applyAllNameColors(); }
+		});
+		window.gNameColor = gNameColor;
+		// Announce our color + ask others for theirs shortly after joining.
+		gClient.on("ch", function() {
+			setTimeout(function() {
+				if(gNameColor) gNameColor.requestAll();
+			}, 600);
+		});
 	}
 	if(typeof SoundBoard !== "undefined") {
 		gSoundBoard = new SoundBoard({ client: gClient });
