@@ -2061,8 +2061,11 @@ Rect.prototype.contains = function(x, y) {
 				if(e.target.participantId == gClient.participantId) {
 					openModal("#rename", "input[name=name]");
 					setTimeout(function() {
-						$("#rename input[name=name]").val(gClient.ppl[gClient.participantId].name);
-						$("#rename input[name=color]").val(gClient.ppl[gClient.participantId].color);
+						var cur = gClient.ppl[gClient.participantId];
+						$("#rename input[name=name]").val(cur.name);
+						var curColor = cur.color || "#3b82f6";
+						$("#rename input[name=color]").val(curColor);
+						if(window.syncRenameColorUI) window.syncRenameColorUI(curColor);
 					}, 100);
 				} else if(e.target.participantId) {
 					var id = e.target.participantId;
@@ -3022,6 +3025,28 @@ Rect.prototype.contains = function(x, y) {
 ////////////////////////////////////////////////////////////////
 
 (function() {
+		// Keep the hex readout and selected swatch in sync with the color input.
+		function syncColorUI(val) {
+			val = (val || "#000000").toLowerCase();
+			$("#rename .rename-color-value").text(val.toUpperCase());
+			$("#rename .swatch").each(function() {
+				$(this).toggleClass("selected", this.getAttribute("data-color").toLowerCase() === val);
+			});
+		}
+		// expose so the dialog-open handler can refresh the UI to the user's current color
+		window.syncRenameColorUI = syncColorUI;
+
+		$("#rename input[name=color]").on("input change", function() {
+			syncColorUI(this.value);
+		});
+		// preset swatches: clicking one picks that color
+		$("#rename .swatch").click(function(evt) {
+			evt.preventDefault();
+			var c = this.getAttribute("data-color");
+			$("#rename input[name=color]").val(c);
+			syncColorUI(c);
+		});
+
 		function submit() {
 			var set = {
 				name: $("#rename input[name=name]").val(),

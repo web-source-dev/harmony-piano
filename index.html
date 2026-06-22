@@ -559,7 +559,32 @@
         </div>
         <div id="rename" class="dialog">
             <p><input type="text" name="name" placeholder="My Fancy New Name" maxlength="40" class="text"/></p>
-            <!--<p><input type="color" name="color" placeholder="" maxlength="7" class="color"/></p>-->
+            <p class="rename-color-row">
+                <label class="rename-color-label" for="rename-color-input">Name color:</label>
+                <input type="color" name="color" id="rename-color-input" value="#3b82f6" class="color"
+                       title="Pick any color for your username"/>
+                <span class="rename-color-value">#3B82F6</span>
+            </p>
+            <div class="color-swatches" aria-label="Preset name colors">
+                <button type="button" class="swatch" data-color="#ef4444" style="background:#ef4444" title="#ef4444"></button>
+                <button type="button" class="swatch" data-color="#f97316" style="background:#f97316" title="#f97316"></button>
+                <button type="button" class="swatch" data-color="#f59e0b" style="background:#f59e0b" title="#f59e0b"></button>
+                <button type="button" class="swatch" data-color="#eab308" style="background:#eab308" title="#eab308"></button>
+                <button type="button" class="swatch" data-color="#84cc16" style="background:#84cc16" title="#84cc16"></button>
+                <button type="button" class="swatch" data-color="#22c55e" style="background:#22c55e" title="#22c55e"></button>
+                <button type="button" class="swatch" data-color="#14b8a6" style="background:#14b8a6" title="#14b8a6"></button>
+                <button type="button" class="swatch" data-color="#06b6d4" style="background:#06b6d4" title="#06b6d4"></button>
+                <button type="button" class="swatch" data-color="#3b82f6" style="background:#3b82f6" title="#3b82f6"></button>
+                <button type="button" class="swatch" data-color="#6366f1" style="background:#6366f1" title="#6366f1"></button>
+                <button type="button" class="swatch" data-color="#8b5cf6" style="background:#8b5cf6" title="#8b5cf6"></button>
+                <button type="button" class="swatch" data-color="#a855f7" style="background:#a855f7" title="#a855f7"></button>
+                <button type="button" class="swatch" data-color="#ec4899" style="background:#ec4899" title="#ec4899"></button>
+                <button type="button" class="swatch" data-color="#f43f5e" style="background:#f43f5e" title="#f43f5e"></button>
+                <button type="button" class="swatch" data-color="#ffffff" style="background:#ffffff" title="#ffffff"></button>
+                <button type="button" class="swatch" data-color="#94a3b8" style="background:#94a3b8" title="#94a3b8"></button>
+                <button type="button" class="swatch" data-color="#1f2937" style="background:#1f2937" title="#1f2937"></button>
+                <button type="button" class="swatch" data-color="#000000" style="background:#000000" title="#000000"></button>
+            </div>
             <button class="submit">USER SET</button>
         </div>
         <div id="sheet-play" class="dialog sheet-dialog">
