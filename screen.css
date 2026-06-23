@@ -2664,33 +2664,6 @@ body.learn-panel-open #social {
 	50% { box-shadow: 0 0 26px 6px rgba(255, 70, 70, 0.7); }
 }
 
-/* ---- Room Pet ---- */
-.roompet-bar {
-	bottom: 182px;
-	align-items: center;
-	gap: 8px;
-	flex-wrap: nowrap;
-}
-.roompet-bar .roompet-canvas { width: 56px; height: 56px; cursor: pointer; flex: 0 0 auto; }
-.roompet-bar .roompet-status { color: #fff; font-size: 12px; min-width: 168px; text-align: center; }
-.roompet-hunger {
-	width: 90px; height: 8px;
-	background: rgba(255, 255, 255, 0.15);
-	border-radius: 5px; overflow: hidden;
-	flex: 0 0 auto;
-}
-.roompet-hunger-fill { height: 100%; width: 100%; background: #6bcb77; transition: width 0.2s linear, background 0.2s linear; }
-.roompet-feed { font-weight: 600; }
-.roompet-bar.roompet-starving {
-	background: rgba(120, 70, 20, 0.95);
-	border-color: #ffb13b;
-	animation: bombPulse 0.7s ease-in-out infinite;
-}
-.roompet-bar.roompet-dead {
-	background: rgba(40, 44, 54, 0.95);
-	border-color: #6b7280;
-}
-
 /* ---- Balloon Pop game ---- */
 .balloon-canvas {
 	position: fixed;
