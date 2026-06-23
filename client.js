@@ -19,7 +19,18 @@ function mixin(obj1, obj2) {
 
 function Client(uri) {
 	EventEmitter.call(this);
-	this.uri = uri;
+	// `uri` may be a single URL or an ordered list of servers. The FIRST entry is
+	// the primary (the public Multiplayer Piano server) and stays the main server;
+	// the rest are backups used for failover. When the primary can't be reached,
+	// the client switches to a backup so people in the room keep playing together
+	// instead of dropping to offline mode or being unable to rejoin. Once the
+	// primary is reachable again the client returns to it.
+	this.servers = (Array.isArray(uri) ? uri.slice() : [uri]).filter(function(u) { return !!u; });
+	if(this.servers.length === 0) this.servers = [uri];
+	this.serverIndex = 0;
+	this.serverFailCount = 0;       // consecutive failed connect attempts on current server
+	this.failoverThreshold = 2;     // switch to the next server after this many failures
+	this.uri = this.servers[0];
 	this.ws = undefined;
 	this.serverTimeOffset = 0;
 	this.user = undefined;
@@ -71,8 +82,10 @@ Client.prototype.stop = function() {
 Client.prototype.connect = function(log) {
 	if(!this.canConnect || !this.isSupported() || this.isConnected() || this.isConnecting())
 		return;
-	this.emit("status", "Connecting...");
-	console.log(`Connect to ${this.uri}`)
+	this.uri = this.servers[this.serverIndex] || this.servers[0];
+	var onBackup = this.serverIndex > 0;
+	this.emit("status", onBackup ? "Connecting to backup server..." : "Connecting...");
+	console.log(`Connect to ${this.uri}` + (onBackup ? " (backup server)" : ""))
 	if(typeof module !== "undefined") {
 		// nodejsicle
 		this.ws = new WebSocket(this.uri, {
@@ -81,6 +94,9 @@ Client.prototype.connect = function(log) {
 		this.ws2 = new WebSocket(this.uri, {
 			origin: "wss://mppclone.com/"
 		});
+		// ws2 is unused; swallow its errors so a failed/backup connection can't
+		// throw an uncaught 'error' and crash the node process during failover.
+		this.ws2.on("error", function() {});
 	} else {
 		// browseroni
 		this.ws = new WebSocket(this.uri);
@@ -98,12 +114,31 @@ Client.prototype.connect = function(log) {
 		self.emit("disconnect", evt);
 		self.emit("status", "Offline mode");
 
-		// reconnect!
+		// reconnect (with failover between the main server and backups)
 		if(self.connectionTime) {
+			// We had a live connection that just dropped.
 			self.connectionTime = undefined;
 			self.connectionAttempts = 0;
+			self.serverFailCount = 0;
+			// If that connection was on a backup, prefer the main server again so
+			// the room returns to public MPP as soon as it's reachable.
+			if(self.serverIndex !== 0) {
+				self.serverIndex = 0;
+				self.uri = self.servers[0];
+			}
 		} else {
+			// Couldn't connect at all.
 			++self.connectionAttempts;
+			++self.serverFailCount;
+			// After enough failures on the current server, fail over to the next
+			// one in the list. The list wraps, so a dead backup loops back to the
+			// main server and keeps retrying it.
+			if(self.servers.length > 1 && self.serverFailCount >= self.failoverThreshold) {
+				self.serverFailCount = 0;
+				self.serverIndex = (self.serverIndex + 1) % self.servers.length;
+				self.uri = self.servers[self.serverIndex];
+				self.emit("status", self.serverIndex === 0 ? "Retrying main server..." : "Switching to backup server...");
+			}
 		}
 		var ms_lut = [50, 2950, 7000, 10000];
 		var idx = self.connectionAttempts;
@@ -119,6 +154,8 @@ Client.prototype.connect = function(log) {
 	this.ws.addEventListener("open", function(evt) {
 		log && console.log(`ws open`)
 		self.connectionTime = Date.now();
+		self.serverFailCount = 0;
+		if(self.serverIndex > 0) self.emit("status", "Connected to backup server");
 		self.sendArray([{"m": "hi", "x": 1, "y": 1, "🐈": self['🐈']++ || undefined }]);
 		self.pingInterval = setInterval(function() {
 			self.sendArray([{m: "t", e: Date.now()}]);

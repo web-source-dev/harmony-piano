@@ -382,9 +382,68 @@ Rect.prototype.contains = function(x, y) {
 		this.synthGain.connect(this.limiterNode);
 
 		this.playings = {};
-		
+		// When a synth-based soundpack is selected this holds its config object and
+		// notes are generated with oscillators instead of samples (see actualPlay /
+		// createPackVoice). null = sample mode (e.g. "MPP Classic").
+		this.packSynth = null;
+
 		if(cb) setTimeout(cb, 0);
 		return this;
+	};
+
+	// Frequency (Hz) for a piano key id ("a-1", "c4", ...), matching the built-in
+	// synth's mapping so synth packs play in tune with the sampled piano.
+	AudioEngineWeb.prototype.noteFreq = function(id) {
+		var idx = (typeof MIDI_KEY_NAMES !== "undefined") ? MIDI_KEY_NAMES.indexOf(id) : -1;
+		if(idx < 0) return null;
+		var transpose = (typeof MIDI_TRANSPOSE !== "undefined") ? MIDI_TRANSPOSE : 0;
+		var note_number = idx + 9 - transpose;
+		return Math.pow(2, (note_number - 69) / 12) * 440.0;
+	};
+
+	// Build one oscillator voice for a synth soundpack with an ADSR envelope.
+	AudioEngineWeb.prototype.createPackVoice = function(id, vol, time) {
+		var cfg = this.packSynth;
+		if(!cfg) return null;
+		var freq = this.noteFreq(id);
+		if(!freq) return null;
+		var ctx = this.context;
+		var a = cfg.attack != null ? cfg.attack : 0.005;
+		var d = cfg.decay != null ? cfg.decay : 0.25;
+		var s = cfg.sustain != null ? cfg.sustain : 0.4;
+		var rel = cfg.release != null ? cfg.release : 0.5;
+		var peak = Math.max(0.0001, vol * (cfg.gain != null ? cfg.gain : 0.6));
+		var out = ctx.createGain();
+		out.connect(this.pianoGain);
+		out.gain.setValueAtTime(0.0001, time);
+		out.gain.exponentialRampToValueAtTime(peak, time + a);
+		out.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak * s), time + a + d);
+		var voices = (cfg.oscs && cfg.oscs.length) ? cfg.oscs : [{type: cfg.type || "triangle"}];
+		var oscs = [];
+		for(var i = 0; i < voices.length; i++) {
+			var v = voices[i];
+			var osc = ctx.createOscillator();
+			osc.type = v.type || "triangle";
+			osc.frequency.value = freq * (v.octave ? Math.pow(2, v.octave) : 1);
+			if(v.detune) osc.detune.value = v.detune;
+			var g = ctx.createGain();
+			g.gain.value = v.gain != null ? v.gain : 1;
+			osc.connect(g);
+			g.connect(out);
+			osc.start(time);
+			oscs.push(osc);
+		}
+		return {
+			stop: function(stopTime) {
+				try {
+					out.gain.cancelScheduledValues(stopTime);
+					var cur = out.gain.value;
+					out.gain.setValueAtTime(cur > 0 ? cur : 0.0001, stopTime);
+					out.gain.exponentialRampToValueAtTime(0.0001, stopTime + rel);
+					for(var i = 0; i < oscs.length; i++) oscs[i].stop(stopTime + rel + 0.05);
+				} catch(e) {}
+			}
+		};
 	};
 
 	AudioEngineWeb.prototype.load = function(id, url, cb, fallbackUrl) {
@@ -423,25 +482,39 @@ Rect.prototype.contains = function(x, y) {
 			this.resume();
 		}
 		if(this.paused) return;
-		if(!this.sounds.hasOwnProperty(id)) return;
-		var source = this.context.createBufferSource();
-		source.buffer = this.sounds[id];
-		var gain = this.context.createGain();
-		gain.gain.value = vol;
-		source.connect(gain);
-		gain.connect(this.pianoGain);
-		source.start(time);
-		// Patch from ste-art remedies stuttering under heavy load
+		var usePackSynth = !!this.packSynth;
+		if(!usePackSynth && !this.sounds.hasOwnProperty(id)) return;
+
+		// Patch from ste-art remedies stuttering under heavy load: stop whatever is
+		// currently sounding on this key before retriggering it.
 		if(this.playings[id]) {
 			var playing = this.playings[id];
-			playing.gain.gain.setValueAtTime(playing.gain.gain.value, time);
-			playing.gain.gain.linearRampToValueAtTime(0.0, time + 0.2);
-			playing.source.stop(time + 0.21);
+			if(playing.gain) {
+				playing.gain.gain.setValueAtTime(playing.gain.gain.value, time);
+				playing.gain.gain.linearRampToValueAtTime(0.0, time + 0.2);
+			}
+			if(playing.source) playing.source.stop(time + 0.21);
+			if(playing.packVoice) playing.packVoice.stop(time);
 			if(enableSynth && playing.voice) {
 				playing.voice.stop(time);
 			}
 		}
-		this.playings[id] = {"source": source, "gain": gain, "part_id": part_id};
+
+		var rec = {"part_id": part_id};
+		if(usePackSynth) {
+			rec.packVoice = this.createPackVoice(id, vol, time);
+		} else {
+			var source = this.context.createBufferSource();
+			source.buffer = this.sounds[id];
+			var gain = this.context.createGain();
+			gain.gain.value = vol;
+			source.connect(gain);
+			gain.connect(this.pianoGain);
+			source.start(time);
+			rec.source = source;
+			rec.gain = gain;
+		}
+		this.playings[id] = rec;
 
 		if(enableSynth) {
 			this.playings[id].voice = new synthVoice(id, time);
@@ -461,15 +534,19 @@ Rect.prototype.contains = function(x, y) {
 	
 	AudioEngineWeb.prototype.actualStop = function(id, time, part_id) {
 		if(this.playings.hasOwnProperty(id) && this.playings[id] && this.playings[id].part_id === part_id) {
-			var gain = this.playings[id].gain.gain;
-			gain.setValueAtTime(gain.value, time);
-			gain.linearRampToValueAtTime(gain.value * 0.1, time + 0.16);
-			gain.linearRampToValueAtTime(0.0, time + 0.4);
-			this.playings[id].source.stop(time + 0.41);
-			
+			var p = this.playings[id];
+			if(p.gain) {
+				var gain = p.gain.gain;
+				gain.setValueAtTime(gain.value, time);
+				gain.linearRampToValueAtTime(gain.value * 0.1, time + 0.16);
+				gain.linearRampToValueAtTime(0.0, time + 0.4);
+				if(p.source) p.source.stop(time + 0.41);
+			}
 
-			if(this.playings[id].voice) {
-				this.playings[id].voice.stop(time);
+			if(p.packVoice) p.packVoice.stop(time);
+
+			if(p.voice) {
+				p.voice.stop(time);
 			}
 
 			this.playings[id] = null;
@@ -926,12 +1003,29 @@ Rect.prototype.contains = function(x, y) {
 	    this.packs = [];
 	    this.piano = piano;
 	    this.soundSelection = localStorage.soundSelection ? localStorage.soundSelection : "MPP Classic";
-	    this.addPack({name: "MPP Classic", keys: Object.keys(this.piano.keys), ext: ".mp3", url: "./sounds/mppclassic/"}, true);
+	    var savedSelection = this.soundSelection;
+	    var allKeys = Object.keys(this.piano.keys);
+	    // The sampled grand piano (downloaded into ./sounds/mppclassic/).
+	    this.addPack({name: "MPP Classic", keys: allKeys, ext: ".mp3", url: "./sounds/mppclassic/"}, true);
+	    // Built-in synthesized instruments — no downloads needed, so the Sound
+	    // Select menu always has real options to switch between (and they keep
+	    // working even with no network / when servers are down).
+	    this.addPacks([
+	        {name: "Harmony Grand", keys: allKeys, synth: {oscs: [{type: "triangle", gain: 1}, {type: "sine", octave: 1, gain: 0.35}], attack: 0.004, decay: 1.4, sustain: 0.0, release: 0.6, gain: 0.85}},
+	        {name: "Electric Piano", keys: allKeys, synth: {oscs: [{type: "sine", gain: 1}, {type: "sine", octave: 1, detune: 6, gain: 0.5}], attack: 0.003, decay: 0.9, sustain: 0.05, release: 0.5, gain: 0.9}},
+	        {name: "Synth Lead", keys: allKeys, synth: {oscs: [{type: "sawtooth", gain: 0.7}, {type: "square", detune: -8, gain: 0.3}], attack: 0.005, decay: 0.2, sustain: 0.6, release: 0.25, gain: 0.5}},
+	        {name: "Mellow Sine", keys: allKeys, synth: {oscs: [{type: "sine", gain: 1}], attack: 0.01, decay: 0.4, sustain: 0.5, release: 0.5, gain: 0.8}},
+	        {name: "8-Bit Square", keys: allKeys, synth: {oscs: [{type: "square", gain: 0.6}], attack: 0.001, decay: 0.1, sustain: 0.7, release: 0.12, gain: 0.45}}
+	    ]);
+	    // The initial addPack above force-loads "MPP Classic" and overwrites
+	    // soundSelection; restore the user's saved choice so init() loads it.
+	    this.soundSelection = savedSelection;
 	}
 
 	SoundSelector.prototype.addPack = function(pack, load) {
 		var self = this;
-		self.loading[pack.url || pack] = true;
+		var loadingKey = (typeof pack === "string") ? pack : (pack.url || pack.name);
+		self.loading[loadingKey] = true;
 		function add(obj) {
 			var added = false;
 			for (var i = 0; self.packs.length > i; i++) {
@@ -941,12 +1035,12 @@ Rect.prototype.contains = function(x, y) {
 				}
 			}
 
-			if (added) return console.warn("Sounds already added!!"); //no adding soundpacks twice D:<
+			if (added) { delete self.loading[loadingKey]; return console.warn("Sounds already added!!"); } //no adding soundpacks twice D:<
 
-			if (obj.url.substr(obj.url.length-1) != "/") obj.url = obj.url + "/";
+			if (obj.url && obj.url.substr(obj.url.length-1) != "/") obj.url = obj.url + "/";
 			var html = document.createElement("li");
 			html.classList = "pack";
-			html.innerText = obj.name + " (" + obj.keys.length + " keys)";
+			html.innerText = obj.name + (obj.synth ? " (synth)" : " (" + obj.keys.length + " keys)");
 			html.onclick = function() {
 				self.loadPack(obj.name);
 				self.notification.close();
@@ -959,7 +1053,7 @@ Rect.prototype.contains = function(x, y) {
 	            return 0;
 	        });
 	        if (load) self.loadPack(obj.name);
-	        delete self.loading[obj.url];
+	        delete self.loading[loadingKey];
 		}
 
 		if (typeof pack == "string") {
@@ -1025,19 +1119,32 @@ Rect.prototype.contains = function(x, y) {
 		}
 
 		var self = this;
-		for (var i in this.piano.keys) {
-	        if (!this.piano.keys.hasOwnProperty(i)) continue;
-	        (function() {
-	            var key = self.piano.keys[i];
-	            key.loaded = false;
-	            var sampleUrl = pack.url + key.note + pack.ext;
-	            var fallbackUrl = "https://game.multiplayerpiano.com/sounds/mppclassic/" + key.note + pack.ext;
-	            self.piano.audio.load(key.note, sampleUrl, function() {
-	                key.loaded = true;
-	                key.timeLoaded = Date.now();
-	            }, fallbackUrl);
-	        })();
-	    }
+		if (pack.synth) {
+			// Synth pack: nothing to download — notes are generated by the audio
+			// engine's oscillators. Mark every key ready so the piano plays them.
+			this.piano.audio.packSynth = pack.synth;
+			for (var i in this.piano.keys) {
+				if (!this.piano.keys.hasOwnProperty(i)) continue;
+				this.piano.keys[i].loaded = true;
+				this.piano.keys[i].timeLoaded = Date.now();
+			}
+		} else {
+			// Sampled pack: back to sample playback and (re)load the .mp3 samples.
+			this.piano.audio.packSynth = null;
+			for (var i in this.piano.keys) {
+		        if (!this.piano.keys.hasOwnProperty(i)) continue;
+		        (function() {
+		            var key = self.piano.keys[i];
+		            key.loaded = false;
+		            var sampleUrl = pack.url + key.note + pack.ext;
+		            var fallbackUrl = "https://game.multiplayerpiano.com/sounds/mppclassic/" + key.note + pack.ext;
+		            self.piano.audio.load(key.note, sampleUrl, function() {
+		                key.loaded = true;
+		                key.timeLoaded = Date.now();
+		            }, fallbackUrl);
+		        })();
+		    }
+		}
 	    if(localStorage) localStorage.soundSelection = pack.name;
 	    this.soundSelection = pack.name;
 	};
@@ -1262,18 +1369,41 @@ Rect.prototype.contains = function(x, y) {
 
 	// Multiplayer: use public MPP server from any static host (GitHub Pages, ngrok, Netlify, etc.).
 	// Only use a local WebSocket server when you open the page with ?ws=local AND run one on port 8081.
+	//
+	// Failover: the public MPP server is the MAIN server, but it goes down a lot.
+	// When it's unreachable the client automatically falls over to our own custom
+	// backup server (an MPP-protocol server hosted by relay-server.js on the
+	// /mpp path, same origin/port as the app) so people stay in the room and keep
+	// playing together instead of dropping to offline mode or failing to rejoin.
+	// As soon as the public server is reachable again the client returns to it.
+	//   ?backup=off            disable failover (main server only)
+	//   ?backup=ws://host/mpp  explicit backup server override
+	//   default                same origin as the page: ws(s)://<host>/mpp
+	// The backup only exists when the app is served by relay-server.js (Node);
+	// on a plain static host it simply isn't reachable and is skipped.
 	var mppOrig = 'game.multiplayerpiano.com';
 	var wsParam = getParameterByName('ws');
 	var useLocalWs = wsParam === 'local';
-	var wsUri;
+	var gServers;
 	if(useLocalWs) {
 		var wsPort = parseInt(getParameterByName('wsport'), 10) || 8081;
 		var wsProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-		wsUri = wsProto + '://' + window.location.hostname + ':' + wsPort;
+		gServers = [wsProto + '://' + window.location.hostname + ':' + wsPort];
 	} else {
-		wsUri = 'wss://' + mppOrig + ':443';
+		var primaryUri = 'wss://' + mppOrig + ':443';
+		gServers = [primaryUri];
+		var backupParam = getParameterByName('backup');
+		if(backupParam === 'off') {
+			// failover disabled
+		} else if(backupParam) {
+			gServers.push(backupParam);
+		} else if(window.location.protocol === 'https:' || window.location.protocol === 'http:') {
+			var bProto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+			var bHost = getParameterByName('backuphost') || window.location.host;
+			gServers.push(bProto + '://' + bHost + '/mpp');
+		}
 	}
-	var gClient = new Client(wsUri);
+	var gClient = new Client(gServers.length > 1 ? gServers : gServers[0]);
 
 	// Real-time room sync for the custom features (Blob Friend, Doodler, Emoji
 	// Party, Sound Board, Party Game, room metronome, Room DJ controls). These
