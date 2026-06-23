@@ -3175,6 +3175,10 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gPartyGame !== "undefined" && gPartyGame) gPartyGame.tryHandleChat(msg);
 			return true;
 		}
+		if(typeof RoomPet !== "undefined" && RoomPet.isSyncText(chatLine)) {
+			if(typeof gRoomPet !== "undefined" && gRoomPet) gRoomPet.tryHandleChat(msg);
+			return true;
+		}
 		if(typeof BalloonPop !== "undefined" && BalloonPop.isSyncText(chatLine)) {
 			if(typeof gBalloonPop !== "undefined" && gBalloonPop) gBalloonPop.tryHandleChat(msg);
 			return true;
@@ -3347,6 +3351,7 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof EmojiParty !== "undefined" && EmojiParty.isSyncText(chatLine)) return;
 				if(typeof SoundBoard !== "undefined" && SoundBoard.isSyncText(chatLine)) return;
 				if(typeof PartyGame !== "undefined" && PartyGame.isSyncText(chatLine)) return;
+				if(typeof RoomPet !== "undefined" && RoomPet.isSyncText(chatLine)) return;
 				if(typeof BalloonPop !== "undefined" && BalloonPop.isSyncText(chatLine)) return;
 				if(typeof CarDodge !== "undefined" && CarDodge.isSyncText(chatLine)) return;
 				if(typeof ReactionRoyale !== "undefined" && ReactionRoyale.isSyncText(chatLine)) return;
@@ -3811,7 +3816,8 @@ Rect.prototype.contains = function(x, y) {
 			if(gBlobFriend) gBlobFriend.requestSync();
 			if(gDesktopDoodler) gDesktopDoodler.requestSync();
 			if(gPartyGame) gPartyGame.requestSync();
-			if(gBalloonPop) gBalloonPop.requestSync();
+			if(gRoomPet) gRoomPet.requestSync();
+				if(gBalloonPop) gBalloonPop.requestSync();
 			if(gCarDodge) gCarDodge.requestSync();
 			if(gReactionRoyale) gReactionRoyale.requestSync();
 			if(gTugOfWar) gTugOfWar.requestSync();
@@ -4241,6 +4247,7 @@ Rect.prototype.contains = function(x, y) {
 	var gEmojiParty;
 	var gSoundBoard;
 	var gPartyGame;
+	var gRoomPet;
 	var gBalloonPop;
 	var gCarDodge;
 	var gReactionRoyale;
@@ -4279,6 +4286,8 @@ Rect.prototype.contains = function(x, y) {
 		if(cardodgeBtn && gCarDodge) cardodgeBtn.classList.toggle("active", !!gCarDodge.visible);
 		if(reactionBtn && gReactionRoyale) reactionBtn.classList.toggle("active", !!gReactionRoyale.visible);
 		if(tugBtn && gTugOfWar) tugBtn.classList.toggle("active", !!gTugOfWar.visible);
+		var roompetBtn = document.getElementById("harmony-roompet-btn");
+		if(roompetBtn && gRoomPet) roompetBtn.classList.toggle("active", !!gRoomPet.visible);
 
 		var uselessBtn = document.getElementById("harmony-useless-btn");
 		var petBtn = document.getElementById("harmony-pet-btn");
@@ -4359,6 +4368,10 @@ Rect.prototype.contains = function(x, y) {
 	}
 	if(typeof PartyGame !== "undefined") {
 		gPartyGame = new PartyGame({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
+	}
+	if(typeof RoomPet !== "undefined") {
+		gRoomPet = new RoomPet({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
+		window.gRoomPet = gRoomPet;
 	}
 	if(typeof BalloonPop !== "undefined") {
 		gBalloonPop = new BalloonPop({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
@@ -5524,6 +5537,17 @@ Rect.prototype.contains = function(x, y) {
 				e.preventDefault();
 				e.stopPropagation();
 				gTugOfWar.setVisible(!gTugOfWar.visible);
+				updateHarmonyToolsUi();
+			});
+		}
+
+		// ---- Room Pet ----
+		var roompetBtn = document.getElementById("harmony-roompet-btn");
+		if(roompetBtn && gRoomPet) {
+			roompetBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				gRoomPet.setVisible(!gRoomPet.visible);
 				updateHarmonyToolsUi();
 			});
 		}
