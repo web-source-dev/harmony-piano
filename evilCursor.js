@@ -17,7 +17,7 @@
 	function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
 
 	function EvilCursor() {
-		this.active = false;
+		this.active = false; 
 		this.mx = window.innerWidth / 2;
 		this.my = window.innerHeight / 2;
 		this.x = this.mx; this.y = this.my;
