@@ -5275,24 +5275,34 @@ Rect.prototype.contains = function(x, y) {
 			resetRoomMediaLayout();
 			showRoomMediaTransport(false);
 		});
-		$roomMediaTransport.on("mousedown touchstart", "input[name=seek]", function() {
+		$roomMediaTransport.on("mousedown touchstart pointerdown", "input[name=seek]", function() {
 			this._dragging = true;
 		});
-		$roomMediaTransport.on("mouseup touchend", "input[name=seek]", function() {
-			this._dragging = false;
+		// Clear _dragging on document so releasing the mouse anywhere (including outside
+		// the slider) always unlocks the slider update loop.
+		$(document).on("mouseup.rmSeek touchend.rmSeek pointerup.rmSeek pointercancel.rmSeek", function() {
+			var seek = $roomMediaTransport.find("input[name=seek]")[0];
+			if(seek) seek._dragging = false;
 		});
 		$roomMediaTransport.on("input", "input[name=seek]", function() {
 			if(!gRoomMedia) return;
 			var sec = parseFloat(this.value) || 0;
 			updateRoomMediaProgress({
 				current: sec,
-				duration: gRoomMedia.activeEl.duration || 0,
+				duration: gRoomMedia.getDuration ? gRoomMedia.getDuration() : (gRoomMedia.activeEl.duration || 0),
+				playing: gRoomMedia.playing,
 				title: gRoomMedia.title,
 				dj: gRoomMedia.djName
 			});
 		});
 		$roomMediaTransport.on("change", "input[name=seek]", function() {
-			if(gRoomMedia) gRoomMedia.seekTo(parseFloat(this.value) || 0);
+			if(!gRoomMedia) return;
+			var sec = parseFloat(this.value) || 0;
+			this._dragging = true;
+			gRoomMedia.seekTo(sec);
+			var el = this;
+			// Keep slider at new position for one frame while DOM currentTime catches up
+			requestAnimationFrame(function() { el._dragging = false; el.value = sec; });
 		});
 		$roomMediaTransport.on("input", "input[name=volume]", function() {
 			if(gRoomMedia) gRoomMedia.setVolume(parseFloat(this.value) || 0);

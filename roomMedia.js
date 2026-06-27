@@ -1116,8 +1116,17 @@
 
 	RoomMedia.prototype.seekTo = function (sec, broadcast) {
 		if (broadcast === undefined) broadcast = true;
-		this._setCurrentTime(Math.max(0, sec));
-		this._emitProgress();
+		sec = Math.max(0, sec);
+		this._setCurrentTime(sec);
+		// Emit the target position directly — DOM currentTime update is async
+		// and reading it back would return the old position, snapping the slider
+		this.onProgress({
+			current: sec,
+			duration: this._getDuration(),
+			playing: this.playing,
+			title: this.title,
+			dj: this.djName
+		});
 		if (broadcast) {
 			this.sendSync("s|" + (this.serverTime() + 120) + "|" + sec);
 		}

@@ -85,9 +85,18 @@
 		this.visible = false;
 		this.minimized = false;
 
+		// Sync guard: only accept "st" (state replay) messages while this flag is set.
+		// It is set when WE explicitly request a sync (requestSync) and cleared after
+		// a short window. This prevents a new joiner's sync reply from being broadcast
+		// back to everyone and resetting canvases that already have drawings.
+		this._awaitingSync = false;
+		this._awaitingSyncTimer = null;
+		this._saveTimer = null;
+
 		this._bindDom();
 		this.setVisible(false);
 		this._resize();
+		this._loadFromSession();   // restore strokes from previous page session
 	}
 
 	DesktopDoodler.SYNC_PREFIX = SYNC_PREFIX;
@@ -362,6 +371,7 @@
 		this.drawing = false;
 		this.lastPt = null;
 		this._flushSync();
+		this._scheduleSave();
 	};
 
 	DesktopDoodler.prototype._queueSync = function () {
@@ -409,6 +419,7 @@
 		this.strokes = [];
 		this.pendingSegs = [];
 		this._redraw();
+		this._saveToSession();
 		if (broadcast) this.sendSync("x");
 	};
 
@@ -492,7 +503,41 @@
 	};
 
 	DesktopDoodler.prototype.requestSync = function () {
+		var self = this;
+		this._awaitingSync = true;
+		clearTimeout(this._awaitingSyncTimer);
+		// After 6 s, stop accepting state-replay messages (all packets should have arrived).
+		this._awaitingSyncTimer = setTimeout(function () {
+			self._awaitingSync = false;
+		}, 6000);
 		this.sendSync("q");
+	};
+
+	// ---- sessionStorage persistence ------------------------------------------
+	DesktopDoodler.prototype._saveToSession = function () {
+		try { sessionStorage.doodlerStrokes = JSON.stringify(this.strokes); } catch (e) {}
+	};
+
+	DesktopDoodler.prototype._scheduleSave = function () {
+		var self = this;
+		clearTimeout(this._saveTimer);
+		this._saveTimer = setTimeout(function () { self._saveToSession(); }, 600);
+	};
+
+	DesktopDoodler.prototype._loadFromSession = function () {
+		try {
+			var raw = sessionStorage.doodlerStrokes;
+			if (!raw) return;
+			var segs = JSON.parse(raw);
+			if (Array.isArray(segs) && segs.length) {
+				this.strokes = segs;
+				// Don't redraw yet — canvas may not be sized; _resize() will redraw.
+			}
+		} catch (e) {}
+	};
+
+	DesktopDoodler.prototype.clearSession = function () {
+		try { sessionStorage.removeItem("doodlerStrokes"); } catch (e) {}
 	};
 
 	DesktopDoodler.prototype._handleSyncRequest = function () {
@@ -521,7 +566,15 @@
 				this.strokes.push(segs[i]);
 				this._drawSeg(segs[i]);
 			}
+			this._scheduleSave();
 		} else if (cmd === "st") {
+			// KEY FIX: "st" messages are state-replay responses to a sync request.
+			// They are broadcast to the whole room, so existing users (who already have
+			// a canvas) would incorrectly receive and apply a reset sent for a new joiner.
+			// Only apply state-replay if we explicitly requested a sync (flag set for 6 s)
+			// OR our canvas is currently empty (we just joined / refreshed).
+			if (this.strokes.length > 0 && !this._awaitingSync) return true;
+
 			if (parts[1] === "0") {
 				this.strokes = [];
 				this._redraw();
@@ -535,9 +588,11 @@
 				}
 				this._redraw();
 			}
+			this._scheduleSave();
 		} else if (cmd === "x") {
 			this.strokes = [];
 			this._redraw();
+			this._saveToSession();
 		} else if (cmd === "q") {
 			this._handleSyncRequest();
 		}
