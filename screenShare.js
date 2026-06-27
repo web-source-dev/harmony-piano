@@ -35,6 +35,12 @@
     var _dragTarget = null;   // which panel is being dragged
     var _dragOX = 0, _dragOY = 0;
 
+    // ── stable per-session identity (never null) ──────────────────────────────────
+    // Generated once per page load. Used when the MPP participant ID is unavailable
+    // (e.g. MPP server unreachable). All signaling checks use d.from && …, so a
+    // null _myId() silently breaks every signal — this fallback prevents that.
+    var _localId = 'ss_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+
     // ──────────────────────────────────────────────────────────────────────────────
     // IDENTITY
     // ──────────────────────────────────────────────────────────────────────────────
@@ -43,10 +49,11 @@
             if (typeof gClient !== 'undefined' && gClient) {
                 if (gClient.participantId) return gClient.participantId;
                 var p = gClient.getOwnParticipant && gClient.getOwnParticipant();
-                return (p && (p._id || p.id)) || null;
+                var id = p && (p._id || p.id);
+                if (id) return id;
             }
         } catch (e) {}
-        return null;
+        return _localId;  // always a non-null string — unique per page load
     }
     function _myName() {
         try {
