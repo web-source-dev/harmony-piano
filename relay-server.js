@@ -31,7 +31,7 @@ var WebSocketServer = ws.WebSocketServer || ws.Server;
 var ROOT = __dirname;
 var LOG_DIR = path.join(ROOT, "chat-logs");
 var PORT = parseInt(process.argv[2], 10) || parseInt(process.env.PORT, 10) || 8550;
-var MAX_TEXT = 8192;
+var MAX_TEXT = 65536;  // large enough for WebRTC SDP offers (~2-5 KB) plus JSON wrapping
 var MAX_ID = 64;
 
 var MIME = {
@@ -338,7 +338,8 @@ function mppHandle(sock, msg) {
 		case "a":
 			if (room && typeof msg.message === "string") {
 				var p = room.parts.get(st.pid) || { id: st.pid, _id: st.user._id, name: st.user.name, color: st.user.color };
-				mppBroadcast(room, { m: "a", a: msg.message.slice(0, 512), p: mppPartPublic(p), t: Date.now() });
+				// Use MAX_TEXT here — 512 was truncating WebRTC SDP offers (2-5 KB), breaking screen share signaling
+				mppBroadcast(room, { m: "a", a: msg.message.slice(0, MAX_TEXT), p: mppPartPublic(p), t: Date.now() });
 			}
 			break;
 		case "userset":

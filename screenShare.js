@@ -56,12 +56,24 @@
     }
 
     // ──────────────────────────────────────────────────────────────────────────────
-    // SIGNALING — messages go over MPP chat with "SS|" prefix
+    // SIGNALING — primary: relay (/relay WebSocket); fallback: MPP chat
+    //
+    // The relay is the custom server everyone is already connected to, so it works
+    // without any MPP access and handles large SDP payloads without truncation.
+    // MPP chat (backup) was truncating at 512 chars, silently breaking SDP offers.
     // ──────────────────────────────────────────────────────────────────────────────
     function _sig(obj) {
         try {
             var txt = SYNC_PREFIX + JSON.stringify(obj);
-            if (typeof gClient !== 'undefined' && gClient && gClient.sendArray) {
+            // Try relay first — custom server, no MPP dependency, no size limit
+            var sentViaRelay = false;
+            if (typeof gRoomSync !== 'undefined' && gRoomSync &&
+                    typeof gRoomSync.broadcast === 'function') {
+                sentViaRelay = gRoomSync.broadcast(txt);
+            }
+            // Fall back to MPP chat when relay is unavailable
+            if (!sentViaRelay &&
+                    typeof gClient !== 'undefined' && gClient && gClient.sendArray) {
                 gClient.sendArray([{ m: 'a', message: txt }]);
             }
         } catch (e) {}
