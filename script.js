@@ -1404,6 +1404,7 @@ Rect.prototype.contains = function(x, y) {
 		}
 	}
 	var gClient = new Client(gServers.length > 1 ? gServers : gServers[0]);
+	window.gClient = gClient; // expose for screenShare.js (scoped inside $(function), not visible otherwise)
 
 	// Real-time room sync for the custom features (Blob Friend, Doodler, Emoji
 	// Party, Sound Board, Party Game, room metronome, Room DJ controls). These
@@ -1442,6 +1443,7 @@ Rect.prototype.contains = function(x, y) {
 				onText: function(msg) { routeRoomSync(msg); }
 			});
 			gClient.roomSync = gRoomSync;
+			window.gRoomSync = gRoomSync; // expose for screenShare.js (scoped inside $(function), not visible otherwise)
 			gRoomSync.start();
 			try { console.info("[Harmony] real-time sync via relay:", relayUri, "(open the same room/?c= on each client)"); } catch(e) {}
 		} else {
