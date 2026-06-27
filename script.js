@@ -3325,6 +3325,10 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gNameColor !== "undefined" && gNameColor) gNameColor.tryHandleChat(msg);
 			return true;
 		}
+		if(typeof ScreenShare !== "undefined" && ScreenShare.isSyncText(chatLine)) {
+			ScreenShare.tryHandleChat(msg);
+			return true;
+		}
 		return false;
 	}
 
@@ -3482,6 +3486,7 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof ReactionRoyale !== "undefined" && ReactionRoyale.isSyncText(chatLine)) return;
 				if(typeof TugOfWar !== "undefined" && TugOfWar.isSyncText(chatLine)) return;
 				if(typeof NameColor !== "undefined" && NameColor.isSyncText(chatLine)) return;
+				if(typeof ScreenShare !== "undefined" && ScreenShare.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
 
