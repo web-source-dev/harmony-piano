@@ -605,6 +605,15 @@
             <p class="sheet-row"><label>Text notation (one note per line):</label></p>
             <p class="sheet-row"><textarea name="notation" rows="5" placeholder="# sec  note  velocity&#10;0.0  c4  0.8&#10;0.5  d4"></textarea></p>
         </div>
+        <div id="birthday-popup" class="dialog birthday-popup-dialog">
+            <div class="birthday-popup-inner">
+                <button type="button" class="birthday-popup-close" aria-label="Close">✕</button>
+                <div class="birthday-popup-emoji" aria-hidden="true">🎂</div>
+                <h2 class="birthday-popup-title"></h2>
+                <p class="birthday-popup-message"></p>
+                <button type="button" class="birthday-popup-celebrate"></button>
+            </div>
+        </div>
         <div id="fun-video" class="dialog fun-video-dialog">
             <div class="fun-video-dialog-inner">
                 <button type="button" class="fun-video-close" aria-label="Close">✕</button>
@@ -812,6 +821,7 @@
 <script src="./chatLogger.js"></script>
 <script src="./cornerBanner.js"></script>
 <script src="./funVideoPopup.js"></script>
+<script src="./birthdayPopup.js"></script>
 <script src="./screenShare.js"></script>
 <!--<script src="/ebsprite.js"></script>-->
 <script src="./script.js?v=20260618i"></script>
