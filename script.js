@@ -3080,13 +3080,6 @@ Rect.prototype.contains = function(x, y) {
 		});
 	}
 
-	if(typeof BirthdayPopup !== "undefined") {
-		BirthdayPopup.init({
-			openModal: openModal,
-			closeModal: closeModal
-		});
-	}
-
 	(function() {
 		function submit() {
 			var name = $("#new-room .text[name=name]").val();
