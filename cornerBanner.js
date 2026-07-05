@@ -1,22 +1,23 @@
 /**
- * Fixed top-right banner — edit CORNER_BANNER_MESSAGES below.
- * Use ‹ › buttons to cycle when more than one message is defined.
+ * Top-right note box — edit CORNER_PROMPT below for your short message + reply input.
+ * Set SHOW_MESSAGES true and fill CORNER_BANNER_MESSAGES to also show scrollable notes.
  */
 (function (global) {
 	"use strict";
 
-	// Set false to hide banner from UI (logging + API still work).
-	var SHOW_UI = false;
+	// Set false to hide the whole box (logging + API still work).
+	var SHOW_UI = true;
 
-	// ── Add your messages here (strings only) ──
-	var CORNER_BANNER_MESSAGES = [
-		"I will join you I promise. I am sorry for the delay but i have been busy with work and other things.",
-		];
+	// Set true to show the scrollable note list above the input (off = input only).
+	var SHOW_MESSAGES = false;
 
-	// ── Corner prompt (question + input) — set enabled: false to hide ──
+	// ── Optional scrollable notes (only when SHOW_MESSAGES is true) ──
+	var CORNER_BANNER_MESSAGES = [];
+
+	// ── Your short message + reply box — edit text / placeholder / buttonLabel ──
 	var CORNER_PROMPT = {
 		enabled: true,
-		text: "Keep Smiling! ❤️",
+		text: "Keep Smiling!",
 		placeholder: "I'm here for you...",
 		buttonLabel: "Noob is Here"
 	};
@@ -33,7 +34,10 @@
 	var $input;
 	var $submit;
 	var $feedback;
+	var $body;
+	var $head;
 	var gFeedbackTimer = null;
+	var gLayoutObserver = null;
 
 	function messageCount() {
 		return CORNER_BANNER_MESSAGES.length;
@@ -51,17 +55,43 @@
 		return global.ChatLogger.logCornerPrompt(getUserName(), answer);
 	}
 
+	function syncLayout() {
+		var body = document.body;
+		if (!body || !$root || !$root.length) return;
+		var visible = SHOW_UI && !$root.is("[hidden]");
+		if (visible) {
+			body.classList.add("corner-banner-open");
+			var h = $root[0].getBoundingClientRect().height;
+			document.documentElement.style.setProperty("--corner-banner-h", Math.ceil(h + 10) + "px");
+		} else {
+			body.classList.remove("corner-banner-open");
+			document.documentElement.style.removeProperty("--corner-banner-h");
+		}
+	}
+
 	function render() {
 		if (!$root || !$text) return;
 		if (!SHOW_UI) {
 			$root.attr("hidden", "hidden");
+			syncLayout();
 			return;
 		}
-		var count = messageCount();
+		var count = SHOW_MESSAGES ? messageCount() : 0;
 		var hasPrompt = CORNER_PROMPT.enabled && CORNER_PROMPT.text;
 		if (count === 0 && !hasPrompt) {
 			$root.attr("hidden", "hidden");
+			syncLayout();
 			return;
+		}
+		var promptOnly = hasPrompt && count === 0;
+		$root.toggleClass("corner-banner-prompt-only", promptOnly);
+		if ($head) {
+			if (promptOnly) $head.attr("hidden", "hidden");
+			else $head.removeAttr("hidden");
+		}
+		if ($body) {
+			if (count === 0) $body.attr("hidden", "hidden");
+			else $body.removeAttr("hidden");
 		}
 		if (count === 0) {
 			$text.text("");
@@ -78,6 +108,7 @@
 			$indexLabel.text(multi ? (index + 1) + " / " + count : "");
 		}
 		$root.removeAttr("hidden");
+		syncLayout();
 	}
 
 	function step(delta) {
@@ -156,6 +187,7 @@
 
 	var CornerBanner = {
 		showUi: SHOW_UI,
+		showMessages: SHOW_MESSAGES,
 		messages: CORNER_BANNER_MESSAGES,
 		prompt: CORNER_PROMPT,
 
@@ -181,6 +213,8 @@
 		init: function () {
 			$root = $("#corner-banner");
 			if (!$root.length) return;
+			$head = $root.find(".corner-banner-head");
+			$body = $root.find(".corner-banner-body");
 			$text = $root.find(".corner-banner-text");
 			$nav = $root.find(".corner-banner-nav");
 			$prev = $root.find(".corner-banner-prev");
@@ -217,6 +251,13 @@
 			if (!SHOW_UI) {
 				$root.attr("hidden", "hidden");
 			}
+			if (typeof ResizeObserver !== "undefined") {
+				gLayoutObserver = new ResizeObserver(function () {
+					syncLayout();
+				});
+				gLayoutObserver.observe($root[0]);
+			}
+			$(global).on("resize.cornerBanner", syncLayout);
 		}
 	};
 

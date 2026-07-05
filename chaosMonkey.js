@@ -11,7 +11,7 @@
 	var SILLY_FONTS = ["'Comic Sans MS', cursive", "'Papyrus', fantasy", "Impact, sans-serif", "'Courier New', monospace", "cursive"];
 	var MONKEY_SAYS = ["ook ook!", "🍌", "chaos!", "hee hee", "oops", "my page now", "🐒", "whoopsie"];
 	// containers we must never touch, or you couldn't turn the monkey back off
-	var SAFE_SELECTOR = "#harmony-tools, .party-bar, #modal, .pixel-pet, .evil-cursor, .useless-btn, .useless-bubble, #emoji-overlay";
+	var SAFE_SELECTOR = "#corner-banner, #harmony-tools, .party-bar, #modal, .pixel-pet, .evil-cursor, .useless-btn, .useless-bubble, #emoji-overlay";
 
 	function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
 	function rand(a, b) { return a + Math.random() * (b - a); }
