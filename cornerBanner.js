@@ -20,9 +20,9 @@
 	// ── Your short message + reply box — edit text / placeholder / buttonLabel ──
 	var CORNER_PROMPT = {
 		enabled: true,
-		text: "Keep Smiling!",
-		placeholder: "I'm here for you...",
-		buttonLabel: "Noob is Here"
+		text: "It will work now.",
+		placeholder: "Type your reply here...",
+		buttonLabel: "Send"
 	};
 
 	var index = 0;
