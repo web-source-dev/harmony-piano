@@ -12,7 +12,9 @@
 	var SHOW_MESSAGES = false;
 
 	// ── Optional scrollable notes (only when SHOW_MESSAGES is true) ──
-	var CORNER_BANNER_MESSAGES = [];
+	var CORNER_BANNER_MESSAGES = [
+		"ahhh Sorry , i gone afk for 5 mins and you came there #_#. and this msg box and btn was'nt working before not it will work. If you come again and you dont find me here then msg here and i will try my best to come back.",
+	];
 
 	// ── Your short message + reply box — edit text / placeholder / buttonLabel ──
 	var CORNER_PROMPT = {
