@@ -13,7 +13,7 @@
 
 	// ── Optional scrollable notes (only when SHOW_MESSAGES is true) ──
 	var CORNER_BANNER_MESSAGES = [
-		"ahhh Sorry , i gone afk for 5 mins and you came there #_#. and this msg box and btn was'nt working before not it will work. If you come again and you dont find me here then msg here and i will try my best to come back.",
+		"ahhh Sorry , i gone afk for 5 mins and you came here #_#. and this msg box and btn was'nt working before now it will work. If you come again and you dont find me here then msg here and i will try my best to come back.",
 		"I know you are busy and i am weird noob. Take care of yourself and your family. and i added this input cuz i know you cant open discord.",
 	];
 
