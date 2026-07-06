@@ -2525,6 +2525,19 @@ Rect.prototype.contains = function(x, y) {
 
 	if(typeof CornerBanner !== "undefined") {
 		CornerBanner.init();
+		var $cornerBanner = $("#corner-banner");
+		$cornerBanner.on("mousedown touchstart pointerdown", function(e) {
+			e.stopPropagation();
+			releaseKeyboard();
+		});
+		$cornerBanner.on("focusin", ".corner-banner-input", function() { releaseKeyboard(); });
+		$cornerBanner.on("focusout", function(e) {
+			setTimeout(function() {
+				if($(e.relatedTarget).closest("#corner-banner").length) return;
+				if(isTypingTarget()) return;
+				if(!gModal && !$("#chat").hasClass("chatting")) captureKeyboard();
+			}, 0);
+		});
 	}
 
 
@@ -3379,6 +3392,7 @@ Rect.prototype.contains = function(x, y) {
 			if($(evt.target).closest("#midi-transport").length) return;
 			if($(evt.target).closest("#room-media-transport").length) return;
 			if($(evt.target).closest("#harmony-tools").length) return;
+			if($(evt.target).closest("#corner-banner").length) return;
 			if($(evt.target).closest("#chat-input-bar").length) return;
 			if(!$("#chat").has(evt.target).length && !$("#chat-input-bar").has(evt.target).length) {
 				chat.blur();
@@ -3393,6 +3407,7 @@ Rect.prototype.contains = function(x, y) {
 				if($(touch.target).closest("#midi-transport").length) continue;
 				if($(touch.target).closest("#room-media-transport").length) continue;
 				if($(touch.target).closest("#harmony-tools").length) continue;
+				if($(touch.target).closest("#corner-banner").length) continue;
 				if($(touch.target).closest("#hacks-dock").length) continue;
 				if(!$("#chat").has(touch.target).length && !$("#chat-input-bar").has(touch.target).length) {
 					chat.blur();

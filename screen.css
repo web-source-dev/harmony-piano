@@ -2078,11 +2078,9 @@ html:not(.dontshow) .harmony-tools-bar {
 		right: 8px;
 		max-width: calc(100vw - 16px);
 	}
-	html:not(.dontshow) body.corner-banner-open .harmony-tools {
-		top: calc(48px + var(--corner-banner-h, 0px));
-	}
+	html:not(.dontshow) body.corner-banner-open .harmony-tools,
 	html.dontshow body.corner-banner-open .harmony-tools {
-		top: calc(8px + var(--corner-banner-h, 0px));
+		top: var(--corner-banner-stack, 0px);
 	}
 	.harmony-tools-bar { padding: 5px 6px; gap: 4px; }
 	.harmony-tool-btn { padding: 4px 8px; font-size: 11px; }
@@ -2090,12 +2088,10 @@ html:not(.dontshow) .harmony-tools-bar {
 	.blob-canvas { height: 200px; min-height: 180px; }
 	.doodler-canvas { height: 220px; min-height: 180px; }
 }
-/* Stack Play tools below the corner note box instead of overlapping it */
-html:not(.dontshow) body.corner-banner-open .harmony-tools {
-	top: calc(48px + var(--corner-banner-h, 0px));
-}
+/* Stack Play tools 5px below the corner note box (offset set in cornerBanner.js) */
+html:not(.dontshow) body.corner-banner-open .harmony-tools,
 html.dontshow body.corner-banner-open .harmony-tools {
-	top: calc(10px + var(--corner-banner-h, 0px));
+	top: var(--corner-banner-stack, 0px);
 }
 body.corner-banner-open .harmony-tools {
 	right: 0;
@@ -2342,7 +2338,7 @@ body.learn-panel-open #social {
 	position: fixed;
 	top: 10px;
 	right: 10px;
-	z-index: 99998;
+	z-index: 100016;
 	width: min(92vw, 400px);
 	max-width: 400px;
 	pointer-events: none;
@@ -2358,7 +2354,7 @@ body.learn-panel-open #social {
 	box-shadow:
 		0 8px 32px rgba(0, 0, 0, 0.45),
 		0 0 0 1px rgba(255, 255, 255, 0.04) inset;
-	overflow: hidden;
+	overflow: visible;
 }
 .corner-banner-head {
 	display: flex;
@@ -2473,6 +2469,7 @@ body.learn-panel-open #social {
 	flex-direction: column;
 	gap: 8px;
 	align-items: stretch;
+	pointer-events: auto;
 }
 .corner-banner-input {
 	width: 100%;
@@ -2487,6 +2484,10 @@ body.learn-panel-open #social {
 	border: 1px solid var(--dj-border, #2a2a2a);
 	border-radius: 8px;
 	resize: vertical;
+	pointer-events: auto;
+	user-select: text;
+	-webkit-user-select: text;
+	touch-action: auto;
 }
 .corner-banner-input:focus {
 	outline: none;
@@ -2509,6 +2510,8 @@ body.learn-panel-open #social {
 	border: none;
 	border-radius: 8px;
 	cursor: pointer;
+	pointer-events: auto;
+	touch-action: manipulation;
 	transition: background 0.15s ease, transform 0.1s ease;
 }
 .corner-banner-submit:hover {

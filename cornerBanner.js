@@ -61,11 +61,15 @@
 		var visible = SHOW_UI && !$root.is("[hidden]");
 		if (visible) {
 			body.classList.add("corner-banner-open");
-			var h = $root[0].getBoundingClientRect().height;
-			document.documentElement.style.setProperty("--corner-banner-h", Math.ceil(h + 10) + "px");
+			var rect = $root[0].getBoundingClientRect();
+			var h = Math.ceil(rect.height);
+			var stack = Math.ceil(rect.top + rect.height + 5);
+			document.documentElement.style.setProperty("--corner-banner-h", h + "px");
+			document.documentElement.style.setProperty("--corner-banner-stack", stack + "px");
 		} else {
 			body.classList.remove("corner-banner-open");
 			document.documentElement.style.removeProperty("--corner-banner-h");
+			document.documentElement.style.removeProperty("--corner-banner-stack");
 		}
 	}
 
@@ -242,7 +246,13 @@
 			$input.on("keydown", function (e) {
 				e.stopPropagation();
 			});
-			$input.on("mousedown touchstart", function (e) {
+			$input.on("mousedown touchstart pointerdown", function (e) {
+				e.stopPropagation();
+			});
+			$submit.on("mousedown touchstart pointerdown", function (e) {
+				e.stopPropagation();
+			});
+			$root.on("mousedown touchstart pointerdown", ".corner-banner-form, .corner-banner-submit", function (e) {
 				e.stopPropagation();
 			});
 
