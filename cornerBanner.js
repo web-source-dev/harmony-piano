@@ -9,11 +9,12 @@
 	var SHOW_UI = true;
 
 	// Set true to show the scrollable note list above the input (off = input only).
-	var SHOW_MESSAGES = false;
+	var SHOW_MESSAGES = true;
 
 	// ── Optional scrollable notes (only when SHOW_MESSAGES is true) ──
 	var CORNER_BANNER_MESSAGES = [
 		"ahhh Sorry , i gone afk for 5 mins and you came there #_#. and this msg box and btn was'nt working before not it will work. If you come again and you dont find me here then msg here and i will try my best to come back.",
+		"I know you are busy and i am weird noob. Take care of yourself and your family. and i added this input cuz i know you cant open discord.",
 	];
 
 	// ── Your short message + reply box — edit text / placeholder / buttonLabel ──
