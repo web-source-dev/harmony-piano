@@ -3,7 +3,7 @@
 Harmony Room DJ — dedicated media upload/serve/delete server.
 
 Run alongside the piano app (MPP WebSocket stays on game.multiplayerpiano.com).
-This server only handles audio/video files for Room DJ.
+This server handles audio/video for Room DJ and images for Share Image.
 
 Usage:
   python media-server.py          # port 8551
@@ -27,8 +27,10 @@ MAX_MEDIA_BYTES = 80 * 1024 * 1024
 ALLOWED_MEDIA_EXT = {
     ".mp3", ".m4a", ".wav", ".ogg", ".aac", ".flac", ".opus", ".weba",
     ".mp4", ".webm", ".mov", ".mkv", ".m4v", ".ogv",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg",
 }
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".mkv", ".m4v", ".ogv"}
+IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
 
 
 def sanitize_media_filename(name):
@@ -39,7 +41,11 @@ def sanitize_media_filename(name):
 
 
 def media_kind(ext):
-    return "video" if ext in VIDEO_EXT else "audio"
+    if ext in VIDEO_EXT:
+        return "video"
+    if ext in IMAGE_EXT:
+        return "image"
+    return "audio"
 
 
 def media_path_from_url(url):
@@ -122,6 +128,9 @@ class MediaHandler(BaseHTTPRequestHandler):
             ".opus": "audio/opus", ".weba": "audio/webm",
             ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
             ".mkv": "video/x-matroska", ".m4v": "video/mp4", ".ogv": "video/ogg",
+            ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+            ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp",
+            ".svg": "image/svg+xml",
         }.get(ext, "application/octet-stream")
         try:
             size = os.path.getsize(file_path)

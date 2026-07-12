@@ -3344,6 +3344,10 @@ Rect.prototype.contains = function(x, y) {
 			ScreenShare.tryHandleChat(msg);
 			return true;
 		}
+		if(typeof ShareImage !== "undefined" && ShareImage.isSyncText(chatLine)) {
+			if(typeof gShareImage !== "undefined" && gShareImage) gShareImage.tryHandleChat(msg);
+			return true;
+		}
 		return false;
 	}
 
@@ -3504,6 +3508,7 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof TugOfWar !== "undefined" && TugOfWar.isSyncText(chatLine)) return;
 				if(typeof NameColor !== "undefined" && NameColor.isSyncText(chatLine)) return;
 				if(typeof ScreenShare !== "undefined" && ScreenShare.isSyncText(chatLine)) return;
+				if(typeof ShareImage !== "undefined" && ShareImage.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
 
@@ -4395,6 +4400,7 @@ Rect.prototype.contains = function(x, y) {
 	var gDesktopDoodler;
 	var gEmojiParty;
 	var gSoundBoard;
+	var gShareImage;
 	var gPartyGame;
 	var gBalloonPop;
 	var gCarDodge;
@@ -4511,6 +4517,16 @@ Rect.prototype.contains = function(x, y) {
 	}
 	if(typeof SoundBoard !== "undefined") {
 		gSoundBoard = new SoundBoard({ client: gClient });
+	}
+	if(typeof ShareImage !== "undefined") {
+		gShareImage = new ShareImage({
+			client: gClient,
+			onStatus: function(msg) {
+				var el = document.querySelector("#share-image .share-image-status");
+				if(el) el.textContent = msg || "Ready";
+			}
+		});
+		window.gShareImage = gShareImage;
 	}
 	if(typeof PartyGame !== "undefined") {
 		gPartyGame = new PartyGame({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
@@ -5293,6 +5309,129 @@ Rect.prototype.contains = function(x, y) {
 				openModal("#room-media");
 			});
 		}
+
+		var shareImageBtn = document.getElementById("share-image-btn");
+		if(shareImageBtn) {
+			shareImageBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				openModal("#share-image", "input[name=imageurl]");
+			});
+		}
+
+		function setShareImageStatus(msg) {
+			var el = document.querySelector("#share-image .share-image-status");
+			if(el) el.textContent = msg || "Ready";
+		}
+
+		function resetShareImageForm() {
+			var $dlg = $("#share-image");
+			$dlg.find("input[name=imageurl]").val("");
+			var fileInput = $dlg.find("input[name=imagefile]")[0];
+			if(fileInput) fileInput.value = "";
+			$dlg.find(".room-media-drop-name").text("");
+			$dlg.find(".room-media-drop-text").text("Click or drop an image");
+			setShareImageStatus("Ready");
+		}
+
+		function shareImageSelection() {
+			if(!gShareImage) return Promise.reject(new Error("Share Image unavailable"));
+			if(!gClient || !gClient.isConnected()) {
+				return Promise.reject(new Error("Connect to a room first"));
+			}
+			var $dlg = $("#share-image");
+			var fileInput = $dlg.find("input[name=imagefile]")[0];
+			var file = fileInput && fileInput.files && fileInput.files[0];
+			var url = ($dlg.find("input[name=imageurl]").val() || "").trim();
+			if(file) {
+				setShareImageStatus("Uploading…");
+				return gShareImage.shareFile(file).then(function(info) {
+					resetShareImageForm();
+					closeModal();
+					return info;
+				});
+			}
+			if(url) {
+				setShareImageStatus("Sharing…");
+				gShareImage.share(url);
+				resetShareImageForm();
+				closeModal();
+				return Promise.resolve({ url: url });
+			}
+			return Promise.reject(new Error("Paste an image URL or choose a file"));
+		}
+
+		$("#share-image").on("click", ".share-image-ok", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			shareImageSelection().catch(function(err) {
+				setShareImageStatus(err.message || String(err));
+				alert(err.message || String(err));
+			});
+		});
+		$("#share-image").on("click", ".share-image-clear", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			if(gShareImage) {
+				gShareImage.clearRoom();
+				closeModal();
+			}
+		});
+		$("#share-image").on("change", "input[name=imagefile]", function() {
+			var f = this.files && this.files[0];
+			var $dlg = $("#share-image");
+			if(f) {
+				$dlg.find("input[name=imageurl]").val("");
+				$dlg.find(".room-media-drop-name").text(f.name);
+				$dlg.find(".room-media-drop-text").text("Selected file");
+				setShareImageStatus("Ready to share");
+			}
+		});
+		$("#share-image").on("input", "input[name=imageurl]", function() {
+			if((this.value || "").trim()) {
+				var fileInput = $("#share-image input[name=imagefile]")[0];
+				if(fileInput) fileInput.value = "";
+				$("#share-image .room-media-drop-name").text("");
+				$("#share-image .room-media-drop-text").text("Click or drop an image");
+			}
+		});
+		$("#share-image").on("click", ".dj-btn", function(e) { e.stopPropagation(); });
+		$("#share-image").on("keydown", "input[name=imageurl]", function(e) {
+			if(e.key === "Enter" || e.keyCode === 13) {
+				e.preventDefault();
+				$("#share-image .share-image-ok").trigger("click");
+			}
+		});
+		(function() {
+			var drop = document.querySelector("#share-image .room-media-drop");
+			if(!drop) return;
+			drop.addEventListener("dragover", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				drop.classList.add("si-drop-hover");
+			});
+			drop.addEventListener("dragleave", function() {
+				drop.classList.remove("si-drop-hover");
+			});
+			drop.addEventListener("drop", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				drop.classList.remove("si-drop-hover");
+				var files = e.dataTransfer && e.dataTransfer.files;
+				var file = files && files[0];
+				if(!file) return;
+				var input = drop.querySelector('input[name=imagefile]');
+				if(!input) return;
+				try {
+					var dt = new DataTransfer();
+					dt.items.add(file);
+					input.files = dt.files;
+				} catch (err) {
+					return;
+				}
+				$(input).trigger("change");
+			});
+		})();
 
 		$roomMediaTransport.on("click", ".dj-btn", function(e) { e.stopPropagation(); });
 		$roomMediaTransport.on("click", ".room-media-player-close", function(e) {
@@ -6595,6 +6734,7 @@ Rect.prototype.contains = function(x, y) {
 		soundSelector: gSoundSelector,
 		sheetPlayer: gSheetPlayer,
 		roomMedia: gRoomMedia,
+		shareImage: gShareImage,
 		blobFriend: gBlobFriend,
 		desktopDoodler: gDesktopDoodler,
 		Notification: Notification

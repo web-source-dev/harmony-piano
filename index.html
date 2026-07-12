@@ -5,7 +5,7 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20260618i"/>
+    <link rel="stylesheet" href="./screen.css?v=20260712a"/>
     <link rel="canonical" href="https://multiplayerpiano.com/">
 
     <script>
@@ -269,6 +269,7 @@
         <div id="metronome-btn" class="ugly-button">Metronome</div>
         <div id="hacks-toggle-btn" class="ugly-button">Hacks ▼</div>
         <div id="screen-share-btn" class="ugly-button" title="Share your screen, a window, or a tab&#10;Keyboard shortcuts: F = fullscreen · P = PiP · S = cycle size">⊡ Share</div>
+        <div id="share-image-btn" class="ugly-button" title="Share an image with everyone in the room">Share Image</div>
         <div id="sound-btn" class="ugly-button sound-btn">Sound Select</div>
         <div id="status"></div>
         <div id="volume">
@@ -613,6 +614,37 @@
                 </div>
             </div>
         </div>
+        <div id="share-image" class="dialog room-media-dialog share-image-dialog">
+            <div class="room-media-dialog-inner">
+                <header class="room-media-dialog-header">
+                    <h2 class="room-media-dialog-title">Share Image</h2>
+                    <p class="room-media-dialog-sub">Paste a link or pick a file — everyone in the room sees it.</p>
+                </header>
+                <div class="room-media-dialog-body">
+                    <section class="room-media-section">
+                        <h3 class="room-media-section-title">Image URL</h3>
+                        <input type="text" name="imageurl" class="room-media-url" placeholder="https://example.com/photo.png" maxlength="480"/>
+                        <p class="room-media-hint">Loads from the link — no upload needed.</p>
+                    </section>
+                    <section class="room-media-section">
+                        <h3 class="room-media-section-title">Upload from PC</h3>
+                        <label class="room-media-drop">
+                            <input type="file" name="imagefile" accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.svg"/>
+                            <span class="room-media-drop-text">Click or drop an image</span>
+                            <span class="room-media-drop-name"></span>
+                        </label>
+                        <p class="room-media-hint">Needs the media server running (same as Room DJ).</p>
+                    </section>
+                    <p class="room-media-status share-image-status">Ready</p>
+                    <div class="room-media-actions">
+                        <button type="button" class="dj-btn primary share-image-ok">Share to room</button>
+                        <div class="room-media-actions-row">
+                            <button type="button" class="dj-btn share-image-clear subtle">Clear room image</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div id="room-media" class="dialog room-media-dialog">
             <div class="room-media-dialog-inner">
                 <header class="room-media-dialog-header">
@@ -813,8 +845,9 @@
 <script src="./cornerBanner.js"></script>
 <script src="./funVideoPopup.js"></script>
 <script src="./screenShare.js"></script>
+<script src="./shareImage.js?v=20260712a"></script>
 <!--<script src="/ebsprite.js"></script>-->
-<script src="./script.js?v=20260618i"></script>
+<script src="./script.js?v=20260712a"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->
 </body>
 </html>
