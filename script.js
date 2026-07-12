@@ -4672,6 +4672,55 @@ Rect.prototype.contains = function(x, y) {
 		}
 	}
 
+	function funDrainQuotaBar() {
+		if(!gNoteQuota) return 0;
+		var pts = Math.floor(gNoteQuota.points) || 0;
+		if(pts > 0) gNoteQuota.spend(pts);
+		return pts;
+	}
+
+	function funFillQuotaBar() {
+		if(!gNoteQuota) return;
+		gNoteQuota.resetPoints();
+	}
+
+	/** Press every key `times` rounds; each round hits all keys nearly together. */
+	function funSpamAllKeysTimes(times, roundGapMs) {
+		funPrep();
+		times = Math.max(1, Math.min(200, times | 0));
+		roundGapMs = Math.max(8, roundGapMs || 40);
+		var keys = pianoKeyList();
+		for(var r = 0; r < times; r++) {
+			(function(round) {
+				gFunTimers.push(setTimeout(function() {
+					for(var i = 0; i < keys.length; i++) {
+						press(keys[i], 0.9, true);
+					}
+					gFunTimers.push(setTimeout(function() {
+						for(var j = 0; j < keys.length; j++) release(keys[j], true);
+					}, Math.min(28, roundGapMs - 2)));
+				}, round * roundGapMs));
+			})(r);
+		}
+	}
+
+	/** Fire `count` notes as fast as possible (quota dump / machine gun). */
+	function funSpamNoteCount(count, gapMs) {
+		funPrep();
+		count = Math.max(1, Math.min(5000, count | 0));
+		gapMs = Math.max(1, gapMs || 4);
+		var keys = pianoKeyList();
+		if(!keys.length) return;
+		for(var i = 0; i < count; i++) {
+			funNoteAt(keys[i % keys.length], i * gapMs, 28, 0.85 + (i % 3) * 0.05);
+		}
+	}
+
+	function funPlayChordNamed(notes, hold, vol) {
+		funPrep();
+		funChord(notes, 0, hold || 700, vol || 0.8);
+	}
+
 	function funPrep() {
 		funStopAll();
 		ensureAudioReady();
@@ -6288,14 +6337,163 @@ Rect.prototype.contains = function(x, y) {
 		});
 		$hacksPanel.on("click", "#fun-g-major", function(e) {
 			e.preventDefault();
-			funPrep();
-			funChord(["g4", "b4", "d5"], 0, 700, 0.8);
+			funPlayChordNamed(["g4", "b4", "d5"], 700, 0.8);
 		});
 		$hacksPanel.on("click", "#fun-a-minor", function(e) {
 			e.preventDefault();
-			funPrep();
-			funChord(["a4", "c5", "e5"], 0, 700, 0.75);
+			funPlayChordNamed(["a4", "c5", "e5"], 700, 0.75);
 		});
+		$hacksPanel.on("click", "#fun-d-major", function(e) {
+			e.preventDefault();
+			funPlayChordNamed(["d4", "fs4", "a4"], 700, 0.8);
+		});
+		$hacksPanel.on("click", "#fun-e-major", function(e) {
+			e.preventDefault();
+			funPlayChordNamed(["e4", "gs4", "b4"], 700, 0.8);
+		});
+		$hacksPanel.on("click", "#fun-f-major", function(e) {
+			e.preventDefault();
+			funPlayChordNamed(["f4", "a4", "c5"], 700, 0.8);
+		});
+		$hacksPanel.on("click", "#fun-bb-major", function(e) {
+			e.preventDefault();
+			funPlayChordNamed(["as3", "d4", "f4"], 700, 0.8);
+		});
+		$hacksPanel.on("click", "#fun-d-minor", function(e) {
+			e.preventDefault();
+			funPlayChordNamed(["d4", "f4", "a4"], 700, 0.75);
+		});
+		$hacksPanel.on("click", "#fun-e-minor", function(e) {
+			e.preventDefault();
+			funPlayChordNamed(["e4", "g4", "b4"], 700, 0.75);
+		});
+		$hacksPanel.on("click", "#fun-c7", function(e) {
+			e.preventDefault();
+			funPlayChordNamed(["c4", "e4", "g4", "as4"], 750, 0.8);
+		});
+		$hacksPanel.on("click", "#fun-g7", function(e) {
+			e.preventDefault();
+			funPlayChordNamed(["g3", "b3", "d4", "f4"], 750, 0.8);
+		});
+		$hacksPanel.on("click", "#fun-f-sharp-min", function(e) {
+			e.preventDefault();
+			funPlayChordNamed(["fs4", "a4", "cs5"], 700, 0.75);
+		});
+		$hacksPanel.on("click", "#fun-power-c", function(e) {
+			e.preventDefault();
+			funPlayChordNamed(["c3", "g3", "c4", "g4", "c5"], 900, 1);
+		});
+		$hacksPanel.on("click", "#fun-full-c", function(e) {
+			e.preventDefault();
+			funPlayChordNamed(["c2", "c3", "e3", "g3", "c4", "e4", "g4", "c5", "e5", "g5"], 1000, 0.95);
+		});
+
+		// ---- spam / nuke -------------------------------------------------
+		$hacksPanel.on("click", "#fun-all-x10", function(e) {
+			e.preventDefault();
+			funSpamAllKeysTimes(10, 45);
+		});
+		$hacksPanel.on("click", "#fun-all-x50", function(e) {
+			e.preventDefault();
+			funSpamAllKeysTimes(50, 30);
+		});
+		$hacksPanel.on("click", "#fun-all-x100", function(e) {
+			e.preventDefault();
+			funSpamAllKeysTimes(100, 22);
+		});
+		$hacksPanel.on("click", "#fun-slam-100", function(e) {
+			e.preventDefault();
+			funSpamAllKeysTimes(100, 18);
+		});
+		$hacksPanel.on("click", "#fun-fill-bar", function(e) {
+			e.preventDefault();
+			funFillQuotaBar();
+		});
+		$hacksPanel.on("click", "#fun-drain-bar", function(e) {
+			e.preventDefault();
+			funDrainQuotaBar();
+		});
+		$hacksPanel.on("click", "#fun-quota-dump", function(e) {
+			e.preventDefault();
+			var pts = funDrainQuotaBar();
+			var n = Math.max(pts, gNoteQuota ? gNoteQuota.max : 600);
+			funSpamNoteCount(n, 3);
+		});
+		$hacksPanel.on("click", "#fun-machine-gun", function(e) {
+			e.preventDefault();
+			var pts = Math.floor((gNoteQuota && gNoteQuota.points) || 400);
+			funDrainQuotaBar();
+			funSpamNoteCount(Math.max(pts, 400), 5);
+		});
+		$hacksPanel.on("click", "#fun-wall-of-sound", function(e) {
+			e.preventDefault();
+			funPrep();
+			pressAllKeysHack();
+			funDrainQuotaBar();
+		});
+		$hacksPanel.on("click", "#fun-octave-slam", function(e) {
+			e.preventDefault();
+			funPrep();
+			var roots = ["c", "d", "e", "f", "g", "a", "b"];
+			var t = 0;
+			for(var r = 0; r < 8; r++) {
+				for(var i = 0; i < roots.length; i++) {
+					var ch = [];
+					for(var o = 2; o <= 6; o++) {
+						var id = roots[i] + o;
+						if(gPiano.keys[id]) ch.push(id);
+					}
+					funChord(ch, t, 90, 0.9);
+					t += 70;
+				}
+			}
+		});
+		$hacksPanel.on("click", "#fun-cluster-bomb", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList().sort();
+			var t = 0;
+			for(var i = 0; i < keys.length; i += 3) {
+				var chunk = keys.slice(i, i + 6);
+				funChord(chunk, t, 120, 0.85);
+				t += 55;
+			}
+		});
+		$hacksPanel.on("click", "#fun-hold-all", function(e) {
+			e.preventDefault();
+			funStopAll();
+			ensureAudioReady();
+			pressAllKeysHack();
+			funDrainQuotaBar();
+		});
+		$hacksPanel.on("click", "#fun-burst-chords", function(e) {
+			e.preventDefault();
+			funPrep();
+			var storm = [
+				["c3", "e3", "g3", "c4", "e4", "g4"],
+				["f3", "a3", "c4", "f4", "a4", "c5"],
+				["g3", "b3", "d4", "g4", "b4", "d5"],
+				["a3", "c4", "e4", "a4", "c5", "e5"],
+				["d3", "fs3", "a3", "d4", "fs4", "a4"],
+				["e3", "gs3", "b3", "e4", "gs4", "b4"],
+				["as2", "d3", "f3", "as3", "d4", "f4"],
+				["c2", "c3", "c4", "c5", "c6"]
+			];
+			for(var i = 0; i < storm.length; i++) {
+				for(var rep = 0; rep < 4; rep++) {
+					funChord(storm[i], (i * 4 + rep) * 90, 80, 0.95);
+				}
+			}
+		});
+		$hacksPanel.on("click", "#fun-max-spam", function(e) {
+			e.preventDefault();
+			funFillQuotaBar();
+			var max = (gNoteQuota && gNoteQuota.max) || 1200;
+			funDrainQuotaBar();
+			funSpamAllKeysTimes(40, 20);
+			funSpamNoteCount(max, 2);
+		});
+
 		$hacksPanel.on("click", "#fun-bounce", function(e) {
 			e.preventDefault();
 			funPrep();

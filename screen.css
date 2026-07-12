@@ -117,7 +117,7 @@ table { border: 0; padding: 0; margin: 0; }
 	--hacks-h: 0px;
 	--ui-stack-h: calc(var(--bottom-ui-h) + var(--hacks-h));
 }
-body.hacks-open { --hacks-h: 268px; }
+body.hacks-open { --hacks-h: 320px; }
 
 #bottom {
 	position: fixed;
@@ -377,7 +377,7 @@ body.hacks-open #hacks-dock {
 	border-radius: 10px 10px 0 0;
 	box-shadow: 0 -4px 18px rgba(0, 0, 0, 0.28);
 	overflow: hidden;
-	max-height: min(52vh, 300px);
+	max-height: min(62vh, 380px);
 	display: flex;
 	flex-direction: column;
 }
