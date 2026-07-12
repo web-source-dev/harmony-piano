@@ -3362,7 +3362,7 @@ Rect.prototype.contains = function(x, y) {
 			chat.clear();
 			if(msg.c) {
 				for(var i = 0; i < msg.c.length; i++) {
-					chat.receive(msg.c[i]);
+					chat.receive(msg.c[i], true);
 				}
 			}
 		});
@@ -3489,7 +3489,7 @@ Rect.prototype.contains = function(x, y) {
 				gClient.sendArray([{m:"a", message: message}]);
 			},
 
-			receive: function(msg) {
+			receive: function(msg, fromHistory) {
 				if(gChatMutes.indexOf(msg.p._id) != -1) return;
 				var chatLine = msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
 				if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) return;
@@ -3510,7 +3510,7 @@ Rect.prototype.contains = function(x, y) {
 				var li = $('<li><span class="name"/><span class="message"/>');
 
 				li.find(".name").text(msg.p.name + ":");
-				li.find(".message").text(msg.a);
+				li.find(".message").text(chatLine);
 				var chatColor = (typeof gNameColor !== "undefined" && gNameColor)
 					? gNameColor.colorFor(msg.p) : (msg.p.color || "white");
 				li.css("color", chatColor || "white");
@@ -3518,7 +3518,10 @@ Rect.prototype.contains = function(x, y) {
 				$("#chat ul").append(li);
 
 				if(typeof ChatLogger !== "undefined") {
-					ChatLogger.logMessage(msg.p.name, msg.a);
+					ChatLogger.logMessage(msg.p.name, chatLine, {
+						fromHistory: !!fromHistory,
+						participantId: msg.p && (msg.p._id != null ? msg.p._id : msg.p.id)
+					});
 				}
 
 				var eles = $("#chat ul li").get();

@@ -10,6 +10,8 @@
 	var PROBE_INTERVAL_MS = 60000;
 	var BACKOFF_MS = 120000;
 	var MAX_FAILS = 3;
+	var SEEN_MAX = 3000;
+	var SEEN_KEY_PREFIX = "harmony_chatlog_seen:";
 
 	// ── Edit your Harmony mirror host(s) here ──
 	var HARMONY_MIRROR_HOSTS = [
@@ -31,8 +33,62 @@
 		draining: false,
 		failCount: 0,
 		pausedUntil: 0,
-		probeTimer: null
+		probeTimer: null,
+		liveRooms: {}
 	};
+
+	function messageFingerprint(room, participantId, userName, messageText) {
+		return (room || "") + "\x1e" + (participantId || userName || "?") + "\x1e" + (messageText || "");
+	}
+
+	function seenStorageKey(room) {
+		return SEEN_KEY_PREFIX + sanitizeRoom(room) + "_" + todayKey();
+	}
+
+	function loadSeenFingerprints(room) {
+		try {
+			var raw = global.sessionStorage && sessionStorage.getItem(seenStorageKey(room));
+			if (!raw) return {};
+			var arr = JSON.parse(raw);
+			if (!Array.isArray(arr)) return {};
+			var set = {};
+			for (var i = 0; i < arr.length; i++) set[arr[i]] = true;
+			return set;
+		} catch (e) {
+			return {};
+		}
+	}
+
+	function markFingerprintSeen(room, fp) {
+		if (!fp || !room) return;
+		try {
+			if (!global.sessionStorage) return;
+			var set = loadSeenFingerprints(room);
+			set[fp] = true;
+			var keys = Object.keys(set);
+			if (keys.length > SEEN_MAX) {
+				keys = keys.slice(keys.length - SEEN_MAX);
+				var trimmed = {};
+				for (var i = 0; i < keys.length; i++) trimmed[keys[i]] = true;
+				set = trimmed;
+			}
+			sessionStorage.setItem(seenStorageKey(room), JSON.stringify(Object.keys(set)));
+		} catch (e) {}
+	}
+
+	function isFingerprintSeen(room, fp) {
+		if (!fp || !room) return false;
+		var set = loadSeenFingerprints(room);
+		return !!set[fp];
+	}
+
+	function markRoomLive(room) {
+		if (room) state.liveRooms[room] = true;
+	}
+
+	function roomHasLiveChat(room) {
+		return !!(room && state.liveRooms[room]);
+	}
 
 	function todayKey() {
 		var d = new Date();
@@ -300,17 +356,28 @@
 			state.room = roomName;
 			state.dateKey = todayKey();
 			if (changed) {
-				writeJoinLine(
-					"\n--- room \"" + roomName + "\" log started at " + timeStamp() +
-					joinDomainSuffix() + " ---\n"
-				);
+				var hdrKey = "harmony_chatlog_roomhdr:" + sanitizeRoom(roomName) + "_" + todayKey();
+				var alreadyStarted = false;
+				try {
+					alreadyStarted = !!(global.sessionStorage && sessionStorage.getItem(hdrKey));
+				} catch (e) {}
+				if (!alreadyStarted) {
+					writeJoinLine(
+						"\n--- room \"" + roomName + "\" log started at " + timeStamp() +
+						joinDomainSuffix() + " ---\n"
+					);
+					try {
+						if (global.sessionStorage) sessionStorage.setItem(hdrKey, "1");
+					} catch (e) {}
+				}
 			}
 		},
 
 		getSiteOrigin: getSiteOrigin,
 
-		logMessage: function (userName, messageText) {
+		logMessage: function (userName, messageText, opts) {
 			if (!state.enabled || !messageText) return;
+			opts = opts || {};
 			if (state.dateKey && state.dateKey !== todayKey()) {
 				state.dateKey = todayKey();
 			}
@@ -318,18 +385,44 @@
 				var ch = global.MPP && global.MPP.client && global.MPP.client.channel;
 				if (ch) this.setRoom(ch._id);
 			}
+			if (!state.room) return;
+
+			var fromHistory = !!opts.fromHistory;
+			if (fromHistory && !roomHasLiveChat(state.room)) {
+				return;
+			}
+			if (!fromHistory) {
+				markRoomLive(state.room);
+			}
+
+			var fp = messageFingerprint(
+				state.room,
+				opts.participantId,
+				userName,
+				messageText
+			);
+			if (isFingerprintSeen(state.room, fp)) return;
+			markFingerprintSeen(state.room, fp);
+
 			writeChatLine("[" + timeStamp() + "] " + (userName || "?") + ": " + messageText + "\n");
 		},
 
 		logJoin: function (userName) {
 			if (!state.enabled) return;
 			ensureRoomSilent();
+			var joinKey = "harmony_chatlog_selfjoin:" + sanitizeRoom(state.room) + "_" + todayKey() + ":" + (userName || "?");
+			try {
+				if (global.sessionStorage && sessionStorage.getItem(joinKey)) return;
+			} catch (e) {}
 			var site = getSiteOrigin();
 			var prefix = site.isHarmony ? "*** HARMONY *** " : "";
 			writeJoinLine(
 				"[" + timeStamp() + "] " + prefix + (userName || "?") +
 				" joined" + joinDomainSuffix() + "\n"
 			);
+			try {
+				if (global.sessionStorage) sessionStorage.setItem(joinKey, "1");
+			} catch (e) {}
 		},
 
 		logRename: function (oldName, newName) {
