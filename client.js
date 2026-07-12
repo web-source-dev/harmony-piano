@@ -251,16 +251,16 @@ Client.prototype.sendArray = function(arr) {
 	this.send(JSON.stringify(arr));
 };
 
-// Broadcast a room-sync payload to everyone in the channel. Prefers the
-// dedicated relay (real-time, no rate limiting); falls back to the chat
-// transport when the relay is unavailable so the feature still works on plain
-// static hosting. Senders apply their own effect locally before calling this.
+// Broadcast a room-sync payload to everyone in the channel via the Harmony
+// relay only. Never falls back to MPP chat — those messages (BF|, RM|, SI|, …)
+// are machine sync and would show up as spam for vanilla multiplayerpiano.com
+// users who don't filter them. Features simply pause sync until the relay is up.
 Client.prototype.broadcastRoom = function(text) {
-	if(typeof text !== "string") return;
+	if(typeof text !== "string") return false;
 	if(this.roomSync && this.roomSync.isConnected() && this.roomSync.broadcast(text)) {
-		return;
+		return true;
 	}
-	this.sendArray([{m: "a", message: text}]);
+	return false;
 };
 
 Client.prototype.setChannel = function(id, set) {

@@ -83,8 +83,7 @@
 	};
 	TugOfWar.prototype._canBroadcast = function () {
 		if (!this.client) return false;
-		if (this.client.roomSync && this.client.roomSync.isConnected()) return true;
-		return !!this.client.isConnected();
+		return !!(this.client.roomSync && this.client.roomSync.isConnected());
 	};
 
 	// ---- networking ------------------------------------------------------

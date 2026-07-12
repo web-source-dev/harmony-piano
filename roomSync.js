@@ -4,8 +4,8 @@
  * Provides reliable, rate-limit-free real-time broadcast between everyone in the
  * same channel for the custom "fun" features. Auto-reconnects, mirrors the
  * channel the MPP client is in, and degrades gracefully: when the relay can't be
- * reached, Client.broadcastRoom() falls back to the old chat transport so the
- * app still works on plain static hosting with no relay.
+ * reached, Client.broadcastRoom() pauses sync (it does NOT fall back to MPP
+ * chat, which would spam vanilla multiplayerpiano.com users with BF|/RM|/…).
  */
 (function (global) {
 	"use strict";
@@ -82,7 +82,7 @@
 		sock.addEventListener("close", function () {
 			clearInterval(self.pingTimer);
 			if (self.ws === sock) self.ws = null;
-			try { console.warn("[RoomSync] relay disconnected — using chat fallback until it returns:", self.uri); } catch (e) {}
+			try { console.warn("[RoomSync] relay disconnected — feature sync paused until it returns:", self.uri); } catch (e) {}
 			self._scheduleReconnect();
 		});
 

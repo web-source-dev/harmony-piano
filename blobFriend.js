@@ -197,8 +197,8 @@
 	// or its participant list.
 	BlobFriend.prototype._canBroadcast = function () {
 		if (!this.client) return false;
-		if (this.client.roomSync && this.client.roomSync.isConnected()) return true;
-		return !!this.client.isConnected();
+		// Relay only — never treat MPP chat as a sync transport (spams vanilla clients).
+		return !!(this.client.roomSync && this.client.roomSync.isConnected());
 	};
 
 	BlobFriend.prototype.sendSync = function (payload) {
@@ -589,7 +589,7 @@
 	// glance whether real-time sync is actually live.
 	BlobFriend.prototype._syncStatus = function (now) {
 		var relay = this.client && this.client.roomSync && this.client.roomSync.isConnected();
-		if (!relay) return this._canBroadcast() ? "sync: chat-only" : "sync: offline";
+		if (!relay) return "sync: offline";
 		var p = this._peerCount(now);
 		return p > 0 ? ("synced · " + p + (p === 1 ? " other" : " others")) : "synced · waiting…";
 	};

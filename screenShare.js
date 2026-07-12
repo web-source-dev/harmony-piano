@@ -72,16 +72,10 @@
     function _sig(obj) {
         try {
             var txt = SYNC_PREFIX + JSON.stringify(obj);
-            // Try relay first — custom server, no MPP dependency, no size limit
-            var sentViaRelay = false;
+            // Relay only — never dump SDP/signaling into public MPP chat.
             if (typeof gRoomSync !== 'undefined' && gRoomSync &&
                     typeof gRoomSync.broadcast === 'function') {
-                sentViaRelay = gRoomSync.broadcast(txt);
-            }
-            // Fall back to MPP chat when relay is unavailable
-            if (!sentViaRelay &&
-                    typeof gClient !== 'undefined' && gClient && gClient.sendArray) {
-                gClient.sendArray([{ m: 'a', message: txt }]);
+                gRoomSync.broadcast(txt);
             }
         } catch (e) {}
     }
