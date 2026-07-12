@@ -6493,6 +6493,410 @@ Rect.prototype.contains = function(x, y) {
 			funSpamAllKeysTimes(40, 20);
 			funSpamNoteCount(max, 2);
 		});
+		$hacksPanel.on("click", "#fun-all-x25", function(e) {
+			e.preventDefault();
+			funSpamAllKeysTimes(25, 35);
+		});
+		$hacksPanel.on("click", "#fun-all-x200", function(e) {
+			e.preventDefault();
+			funSpamAllKeysTimes(200, 16);
+		});
+		$hacksPanel.on("click", "#fun-slam-50", function(e) {
+			e.preventDefault();
+			funSpamAllKeysTimes(50, 20);
+		});
+		$hacksPanel.on("click", "#fun-double-tap", function(e) {
+			e.preventDefault();
+			funSpamAllKeysTimes(2, 55);
+		});
+		$hacksPanel.on("click", "#fun-triple-roll", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList().sort();
+			var t = 0;
+			for(var r = 0; r < 3; r++) {
+				for(var i = 0; i < keys.length; i++) {
+					funNoteAt(keys[i], t, 40, 0.8);
+					t += 12;
+				}
+			}
+		});
+		$hacksPanel.on("click", "#fun-note-flood", function(e) {
+			e.preventDefault();
+			funDrainQuotaBar();
+			funSpamNoteCount(800, 3);
+		});
+		$hacksPanel.on("click", "#fun-bass-nuke", function(e) {
+			e.preventDefault();
+			funPrep();
+			var lows = pianoKeyList().filter(function(k) {
+				var o = parseInt(k.slice(-1), 10);
+				return !isNaN(o) && o <= 3;
+			});
+			if(!lows.length) lows = pianoKeyList().slice(0, 20);
+			for(var i = 0; i < 120; i++) {
+				funNoteAt(lows[i % lows.length], i * 18, 50, 1);
+			}
+		});
+		$hacksPanel.on("click", "#fun-treble-nuke", function(e) {
+			e.preventDefault();
+			funPrep();
+			var highs = pianoKeyList().sort().slice(-24);
+			for(var i = 0; i < 160; i++) {
+				funNoteAt(highs[i % highs.length], i * 14, 35, 0.7);
+			}
+		});
+
+		// ---- random / fun ------------------------------------------------
+		function funPick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+		function funShuffle(arr) {
+			var a = arr.slice();
+			for(var i = a.length - 1; i > 0; i--) {
+				var j = Math.floor(Math.random() * (i + 1));
+				var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+			}
+			return a;
+		}
+		$hacksPanel.on("click", "#fun-lucky", function(e) {
+			e.preventDefault();
+			var ids = [
+				"#fun-rainbow", "#fun-thunder", "#fun-meteor", "#fun-sparkle",
+				"#fun-scale-party", "#fun-blues-jam", "#fun-epic-fanfare",
+				"#fun-burst-chords", "#fun-galaxy",
+				"#fun-ping-pong", "#fun-cluster-bomb", "#fun-octave-slam",
+				"#fun-shuffle-run", "#fun-polyrhythm", "#fun-dice-chord",
+				"#fun-mystery-box", "#fun-slot-machine",
+				"#fun-tidal-wave", "#fun-supernova", "#fun-volcano",
+				"#fun-finale", "#fun-comet-strike", "#fun-black-hole"
+			];
+			var id = funPick(ids);
+			var btn = document.querySelector(id) || document.getElementById(id.slice(1));
+			if(btn) $(btn).trigger("click");
+			else $("#fun-mystery-box").trigger("click");
+		});
+		$hacksPanel.on("click", "#fun-dice-chord", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList();
+			var n = 4 + Math.floor(Math.random() * 6);
+			var ch = [];
+			for(var i = 0; i < n; i++) ch.push(funPick(keys));
+			funChord(ch, 0, 900, 0.9);
+		});
+		$hacksPanel.on("click", "#fun-shuffle-run", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = funShuffle(pianoKeyList());
+			for(var i = 0; i < keys.length; i++) funNoteAt(keys[i], i * 22, 45, 0.75);
+		});
+		$hacksPanel.on("click", "#fun-coin-flip", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList().sort();
+			var half = Math.floor(keys.length / 2);
+			var side = Math.random() < 0.5 ? keys.slice(0, half) : keys.slice(half);
+			for(var i = 0; i < 40; i++) funNoteAt(funPick(side), i * 40, 60, 0.85);
+		});
+		$hacksPanel.on("click", "#fun-slot-machine", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList();
+			var t = 0;
+			for(var spin = 0; spin < 18; spin++) {
+				funNoteAt(funPick(keys), t, 40, 0.5 + spin * 0.02);
+				t += 55 - Math.min(30, spin);
+			}
+			var jackpot = [funPick(keys), funPick(keys), funPick(keys)];
+			funChord(jackpot, t + 80, 700, 1);
+		});
+		$hacksPanel.on("click", "#fun-rainbow", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList().sort();
+			for(var i = 0; i < keys.length; i++) {
+				funNoteAt(keys[i], i * 28, 120, 0.55 + (i / keys.length) * 0.4);
+			}
+		});
+		$hacksPanel.on("click", "#fun-sparkle", function(e) {
+			e.preventDefault();
+			funPrep();
+			var highs = pianoKeyList().sort().slice(-18);
+			for(var i = 0; i < 60; i++) {
+				funNoteAt(funPick(highs), i * 45 + Math.random() * 20, 40, 0.4 + Math.random() * 0.4);
+			}
+		});
+		$hacksPanel.on("click", "#fun-thunder", function(e) {
+			e.preventDefault();
+			funPrep();
+			var lows = pianoKeyList().filter(function(k) {
+				var o = parseInt(k.slice(-1), 10);
+				return !isNaN(o) && o <= 3;
+			});
+			var highs = pianoKeyList().sort().slice(-12);
+			var t = 0;
+			for(var i = 0; i < 8; i++) {
+				funChord(lows.slice(0, 8), t, 200, 1);
+				funNoteAt(funPick(highs), t + 120, 80, 0.9);
+				funNoteAt(funPick(highs), t + 180, 60, 0.7);
+				t += 320;
+			}
+		});
+		$hacksPanel.on("click", "#fun-meteor", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList().sort().reverse();
+			for(var i = 0; i < keys.length; i++) {
+				funNoteAt(keys[i], i * 18, 55, 0.7);
+				if(i % 5 === 0) funNoteAt(funPick(keys), i * 18 + 8, 40, 0.5);
+			}
+		});
+		$hacksPanel.on("click", "#fun-polyrhythm", function(e) {
+			e.preventDefault();
+			funPrep();
+			var a = ["c4", "e4", "g4"];
+			var b = ["c5", "d5", "e5", "g5"];
+			for(var i = 0; i < 24; i++) {
+				funNoteAt(a[i % a.length], i * 110, 80, 0.8);
+				funNoteAt(b[i % b.length], i * 85, 50, 0.55);
+			}
+		});
+		$hacksPanel.on("click", "#fun-scale-party", function(e) {
+			e.preventDefault();
+			funPrep();
+			var scale = ["c4", "d4", "e4", "f4", "g4", "a4", "b4", "c5", "d5", "e5", "f5", "g5"];
+			var t = 0;
+			for(var r = 0; r < 4; r++) {
+				for(var i = 0; i < scale.length; i++) {
+					funNoteAt(scale[i], t, 70, 0.75);
+					t += 55;
+				}
+				for(var j = scale.length - 2; j >= 0; j--) {
+					funNoteAt(scale[j], t, 70, 0.7);
+					t += 50;
+				}
+			}
+		});
+		$hacksPanel.on("click", "#fun-blues-jam", function(e) {
+			e.preventDefault();
+			funPrep();
+			var blues = ["c4", "ds4", "f4", "fs4", "g4", "as4", "c5"];
+			var t = 0;
+			for(var i = 0; i < 32; i++) {
+				funNoteAt(blues[i % blues.length], t, 90, 0.7 + Math.random() * 0.25);
+				if(i % 4 === 0) funChord(["c3", "g3"], t, 150, 0.6);
+				t += 95;
+			}
+		});
+		$hacksPanel.on("click", "#fun-epic-fanfare", function(e) {
+			e.preventDefault();
+			funPrep();
+			var fan = [
+				["c4", "e4", "g4"],
+				["c4", "e4", "g4"],
+				["g4", "b4", "d5"],
+				["c4", "e4", "g4", "c5"],
+				["f4", "a4", "c5"],
+				["c4", "e4", "g4", "c5", "e5"]
+			];
+			for(var i = 0; i < fan.length; i++) funChord(fan[i], i * 280, 240, 0.9);
+			funChord(["c3", "g3", "c4", "e4", "g4", "c5"], fan.length * 280, 900, 1);
+		});
+		$hacksPanel.on("click", "#fun-mystery-box", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList();
+			var t = 0;
+			for(var i = 0; i < 12; i++) {
+				var roll = Math.random();
+				if(roll < 0.33) {
+					funChord([funPick(keys), funPick(keys), funPick(keys)], t, 160, 0.85);
+				} else if(roll < 0.66) {
+					funNoteAt(funPick(keys), t, 80, 0.9);
+					funNoteAt(funPick(keys), t + 40, 80, 0.7);
+				} else {
+					var burst = funShuffle(keys).slice(0, 8);
+					funChord(burst, t, 100, 0.75);
+				}
+				t += 160 + Math.floor(Math.random() * 80);
+			}
+			funSpamAllKeysTimes(3, 40);
+		});
+		$hacksPanel.on("click", "#fun-ping-pong", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList().sort();
+			var lo = 0, hi = keys.length - 1, left = true;
+			for(var i = 0; i < 48; i++) {
+				funNoteAt(keys[left ? lo : hi], i * 70, 55, 0.8);
+				if(left) lo = Math.min(hi - 1, lo + 2);
+				else hi = Math.max(lo + 1, hi - 2);
+				left = !left;
+				if(lo >= hi) { lo = 0; hi = keys.length - 1; }
+			}
+		});
+		$hacksPanel.on("click", "#fun-galaxy", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList().sort();
+			var t = 0;
+			for(var i = 0; i < 20; i++) {
+				var mid = Math.floor(keys.length * Math.random());
+				var chunk = keys.slice(Math.max(0, mid - 4), Math.min(keys.length, mid + 5));
+				funChord(chunk, t, 180, 0.45 + Math.random() * 0.4);
+				t += 140;
+			}
+		});
+
+		// ---- nuke (fun) — big moments, not pure spam --------------------
+		$hacksPanel.on("click", "#fun-tidal-wave", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList().sort();
+			var t = 0;
+			for(var i = 0; i < keys.length; i++) {
+				funNoteAt(keys[i], t, 90, 0.5 + (i / keys.length) * 0.45);
+				t += 22;
+			}
+			for(var j = keys.length - 1; j >= 0; j--) {
+				funNoteAt(keys[j], t, 70, 0.85);
+				t += 14;
+			}
+			funChord(keys.slice(0, 12).concat(keys.slice(-8)), t + 40, 500, 1);
+		});
+		$hacksPanel.on("click", "#fun-supernova", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList().sort();
+			var mid = Math.floor(keys.length / 2);
+			var t = 0;
+			for(var r = 0; r < 10; r++) {
+				var lo = Math.max(0, mid - r * 2);
+				var hi = Math.min(keys.length, mid + r * 2 + 1);
+				funChord(keys.slice(lo, hi), t, 100, 0.4 + r * 0.06);
+				t += 90;
+			}
+			gFunTimers.push(setTimeout(function() { pressAllKeysHack(); }, t + 60));
+			gFunTimers.push(setTimeout(function() { releaseAllKeysHack(); }, t + 420));
+		});
+		$hacksPanel.on("click", "#fun-avalanche", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList().sort().reverse();
+			var t = 0;
+			for(var i = 0; i < keys.length; i++) {
+				funNoteAt(keys[i], t, 55, 0.65 + Math.random() * 0.3);
+				if(i % 3 === 0) funNoteAt(keys[Math.min(keys.length - 1, i + 2)], t + 10, 40, 0.5);
+				t += 16 + (i % 5);
+			}
+		});
+		$hacksPanel.on("click", "#fun-volcano", function(e) {
+			e.preventDefault();
+			funPrep();
+			var lows = pianoKeyList().filter(function(k) {
+				var o = parseInt(k.slice(-1), 10);
+				return !isNaN(o) && o <= 3;
+			});
+			var highs = pianoKeyList().sort().slice(-16);
+			if(!lows.length) lows = pianoKeyList().slice(0, 12);
+			var t = 0;
+			for(var i = 0; i < 6; i++) {
+				funChord(lows.slice(0, Math.min(10, lows.length)), t, 220, 1);
+				for(var s = 0; s < 8; s++) {
+					funNoteAt(funPick(highs), t + 80 + s * 28, 45, 0.55 + Math.random() * 0.35);
+				}
+				t += 380;
+			}
+		});
+		$hacksPanel.on("click", "#fun-earthquake", function(e) {
+			e.preventDefault();
+			funPrep();
+			var lows = pianoKeyList().filter(function(k) {
+				var o = parseInt(k.slice(-1), 10);
+				return !isNaN(o) && o <= 4;
+			});
+			if(!lows.length) lows = pianoKeyList().slice(0, 24);
+			for(var i = 0; i < 36; i++) {
+				var chunk = funShuffle(lows).slice(0, 5 + (i % 4));
+				funChord(chunk, i * 70, 90, 0.75 + (i % 3) * 0.08);
+			}
+		});
+		$hacksPanel.on("click", "#fun-laser-grid", function(e) {
+			e.preventDefault();
+			funPrep();
+			var grid = ["c4", "e4", "g4", "c5", "e5", "g5", "c3", "g3", "a4", "d5"];
+			var t = 0;
+			for(var row = 0; row < 8; row++) {
+				for(var col = 0; col < grid.length; col++) {
+					funNoteAt(grid[col], t, 35, 0.7);
+					t += 38;
+				}
+				funChord(["c4", "g4", "c5"], t, 80, 0.9);
+				t += 100;
+			}
+		});
+		$hacksPanel.on("click", "#fun-black-hole", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList().sort();
+			var mid = Math.floor(keys.length / 2);
+			var t = 0;
+			for(var r = Math.floor(keys.length / 2); r >= 0; r--) {
+				var lo = Math.max(0, mid - r);
+				var hi = Math.min(keys.length - 1, mid + r);
+				funNoteAt(keys[lo], t, 50, 0.6);
+				funNoteAt(keys[hi], t, 50, 0.6);
+				t += 28;
+			}
+			funChord(keys.slice(mid - 3, mid + 4), t + 40, 200, 0.5);
+			gFunTimers.push(setTimeout(function() { pressAllKeysHack(); }, t + 280));
+			gFunTimers.push(setTimeout(function() { releaseAllKeysHack(); }, t + 700));
+		});
+		$hacksPanel.on("click", "#fun-comet-strike", function(e) {
+			e.preventDefault();
+			funPrep();
+			var keys = pianoKeyList().sort().reverse();
+			var t = 0;
+			for(var i = 0; i < keys.length; i++) {
+				funNoteAt(keys[i], t, 40, 0.45 + (i / keys.length) * 0.5);
+				t += 12;
+			}
+			funChord(["c2", "g2", "c3", "g3", "c4", "e4", "g4", "c5"], t + 30, 800, 1);
+		});
+		$hacksPanel.on("click", "#fun-storm-front", function(e) {
+			e.preventDefault();
+			funPrep();
+			var fronts = [
+				["c3", "g3", "c4"],
+				["d3", "a3", "d4"],
+				["e3", "b3", "e4"],
+				["f3", "c4", "f4"],
+				["g3", "d4", "g4"],
+				["a3", "e4", "a4"],
+				["g3", "b3", "d4", "g4"],
+				["c3", "e3", "g3", "c4", "e4", "g4"]
+			];
+			for(var i = 0; i < fronts.length; i++) {
+				funChord(fronts[i], i * 220, 200, 0.75 + i * 0.03);
+				funNoteAt(funPick(pianoKeyList().sort().slice(-10)), i * 220 + 100, 60, 0.8);
+			}
+		});
+		$hacksPanel.on("click", "#fun-finale", function(e) {
+			e.preventDefault();
+			funPrep();
+			var build = ["c4", "e4", "g4", "c5", "e5", "g5"];
+			var t = 0;
+			for(var i = 0; i < build.length; i++) {
+				funChord(build.slice(0, i + 1), t, 160, 0.7);
+				t += 200;
+			}
+			// dramatic pause then boom
+			gFunTimers.push(setTimeout(function() {
+				pressAllKeysHack();
+				funDrainQuotaBar();
+			}, t + 400));
+			gFunTimers.push(setTimeout(function() { releaseAllKeysHack(); }, t + 1100));
+			funChord(["c2", "c3", "g3", "c4", "e4", "g4", "c5"], t + 450, 900, 1);
+		});
 
 		$hacksPanel.on("click", "#fun-bounce", function(e) {
 			e.preventDefault();
