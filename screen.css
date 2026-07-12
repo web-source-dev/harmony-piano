@@ -281,6 +281,7 @@ body.hacks-open { --hacks-h: 200px; }
 #play-alone-btn,
 #sound-btn,
 #room-settings-btn,
+#server-btn,
 #room-media-btn,
 #midi-btn,
 #record-btn,
@@ -297,6 +298,17 @@ body.hacks-open { --hacks-h: 200px; }
 	width: auto;
 }
 #room-settings-btn { display: none; }
+#server-btn { display: none; }
+#server-btn.server-btn-visible { display: block; }
+#server-btn.server-backup {
+	background: rgba(204, 170, 102, 0.35);
+	border-color: #b8860b;
+}
+#server-btn.server-manual::after {
+	content: " ✎";
+	font-size: 10px;
+	opacity: 0.75;
+}
 #room-media-btn { display: none; }
 #room-media-btn.room-dj-visible { display: block; }
 body.room-dj-active #room-media-btn,
@@ -1034,6 +1046,12 @@ body.hacks-open #hacks-dock {
 .notification .connection:after { content: "OFF"; font-size: 10px; color: #a44; float: right; }
 .notification .connection.enabled:after { content: "ON"; font-size: 10px; color: #4a4; float: right; }
 .notification .connection:hover { font-weight: bold; }
+.notification .server-pick { padding: 8px; margin: 8px 0; background: #eed; border: 1px solid #a86; cursor: pointer; font-family: monospace; font-size: 12px; }
+.notification .server-pick.enabled { background: #dfd; border-color: #4a4; }
+.notification .server-pick:hover { font-weight: bold; }
+.notification .server-pick .server-pick-label { display: block; font-weight: 800; }
+.notification .server-pick .server-pick-uri { display: block; font-size: 10px; color: #666; margin-top: 2px; word-break: break-all; }
+.notification .server-pick-note { margin: 8px 0 0; font-size: 11px; color: #555; line-height: 1.35; }
 
 .notification ul { list-style-type: upper-roman; }
 

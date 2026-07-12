@@ -30,6 +30,8 @@ function Client(uri) {
 	this.serverIndex = 0;
 	this.serverFailCount = 0;       // consecutive failed connect attempts on current server
 	this.failoverThreshold = 2;     // switch to the next server after this many failures
+	this.manualServer = false;      // true when the user picked a server in the UI (stay put)
+	this._switchingServer = false; // true while a manual switch is closing the old socket
 	this.uri = this.servers[0];
 	this.ws = undefined;
 	this.serverTimeOffset = 0;
@@ -79,6 +81,59 @@ Client.prototype.stop = function() {
 	this.ws.close();
 };
 
+// Human-readable info about the current (or given) server slot for the UI.
+Client.prototype.getServerInfo = function(index) {
+	var idx = (typeof index === "number") ? index : this.serverIndex;
+	if(idx < 0 || idx >= this.servers.length) idx = 0;
+	var uri = this.servers[idx] || "";
+	var isBackup = idx > 0;
+	var label = isBackup ? "Backup" : "MPP";
+	try {
+		if(uri.indexOf("multiplayerpiano.com") !== -1) label = "MPP";
+		else if(isBackup) label = "Backup";
+		else label = "Main";
+	} catch(e) {}
+	return {
+		index: idx,
+		uri: uri,
+		label: label,
+		isBackup: isBackup,
+		manual: !!this.manualServer,
+		count: this.servers.length
+	};
+};
+
+// Force an immediate reconnect to servers[index]. When index !== 0 the choice is
+// treated as a manual lock (auto failover / return-to-main is suspended) so the
+// UI can keep people on the backup when public MPP is dead but not failing cleanly.
+Client.prototype.switchServer = function(index) {
+	index = parseInt(index, 10);
+	if(isNaN(index) || index < 0 || index >= this.servers.length) return false;
+	var sameAndLive = (index === this.serverIndex) && (this.isConnected() || this.isConnecting());
+	this.manualServer = (index !== 0);
+	this.serverIndex = index;
+	this.uri = this.servers[index];
+	this.serverFailCount = 0;
+	this.connectionAttempts = 0;
+	this.emit("status", index === 0 ? "Switching to main server..." : "Switching to backup server...");
+	this.emit("server", this.getServerInfo());
+	if(sameAndLive) return true;
+	if(!this.canConnect) this.canConnect = true;
+	if(this.ws) {
+		this._switchingServer = true;
+		try {
+			this.ws.close();
+		} catch(e) {
+			this._switchingServer = false;
+			this.ws = undefined;
+			this.connect();
+		}
+	} else {
+		this.connect();
+	}
+	return true;
+};
+
 Client.prototype.connect = function(log) {
 	if(!this.canConnect || !this.isSupported() || this.isConnected() || this.isConnecting())
 		return;
@@ -114,6 +169,18 @@ Client.prototype.connect = function(log) {
 		self.emit("disconnect", evt);
 		self.emit("status", "Offline mode");
 
+		// Manual switch: skip auto failover / "return to main" and reconnect ASAP
+		// on the server the user just picked.
+		if(self._switchingServer) {
+			self._switchingServer = false;
+			self.connectionTime = undefined;
+			self.connectionAttempts = 0;
+			self.serverFailCount = 0;
+			self.emit("server", self.getServerInfo());
+			setTimeout(self.connect.bind(self), 50);
+			return;
+		}
+
 		// reconnect (with failover between the main server and backups)
 		if(self.connectionTime) {
 			// We had a live connection that just dropped.
@@ -121,10 +188,12 @@ Client.prototype.connect = function(log) {
 			self.connectionAttempts = 0;
 			self.serverFailCount = 0;
 			// If that connection was on a backup, prefer the main server again so
-			// the room returns to public MPP as soon as it's reachable.
-			if(self.serverIndex !== 0) {
+			// the room returns to public MPP as soon as it's reachable — unless the
+			// user manually locked onto a server from the UI.
+			if(self.serverIndex !== 0 && !self.manualServer) {
 				self.serverIndex = 0;
 				self.uri = self.servers[0];
+				self.emit("server", self.getServerInfo());
 			}
 		} else {
 			// Couldn't connect at all.
@@ -132,12 +201,14 @@ Client.prototype.connect = function(log) {
 			++self.serverFailCount;
 			// After enough failures on the current server, fail over to the next
 			// one in the list. The list wraps, so a dead backup loops back to the
-			// main server and keeps retrying it.
-			if(self.servers.length > 1 && self.serverFailCount >= self.failoverThreshold) {
+			// main server and keeps retrying it. Skip while the user has a manual
+			// server lock so we don't bounce them off their choice.
+			if(!self.manualServer && self.servers.length > 1 && self.serverFailCount >= self.failoverThreshold) {
 				self.serverFailCount = 0;
 				self.serverIndex = (self.serverIndex + 1) % self.servers.length;
 				self.uri = self.servers[self.serverIndex];
 				self.emit("status", self.serverIndex === 0 ? "Retrying main server..." : "Switching to backup server...");
+				self.emit("server", self.getServerInfo());
 			}
 		}
 		var ms_lut = [50, 2950, 7000, 10000];
@@ -156,6 +227,7 @@ Client.prototype.connect = function(log) {
 		self.connectionTime = Date.now();
 		self.serverFailCount = 0;
 		if(self.serverIndex > 0) self.emit("status", "Connected to backup server");
+		self.emit("server", self.getServerInfo());
 		self.sendArray([{"m": "hi", "x": 1, "y": 1, "🐈": self['🐈']++ || undefined }]);
 		self.pingInterval = setInterval(function() {
 			self.sendArray([{m: "t", e: Date.now()}]);

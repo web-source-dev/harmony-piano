@@ -1406,6 +1406,18 @@ Rect.prototype.contains = function(x, y) {
 	var gClient = new Client(gServers.length > 1 ? gServers : gServers[0]);
 	window.gClient = gClient; // expose for screenShare.js (scoped inside $(function), not visible otherwise)
 
+	// Restore a previously chosen manual server (e.g. user forced Backup while MPP
+	// was down). Only applies when more than one server is configured.
+	(function() {
+		if(gClient.servers.length < 2 || !window.localStorage) return;
+		var saved = parseInt(localStorage.harmonyServerIndex, 10);
+		if(!isNaN(saved) && saved > 0 && saved < gClient.servers.length) {
+			gClient.serverIndex = saved;
+			gClient.uri = gClient.servers[saved];
+			gClient.manualServer = true;
+		}
+	})();
+
 	// Real-time room sync for the custom features (Blob Friend, Doodler, Emoji
 	// Party, Sound Board, Party Game, room metronome, Room DJ controls). These
 	// broadcast through a dedicated relay (relay-server.js) instead of abusing
@@ -1487,6 +1499,81 @@ Rect.prototype.contains = function(x, y) {
 			} else {
 				document.title = "Multiplayer Piano";
 			}
+		});
+	})();
+
+	// Manual server switch (MPP <-> Harmony backup). Shown only when a backup
+	// is configured — auto failover can stall if MPP hangs instead of failing.
+	(function() {
+		var $btn = $("#server-btn");
+		var pickerNote = null;
+		if(gClient.servers.length < 2) {
+			$btn.removeClass("server-btn-visible");
+			return;
+		}
+		$btn.addClass("server-btn-visible");
+
+		function updateServerBtn(info) {
+			info = info || gClient.getServerInfo();
+			$btn.text("Server: " + info.label);
+			$btn.toggleClass("server-backup", !!info.isBackup);
+			$btn.toggleClass("server-manual", !!info.manual);
+			$btn.attr("title",
+				(info.isBackup
+					? "Using Harmony backup server"
+					: "Using public Multiplayer Piano server")
+				+ (info.manual ? " (manual)" : " (auto)")
+				+ "\nClick to switch servers");
+		}
+
+		function showServerPicker() {
+			var existing = document.getElementById("Notification-Server-Picker");
+			if(existing && pickerNote) {
+				pickerNote.close();
+				return;
+			}
+			var div = document.createElement("div");
+			for(var i = 0; i < gClient.servers.length; i++) {
+				(function(idx) {
+					var info = gClient.getServerInfo(idx);
+					var row = document.createElement("div");
+					row.className = "server-pick" + (idx === gClient.serverIndex ? " enabled" : "");
+					row.innerHTML =
+						'<span class="server-pick-label">' + (idx === 0 ? "Main — " : "Backup — ") + info.label +
+						(idx === gClient.serverIndex ? " (current)" : "") + "</span>" +
+						'<span class="server-pick-uri">' + info.uri + "</span>";
+					row.addEventListener("click", function() {
+						if(window.localStorage) {
+							if(idx === 0) {
+								try { localStorage.removeItem("harmonyServerIndex"); } catch(e) {}
+							} else {
+								localStorage.harmonyServerIndex = String(idx);
+							}
+						}
+						gClient.switchServer(idx);
+						if(pickerNote) pickerNote.close();
+					});
+					div.appendChild(row);
+				})(i);
+			}
+			var note = document.createElement("p");
+			note.className = "server-pick-note";
+			note.textContent = "If public MPP is down and auto-switch did not kick in, pick Backup here. Choosing Main clears the manual lock so auto failover works again.";
+			div.appendChild(note);
+			pickerNote = new Notification({
+				id: "Server-Picker",
+				title: "Piano Server",
+				html: div,
+				duration: -1,
+				target: "#server-btn"
+			});
+		}
+
+		updateServerBtn();
+		gClient.on("server", updateServerBtn);
+		$btn.on("click", function(evt) {
+			evt.preventDefault();
+			showServerPicker();
 		});
 	})();
 
