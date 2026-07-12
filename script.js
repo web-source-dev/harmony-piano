@@ -1963,6 +1963,22 @@ Rect.prototype.contains = function(x, y) {
 		$("#volume-label").text("Volume: " + Math.floor(v * 100) + "%");
 	});
 
+	function syncBottomUiHeight() {
+		var bottom = document.getElementById("bottom");
+		if(!bottom) return;
+		var h = bottom.offsetHeight || 96;
+		document.documentElement.style.setProperty("--bottom-ui-h", h + "px");
+	}
+	syncBottomUiHeight();
+	window.addEventListener("resize", syncBottomUiHeight);
+	if(typeof ResizeObserver !== "undefined") {
+		var bottomEl = document.getElementById("bottom");
+		if(bottomEl) {
+			var ro = new ResizeObserver(function() { syncBottomUiHeight(); });
+			ro.observe(bottomEl);
+		}
+	}
+
 
 
 

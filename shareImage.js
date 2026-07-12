@@ -34,7 +34,12 @@
 		if (!base) return Promise.resolve(null);
 		return fetch(base + "/api/media/health", { method: "GET", cache: "no-store" })
 			.then(function (r) { return r.ok ? r.json() : null; })
-			.then(function (data) { return (data && data.ok) ? base : null; })
+			.then(function (data) {
+				// Relay fakes /api/media/health with ok:true — only real media hosts qualify.
+				if (!data || !data.ok) return null;
+				if (data.media === true || data.service === "harmony-media") return base;
+				return null;
+			})
 			.catch(function () { return null; });
 	}
 
@@ -48,11 +53,12 @@
 			}
 		} catch (e) {}
 		if (typeof window !== "undefined" && window.location) {
-			bases.push(window.location.origin);
 			var host = window.location.hostname || "localhost";
+			// Prefer dedicated media port before page origin (origin often fakes health).
 			bases.push("http://" + host + ":" + DEFAULT_MEDIA_PORT);
 			bases.push("http://localhost:" + DEFAULT_MEDIA_PORT);
 			bases.push("http://127.0.0.1:" + DEFAULT_MEDIA_PORT);
+			bases.push(window.location.origin);
 		}
 		var seen = {};
 		var out = [];
@@ -213,7 +219,7 @@
 				'</div>' +
 			'</div>' +
 			'<div class="si-stage">' +
-				'<img class="si-img" alt="Shared image" draggable="false"/>' +
+				'<img class="si-img" alt="Shared image" draggable="false" referrerpolicy="no-referrer"/>' +
 				'<div class="si-loading">Loading…</div>' +
 				'<div class="si-error" hidden>Could not load image</div>' +
 			'</div>';
@@ -236,12 +242,16 @@
 		this.imgEl.addEventListener("load", function () {
 			panel.classList.remove("si-loading");
 			panel.classList.remove("si-failed");
-			panel.querySelector(".si-error").hidden = true;
+			var err = panel.querySelector(".si-error");
+			if (err) err.hidden = true;
 		});
 		this.imgEl.addEventListener("error", function () {
+			// Ignore empty/cleared src — only real failed URLs.
+			if (!self.imgEl.getAttribute("src")) return;
 			panel.classList.remove("si-loading");
 			panel.classList.add("si-failed");
-			panel.querySelector(".si-error").hidden = false;
+			var err = panel.querySelector(".si-error");
+			if (err) err.hidden = false;
 		});
 
 		this._bindDrag(panel);
@@ -322,9 +332,15 @@
 
 		panel.classList.add("si-loading");
 		panel.classList.remove("si-failed");
-		panel.querySelector(".si-error").hidden = true;
-		this.imgEl.removeAttribute("src");
+		var err = panel.querySelector(".si-error");
+		if (err) err.hidden = true;
+		// Set src directly — clearing first fires a false error in some browsers.
 		this.imgEl.src = url;
+		if (this.imgEl.complete && this.imgEl.naturalWidth > 0) {
+			panel.classList.remove("si-loading");
+			panel.classList.remove("si-failed");
+			if (err) err.hidden = true;
+		}
 		panel.removeAttribute("hidden");
 		document.body.classList.add("share-image-open");
 		var btn = document.getElementById("share-image-btn");
@@ -338,7 +354,13 @@
 		this.sharerId = "";
 		if (this.panel) {
 			this.panel.setAttribute("hidden", "");
-			if (this.imgEl) this.imgEl.removeAttribute("src");
+			if (this.imgEl) {
+				this.imgEl.removeAttribute("src");
+				this.imgEl.src = "";
+			}
+			var err = this.panel.querySelector(".si-error");
+			if (err) err.hidden = true;
+			this.panel.classList.remove("si-loading", "si-failed");
 		}
 		document.body.classList.remove("share-image-open");
 		var btn = document.getElementById("share-image-btn");
@@ -398,7 +420,10 @@
 					}
 					var data = res.data;
 					if (!data.ok) throw new Error(data.error || "Upload failed (" + res.status + ")");
-					var playUrl = data.absUrl || resolveMediaUrl(data.url);
+					// Prefer relative /room-media/ path resolved against the media host
+					// so LAN peers get hostname instead of localhost from absUrl.
+					var playUrl = data.url ? resolveMediaUrl(data.url) : (data.absUrl || "");
+					if (!playUrl && data.absUrl) playUrl = data.absUrl;
 					return { url: playUrl, title: title };
 				});
 		});

@@ -105,7 +105,7 @@ class MediaHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?", 1)[0]
         if path.rstrip("/") == "/api/media/health":
-            self._json(200, {"ok": True, "service": "harmony-media", "port": PORT})
+            self._json(200, {"ok": True, "service": "harmony-media", "media": True, "port": PORT})
             return
         if path.startswith("/room-media/"):
             self._serve_file(path)

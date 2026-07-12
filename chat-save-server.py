@@ -26,8 +26,10 @@ MAX_MEDIA_BYTES = 80 * 1024 * 1024
 ALLOWED_MEDIA_EXT = {
     ".mp3", ".m4a", ".wav", ".ogg", ".aac", ".flac", ".opus", ".weba",
     ".mp4", ".webm", ".mov", ".mkv", ".m4v", ".ogv",
+    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg",
 }
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".mkv", ".m4v", ".ogv"}
+IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
 
 
 def sanitize_room(name):
@@ -45,7 +47,11 @@ def sanitize_media_filename(name):
 
 
 def media_kind(ext):
-    return "video" if ext in VIDEO_EXT else "audio"
+    if ext in VIDEO_EXT:
+        return "video"
+    if ext in IMAGE_EXT:
+        return "image"
+    return "audio"
 
 
 def media_path_from_url(url):
@@ -109,7 +115,9 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({"ok": True, "service": "harmony-app", "port": PORT}).encode("utf-8"))
+            self.wfile.write(json.dumps({
+                "ok": True, "service": "harmony-app", "media": True, "port": PORT
+            }).encode("utf-8"))
             return
         if path.startswith("/room-media/"):
             rel = path[len("/room-media/"):]
@@ -137,6 +145,13 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
                 ".mkv": "video/x-matroska",
                 ".m4v": "video/mp4",
                 ".ogv": "video/ogg",
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".gif": "image/gif",
+                ".webp": "image/webp",
+                ".bmp": "image/bmp",
+                ".svg": "image/svg+xml",
             }.get(ext, "application/octet-stream")
             try:
                 size = os.path.getsize(file_path)

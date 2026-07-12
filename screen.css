@@ -110,9 +110,10 @@ table { border: 0; padding: 0; margin: 0; }
 
 /* --- Bottom UI: flex column — chat input (1st) higher, toolbar (2nd) on screen bottom --- */
 :root {
-	--toolbar-h: 60px;
+	--toolbar-h: auto;
+	--toolbar-min-h: 56px;
 	--chat-input-h: 40px;
-	--bottom-ui-h: calc(var(--toolbar-h) + var(--chat-input-h));
+	--bottom-ui-h: calc(var(--toolbar-min-h) + var(--chat-input-h));
 	--hacks-h: 0px;
 	--ui-stack-h: calc(var(--bottom-ui-h) + var(--hacks-h));
 }
@@ -134,23 +135,35 @@ body.hacks-open { --hacks-h: 268px; }
 #bottom .toolbar-band {
 	position: relative;
 	width: 100%;
-	height: var(--toolbar-h);
+	min-height: var(--toolbar-min-h);
+	height: auto;
 	flex-shrink: 0;
 	overflow: visible;
 }
 #bottom .relative.toolbar-band {
-	height: var(--toolbar-h);
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	align-content: center;
+	gap: 6px;
+	box-sizing: border-box;
+	min-height: var(--toolbar-min-h);
+	height: auto;
+	padding: 6px 118px 6px 8px;
 }
 
 #room, #room * { cursor: pointer; }
 #room {
-	position: absolute;
-	left: 0;
-	top: 0;
+	position: relative;
+	left: auto;
+	top: auto;
+	flex: 0 1 220px;
+	min-width: 160px;
+	max-width: 260px;
 	padding: 6px 28px 6px 8px;
-	width: 240px;
+	width: auto;
 	height: 12px;
-	margin: 4px 24px;
+	margin: 0;
 	font-size: 12px;
 	background: #5a6d5a;
 	border: 2px solid #3d4f3d;
@@ -237,16 +250,54 @@ body.hacks-open { --hacks-h: 268px; }
 	-ms-user-select: text;
 }
 
-.ugly-button { height: 12px; font-size: 12px; background: rgba(170, 187, 170, 0.35); border: 1px solid #898; padding: 5px; cursor: pointer; line-height: 12px;
-	border-radius: 3px; -webkit-border-radius: 3px; -moz-border-radius: 3px; width: 100px; overflow: hidden; white-space:nowrap; }
+.ugly-button {
+	position: relative;
+	left: auto;
+	top: auto;
+	box-sizing: border-box;
+	height: auto;
+	min-height: 24px;
+	font-size: 12px;
+	background: rgba(170, 187, 170, 0.35);
+	border: 1px solid #898;
+	padding: 5px 8px;
+	cursor: pointer;
+	line-height: 1.2;
+	border-radius: 3px;
+	-webkit-border-radius: 3px;
+	-moz-border-radius: 3px;
+	width: auto;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	flex: 0 0 auto;
+}
 .ugly-button:hover { background: rgba(187, 204, 170, 0.35) }
 .ugly-button.stuck { background: rgba(204, 187, 170, 0.35); }
-#all-rooms-btn { position: absolute; left: 300px; top: 4px; width: 72px; }
-#new-room-btn { position: absolute; left: 388px; top: 4px; }
-#play-alone-btn { position: absolute; left: 508px; top: 4px; }
-#sound-btn { position: absolute; left: 628px; top: 4px; }
-#room-settings-btn { position: absolute; left: 748px; top: 4px; display: none; }
-#room-media-btn { position: absolute; left: 858px; top: 4px; width: 88px; display: none; }
+#all-rooms-btn,
+#new-room-btn,
+#play-alone-btn,
+#sound-btn,
+#room-settings-btn,
+#room-media-btn,
+#midi-btn,
+#record-btn,
+#synth-btn,
+#sheet-btn,
+#learn-btn,
+#metronome-btn,
+#hacks-toggle-btn,
+#screen-share-btn,
+#share-image-btn {
+	position: relative;
+	left: auto;
+	top: auto;
+	width: auto;
+}
+#room-settings-btn { display: none; }
+#room-media-btn { display: none; }
 #room-media-btn.room-dj-visible { display: block; }
 body.room-dj-active #room-media-btn,
 body.room-media-active #room-media-btn {
@@ -263,22 +314,11 @@ body.room-media-active #room-media-btn {
 	0%, 100% { box-shadow: 0 0 0 0 rgba(77, 171, 247, 0.25); }
 	50% { box-shadow: 0 0 10px 2px rgba(77, 171, 247, 0.35); }
 }
-#midi-btn { position: absolute; left: 300px; top: 32px; }
-#record-btn { position: absolute; left: 420px; top: 32px; }
-#synth-btn { position: absolute; left: 540px; top: 32px; }
-#sheet-btn { position: absolute; left: 660px; top: 32px; }
-#learn-btn { position: absolute; left: 780px; top: 32px; }
 body.learn-panel-open #learn-btn { background: rgba(204, 187, 170, 0.5); }
-#metronome-btn { position: absolute; left: 900px; top: 32px; }
 body.metronome-panel-open #metronome-btn { background: rgba(204, 187, 170, 0.5); }
 body.metronome-running #metronome-btn { background: rgba(170, 204, 170, 0.45); }
-#hacks-toggle-btn { position: absolute; left: 1020px; top: 32px; width: 72px; }
 body.hacks-open #hacks-toggle-btn { background: rgba(204, 187, 170, 0.5); }
 #screen-share-btn {
-	position: absolute;
-	left: 1100px;
-	top: 32px;
-	width: 68px;
 	background: rgba(59, 130, 246, 0.10);
 	border-color: rgba(59, 130, 246, 0.32);
 	color: #a5c8f8;
@@ -293,10 +333,6 @@ body.hacks-open #hacks-toggle-btn { background: rgba(204, 187, 170, 0.5); }
 	box-shadow: 0 0 8px rgba(59, 130, 246, 0.2);
 }
 #share-image-btn {
-	position: absolute;
-	left: 1180px;
-	top: 32px;
-	width: 92px;
 	background: rgba(34, 166, 153, 0.10);
 	border-color: rgba(34, 166, 153, 0.32);
 	color: #9ad8cf;
@@ -930,26 +966,47 @@ body.hacks-open #hacks-dock {
 
 #status {
 	position: absolute;
-	left: 4px;
-	bottom: 2px;
-	width: 280px;
-	height: 18px;
-	padding: 2px 4px;
-	font-size: 14px;
+	left: 8px;
+	top: -18px;
+	bottom: auto;
+	width: auto;
+	max-width: min(280px, 50vw);
+	height: 16px;
+	padding: 0 4px;
+	font-size: 12px;
 	font-weight: 800;
-	line-height: 18px;
+	line-height: 16px;
 	pointer-events: none;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	color: #1a2a1a;
+	text-shadow: 0 1px 0 rgba(255,255,255,0.25);
 }
 #status .number { font-size: 22px; }
 
-#volume { position: absolute; right: 12px; top: 6px; width: 90px; height: 36px; margin: 0; }
+#volume {
+	position: absolute;
+	right: 12px;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 90px;
+	height: 36px;
+	margin: 0;
+	z-index: 2;
+}
 #volume-slider { width: 100%; height: 100%; background: url("volume2.png") no-repeat; background-position: 50% 50%;
 	-webkit-appearance: none; }
 
-#volume-label { position: absolute; right: 16px; bottom: 4px; font-size: 9px; color: #eee; }
+#volume-label {
+	position: absolute;
+	right: 16px;
+	bottom: 2px;
+	font-size: 9px;
+	color: #eee;
+	z-index: 2;
+	pointer-events: none;
+}
 
 #banner { width: 468px; height: 60px; position: absolute; right: 0; top: 0; font-size: 18px; display: none; }
 #banner a { color: #ffdd00; }
@@ -3832,6 +3889,12 @@ body.learn-panel-open #social {
 	color: #f8a5a5;
 	font-size: 13px;
 	background: rgba(7, 11, 10, 0.85);
+}
+.si-error[hidden] {
+	display: none !important;
+}
+.share-image-panel.si-failed .si-img {
+	opacity: 0.2;
 }
 .dialog.share-image-dialog {
 	width: min(400px, 94vw);

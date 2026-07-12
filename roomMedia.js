@@ -31,7 +31,11 @@
 		if (!base) return Promise.resolve(null);
 		return fetch(base + "/api/media/health", { method: "GET", cache: "no-store" })
 			.then(function (r) { return r.ok ? r.json() : null; })
-			.then(function (data) { return (data && data.ok) ? base : null; })
+			.then(function (data) {
+				if (!data || !data.ok) return null;
+				if (data.media === true || data.service === "harmony-media") return base;
+				return null;
+			})
 			.catch(function () { return null; });
 	}
 
@@ -45,11 +49,11 @@
 			}
 		} catch (e) {}
 		if (typeof window !== "undefined" && window.location) {
-			bases.push(window.location.origin);
 			var host = window.location.hostname || "localhost";
 			bases.push("http://" + host + ":" + DEFAULT_MEDIA_PORT);
 			bases.push("http://localhost:" + DEFAULT_MEDIA_PORT);
 			bases.push("http://127.0.0.1:" + DEFAULT_MEDIA_PORT);
+			bases.push(window.location.origin);
 		}
 		var seen = {};
 		var out = [];
