@@ -16,6 +16,7 @@
 		this.channel = opts.channel || "lobby";
 		this.getIdentity = opts.getIdentity || function () { return { _id: "", name: "" }; };
 		this.onText = opts.onText || function () {};
+		this.onManageNoob = opts.onManageNoob || function () {};
 		this.ws = null;
 		this.canConnect = false;
 		this.reconnectAttempts = 0;
@@ -75,6 +76,8 @@
 				var m = arr[i];
 				if (m && m.m === "b" && typeof m.text === "string") {
 					self.onText({ message: m.text, p: m.p || { _id: "", name: "" } });
+				} else if (m && m.m === "manage-noob") {
+					self.onManageNoob(!!m.hidden);
 				}
 			}
 		});
@@ -113,6 +116,14 @@
 	RoomSync.prototype.broadcast = function (text) {
 		if (typeof text !== "string" || !this.isConnected()) return false;
 		return this._send({ m: "b", ch: this.channel, text: text, p: this.getIdentity() });
+	};
+
+	// Requests a GLOBAL change (affects every connected client, not just this
+	// browser) — the relay holds the authoritative flag and echoes the new
+	// value back to everyone (including us) as a "manage-noob" message, which
+	// arrives via onManageNoob. Returns false if the relay isn't reachable.
+	RoomSync.prototype.setLobbyNoobHidden = function (hidden) {
+		return this._send({ m: "manage-noob-set", hidden: !!hidden });
 	};
 
 	if (typeof module !== "undefined" && module.exports) {

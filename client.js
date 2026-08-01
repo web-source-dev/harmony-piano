@@ -410,6 +410,40 @@ Client.isLobbyNoobParticipant = function(part) {
 	return !!(part && (part.id === Client.LOBBY_NOOB_ID || part._id === Client.LOBBY_NOOB._id));
 };
 
+// Global show/hide switch for the lobby ghost, exposed via the #manage panel
+// (see script.js). This is NOT per-browser state: relay-server.js holds the
+// authoritative flag and pushes it to every connected client (see "manage-noob"
+// in roomSync.js), so toggling it changes what everyone sees, not just the
+// browser that flipped the switch. Client._lobbyNoobHidden only mirrors the
+// last value the server told us; never set it directly — request a change
+// with RoomSync#setLobbyNoobHidden and wait for the server's broadcast.
+// Starts false (shown) until the relay sends the first manage-noob on connect.
+Client._lobbyNoobHidden = false;
+Client._lobbyNoobSynced = false;
+Client._lobbyNoobHiddenListeners = [];
+
+Client.isLobbyNoobHidden = function() {
+	return !!Client._lobbyNoobHidden;
+};
+
+Client.isLobbyNoobSynced = function() {
+	return !!Client._lobbyNoobSynced;
+};
+
+Client.applyLobbyNoobHidden = function(hidden) {
+	hidden = !!hidden;
+	Client._lobbyNoobSynced = true;
+	if(hidden === Client._lobbyNoobHidden) return;
+	Client._lobbyNoobHidden = hidden;
+	Client._lobbyNoobHiddenListeners.forEach(function(fn) {
+		try { fn(hidden); } catch(e) {}
+	});
+};
+
+Client.onLobbyNoobHiddenChange = function(fn) {
+	if(typeof fn === "function") Client._lobbyNoobHiddenListeners.push(fn);
+};
+
 Client.prototype.hasNoobNamedParticipant = function() {
 	for(var id in this.ppl) {
 		if(this.ppl.hasOwnProperty(id) && isNoobProtectedName(this.ppl[id].name)) {
@@ -420,11 +454,18 @@ Client.prototype.hasNoobNamedParticipant = function() {
 };
 
 Client.prototype.ensureLobbyNoob = function() {
-	if(!this.isConnected() || !this.isLobbyChannel()) {
+	if(!this.isConnected() || !this.isLobbyChannel() || Client.isLobbyNoobHidden()) {
 		this.removeLobbyNoob();
 		return;
 	}
 	if(this.hasNoobNamedParticipant()) {
+		this.removeLobbyNoob();
+		return;
+	}
+	// Never inject a per-browser ghost without the relay — that would ignore the
+	// global show/hide flag and re-add Noob after the server bot disconnects.
+	var relay = this.roomSync;
+	if(!relay || !relay.isConnected() || !Client.isLobbyNoobSynced()) {
 		this.removeLobbyNoob();
 		return;
 	}

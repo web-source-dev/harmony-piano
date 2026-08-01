@@ -11,6 +11,8 @@ $(function() {
 
 	var gMidiVolumeTest = (window.location.hash && window.location.hash.match(/^(?:#.+)*#midivolumetest(?:#.+)*$/i));
 
+	var gManageMode = !!(window.location.hash && window.location.hash.match(/^(?:#.+)*#manage(?:#.+)*$/i));
+
 	var gMidiOutTest;
 
 	if (!Array.prototype.indexOf) {
@@ -1452,7 +1454,8 @@ Rect.prototype.contains = function(x, y) {
 					var me = gClient.getOwnParticipant();
 					return { _id: (me && me._id) || "", name: (me && me.name) || "" };
 				},
-				onText: function(msg) { routeRoomSync(msg); }
+				onText: function(msg) { routeRoomSync(msg); },
+				onManageNoob: function(hidden) { Client.applyLobbyNoobHidden(hidden); gClient.ensureLobbyNoob(); }
 			});
 			gClient.roomSync = gRoomSync;
 			window.gRoomSync = gRoomSync; // expose for screenShare.js (scoped inside $(function), not visible otherwise)
@@ -2642,6 +2645,48 @@ Rect.prototype.contains = function(x, y) {
 				if(!gModal && !$("#chat").hasClass("chatting")) captureKeyboard();
 			}, 0);
 		});
+	}
+
+	// #manage in the URL hash reveals a small panel to toggle the lobby
+	// "Noob x_x" ghost participant for EVERYONE — relay-server.js holds the one
+	// shared flag and broadcasts it to every connected client (see
+	// Client.applyLobbyNoobHidden + RoomSync#setLobbyNoobHidden), so flipping
+	// this switch changes what all users see, not just this browser. Requires
+	// the relay to be reachable (see gRoomSync above); if it isn't, the toggle
+	// is disabled rather than silently only affecting the local browser.
+	if(gManageMode) {
+		var $managePanel = $("#manage-panel");
+		if($managePanel.length) {
+			var $noobToggle = $("#manage-noob-toggle");
+			var $noobState = $("#manage-noob-state");
+			var noobRelayReady = function() {
+				return !!(gRoomSync && gRoomSync.isConnected());
+			};
+			var updateNoobToggleUi = function() {
+				var hidden = Client.isLobbyNoobHidden();
+				$noobToggle.prop("checked", !hidden);
+				$noobToggle.prop("disabled", !noobRelayReady());
+				$noobState.text(!noobRelayReady()
+					? "Relay unavailable — can't sync this toggle right now"
+					: (hidden ? "Hidden from everyone's lobby" : "Visible in everyone's lobby"));
+			};
+			updateNoobToggleUi();
+			Client.onLobbyNoobHiddenChange(updateNoobToggleUi);
+			$noobToggle.on("change", function() {
+				var wantHidden = !this.checked;
+				if(!noobRelayReady() || !gRoomSync.setLobbyNoobHidden(wantHidden)) {
+					updateNoobToggleUi(); // relay rejected/unavailable — revert to last known state
+					return;
+				}
+				$noobState.text("Updating for everyone…");
+			});
+			$managePanel.on("mousedown touchstart pointerdown", function(e) {
+				e.stopPropagation();
+			});
+			$managePanel.removeAttr("hidden");
+			// Relay connect state can change after this panel is wired up.
+			setInterval(updateNoobToggleUi, 2000);
+		}
 	}
 
 

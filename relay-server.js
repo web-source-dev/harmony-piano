@@ -164,6 +164,36 @@ function broadcast(sender, frame) {
 		if (peer !== sender && peer.readyState === 1) { try { peer.send(data); } catch (e) {} }
 	});
 }
+// Like broadcast(), but to every relay-connected socket in every room
+// (including the sender) — used for global admin state like manage-noob,
+// which must reach everyone regardless of which channel they're currently in.
+function broadcastAll(frame) {
+	var data = JSON.stringify(frame);
+	for (var ch in rooms) {
+		rooms[ch].forEach(function (peer) {
+			if (peer.readyState === 1) { try { peer.send(data); } catch (e) {} }
+		});
+	}
+}
+
+// Reassigned by startMppLobbyNoobBot() once it runs; no-ops until then (or if
+// the bot is disabled entirely via MPP_NOOB_BOT=0).
+var gNoobBotStart = function () {};
+var gNoobBotStop = function () {};
+
+function setLobbyNoobHidden(hidden) {
+	hidden = !!hidden;
+	if (hidden !== gLobbyNoobHidden) {
+		gLobbyNoobHidden = hidden;
+		persistManageState();
+		if (hidden) gNoobBotStop(); else gNoobBotStart();
+		// Refresh backup-server lobby participant lists for everyone already in room.
+		for (var id in mppRooms) {
+			if (mppRooms.hasOwnProperty(id) && isLobbyRoomId(id)) mppBroadcastCh(mppRooms[id]);
+		}
+	}
+	broadcastAll({ m: "manage-noob", hidden: gLobbyNoobHidden });
+}
 
 wss.on("connection", function (socket) {
 	socket._room = null;
@@ -174,13 +204,20 @@ wss.on("connection", function (socket) {
 		try { m = JSON.parse(raw.toString()); } catch (e) { return; }
 		if (!m || typeof m !== "object") return;
 		switch (m.m) {
-			case "hi": case "join": joinRoom(socket, m.ch); break;
+			case "hi": case "join":
+				joinRoom(socket, m.ch);
+				// Sync the joining client with the current global state right away.
+				try { socket.send(JSON.stringify({ m: "manage-noob", hidden: gLobbyNoobHidden })); } catch (e) {}
+				break;
 			case "ping": try { socket.send('{"m":"pong"}'); } catch (e) {} break;
 			case "b":
 				if (typeof m.text !== "string" || m.text.length > MAX_TEXT) return;
 				if (typeof m.ch === "string" && m.ch !== socket._room) joinRoom(socket, m.ch);
 				if (!socket._room) joinRoom(socket, "lobby");
 				broadcast(socket, { m: "b", text: m.text, p: sanitizeP(m.p) });
+				break;
+			case "manage-noob-set":
+				setLobbyNoobHidden(m.hidden);
 				break;
 		}
 	});
@@ -212,6 +249,25 @@ var LOBBY_NOOB = {
 	y: 50
 };
 
+// Global show/hide flag for LOBBY_NOOB, controlled by the #manage panel in the
+// web client (relay message "manage-noob-set"). This is the ONE authoritative
+// flag — persisted to disk so a restart doesn't quietly flip it back, and
+// applied to every surface that shows the ghost: the backup MPP server's
+// participant list below, the real persistent bot (see startMppLobbyNoobBot),
+// and every relay-connected browser (via broadcastAll). Flipping the switch
+// therefore changes what ALL users see, not just the browser that toggled it.
+var MANAGE_STATE_FILE = path.join(ROOT, "manage-state.json");
+var gLobbyNoobHidden = false;
+(function loadManageState() {
+	try {
+		var raw = JSON.parse(fs.readFileSync(MANAGE_STATE_FILE, "utf8"));
+		gLobbyNoobHidden = !!raw.lobbyNoobHidden;
+	} catch (e) {}
+})();
+function persistManageState() {
+	try { fs.writeFileSync(MANAGE_STATE_FILE, JSON.stringify({ lobbyNoobHidden: gLobbyNoobHidden })); } catch (e) {}
+}
+
 function isLobbyRoomId(id) {
 	return id === "lobby" || /^lobby\d+$/.test(id);
 }
@@ -236,7 +292,7 @@ function mppPartPublic(p) {
 function mppPplArray(room) {
 	var arr = [];
 	room.parts.forEach(function (p) { arr.push({ id: p.id, _id: p._id, name: p.name, color: p.color, x: p.x, y: p.y }); });
-	if (isLobbyRoomId(room._id)) {
+	if (isLobbyRoomId(room._id) && !gLobbyNoobHidden) {
 		var hasNoob = false;
 		for (var i = 0; i < arr.length; i++) {
 			if (isNoobProtectedName(arr[i].name)) { hasNoob = true; break; }
@@ -248,7 +304,7 @@ function mppPplArray(room) {
 
 function mppRoomParticipantCount(room) {
 	var n = room.parts.size;
-	if (isLobbyRoomId(room._id)) {
+	if (isLobbyRoomId(room._id) && !gLobbyNoobHidden) {
 		var hasNoob = false;
 		room.parts.forEach(function (p) { if (isNoobProtectedName(p.name)) hasNoob = true; });
 		if (!hasNoob) ++n;
@@ -467,22 +523,34 @@ var heartbeat = setInterval(function () {
 }, 30000);
 wss.on("close", function () { clearInterval(heartbeat); });
 
-// Persistent "Noob x_x" in the public MPP lobby — no browser tab needed.
-// Set MPP_NOOB_BOT=0 to disable. Uses MPP_NOOB_URI to override the server URL.
+// Persistent "Noob x_x" in the public MPP lobby — no browser tab needed. This
+// is a REAL participant on the real public server, so everyone there sees it
+// (not just users of this custom client) — which is exactly why the #manage
+// panel controls it directly instead of just hiding it locally per-browser.
+// Set MPP_NOOB_BOT=0 to disable entirely (the #manage toggle then has nothing
+// to start/stop). Uses MPP_NOOB_URI to override the server URL.
 function startMppLobbyNoobBot() {
-	if (process.env.MPP_NOOB_BOT === "0") return;
+	if (process.env.MPP_NOOB_BOT === "0") {
+		console.log("  lobby Noob x_x bot disabled (MPP_NOOB_BOT=0)");
+		return;
+	}
 	var uri = process.env.MPP_NOOB_URI || "wss://game.multiplayerpiano.com:443";
 	var reconnectMs = 8000;
 	var WebSocketClient = ws;
+	var wantConnected = false;
+	var socket = null;
+	var reconnectTimer = null;
 
 	function connect() {
+		if (!wantConnected) return;
 		var bot;
 		try {
 			bot = new WebSocketClient(uri, { origin: "https://game.multiplayerpiano.com" });
 		} catch (e) {
-			setTimeout(connect, reconnectMs);
+			reconnectTimer = setTimeout(connect, reconnectMs);
 			return;
 		}
+		socket = bot;
 		var joined = false;
 		var pingIv = setInterval(function () {
 			if (bot.readyState === 1) {
@@ -515,15 +583,27 @@ function startMppLobbyNoobBot() {
 		});
 		bot.on("close", function () {
 			clearInterval(pingIv);
-			setTimeout(connect, reconnectMs);
+			if (socket === bot) socket = null;
+			if (wantConnected) reconnectTimer = setTimeout(connect, reconnectMs);
 		});
 		bot.on("error", function () {
 			try { bot.close(); } catch (e) {}
 		});
 	}
 
-	connect();
-	console.log("  lobby Noob x_x bot -> " + uri + " (MPP_NOOB_BOT=0 to disable)");
+	gNoobBotStart = function () {
+		if (wantConnected) return;
+		wantConnected = true;
+		connect();
+	};
+	gNoobBotStop = function () {
+		wantConnected = false;
+		if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+		if (socket) { try { socket.close(); } catch (e) {} socket = null; }
+	};
+
+	if (!gLobbyNoobHidden) gNoobBotStart();
+	console.log("  lobby Noob x_x bot -> " + uri + " (currently " + (gLobbyNoobHidden ? "hidden" : "shown") + "; MPP_NOOB_BOT=0 to disable)");
 }
 
 // Route WebSocket upgrades to the right server by path: /relay -> fun-feature
