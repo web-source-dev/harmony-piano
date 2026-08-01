@@ -1653,8 +1653,9 @@ Rect.prototype.contains = function(x, y) {
 			});
 			$("#names").html(arr);
 
-			// add cursorDiv
-			if(gClient.participantId !== part.id || gSeeOwnCursor) {
+			// add cursorDiv (lobby ghost Noob x_x is name-only — no cursor)
+			var skipCursor = (typeof Client !== "undefined" && Client.isLobbyNoobParticipant && Client.isLobbyNoobParticipant(part));
+			if(!skipCursor && (gClient.participantId !== part.id || gSeeOwnCursor)) {
 				var div = document.createElement("div");
 				div.className = "cursor";
 				div.style.display = "none";

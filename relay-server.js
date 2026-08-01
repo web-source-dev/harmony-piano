@@ -203,6 +203,23 @@ var mppRooms = Object.create(null);   // chId -> { _id, settings, crown, parts:M
 var MPP_COLORS = ["#8073ae", "#3c7fb1", "#52a72b", "#cd2b2b", "#d9760a", "#0fac9b", "#b13aa3", "#e0c020"];
 var mppIdSeq = 0;
 
+var LOBBY_NOOB = {
+	id: "harmony-lobby-noob",
+	_id: "harmony-noob-xx",
+	name: "Noob x_x",
+	color: "#808080",
+	x: 50,
+	y: 50
+};
+
+function isLobbyRoomId(id) {
+	return id === "lobby" || /^lobby\d+$/.test(id);
+}
+
+function isNoobProtectedName(name) {
+	return !!(name && /noob/i.test(String(name)));
+}
+
 function mppGenId(prefix) {
 	mppIdSeq = (mppIdSeq + 1) >>> 0;
 	return (prefix || "") + Date.now().toString(16) + mppIdSeq.toString(16) + Math.floor(Math.random() * 0xffffff).toString(16);
@@ -219,7 +236,24 @@ function mppPartPublic(p) {
 function mppPplArray(room) {
 	var arr = [];
 	room.parts.forEach(function (p) { arr.push({ id: p.id, _id: p._id, name: p.name, color: p.color, x: p.x, y: p.y }); });
+	if (isLobbyRoomId(room._id)) {
+		var hasNoob = false;
+		for (var i = 0; i < arr.length; i++) {
+			if (isNoobProtectedName(arr[i].name)) { hasNoob = true; break; }
+		}
+		if (!hasNoob) arr.push(LOBBY_NOOB);
+	}
 	return arr;
+}
+
+function mppRoomParticipantCount(room) {
+	var n = room.parts.size;
+	if (isLobbyRoomId(room._id)) {
+		var hasNoob = false;
+		room.parts.forEach(function (p) { if (isNoobProtectedName(p.name)) hasNoob = true; });
+		if (!hasNoob) ++n;
+	}
+	return n;
 }
 function mppSend(sock, payload) {
 	if (sock.readyState !== 1) return;
@@ -241,7 +275,7 @@ function mppRoomList() {
 	for (var id in mppRooms) {
 		var r = mppRooms[id];
 		if (r.settings && r.settings.visible === false) continue;
-		list.push({ _id: r._id, count: r.parts.size, settings: r.settings, crown: r.crown || undefined });
+		list.push({ _id: r._id, count: mppRoomParticipantCount(r), settings: r.settings, crown: r.crown || undefined });
 	}
 	return list;
 }
@@ -292,6 +326,7 @@ function mppJoinRoom(sock, chId, set) {
 		if (set && typeof set === "object") {
 			for (var k in set) if (set.hasOwnProperty(k)) room.settings[k] = set[k];
 		}
+		if (isLobbyRoomId(chId)) room.settings.lobby = true;
 		created = true;
 	}
 	var part = { id: st.pid, _id: st.user._id, name: st.user.name, color: st.user.color, x: 50, y: 50, sock: sock };
@@ -377,8 +412,11 @@ function mppHandle(sock, msg) {
 			break;
 		case "kickban":
 			if (room && room.crown && room.crown.participantId === st.pid && msg._id) {
+				if (msg._id === LOBBY_NOOB._id) break;
 				var targets = [];
-				room.parts.forEach(function (p) { if (p._id === msg._id && p.sock !== sock) targets.push(p.sock); });
+				room.parts.forEach(function (p) {
+					if (p._id === msg._id && p.sock !== sock && !isNoobProtectedName(p.name)) targets.push(p.sock);
+				});
 				targets.forEach(function (tsock) {
 					mppSend(tsock, { m: "notification", title: "Notice", text: "You were kicked from the room.", duration: 7000 });
 					mppLeaveRoom(tsock);
@@ -429,6 +467,65 @@ var heartbeat = setInterval(function () {
 }, 30000);
 wss.on("close", function () { clearInterval(heartbeat); });
 
+// Persistent "Noob x_x" in the public MPP lobby — no browser tab needed.
+// Set MPP_NOOB_BOT=0 to disable. Uses MPP_NOOB_URI to override the server URL.
+function startMppLobbyNoobBot() {
+	if (process.env.MPP_NOOB_BOT === "0") return;
+	var uri = process.env.MPP_NOOB_URI || "wss://game.multiplayerpiano.com:443";
+	var reconnectMs = 8000;
+	var WebSocketClient = ws;
+
+	function connect() {
+		var bot;
+		try {
+			bot = new WebSocketClient(uri, { origin: "https://game.multiplayerpiano.com" });
+		} catch (e) {
+			setTimeout(connect, reconnectMs);
+			return;
+		}
+		var joined = false;
+		var pingIv = setInterval(function () {
+			if (bot.readyState === 1) {
+				try { bot.send(JSON.stringify([{ m: "t", e: Date.now() }])); } catch (e) {}
+			}
+		}, 20000);
+
+		bot.on("open", function () {
+			try { bot.send(JSON.stringify([{ m: "hi", x: 1, y: 1 }])); } catch (e) {}
+		});
+		bot.on("message", function (raw) {
+			var tx;
+			try { tx = JSON.parse(raw.toString()); } catch (e) { return; }
+			if (!Array.isArray(tx)) tx = [tx];
+			for (var i = 0; i < tx.length; i++) {
+				var msg = tx[i];
+				if (msg.m === "hi" && !joined) {
+					joined = true;
+					try {
+						bot.send(JSON.stringify([
+							{ m: "userset", set: { name: LOBBY_NOOB.name, color: LOBBY_NOOB.color } },
+							{ m: "ch", _id: "lobby" }
+						]));
+					} catch (e) {}
+				}
+				if (msg.m === "ch" && msg.ch && !isLobbyRoomId(msg.ch._id)) {
+					try { bot.send(JSON.stringify([{ m: "ch", _id: "lobby" }])); } catch (e) {}
+				}
+			}
+		});
+		bot.on("close", function () {
+			clearInterval(pingIv);
+			setTimeout(connect, reconnectMs);
+		});
+		bot.on("error", function () {
+			try { bot.close(); } catch (e) {}
+		});
+	}
+
+	connect();
+	console.log("  lobby Noob x_x bot -> " + uri + " (MPP_NOOB_BOT=0 to disable)");
+}
+
 // Route WebSocket upgrades to the right server by path: /relay -> fun-feature
 // relay, /mpp -> backup Multiplayer Piano server. Anything else is rejected.
 server.on("upgrade", function (req, socket, head) {
@@ -449,4 +546,5 @@ server.listen(PORT, function () {
 	console.log("  backup MPP server (failover): ws://localhost:" + PORT + "/mpp");
 	console.log("  chat logs -> " + LOG_DIR);
 	console.log("  Open http://localhost:" + PORT + "/  (media uploads still need media-server.py on :8551)");
+	startMppLobbyNoobBot();
 });

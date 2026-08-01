@@ -274,7 +274,7 @@ Client.prototype.bindEventListeners = function() {
 		self.channel = msg.ch;
 		if(msg.p) self.participantId = msg.p;
 		self.emit("room participants sync", msg.ppl || []);
-		self.setParticipants(msg.ppl);
+		self.setParticipants(msg.ppl || []);
 	});
 	this.on("p", function(msg) {
 		var part = self.ppl[msg.id];
@@ -390,10 +390,60 @@ Client.prototype.getOwnParticipant = function() {
 	return this.findParticipantById(this.participantId);
 };
 
+Client.LOBBY_NOOB_ID = "harmony-lobby-noob";
+Client.LOBBY_NOOB = {
+	id: Client.LOBBY_NOOB_ID,
+	_id: "harmony-noob-xx",
+	name: "Noob x_x",
+	color: "#808080",
+	x: 50,
+	y: 50
+};
+
+Client.prototype.isLobbyChannel = function() {
+	var id = (this.channel && this.channel._id) || this.desiredChannelId || "";
+	if(id === "lobby") return true;
+	return /^lobby\d+$/.test(id);
+};
+
+Client.isLobbyNoobParticipant = function(part) {
+	return !!(part && (part.id === Client.LOBBY_NOOB_ID || part._id === Client.LOBBY_NOOB._id));
+};
+
+Client.prototype.hasNoobNamedParticipant = function() {
+	for(var id in this.ppl) {
+		if(this.ppl.hasOwnProperty(id) && isNoobProtectedName(this.ppl[id].name)) {
+			return true;
+		}
+	}
+	return false;
+};
+
+Client.prototype.ensureLobbyNoob = function() {
+	if(!this.isConnected() || !this.isLobbyChannel()) {
+		this.removeLobbyNoob();
+		return;
+	}
+	if(this.hasNoobNamedParticipant()) {
+		this.removeLobbyNoob();
+		return;
+	}
+	if(!this.ppl[Client.LOBBY_NOOB_ID]) {
+		this.participantUpdate(Client.LOBBY_NOOB);
+	}
+};
+
+Client.prototype.removeLobbyNoob = function() {
+	if(this.ppl[Client.LOBBY_NOOB_ID]) {
+		this.removeParticipant(Client.LOBBY_NOOB_ID);
+	}
+};
+
 Client.prototype.setParticipants = function(ppl) {
 	// remove participants who left
 	for(var id in this.ppl) {
 		if(!this.ppl.hasOwnProperty(id)) continue;
+		if(id === Client.LOBBY_NOOB_ID && this.isLobbyChannel()) continue;
 		var found = false;
 		for(var j = 0; j < ppl.length; j++) {
 			if(ppl[j].id === id) {
@@ -409,6 +459,7 @@ Client.prototype.setParticipants = function(ppl) {
 	for(var i = 0; i < ppl.length; i++) {
 		this.participantUpdate(ppl[i]);
 	}
+	this.ensureLobbyNoob();
 };
 
 Client.prototype.countParticipants = function() {
