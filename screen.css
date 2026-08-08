@@ -2694,6 +2694,30 @@ body.learn-panel-open #social {
 	font-size: 11px;
 	color: var(--dj-text-dim, #666);
 }
+.manage-action-btn {
+	flex: 0 0 auto;
+	padding: 7px 14px;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: #fff;
+	background: #a33;
+	border: 1px solid #c55;
+	border-radius: 8px;
+	cursor: pointer;
+	transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+.manage-action-btn:hover {
+	background: #c44;
+	border-color: #e66;
+}
+.manage-action-btn:active {
+	transform: scale(0.97);
+}
+.manage-action-btn:focus-visible {
+	outline: 2px solid var(--dj-accent, #4dabf7);
+	outline-offset: 2px;
+}
 .manage-toggle {
 	position: relative;
 	display: inline-block;

@@ -5,7 +5,7 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20260712e"/>
+    <link rel="stylesheet" href="./screen.css?v=20260809b"/>
     <link rel="canonical" href="https://multiplayerpiano.com/">
 
     <script>
@@ -133,13 +133,10 @@
         </div>
         <div class="manage-panel-row">
             <span class="manage-panel-row-text">
-                <span class="manage-panel-row-title">Lobby "Noob x_x"</span>
-                <span class="manage-panel-row-sub" id="manage-noob-state">Visible in the public lobby</span>
+                <span class="manage-panel-row-title">Clear all chat</span>
+                <span class="manage-panel-row-sub" id="manage-clear-chat-state">Wipe the chat for everyone in this room</span>
             </span>
-            <label class="manage-toggle">
-                <input type="checkbox" id="manage-noob-toggle" checked>
-                <span class="manage-toggle-track"><span class="manage-toggle-thumb"></span></span>
-            </label>
+            <button type="button" id="manage-clear-chat-btn" class="manage-action-btn" title="Force-clear the chat log for everyone in this room">Clear</button>
         </div>
     </div>
 </aside>
@@ -934,7 +931,7 @@
 <script src="./screenShare.js?v=20260712c"></script>
 <script src="./shareImage.js?v=20260712b"></script>
 <!--<script src="/ebsprite.js"></script>-->
-<script src="./script.js?v=20260712f"></script>
+<script src="./script.js?v=20260809b"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->
 </body>
 </html>

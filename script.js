@@ -2647,45 +2647,27 @@ Rect.prototype.contains = function(x, y) {
 		});
 	}
 
-	// #manage in the URL hash reveals a small panel to toggle the lobby
-	// "Noob x_x" ghost participant for EVERYONE — relay-server.js holds the one
-	// shared flag and broadcasts it to every connected client (see
-	// Client.applyLobbyNoobHidden + RoomSync#setLobbyNoobHidden), so flipping
-	// this switch changes what all users see, not just this browser. Requires
-	// the relay to be reachable (see gRoomSync above); if it isn't, the toggle
-	// is disabled rather than silently only affecting the local browser.
+	// #manage in the URL hash reveals a small admin panel. Currently: force-clear
+	// chat for everyone in the room (relay first, MPP chat fallback).
 	if(gManageMode) {
 		var $managePanel = $("#manage-panel");
 		if($managePanel.length) {
-			var $noobToggle = $("#manage-noob-toggle");
-			var $noobState = $("#manage-noob-state");
-			var noobRelayReady = function() {
-				return !!(gRoomSync && gRoomSync.isConnected());
-			};
-			var updateNoobToggleUi = function() {
-				var hidden = Client.isLobbyNoobHidden();
-				$noobToggle.prop("checked", !hidden);
-				$noobToggle.prop("disabled", !noobRelayReady());
-				$noobState.text(!noobRelayReady()
-					? "Relay unavailable — can't sync this toggle right now"
-					: (hidden ? "Hidden from everyone's lobby" : "Visible in everyone's lobby"));
-			};
-			updateNoobToggleUi();
-			Client.onLobbyNoobHiddenChange(updateNoobToggleUi);
-			$noobToggle.on("change", function() {
-				var wantHidden = !this.checked;
-				if(!noobRelayReady() || !gRoomSync.setLobbyNoobHidden(wantHidden)) {
-					updateNoobToggleUi(); // relay rejected/unavailable — revert to last known state
-					return;
-				}
-				$noobState.text("Updating for everyone…");
+			var $clearChatBtn = $("#manage-clear-chat-btn");
+			var $clearChatState = $("#manage-clear-chat-state");
+			$clearChatBtn.on("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				if(typeof stopChatSpam === "function") stopChatSpam();
+				forceClearAllChat(true);
+				$clearChatState.text("Cleared for everyone");
+				setTimeout(function() {
+					$clearChatState.text("Wipe the chat for everyone in this room");
+				}, 2000);
 			});
 			$managePanel.on("mousedown touchstart pointerdown", function(e) {
 				e.stopPropagation();
 			});
 			$managePanel.removeAttr("hidden");
-			// Relay connect state can change after this panel is wired up.
-			setInterval(updateNoobToggleUi, 2000);
 		}
 	}
 
@@ -3436,10 +3418,34 @@ Rect.prototype.contains = function(x, y) {
 
 ////////////////////////////////////////////////////////////////
 
+	// Force-clear chat for everyone in the room (Harmony relay: "CC|x").
+	var CHAT_CLEAR_SYNC_PREFIX = "CC|";
+	function isChatClearSyncText(text) {
+		return !!(text && typeof text === "string" && text.indexOf(CHAT_CLEAR_SYNC_PREFIX) === 0);
+	}
+	function forceClearAllChat(broadcast) {
+		chat.clear();
+		if(!broadcast || !gClient) return;
+		var payload = CHAT_CLEAR_SYNC_PREFIX + "x|" + Date.now();
+		var sent = false;
+		if(typeof gClient.broadcastRoom === "function") {
+			sent = !!gClient.broadcastRoom(payload);
+		}
+		// Relay is preferred; if it's down, send over MPP chat so other
+		// Harmony clients still wipe (they filter CC| and never show it).
+		if(!sent && typeof gClient.sendArray === "function" && gClient.isConnected && gClient.isConnected()) {
+			gClient.sendArray([{m: "a", message: payload}]);
+		}
+	}
+
 	// Routes a room-sync message (from the relay OR the chat fallback) to the
 	// owning feature by prefix. Returns true if a feature claimed it.
 	function routeRoomSync(msg) {
 		var chatLine = msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
+		if(isChatClearSyncText(chatLine)) {
+			forceClearAllChat(false);
+			return true;
+		}
 		if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 			chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) {
 			if(typeof gRoomMetronome !== "undefined" && gRoomMetronome) gRoomMetronome.tryHandleChat(msg);
@@ -3645,6 +3651,10 @@ Rect.prototype.contains = function(x, y) {
 			receive: function(msg, fromHistory) {
 				if(gChatMutes.indexOf(msg.p._id) != -1) return;
 				var chatLine = msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
+				if(isChatClearSyncText(chatLine)) {
+					forceClearAllChat(false);
+					return;
+				}
 				if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) return;
 				if(typeof BlobFriend !== "undefined" && BlobFriend.isSyncText(chatLine)) return;
 				if(typeof DesktopDoodler !== "undefined" && DesktopDoodler.isSyncText(chatLine)) return;
