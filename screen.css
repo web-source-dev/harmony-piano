@@ -2643,8 +2643,8 @@ body.learn-panel-open #social {
 	bottom: 10px;
 	right: 10px;
 	z-index: 100016;
-	width: min(92vw, 320px);
-	max-width: 320px;
+	width: min(92vw, 280px);
+	max-width: 280px;
 	user-select: none;
 }
 .manage-panel-card {
@@ -2661,12 +2661,12 @@ body.learn-panel-open #social {
 .manage-panel-head {
 	display: flex;
 	align-items: center;
-	padding: 10px 14px 8px;
+	padding: 8px 12px 6px;
 	border-bottom: 1px solid var(--dj-border, #2a2a2a);
 	background: rgba(255, 255, 255, 0.02);
 }
 .manage-panel-label {
-	font-size: 11px;
+	font-size: 10px;
 	font-weight: 600;
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
@@ -2676,34 +2676,37 @@ body.learn-panel-open #social {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	gap: 12px;
-	padding: 12px 14px;
+	gap: 10px;
+	padding: 8px 12px;
+}
+.manage-panel-row-divider {
+	border-top: 1px solid var(--dj-border, #2a2a2a);
 }
 .manage-panel-row-text {
 	display: flex;
 	flex-direction: column;
-	gap: 2px;
+	gap: 1px;
 	min-width: 0;
 }
 .manage-panel-row-title {
-	font-size: 13px;
+	font-size: 12px;
 	font-weight: 600;
 	color: var(--dj-text, #f5f5f5);
 }
 .manage-panel-row-sub {
-	font-size: 11px;
+	font-size: 10px;
 	color: var(--dj-text-dim, #666);
 }
 .manage-action-btn {
 	flex: 0 0 auto;
-	padding: 7px 14px;
-	font-size: 12px;
+	padding: 4px 10px;
+	font-size: 11px;
 	font-weight: 600;
 	letter-spacing: 0.02em;
 	color: #fff;
 	background: #a33;
 	border: 1px solid #c55;
-	border-radius: 8px;
+	border-radius: 6px;
 	cursor: pointer;
 	transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
@@ -2722,8 +2725,8 @@ body.learn-panel-open #social {
 	position: relative;
 	display: inline-block;
 	flex: 0 0 auto;
-	width: 42px;
-	height: 24px;
+	width: 36px;
+	height: 20px;
 	cursor: pointer;
 }
 .manage-toggle input {
@@ -2746,8 +2749,8 @@ body.learn-panel-open #social {
 	position: absolute;
 	top: 2px;
 	left: 2px;
-	width: 18px;
-	height: 18px;
+	width: 14px;
+	height: 14px;
 	background: var(--dj-text-dim, #888);
 	border-radius: 50%;
 	transition: transform 0.15s ease, background 0.15s ease;
@@ -2758,7 +2761,7 @@ body.learn-panel-open #social {
 }
 .manage-toggle input:checked + .manage-toggle-track .manage-toggle-thumb {
 	background: var(--dj-accent, #4dabf7);
-	transform: translateX(18px);
+	transform: translateX(16px);
 }
 .manage-toggle input:focus-visible + .manage-toggle-track {
 	box-shadow: 0 0 0 2px var(--dj-accent-soft, rgba(77, 171, 247, 0.35));

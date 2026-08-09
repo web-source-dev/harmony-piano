@@ -2647,13 +2647,65 @@ Rect.prototype.contains = function(x, y) {
 		});
 	}
 
-	// #manage in the URL hash reveals a small admin panel. Currently: force-clear
-	// chat for everyone in the room (relay first, MPP chat fallback).
+	// #manage in the URL hash reveals a small admin panel: lobby Noob x_x
+	// show/hide (global via relay) + force-clear chat for everyone in the room.
 	if(gManageMode) {
 		var $managePanel = $("#manage-panel");
 		if($managePanel.length) {
+			var $noobToggle = $("#manage-noob-toggle");
+			var $noobState = $("#manage-noob-state");
 			var $clearChatBtn = $("#manage-clear-chat-btn");
 			var $clearChatState = $("#manage-clear-chat-state");
+			var manageNoobUiBusy = false;
+			var manageNoobPending = false;
+
+			function syncManageNoobUi(hidden) {
+				manageNoobUiBusy = true;
+				manageNoobPending = false;
+				$noobToggle.prop("checked", !hidden);
+				$noobState.text(hidden ? "Hidden in lobby" : "Shown in lobby");
+				manageNoobUiBusy = false;
+			}
+
+			function refreshManageNoobReady() {
+				var ready = !!(gRoomSync && gRoomSync.isConnected && gRoomSync.isConnected()
+					&& typeof Client !== "undefined" && Client.isLobbyNoobSynced && Client.isLobbyNoobSynced());
+				$noobToggle.prop("disabled", !ready);
+				if(!ready) {
+					manageNoobPending = false;
+					$noobState.text("Waiting for relay…");
+					return;
+				}
+				if(!manageNoobPending && typeof Client !== "undefined" && Client.isLobbyNoobHidden) {
+					syncManageNoobUi(Client.isLobbyNoobHidden());
+				}
+			}
+
+			$noobToggle.on("change", function(e) {
+				e.stopPropagation();
+				if(manageNoobUiBusy) return;
+				var hide = !$noobToggle.prop("checked");
+				var ok = !!(gRoomSync && typeof gRoomSync.setLobbyNoobHidden === "function"
+					&& gRoomSync.setLobbyNoobHidden(hide));
+				if(!ok) {
+					manageNoobPending = false;
+					$noobState.text("Relay offline — try again");
+					refreshManageNoobReady();
+					return;
+				}
+				manageNoobPending = true;
+				$noobState.text(hide ? "Hiding…" : "Showing…");
+			});
+
+			if(typeof Client !== "undefined" && Client.onLobbyNoobHiddenChange) {
+				Client.onLobbyNoobHiddenChange(function(hidden) {
+					syncManageNoobUi(hidden);
+				});
+			}
+			refreshManageNoobReady();
+			var manageNoobReadyTimer = setInterval(refreshManageNoobReady, 1000);
+			$(window).on("beforeunload", function() { clearInterval(manageNoobReadyTimer); });
+
 			$clearChatBtn.on("click", function(e) {
 				e.preventDefault();
 				e.stopPropagation();
@@ -2661,7 +2713,7 @@ Rect.prototype.contains = function(x, y) {
 				forceClearAllChat(true);
 				$clearChatState.text("Cleared for everyone");
 				setTimeout(function() {
-					$clearChatState.text("Wipe the chat for everyone in this room");
+					$clearChatState.text("Wipe for everyone");
 				}, 2000);
 			});
 			$managePanel.on("mousedown touchstart pointerdown", function(e) {

@@ -433,7 +433,6 @@ Client.isLobbyNoobSynced = function() {
 Client.applyLobbyNoobHidden = function(hidden) {
 	hidden = !!hidden;
 	Client._lobbyNoobSynced = true;
-	if(hidden === Client._lobbyNoobHidden) return;
 	Client._lobbyNoobHidden = hidden;
 	Client._lobbyNoobHiddenListeners.forEach(function(fn) {
 		try { fn(hidden); } catch(e) {}
