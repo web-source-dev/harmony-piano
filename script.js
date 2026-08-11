@@ -1615,8 +1615,33 @@ Rect.prototype.contains = function(x, y) {
 		}
 	}
 
+	function ensureParticipantCursorDiv(part) {
+		if(!part || part.cursorDiv) return part && part.cursorDiv;
+		var skipCursor = (typeof Client !== "undefined" && Client.isLobbyNoobParticipant && Client.isLobbyNoobParticipant(part));
+		if(skipCursor) return null;
+		var host = $("#cursors")[0];
+		if(!host) return null;
+		var div = document.createElement("div");
+		div.className = "cursor";
+		div.style.display = "none";
+		part.cursorDiv = host.appendChild(div);
+		$(part.cursorDiv).fadeIn(200);
+		var name = document.createElement("div");
+		name.className = "name";
+		name.style.backgroundColor = resolveNameColor(part);
+		name.textContent = part.name || "";
+		part.cursorDiv.appendChild(name);
+		applyNameColorTo(part);
+		if(part.id === gClient.participantId) {
+			$(part.cursorDiv).addClass("cursor-self");
+		}
+		return part.cursorDiv;
+	}
+
 	function applyCursorLookTo(part) {
-		if(!part || !part.cursorDiv) return;
+		if(!part) return;
+		ensureParticipantCursorDiv(part);
+		if(!part.cursorDiv) return;
 		var def = null;
 		if(typeof gCursorLooks !== "undefined" && gCursorLooks) {
 			def = gCursorLooks.cursorDefFor(part);
@@ -1634,6 +1659,17 @@ Rect.prototype.contains = function(x, y) {
 			old.className = "cursor-icon";
 			old.style.display = "none";
 			old.innerHTML = "";
+		}
+
+		if(part.id === gClient.participantId) {
+			var look = (typeof gCursorLooks !== "undefined" && gCursorLooks) ? gCursorLooks.getMyLook() : null;
+			var followerOn = !!(look && look.follower !== "default" && look.follower !== "none");
+			var customOn = !!(look && (look.cursor !== "default" || followerOn));
+			document.body.classList.toggle("harmony-custom-cursor", themed);
+			document.body.classList.toggle("harmony-custom-follower", followerOn);
+			part.cursorDiv.classList.toggle("cursor-self", true);
+			// Hide classic duplicate arrow when not using a themed cursor (unless #seeowncursor).
+			part.cursorDiv.classList.toggle("cursor-self-plain", !themed && !gSeeOwnCursor);
 		}
 	}
 
@@ -1687,22 +1723,11 @@ Rect.prototype.contains = function(x, y) {
 			$("#names").html(arr);
 
 			// add cursorDiv (lobby ghost Noob x_x is name-only — no cursor)
+			// Always create for self too so Cursor Looks / followers are visible locally.
 			var skipCursor = (typeof Client !== "undefined" && Client.isLobbyNoobParticipant && Client.isLobbyNoobParticipant(part));
-			if(!skipCursor && (gClient.participantId !== part.id || gSeeOwnCursor)) {
-				var div = document.createElement("div");
-				div.className = "cursor";
-				div.style.display = "none";
-				part.cursorDiv = $("#cursors")[0].appendChild(div);
-				$(part.cursorDiv).fadeIn(2000);
-
-				var div = document.createElement("div");
-				div.className = "name";
-				div.style.backgroundColor = resolveNameColor(part);
-				div.textContent = part.name || "";
-				part.cursorDiv.appendChild(div);
-				applyNameColorTo(part);
+			if(!skipCursor) {
+				ensureParticipantCursorDiv(part);
 				applyCursorLookTo(part);
-
 			} else {
 				part.cursorDiv = undefined;
 			}
@@ -1896,7 +1921,8 @@ Rect.prototype.contains = function(x, y) {
 			last_mx = mx;
 			last_my = my;
 			gClient.sendArray([{m: "m", x: mx, y: my}]);
-			if(gSeeOwnCursor) {
+			// Always update our own cursor/trail locally (needed for Cursor Looks).
+			if(gClient.participantId) {
 				gClient.emit("m", { m: "m", id: gClient.participantId, x: mx, y: my });
 			}
 			var part = gClient.getOwnParticipant();
@@ -5638,9 +5664,16 @@ Rect.prototype.contains = function(x, y) {
 				e.preventDefault();
 				e.stopPropagation();
 				openModal("#play-mp3");
-				if(typeof window.showMp3TransportPanel === "function") {
-					window.showMp3TransportPanel(true);
-				}
+			});
+		}
+
+		var cursorLooksBtn = document.getElementById("cursor-looks-btn");
+		if(cursorLooksBtn) {
+			cursorLooksBtn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				openModal("#cursor-looks");
+				if(typeof window.syncCursorLooksUI === "function") window.syncCursorLooksUI();
 			});
 		}
 
@@ -7996,7 +8029,7 @@ Rect.prototype.contains = function(x, y) {
 			showMp3Transport(false);
 		});
 
-		// --- Drag anywhere via the header ---
+		// Drag via header — document-level move/up so it always tracks
 		(function bindMp3Drag() {
 			var panel = $transport[0];
 			var head = panel.querySelector(".mp3-drag-head");
@@ -8004,11 +8037,37 @@ Rect.prototype.contains = function(x, y) {
 			var dragging = false;
 			var ox = 0;
 			var oy = 0;
+			var activePointer = null;
 
-			head.addEventListener("pointerdown", function(e) {
+			function onMove(e) {
+				if(!dragging) return;
+				if(activePointer != null && e.pointerId != null && e.pointerId !== activePointer) return;
+				var w = panel.offsetWidth || 320;
+				var h = panel.offsetHeight || 80;
+				var nx = Math.max(0, Math.min(window.innerWidth - Math.min(w, 120), e.clientX - ox));
+				var ny = Math.max(0, Math.min(window.innerHeight - Math.min(h, 48), e.clientY - oy));
+				panel.style.left = nx + "px";
+				panel.style.top = ny + "px";
+			}
+
+			function onUp(e) {
+				if(!dragging) return;
+				if(activePointer != null && e.pointerId != null && e.pointerId !== activePointer) return;
+				dragging = false;
+				activePointer = null;
+				panel.classList.remove("mp3-dragging");
+				document.removeEventListener("pointermove", onMove, true);
+				document.removeEventListener("pointerup", onUp, true);
+				document.removeEventListener("pointercancel", onUp, true);
+				document.removeEventListener("mousemove", onMove, true);
+				document.removeEventListener("mouseup", onUp, true);
+			}
+
+			function startDrag(e) {
 				if(e.target.closest && e.target.closest("button, input, label, a, select, textarea")) return;
 				if(e.button != null && e.button !== 0) return;
 				e.preventDefault();
+				e.stopPropagation();
 				var r = panel.getBoundingClientRect();
 				panel.classList.add("mp3-dragged");
 				panel.style.left = r.left + "px";
@@ -8019,33 +8078,35 @@ Rect.prototype.contains = function(x, y) {
 				ox = e.clientX - r.left;
 				oy = e.clientY - r.top;
 				dragging = true;
+				activePointer = e.pointerId != null ? e.pointerId : null;
 				panel.classList.add("mp3-dragging");
-				try { head.setPointerCapture(e.pointerId); } catch(err) {}
-			});
-
-			head.addEventListener("pointermove", function(e) {
-				if(!dragging) return;
-				var w = panel.offsetWidth || 320;
-				var h = panel.offsetHeight || 80;
-				var nx = Math.max(0, Math.min(window.innerWidth - Math.min(w, 120), e.clientX - ox));
-				var ny = Math.max(0, Math.min(window.innerHeight - Math.min(h, 48), e.clientY - oy));
-				panel.style.left = nx + "px";
-				panel.style.top = ny + "px";
-			});
-
-			function endDrag() {
-				if(!dragging) return;
-				dragging = false;
-				panel.classList.remove("mp3-dragging");
+				document.addEventListener("pointermove", onMove, true);
+				document.addEventListener("pointerup", onUp, true);
+				document.addEventListener("pointercancel", onUp, true);
+				document.addEventListener("mousemove", onMove, true);
+				document.addEventListener("mouseup", onUp, true);
 			}
-			head.addEventListener("pointerup", endDrag);
-			head.addEventListener("pointercancel", endDrag);
-			head.addEventListener("lostpointercapture", endDrag);
+
+			head.addEventListener("pointerdown", startDrag);
+			head.addEventListener("mousedown", function(e) {
+				if(window.PointerEvent) return;
+				startDrag(e);
+			});
 		})();
 
-		// --- Shared cursor + follower look pickers ---
+		window.showMp3TransportPanel = showMp3Transport;
+		applyMp3Volume();
+		applyMp3Speed();
+		updateMp3Progress(0, 0);
+	})();
+
+	// Cursor Looks — separate popup (not inside Play MP3)
+	(function() {
+		var $dlg = $("#cursor-looks");
+		if(!$dlg.length || typeof CursorLooks === "undefined") return;
+
 		function fillLooksChips($root) {
-			if(typeof CursorLooks === "undefined" || !$root || !$root.length) return;
+			if(!$root || !$root.length) return;
 			$root.find(".mp3-looks-chips[data-looks=cursor]").each(function() {
 				var host = this;
 				if(host.getAttribute("data-filled")) return;
@@ -8096,49 +8157,45 @@ Rect.prototype.contains = function(x, y) {
 		function syncCursorLooksUI() {
 			if(typeof gCursorLooks === "undefined" || !gCursorLooks) return;
 			var look = gCursorLooks.getMyLook();
-			$(".mp3-look-chip[data-cursor]").each(function() {
+			$dlg.find(".mp3-look-chip[data-cursor]").each(function() {
 				this.classList.toggle("active", this.getAttribute("data-cursor") === look.cursor);
 			});
-			$(".mp3-look-chip[data-follower]").each(function() {
+			$dlg.find(".mp3-look-chip[data-follower]").each(function() {
 				this.classList.toggle("active", this.getAttribute("data-follower") === look.follower);
 			});
+			var info = $dlg.find(".file-info");
+			if(info.length) {
+				var cDef = CursorLooks.CURSORS.filter(function(c) { return c.id === look.cursor; })[0];
+				var fDef = CursorLooks.FOLLOWERS.filter(function(f) { return f.id === look.follower; })[0];
+				info.text("Now: " + (cDef ? cDef.label : look.cursor) + " cursor · " + (fDef ? fDef.label : look.follower) + " follower");
+			}
 		}
 		window.syncCursorLooksUI = syncCursorLooksUI;
-		window.showMp3TransportPanel = showMp3Transport;
 
-		fillLooksChips($transport);
 		fillLooksChips($dlg);
 		syncCursorLooksUI();
 
-		function onLookChipClick(e) {
-			var btn = e.currentTarget;
-			if(typeof gCursorLooks === "undefined" || !gCursorLooks) return;
+		$dlg.on("click", ".mp3-look-chip", function(e) {
 			e.preventDefault();
 			e.stopPropagation();
-			var cursorId = btn.getAttribute("data-cursor");
-			var followerId = btn.getAttribute("data-follower");
+			if(typeof gCursorLooks === "undefined" || !gCursorLooks) {
+				alert("Cursor Looks is not ready yet. Wait a moment and try again.");
+				return;
+			}
+			var cursorId = this.getAttribute("data-cursor");
+			var followerId = this.getAttribute("data-follower");
 			if(cursorId) gCursorLooks.setMyCursor(cursorId);
 			if(followerId) gCursorLooks.setMyFollower(followerId);
+			var me = gClient && gClient.getOwnParticipant && gClient.getOwnParticipant();
+			if(me) applyCursorLookTo(me);
+			else applyAllCursorLooks();
 			syncCursorLooksUI();
-			showMp3Transport(true);
-			var $looks = $transport.find(".mp3-looks-panel");
-			if($looks.length) $looks.prop("hidden", false).removeAttr("hidden");
-		}
-
-		$(document).on("click", ".mp3-look-chip", onLookChipClick);
-
-		$transport.on("click", ".mp3-looks-toggle", function(e) {
-			e.preventDefault();
-			var $looks = $transport.find(".mp3-looks-panel");
-			var open = $looks.is("[hidden]");
-			if(open) $looks.prop("hidden", false).removeAttr("hidden");
-			else $looks.prop("hidden", true).attr("hidden", "hidden");
-			this.classList.toggle("stuck", open);
 		});
 
-		applyMp3Volume();
-		applyMp3Speed();
-		updateMp3Progress(0, 0);
+		$dlg.on("click", ".cursor-looks-done", function(e) {
+			e.preventDefault();
+			closeModal();
+		});
 	})();
 
 

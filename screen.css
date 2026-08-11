@@ -287,6 +287,7 @@ body.hacks-open { --hacks-h: 200px; }
 #midi-btn,
 #record-btn,
 #play-mp3-btn,
+#cursor-looks-btn,
 #synth-btn,
 #sheet-btn,
 #learn-btn,
@@ -995,23 +996,30 @@ body.mp3-transport-active #play-mp3-btn {
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 6px 10px;
-	padding: 7px 12px;
+	padding: 10px 12px;
 	background: linear-gradient(180deg, rgba(70, 90, 110, 0.95), rgba(48, 62, 78, 0.95));
 	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 	cursor: grab;
 	touch-action: none;
 	user-select: none;
+	-webkit-user-select: none;
 }
 .mp3-drag-head:active { cursor: grabbing; }
 .mp3-drag-grip {
-	opacity: 0.55;
-	font-size: 14px;
+	opacity: 0.7;
+	font-size: 16px;
 	letter-spacing: -2px;
+	padding: 0 4px;
 }
 .mp3-drag-hint {
 	font-size: 10px;
-	opacity: 0.45;
+	opacity: 0.55;
 	margin-right: auto;
+	pointer-events: none;
+}
+.mp3-transport .transport-label,
+.mp3-transport .mp3-track-name {
+	pointer-events: none;
 }
 .mp3-transport .transport-label { font-weight: bold; color: #8cf; }
 .mp3-transport .mp3-track-name {
@@ -1102,30 +1110,71 @@ body.mp3-transport-active #play-mp3-btn {
 	color: #9ab;
 	line-height: 1.35;
 }
-.dialog.play-mp3-dialog { margin-top: -180px; width: 480px; margin-left: -240px; }
-.dialog.play-mp3-dialog .sheet-title-sm {
-	font-size: 13px;
-	font-weight: bold;
-	margin: 12px 12px 4px;
-	color: #333;
+.dialog.play-mp3-dialog { margin-top: -140px; }
+.dialog.cursor-looks-dialog {
+	width: min(560px, 94vw);
+	height: auto;
+	max-height: 85vh;
+	overflow-y: auto;
+	margin-left: calc(min(560px, 94vw) / -2);
+	margin-top: -220px;
+	padding-bottom: 16px;
 }
-.dialog.play-mp3-dialog .mp3-looks-dialog {
-	margin: 4px 8px 8px;
-	padding: 8px;
+.dialog.cursor-looks-dialog .cursor-looks-body {
+	margin: 8px 10px 4px;
+	padding: 10px;
 	background: rgba(255, 230, 240, 0.35);
 	border: 1px solid rgba(200, 120, 150, 0.25);
-	border-radius: 6px;
+	border-radius: 8px;
 }
-.dialog.play-mp3-dialog .mp3-looks-label { color: #a45; }
-.dialog.play-mp3-dialog .mp3-look-chip {
+.dialog.cursor-looks-dialog .mp3-looks-label { color: #a45; }
+.dialog.cursor-looks-dialog .mp3-look-chip {
 	background: #fff;
 	color: #222;
 	border-color: rgba(0, 0, 0, 0.12);
 	text-shadow: none;
 }
-.dialog.play-mp3-dialog .mp3-look-chip.active {
+.dialog.cursor-looks-dialog .mp3-look-chip.active {
 	background: #ffe0ec;
 	border-color: #e88;
+}
+body.cursor-looks-active #cursor-looks-btn,
+body.harmony-custom-cursor #cursor-looks-btn,
+body.harmony-custom-follower #cursor-looks-btn {
+	background: rgba(255, 160, 190, 0.28);
+	border-color: #e8a;
+}
+
+/* Own themed cursor: hide OS arrow so the custom one is clear */
+body.harmony-custom-cursor {
+	cursor: none;
+}
+body.harmony-custom-cursor a,
+body.harmony-custom-cursor button,
+body.harmony-custom-cursor input,
+body.harmony-custom-cursor select,
+body.harmony-custom-cursor textarea,
+body.harmony-custom-cursor label,
+body.harmony-custom-cursor .ugly-button,
+body.harmony-custom-cursor .tb-btn,
+body.harmony-custom-cursor .dj-btn,
+body.harmony-custom-cursor .hack-chip,
+body.harmony-custom-cursor .mp3-look-chip,
+body.harmony-custom-cursor .link {
+	cursor: pointer;
+}
+.cursor.cursor-self-plain {
+	background: none !important;
+	width: 0 !important;
+	height: 0 !important;
+	margin: 0 !important;
+}
+.cursor.cursor-self-plain .name,
+.cursor.cursor-self-plain .cursor-icon {
+	display: none !important;
+}
+.cursor.cursor-self.cursor-themed .name {
+	opacity: 0.75;
 }
 
 /* Themed + animated multiplayer cursors */

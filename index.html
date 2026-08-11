@@ -5,7 +5,7 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20260812c"/>
+    <link rel="stylesheet" href="./screen.css?v=20260812d"/>
     <link rel="canonical" href="https://multiplayerpiano.com/">
 
     <script>
@@ -290,6 +290,7 @@
         <div id="midi-btn" class="ugly-button translate">MIDI In/Out</div>
         <div id="record-btn" class="ugly-button translate">Record MP3</div>
         <div id="play-mp3-btn" class="ugly-button translate">Play MP3</div>
+        <div id="cursor-looks-btn" class="ugly-button" title="Change your cursor and mouse follower — everyone sees it">Cursor Looks</div>
         <div id="synth-btn" class="ugly-button translate">Synth</div>
         <div id="sheet-btn" class="ugly-button">Sheet Play</div>
         <div id="learn-btn" class="ugly-button">Learn Piano</div>
@@ -560,8 +561,7 @@
             <span class="mp3-drag-grip" aria-hidden="true">⠿</span>
             <span class="transport-label">MP3</span>
             <span class="mp3-track-name" title="">No file loaded</span>
-            <span class="mp3-drag-hint">drag</span>
-            <button type="button" class="tb-btn mp3-looks-toggle" title="Cursor &amp; follower looks">💕</button>
+            <span class="mp3-drag-hint">drag me</span>
             <button type="button" class="tb-btn mp3-change-file" title="Choose another file">📁</button>
             <button type="button" class="tb-btn mp3-close" title="Close player">✕</button>
         </div>
@@ -585,17 +585,6 @@
                 <span class="vol-label">Vol</span>
                 <input type="range" name="volume" min="0" max="1" step="0.01" value="0.9" class="mp3-volume-slider"/>
             </label>
-        </div>
-        <div class="mp3-looks-panel" hidden>
-            <div class="mp3-looks-row">
-                <span class="mp3-looks-label">Cursor</span>
-                <div class="mp3-looks-chips" data-looks="cursor"></div>
-            </div>
-            <div class="mp3-looks-row">
-                <span class="mp3-looks-label">Follower</span>
-                <div class="mp3-looks-chips" data-looks="follower"></div>
-            </div>
-            <p class="mp3-looks-hint">Everyone in the room sees your cursor &amp; trail. Love &amp; couple looks included.</p>
         </div>
     </div>
 </div>
@@ -755,8 +744,11 @@
                 <button type="button" class="tb-btn play">▶ Play</button>
                 <button type="button" class="tb-btn stop">⏹ Stop</button>
             </p>
-            <div class="mp3-looks-dialog">
-                <p class="sheet-row sheet-title-sm">Cursor &amp; follower (everyone sees yours)</p>
+        </div>
+        <div id="cursor-looks" class="dialog sheet-dialog cursor-looks-dialog">
+            <p class="sheet-title">Cursor &amp; Follower</p>
+            <p class="file-info">Pick a look — you and everyone in the room will see it on your mouse.</p>
+            <div class="cursor-looks-body">
                 <div class="mp3-looks-row">
                     <span class="mp3-looks-label">Cursor</span>
                     <div class="mp3-looks-chips" data-looks="cursor"></div>
@@ -766,6 +758,9 @@
                     <div class="mp3-looks-chips" data-looks="follower"></div>
                 </div>
             </div>
+            <p class="sheet-row sheet-actions-row">
+                <button type="button" class="tb-btn cursor-looks-done">Done</button>
+            </p>
         </div>
         <div id="fun-video" class="dialog fun-video-dialog">
             <div class="fun-video-dialog-inner">
@@ -992,7 +987,7 @@
 <script src="./desktopDoodler.js?v=20260618i"></script>
 <script src="./emojiParty.js"></script>
 <script src="./nameColor.js"></script>
-<script src="./cursorLooks.js?v=20260812c"></script>
+<script src="./cursorLooks.js?v=20260812d"></script>
 <script src="./soundBoard.js"></script>
 <script src="./partyGame.js"></script>
 <script src="./balloonPop.js?v=20260712c"></script>
@@ -1009,7 +1004,7 @@
 <script src="./screenShare.js?v=20260712c"></script>
 <script src="./shareImage.js?v=20260712b"></script>
 <!--<script src="/ebsprite.js"></script>-->
-<script src="./script.js?v=20260812c"></script>
+<script src="./script.js?v=20260812d"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->
 </body>
 </html>
