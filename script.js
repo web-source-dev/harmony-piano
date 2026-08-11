@@ -7781,8 +7781,12 @@ Rect.prototype.contains = function(x, y) {
 
 		function showMp3Transport(show) {
 			if(show) {
-				$transport.prop("hidden", false).attr("hidden", null);
+				$transport.prop("hidden", false).removeAttr("hidden");
 				document.body.classList.add("mp3-transport-active");
+				// Modal overlay sits above the old z-index and blocks clicks — close it.
+				if(typeof closeModal === "function" && typeof gModal !== "undefined" && gModal) {
+					closeModal();
+				}
 			} else {
 				$transport.prop("hidden", true).attr("hidden", "hidden");
 				document.body.classList.remove("mp3-transport-active");
@@ -7977,26 +7981,14 @@ Rect.prototype.contains = function(x, y) {
 			stopMp3();
 		});
 
-		$transport.on("click", ".tb-btn", function(e) { e.stopPropagation(); });
 		$transport.on("input", "input[name=tempo]", applyMp3Speed);
-		$transport.on("click", ".speed-half", function() {
-			$transport.find("input[name=tempo]").val(50);
-			applyMp3Speed();
-		});
-		$transport.on("click", ".speed-one", function() {
-			$transport.find("input[name=tempo]").val(100);
-			applyMp3Speed();
-		});
-		$transport.on("click", ".speed-double", function() {
-			$transport.find("input[name=tempo]").val(200);
-			applyMp3Speed();
-		});
 		$transport.on("change", "input[name=loop]", applyMp3Loop);
 		$transport.on("input", "input[name=volume]", applyMp3Volume);
-		$transport.on("mousedown touchstart", "input[name=seek]", function() {
+		$transport.on("mousedown touchstart pointerdown", "input[name=seek]", function(e) {
+			e.stopPropagation();
 			seekDragging = true;
 		});
-		$transport.on("mouseup touchend", "input[name=seek]", function() {
+		$transport.on("mouseup touchend pointerup", "input[name=seek]", function() {
 			seekDragging = false;
 		});
 		$transport.on("input", "input[name=seek]", function() {
@@ -8007,42 +7999,8 @@ Rect.prototype.contains = function(x, y) {
 			seekMp3(parseFloat(this.value) || 0);
 			seekDragging = false;
 		});
-		$transport.on("click", ".play", function(e) {
-			e.preventDefault();
-			playMp3();
-		});
-		$transport.on("click", ".pause", function(e) {
-			e.preventDefault();
-			pauseMp3();
-		});
-		$transport.on("click", ".stop", function(e) {
-			e.preventDefault();
-			stopMp3();
-		});
-		$transport.on("click", ".restart", function(e) {
-			e.preventDefault();
-			seekMp3(0);
-			playMp3();
-		});
-		$transport.on("click", ".back", function(e) {
-			e.preventDefault();
-			seekMp3By(-5);
-		});
-		$transport.on("click", ".forward", function(e) {
-			e.preventDefault();
-			seekMp3By(5);
-		});
-		$transport.on("click", ".mp3-change-file", function(e) {
-			e.preventDefault();
-			openModal("#play-mp3");
-		});
-		$transport.on("click", ".mp3-close", function(e) {
-			e.preventDefault();
-			stopMp3();
-			showMp3Transport(false);
-		});
 
-		// Drag via header — document-level move/up so it always tracks
+		// Drag via header — robust document listeners (buttons in header stay clickable)
 		(function bindMp3Drag() {
 			var panel = $transport[0];
 			var head = panel.querySelector(".mp3-drag-head");
@@ -8050,24 +8008,9 @@ Rect.prototype.contains = function(x, y) {
 			var dragging = false;
 			var ox = 0;
 			var oy = 0;
-			var activePointer = null;
 
-			function onMove(e) {
-				if(!dragging) return;
-				if(activePointer != null && e.pointerId != null && e.pointerId !== activePointer) return;
-				var w = panel.offsetWidth || 320;
-				var h = panel.offsetHeight || 80;
-				var nx = Math.max(0, Math.min(window.innerWidth - Math.min(w, 120), e.clientX - ox));
-				var ny = Math.max(0, Math.min(window.innerHeight - Math.min(h, 48), e.clientY - oy));
-				panel.style.left = nx + "px";
-				panel.style.top = ny + "px";
-			}
-
-			function onUp(e) {
-				if(!dragging) return;
-				if(activePointer != null && e.pointerId != null && e.pointerId !== activePointer) return;
+			function cleanup() {
 				dragging = false;
-				activePointer = null;
 				panel.classList.remove("mp3-dragging");
 				document.removeEventListener("pointermove", onMove, true);
 				document.removeEventListener("pointerup", onUp, true);
@@ -8076,23 +8019,45 @@ Rect.prototype.contains = function(x, y) {
 				document.removeEventListener("mouseup", onUp, true);
 			}
 
+			function onMove(e) {
+				if(!dragging) return;
+				e.preventDefault();
+				var w = panel.offsetWidth || 320;
+				var h = panel.offsetHeight || 80;
+				var nx = Math.max(0, Math.min(window.innerWidth - Math.min(w, 80), e.clientX - ox));
+				var ny = Math.max(0, Math.min(window.innerHeight - Math.min(h, 40), e.clientY - oy));
+				panel.style.left = nx + "px";
+				panel.style.top = ny + "px";
+			}
+
+			function onUp() {
+				if(!dragging) return;
+				cleanup();
+			}
+
+			function isInteractive(el) {
+				if(!el || !el.closest) return false;
+				return !!el.closest("button, input, select, textarea, a, label");
+			}
+
 			function startDrag(e) {
-				if(e.target.closest && e.target.closest("button, input, label, a, select, textarea")) return;
+				if(isInteractive(e.target)) return;
 				if(e.button != null && e.button !== 0) return;
 				e.preventDefault();
 				e.stopPropagation();
+
 				var r = panel.getBoundingClientRect();
 				panel.classList.add("mp3-dragged");
-				panel.style.left = r.left + "px";
-				panel.style.top = r.top + "px";
+				panel.style.transform = "none";
 				panel.style.right = "auto";
 				panel.style.bottom = "auto";
-				panel.style.transform = "none";
+				panel.style.left = r.left + "px";
+				panel.style.top = r.top + "px";
 				ox = e.clientX - r.left;
 				oy = e.clientY - r.top;
 				dragging = true;
-				activePointer = e.pointerId != null ? e.pointerId : null;
 				panel.classList.add("mp3-dragging");
+
 				document.addEventListener("pointermove", onMove, true);
 				document.addEventListener("pointerup", onUp, true);
 				document.addEventListener("pointercancel", onUp, true);
@@ -8101,11 +8066,43 @@ Rect.prototype.contains = function(x, y) {
 			}
 
 			head.addEventListener("pointerdown", startDrag);
-			head.addEventListener("mousedown", function(e) {
-				if(window.PointerEvent) return;
-				startDrag(e);
-			});
+			// Fallback for older browsers without PointerEvent
+			if(typeof window.PointerEvent === "undefined") {
+				head.addEventListener("mousedown", startDrag);
+			}
+
+			// Never let a stuck drag block the UI
+			window.addEventListener("blur", cleanup);
 		})();
+
+		// Direct listeners so controls work even if delegated clicks are blocked
+		$transport[0].addEventListener("click", function(e) {
+			var btn = e.target && e.target.closest ? e.target.closest(".tb-btn, button") : null;
+			if(!btn || !$transport[0].contains(btn)) return;
+			e.preventDefault();
+			e.stopPropagation();
+			if(btn.classList.contains("play")) playMp3();
+			else if(btn.classList.contains("pause")) pauseMp3();
+			else if(btn.classList.contains("stop")) stopMp3();
+			else if(btn.classList.contains("restart")) { seekMp3(0); playMp3(); }
+			else if(btn.classList.contains("back")) seekMp3By(-5);
+			else if(btn.classList.contains("forward")) seekMp3By(5);
+			else if(btn.classList.contains("speed-half")) {
+				$transport.find("input[name=tempo]").val(50);
+				applyMp3Speed();
+			} else if(btn.classList.contains("speed-one")) {
+				$transport.find("input[name=tempo]").val(100);
+				applyMp3Speed();
+			} else if(btn.classList.contains("speed-double")) {
+				$transport.find("input[name=tempo]").val(200);
+				applyMp3Speed();
+			} else if(btn.classList.contains("mp3-change-file")) {
+				openModal("#play-mp3");
+			} else if(btn.classList.contains("mp3-close")) {
+				stopMp3();
+				showMp3Transport(false);
+			}
+		}, true);
 
 		window.showMp3TransportPanel = showMp3Transport;
 		applyMp3Volume();

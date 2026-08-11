@@ -955,7 +955,7 @@ body.hacks-open #hacks-dock {
 .midi-transport .tempo-slider { width: 72px; }
 .midi-transport .loop-label { font-size: 11px; white-space: nowrap; }
 
-/* Local MP3 player — same transport style as Sheet Play, audio only (not piano) */
+/* Local MP3 player — above modal so controls stay clickable */
 #mp3-transport {
 	position: fixed;
 	left: 50%;
@@ -963,7 +963,7 @@ body.hacks-open #hacks-dock {
 	bottom: auto;
 	transform: translate(-50%, 0);
 	width: min(96%, 900px);
-	z-index: 751;
+	z-index: 100060;
 	display: none;
 	pointer-events: auto;
 }
@@ -986,6 +986,9 @@ body.mp3-transport-active #play-mp3-btn {
 	font-size: 12px;
 	color: #fff;
 	text-shadow: #111 1px 1px;
+	pointer-events: auto;
+	position: relative;
+	z-index: 1;
 }
 .mp3-transport.mp3-dragging .mp3-transport-inner {
 	box-shadow: 0 10px 36px rgba(0, 0, 0, 0.55);
@@ -1003,6 +1006,7 @@ body.mp3-transport-active #play-mp3-btn {
 	touch-action: none;
 	user-select: none;
 	-webkit-user-select: none;
+	pointer-events: auto;
 }
 .mp3-drag-head:active { cursor: grabbing; }
 .mp3-drag-grip {
@@ -1037,6 +1041,19 @@ body.mp3-transport-active #play-mp3-btn {
 	justify-content: center;
 	gap: 6px 10px;
 	padding: 8px 14px;
+	pointer-events: auto;
+	position: relative;
+	z-index: 2;
+}
+.mp3-transport .seek-slider,
+.mp3-transport .tempo-slider,
+.mp3-transport .mp3-volume-slider,
+.mp3-transport .tb-btn,
+.mp3-transport label,
+.mp3-transport input {
+	pointer-events: auto;
+	position: relative;
+	z-index: 3;
 }
 .mp3-transport .seek-slider { flex: 1; min-width: 80px; max-width: 220px; }
 .mp3-transport .tempo-slider { width: 72px; }
@@ -2090,7 +2107,7 @@ body.harmony-custom-cursor .link {
 
 
 #room-notice { z-index: 1; }
-#cursors { z-index: 2; }
+#cursors { z-index: 2; pointer-events: none; }
 #chat { z-index: 480; }
 #social { z-index: 20000; }
 #names { z-index: 300; }
