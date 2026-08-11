@@ -3601,6 +3601,7 @@ Rect.prototype.contains = function(x, y) {
 			if($(evt.target).closest("#metronome-panel").length) return;
 			if($(evt.target).closest("#metronome-hud").length) return;
 			if($(evt.target).closest("#midi-transport").length) return;
+			if($(evt.target).closest("#mp3-transport").length) return;
 			if($(evt.target).closest("#room-media-transport").length) return;
 			if($(evt.target).closest("#harmony-tools").length) return;
 			if($(evt.target).closest("#corner-banner").length) return;
@@ -3616,6 +3617,7 @@ Rect.prototype.contains = function(x, y) {
 				if($(touch.target).closest("#metronome-panel").length) continue;
 				if($(touch.target).closest("#metronome-hud").length) continue;
 				if($(touch.target).closest("#midi-transport").length) continue;
+				if($(touch.target).closest("#mp3-transport").length) continue;
 				if($(touch.target).closest("#room-media-transport").length) continue;
 				if($(touch.target).closest("#harmony-tools").length) continue;
 				if($(touch.target).closest("#corner-banner").length) continue;
@@ -5560,6 +5562,15 @@ Rect.prototype.contains = function(x, y) {
 			e.stopPropagation();
 			openModal("#sheet-play");
 		});
+
+		var playMp3Btn = document.getElementById("play-mp3-btn");
+		if(playMp3Btn) {
+			playMp3Btn.addEventListener("click", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				openModal("#play-mp3");
+			});
+		}
 
 		var roomMediaBtn = document.getElementById("room-media-btn");
 		if(roomMediaBtn) {
@@ -7616,6 +7627,306 @@ Rect.prototype.contains = function(x, y) {
 			}
 			return(result);
 		}
+	})();
+
+	// play mp3 — local audio file player (voice/sound only, not through piano keys)
+	(function() {
+		var $dlg = $("#play-mp3");
+		var $transport = $("#mp3-transport");
+		if(!$dlg.length || !$transport.length) return;
+
+		var audioEl = document.createElement("audio");
+		audioEl.preload = "auto";
+		audioEl.style.display = "none";
+		// Keep pitch stable when changing speed (like Sheet Play tempo)
+		audioEl.preservesPitch = true;
+		audioEl.mozPreservesPitch = true;
+		audioEl.webkitPreservesPitch = true;
+		document.body.appendChild(audioEl);
+
+		var objectUrl = null;
+		var fileName = "";
+		var progressTimer = null;
+		var seekDragging = false;
+
+		function formatMp3Time(sec) {
+			if(!isFinite(sec) || sec < 0) sec = 0;
+			var ms = Math.floor(sec * 1000);
+			if(typeof SheetPlayer !== "undefined" && SheetPlayer.formatTime) {
+				return SheetPlayer.formatTime(ms);
+			}
+			var s = Math.floor(sec);
+			var m = Math.floor(s / 60);
+			s = s % 60;
+			return m + ":" + (s < 10 ? "0" : "") + s;
+		}
+
+		function showMp3Transport(show) {
+			if(show) {
+				$transport.prop("hidden", false).attr("hidden", null);
+				document.body.classList.add("mp3-transport-active");
+			} else {
+				$transport.prop("hidden", true).attr("hidden", "hidden");
+				document.body.classList.remove("mp3-transport-active");
+			}
+		}
+
+		function mp3TempoScale() {
+			var el = $transport.find("input[name=tempo]")[0];
+			var pct = el ? parseFloat(el.value) : 100;
+			if(!isFinite(pct) || pct <= 0) pct = 100;
+			return pct / 100;
+		}
+
+		function applyMp3Speed() {
+			var pct = $transport.find("input[name=tempo]").val();
+			$transport.find(".tempo-label").text(pct + "%");
+			try {
+				audioEl.playbackRate = mp3TempoScale();
+			} catch(err) {}
+		}
+
+		function applyMp3Volume() {
+			var el = $transport.find("input[name=volume]")[0];
+			var v = el ? parseFloat(el.value) : 0.9;
+			if(!isFinite(v)) v = 0.9;
+			audioEl.volume = Math.max(0, Math.min(1, v));
+		}
+
+		function applyMp3Loop() {
+			audioEl.loop = !!$transport.find("input[name=loop]").prop("checked");
+		}
+
+		function updateMp3Progress(cur, dur) {
+			if(!isFinite(cur)) cur = 0;
+			if(!isFinite(dur) || dur < 0) dur = 0;
+			$transport.find(".time-current").text(formatMp3Time(cur));
+			$transport.find(".time-total").text(formatMp3Time(dur));
+			var seek = $transport.find("input[name=seek]")[0];
+			if(seek && !seekDragging) {
+				seek.max = Math.max(dur || 1, 0.001);
+				seek.value = Math.min(cur, seek.max);
+			}
+			$dlg.find(".file-info").text(
+				fileName
+					? (fileName + " — " + formatMp3Time(cur) + " / " + formatMp3Time(dur) +
+						(audioEl.paused ? (cur > 0.05 ? " (paused)" : " (ready)") : " (playing)"))
+					: "Pick an MP3 (or other audio). It plays as sound only — not on the piano keys. Use speed controls like Sheet Play."
+			);
+		}
+
+		function stopProgressTimer() {
+			if(progressTimer) {
+				clearInterval(progressTimer);
+				progressTimer = null;
+			}
+		}
+
+		function startProgressTimer() {
+			stopProgressTimer();
+			progressTimer = setInterval(function() {
+				updateMp3Progress(audioEl.currentTime || 0, audioEl.duration || 0);
+			}, 100);
+		}
+
+		function clearLoadedFile() {
+			stopProgressTimer();
+			audioEl.pause();
+			audioEl.removeAttribute("src");
+			try { audioEl.load(); } catch(err) {}
+			if(objectUrl) {
+				URL.revokeObjectURL(objectUrl);
+				objectUrl = null;
+			}
+			fileName = "";
+			$transport.find(".mp3-track-name").text("No file loaded").attr("title", "");
+			updateMp3Progress(0, 0);
+		}
+
+		function loadMp3File(file, autoPlay) {
+			if(!file) return;
+			clearLoadedFile();
+			fileName = file.name || "Audio file";
+			objectUrl = URL.createObjectURL(file);
+			audioEl.src = objectUrl;
+			applyMp3Speed();
+			applyMp3Volume();
+			applyMp3Loop();
+			$transport.find(".mp3-track-name").text(fileName).attr("title", fileName);
+			$dlg.find(".file-info").text("Loading “" + fileName + "”…");
+			showMp3Transport(true);
+
+			var onReady = function() {
+				audioEl.removeEventListener("loadedmetadata", onReady);
+				updateMp3Progress(0, audioEl.duration || 0);
+				if(autoPlay) playMp3();
+			};
+			audioEl.addEventListener("loadedmetadata", onReady);
+			try { audioEl.load(); } catch(err) {}
+		}
+
+		function playMp3() {
+			if(!audioEl.src) {
+				alert("Choose an MP3 (or other audio) file first.");
+				return;
+			}
+			if(typeof ensureAudioReady === "function") ensureAudioReady();
+			applyMp3Speed();
+			applyMp3Volume();
+			applyMp3Loop();
+			showMp3Transport(true);
+			var p = audioEl.play();
+			if(p && typeof p.then === "function") {
+				p.then(function() {
+					startProgressTimer();
+					updateMp3Progress(audioEl.currentTime || 0, audioEl.duration || 0);
+				}).catch(function(err) {
+					alert("Could not play audio: " + (err && err.message ? err.message : err));
+				});
+			} else {
+				startProgressTimer();
+				updateMp3Progress(audioEl.currentTime || 0, audioEl.duration || 0);
+			}
+		}
+
+		function pauseMp3() {
+			audioEl.pause();
+			stopProgressTimer();
+			updateMp3Progress(audioEl.currentTime || 0, audioEl.duration || 0);
+			showMp3Transport(true);
+		}
+
+		function stopMp3() {
+			audioEl.pause();
+			try { audioEl.currentTime = 0; } catch(err) {}
+			stopProgressTimer();
+			updateMp3Progress(0, audioEl.duration || 0);
+			showMp3Transport(!!audioEl.src);
+		}
+
+		function seekMp3(sec) {
+			if(!audioEl.src || !isFinite(sec)) return;
+			var dur = audioEl.duration;
+			if(isFinite(dur) && dur > 0) {
+				sec = Math.max(0, Math.min(dur, sec));
+			} else {
+				sec = Math.max(0, sec);
+			}
+			try { audioEl.currentTime = sec; } catch(err) {}
+			updateMp3Progress(audioEl.currentTime || sec, audioEl.duration || 0);
+		}
+
+		function seekMp3By(delta) {
+			seekMp3((audioEl.currentTime || 0) + delta);
+		}
+
+		audioEl.addEventListener("ended", function() {
+			if(audioEl.loop) return;
+			stopProgressTimer();
+			updateMp3Progress(audioEl.duration || 0, audioEl.duration || 0);
+		});
+		audioEl.addEventListener("error", function() {
+			var code = audioEl.error && audioEl.error.code;
+			$dlg.find(".file-info").text("Could not load this audio file" + (code ? " (error " + code + ")" : "") + ".");
+			new Notification({
+				id: "mp3-play",
+				title: "MP3 play error",
+				text: "That file could not be decoded. Try another MP3, M4A, WAV, or OGG.",
+				duration: 6000
+			});
+		});
+
+		$dlg.on("change", "input[name=mp3file]", function(evt) {
+			var file = evt.target.files && evt.target.files[0];
+			if(!file) return;
+			loadMp3File(file, false);
+		});
+
+		$dlg.on("click", ".play", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			var fileInput = $dlg.find("input[name=mp3file]")[0];
+			if(!audioEl.src && fileInput && fileInput.files && fileInput.files[0]) {
+				loadMp3File(fileInput.files[0], true);
+				return;
+			}
+			playMp3();
+		});
+
+		$dlg.on("click", ".stop", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			stopMp3();
+		});
+
+		$transport.on("click", ".tb-btn", function(e) { e.stopPropagation(); });
+		$transport.on("input", "input[name=tempo]", applyMp3Speed);
+		$transport.on("click", ".speed-half", function() {
+			$transport.find("input[name=tempo]").val(50);
+			applyMp3Speed();
+		});
+		$transport.on("click", ".speed-one", function() {
+			$transport.find("input[name=tempo]").val(100);
+			applyMp3Speed();
+		});
+		$transport.on("click", ".speed-double", function() {
+			$transport.find("input[name=tempo]").val(200);
+			applyMp3Speed();
+		});
+		$transport.on("change", "input[name=loop]", applyMp3Loop);
+		$transport.on("input", "input[name=volume]", applyMp3Volume);
+		$transport.on("mousedown touchstart", "input[name=seek]", function() {
+			seekDragging = true;
+		});
+		$transport.on("mouseup touchend", "input[name=seek]", function() {
+			seekDragging = false;
+		});
+		$transport.on("input", "input[name=seek]", function() {
+			var sec = parseFloat(this.value) || 0;
+			updateMp3Progress(sec, audioEl.duration || 0);
+		});
+		$transport.on("change", "input[name=seek]", function() {
+			seekMp3(parseFloat(this.value) || 0);
+			seekDragging = false;
+		});
+		$transport.on("click", ".play", function(e) {
+			e.preventDefault();
+			playMp3();
+		});
+		$transport.on("click", ".pause", function(e) {
+			e.preventDefault();
+			pauseMp3();
+		});
+		$transport.on("click", ".stop", function(e) {
+			e.preventDefault();
+			stopMp3();
+		});
+		$transport.on("click", ".restart", function(e) {
+			e.preventDefault();
+			seekMp3(0);
+			playMp3();
+		});
+		$transport.on("click", ".back", function(e) {
+			e.preventDefault();
+			seekMp3By(-5);
+		});
+		$transport.on("click", ".forward", function(e) {
+			e.preventDefault();
+			seekMp3By(5);
+		});
+		$transport.on("click", ".mp3-change-file", function(e) {
+			e.preventDefault();
+			openModal("#play-mp3");
+		});
+		$transport.on("click", ".mp3-close", function(e) {
+			e.preventDefault();
+			stopMp3();
+			showMp3Transport(false);
+		});
+
+		applyMp3Volume();
+		applyMp3Speed();
+		updateMp3Progress(0, 0);
 	})();
 
 

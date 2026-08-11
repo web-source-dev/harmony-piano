@@ -285,6 +285,7 @@ body.hacks-open { --hacks-h: 200px; }
 #room-media-btn,
 #midi-btn,
 #record-btn,
+#play-mp3-btn,
 #synth-btn,
 #sheet-btn,
 #learn-btn,
@@ -951,6 +952,61 @@ body.hacks-open #hacks-dock {
 .midi-transport .seek-slider { flex: 1; min-width: 80px; max-width: 200px; }
 .midi-transport .tempo-slider { width: 72px; }
 .midi-transport .loop-label { font-size: 11px; white-space: nowrap; }
+
+/* Local MP3 player — same transport style as Sheet Play, audio only (not piano) */
+#mp3-transport {
+	position: fixed;
+	left: 50%;
+	top: 34%;
+	bottom: auto;
+	transform: translate(-50%, -50%);
+	width: min(96%, 860px);
+	z-index: 751;
+	display: none;
+	pointer-events: auto;
+}
+#mp3-transport:not([hidden]) { display: block; }
+body.mp3-transport-active #play-mp3-btn {
+	background: rgba(170, 204, 187, 0.35);
+	border-color: #8c8;
+}
+.mp3-transport-inner {
+	margin: 0;
+	padding: 8px 14px;
+	background: rgba(42, 52, 62, 0.97);
+	border: 2px solid #8ab;
+	border-radius: 8px;
+	box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 6px 10px;
+	font-size: 12px;
+	color: #fff;
+	text-shadow: #111 1px 1px;
+}
+.mp3-transport .transport-label { font-weight: bold; color: #8cf; }
+.mp3-transport .mp3-track-name {
+	max-width: 160px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: #cde;
+	font-size: 11px;
+}
+.mp3-transport .seek-slider { flex: 1; min-width: 80px; max-width: 220px; }
+.mp3-transport .tempo-slider { width: 72px; }
+.mp3-transport .loop-label { font-size: 11px; white-space: nowrap; }
+.mp3-transport .mp3-vol-label {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 11px;
+	white-space: nowrap;
+}
+.mp3-transport .mp3-volume-slider { width: 64px; }
+.dialog.play-mp3-dialog { margin-top: -140px; }
 
 .tb-btn,
 .dialog .tb-btn {
