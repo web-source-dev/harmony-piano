@@ -1643,16 +1643,19 @@ Rect.prototype.contains = function(x, y) {
 		ensureParticipantCursorDiv(part);
 		if(!part.cursorDiv) return;
 		var def = null;
+		var size = 18;
 		if(typeof gCursorLooks !== "undefined" && gCursorLooks) {
 			def = gCursorLooks.cursorDefFor(part);
+			size = gCursorLooks.sizeFor(part);
 		}
 		var themed = !!(def && def.image);
 		part.cursorDiv.classList.toggle("cursor-themed", themed);
 		part.cursorDiv.classList.toggle("cursor-image-theme", themed);
+		part.cursorDiv.style.setProperty("--cursor-img-size", size + "px");
 
 		var old = part.cursorDiv.querySelector(".cursor-icon");
 		if(themed && typeof CursorLooks !== "undefined" && CursorLooks.buildCursorIcon) {
-			var icon = CursorLooks.buildCursorIcon(def);
+			var icon = CursorLooks.buildCursorIcon(def, size);
 			if(old) part.cursorDiv.replaceChild(icon, old);
 			else part.cursorDiv.insertBefore(icon, part.cursorDiv.firstChild);
 		} else if(old) {
@@ -1668,11 +1671,12 @@ Rect.prototype.contains = function(x, y) {
 			document.body.classList.toggle("harmony-custom-cursor", themed);
 			document.body.classList.toggle("harmony-custom-follower", followerOn);
 			part.cursorDiv.classList.toggle("cursor-self", true);
-			// Use native CSS cursor for self (instant), hide the overlay duplicate.
-			if(themed && typeof CursorLooks !== "undefined" && CursorLooks.cssCursorValue) {
-				var cssVal = CursorLooks.cssCursorValue(def);
-				document.body.style.cursor = cssVal;
-				document.documentElement.style.setProperty("--harmony-cursor", cssVal);
+			if(themed && typeof CursorLooks !== "undefined" && CursorLooks.makeSizedCssCursor) {
+				CursorLooks.makeSizedCssCursor(def, size, function(cssVal) {
+					if(!cssVal) return;
+					document.body.style.cursor = cssVal;
+					document.documentElement.style.setProperty("--harmony-cursor", cssVal);
+				});
 				part.cursorDiv.classList.add("cursor-self-plain");
 			} else {
 				document.body.style.cursor = "";
@@ -1789,7 +1793,7 @@ Rect.prototype.contains = function(x, y) {
 				}
 			}
 		});
-		var TRAIL_EMOJIS = ["✨", "💫", "⭐", "🌟", "💖", "🔥", "🌈", "🦄", "🍭", "🎈"];
+		var TRAIL_EMOJIS = ["💖", "💗", "💕", "❤️", "💞", "💋", "💘", "😍"];
 		function trailParticleFor(part) {
 			if(typeof gCursorLooks !== "undefined" && gCursorLooks && gCursorLooks.nextTrailParticle) {
 				var custom = gCursorLooks.nextTrailParticle(part, null);
@@ -1804,7 +1808,7 @@ Rect.prototype.contains = function(x, y) {
 				for(var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
 				part._trailEmoji = TRAIL_EMOJIS[h % TRAIL_EMOJIS.length];
 			}
-			return { text: part._trailEmoji, anim: "", life: 900 };
+			return { text: part._trailEmoji, anim: "love", life: 900 };
 		}
 		var $cursors = $("#cursors");
 		function spawnTrail(xPct, yPct, particle) {
@@ -1831,7 +1835,7 @@ Rect.prototype.contains = function(x, y) {
 				var gap = 55;
 				if(typeof gCursorLooks !== "undefined" && gCursorLooks) {
 					var fid = gCursorLooks.followerFor(part);
-					if(fid === "heartstorm" || fid === "orbitdust") gap = 40;
+					if(fid === "heartstorm" || fid === "kissburst") gap = 40;
 				}
 				if(!part._trailT || now - part._trailT > gap) {
 					part._trailT = now;
@@ -8178,17 +8182,31 @@ Rect.prototype.contains = function(x, y) {
 			$dlg.find(".mp3-look-chip[data-follower]").each(function() {
 				this.classList.toggle("active", this.getAttribute("data-follower") === look.follower);
 			});
+			var sizeEl = $dlg.find("input[name=cursor-size]")[0];
+			if(sizeEl) sizeEl.value = look.size;
+			$dlg.find(".cursor-size-label").text(look.size + "px");
 			var info = $dlg.find(".file-info");
 			if(info.length) {
 				var cDef = CursorLooks.CURSORS.filter(function(c) { return c.id === look.cursor; })[0];
 				var fDef = CursorLooks.FOLLOWERS.filter(function(f) { return f.id === look.follower; })[0];
-				info.text("Now: " + (cDef ? cDef.label : look.cursor) + " cursor · " + (fDef ? fDef.label : look.follower) + " follower");
+				info.text(
+					"Now: " + (cDef ? cDef.label : look.cursor) +
+					" · " + look.size + "px · " +
+					(fDef ? fDef.label : look.follower)
+				);
 			}
 		}
 		window.syncCursorLooksUI = syncCursorLooksUI;
 
 		fillLooksChips($dlg);
 		syncCursorLooksUI();
+
+		function applyLookNow() {
+			var me = gClient && gClient.getOwnParticipant && gClient.getOwnParticipant();
+			if(me) applyCursorLookTo(me);
+			else applyAllCursorLooks();
+			syncCursorLooksUI();
+		}
 
 		$dlg.on("click", ".mp3-look-chip", function(e) {
 			e.preventDefault();
@@ -8201,10 +8219,27 @@ Rect.prototype.contains = function(x, y) {
 			var followerId = this.getAttribute("data-follower");
 			if(cursorId) gCursorLooks.setMyCursor(cursorId);
 			if(followerId) gCursorLooks.setMyFollower(followerId);
-			var me = gClient && gClient.getOwnParticipant && gClient.getOwnParticipant();
-			if(me) applyCursorLookTo(me);
-			else applyAllCursorLooks();
-			syncCursorLooksUI();
+			applyLookNow();
+		});
+
+		$dlg.on("input", "input[name=cursor-size]", function() {
+			if(typeof gCursorLooks === "undefined" || !gCursorLooks) return;
+			var size = parseInt(this.value, 10);
+			$dlg.find(".cursor-size-label").text(size + "px");
+			gCursorLooks.setMySize(size);
+			applyLookNow();
+		});
+		$dlg.on("click", ".cursor-size-sm", function(e) {
+			e.preventDefault();
+			if(gCursorLooks) { gCursorLooks.setMySize(16); applyLookNow(); }
+		});
+		$dlg.on("click", ".cursor-size-md", function(e) {
+			e.preventDefault();
+			if(gCursorLooks) { gCursorLooks.setMySize(22); applyLookNow(); }
+		});
+		$dlg.on("click", ".cursor-size-lg", function(e) {
+			e.preventDefault();
+			if(gCursorLooks) { gCursorLooks.setMySize(30); applyLookNow(); }
 		});
 
 		$dlg.on("click", ".cursor-looks-done", function(e) {

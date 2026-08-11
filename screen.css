@@ -1145,33 +1145,33 @@ body.harmony-custom-follower #cursor-looks-btn {
 	border-color: #e8a;
 }
 
-/* Image cursors (Mochi / Goma) for other players */
+/* Image cursors (Mochi / Goma) for other players — size via --cursor-img-size */
 .cursor.cursor-themed.cursor-image-theme {
-	width: 36px;
-	height: 36px;
+	width: var(--cursor-img-size, 18px);
+	height: var(--cursor-img-size, 18px);
 	background: none !important;
-	margin-left: -4px;
-	margin-top: -4px;
+	margin-left: -2px;
+	margin-top: -2px;
 }
 .cursor.cursor-image-theme .cursor-icon.cursor-image {
-	width: 36px;
-	height: 36px;
-	filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+	width: var(--cursor-img-size, 18px);
+	height: var(--cursor-img-size, 18px);
+	filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
 }
 .cursor.cursor-image-theme .ca-cursor-img {
 	display: block;
-	width: 32px;
-	height: 32px;
+	width: var(--cursor-img-size, 18px);
+	height: var(--cursor-img-size, 18px);
 	object-fit: contain;
 	pointer-events: none;
 	user-select: none;
 }
 .cursor.cursor-image-theme .name {
-	left: 30px;
-	top: 12px;
+	left: calc(var(--cursor-img-size, 18px) + 4px);
+	top: 8px;
 }
 
-/* Own cursor uses native CSS url() — keep interactive controls clickable */
+/* Own cursor uses resized CSS url() */
 body.harmony-custom-cursor {
 	cursor: var(--harmony-cursor, auto);
 }
@@ -1190,19 +1190,41 @@ body.harmony-custom-cursor .link {
 	cursor: var(--harmony-cursor, pointer);
 }
 
+.cursor-size-controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	flex: 1;
+}
+.cursor-size-slider {
+	flex: 1;
+	min-width: 100px;
+	max-width: 180px;
+}
+.cursor-size-label {
+	font-size: 11px;
+	font-weight: 700;
+	color: #a45;
+	min-width: 36px;
+}
+.dialog.cursor-looks-dialog .cursor-size-row {
+	align-items: center;
+}
+
 .mp3-look-chip.mp3-look-img-chip {
 	display: inline-flex;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
 	gap: 4px;
-	min-width: 88px;
+	min-width: 78px;
 	height: auto;
 	padding: 8px 10px;
 }
 .mp3-cursor-preview-img {
-	width: 36px;
-	height: 36px;
+	width: 22px;
+	height: 22px;
 	object-fit: contain;
 	display: block;
 	pointer-events: none;

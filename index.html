@@ -5,7 +5,7 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20260812e"/>
+    <link rel="stylesheet" href="./screen.css?v=20260812f"/>
     <link rel="canonical" href="https://multiplayerpiano.com/">
 
     <script>
@@ -747,11 +747,21 @@
         </div>
         <div id="cursor-looks" class="dialog sheet-dialog cursor-looks-dialog">
             <p class="sheet-title">Cursor &amp; Follower</p>
-            <p class="file-info">Pick a cat cursor + emoji follower. Everyone in the room sees your look.</p>
+            <p class="file-info">Pick a cat cursor + love emoji trail. Everyone in the room sees your look.</p>
             <div class="cursor-looks-body">
                 <div class="mp3-looks-row">
                     <span class="mp3-looks-label">Cursor</span>
                     <div class="mp3-looks-chips" data-looks="cursor"></div>
+                </div>
+                <div class="mp3-looks-row cursor-size-row">
+                    <span class="mp3-looks-label">Size</span>
+                    <div class="cursor-size-controls">
+                        <input type="range" name="cursor-size" min="14" max="36" step="2" value="18" class="cursor-size-slider" title="Cursor size"/>
+                        <span class="cursor-size-label">18px</span>
+                        <button type="button" class="tb-btn cursor-size-sm" title="Small">S</button>
+                        <button type="button" class="tb-btn cursor-size-md" title="Medium">M</button>
+                        <button type="button" class="tb-btn cursor-size-lg" title="Large">L</button>
+                    </div>
                 </div>
                 <div class="mp3-looks-row">
                     <span class="mp3-looks-label">Follower</span>
@@ -987,7 +997,7 @@
 <script src="./desktopDoodler.js?v=20260618i"></script>
 <script src="./emojiParty.js"></script>
 <script src="./nameColor.js"></script>
-<script src="./cursorLooks.js?v=20260812e"></script>
+<script src="./cursorLooks.js?v=20260812f"></script>
 <script src="./soundBoard.js"></script>
 <script src="./partyGame.js"></script>
 <script src="./balloonPop.js?v=20260712c"></script>
@@ -1004,7 +1014,7 @@
 <script src="./screenShare.js?v=20260712c"></script>
 <script src="./shareImage.js?v=20260712b"></script>
 <!--<script src="/ebsprite.js"></script>-->
-<script src="./script.js?v=20260812e"></script>
+<script src="./script.js?v=20260812f"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->
 </body>
 </html>
