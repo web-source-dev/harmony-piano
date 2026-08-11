@@ -1646,8 +1646,9 @@ Rect.prototype.contains = function(x, y) {
 		if(typeof gCursorLooks !== "undefined" && gCursorLooks) {
 			def = gCursorLooks.cursorDefFor(part);
 		}
-		var themed = !!(def && def.id && def.id !== "default");
+		var themed = !!(def && def.image);
 		part.cursorDiv.classList.toggle("cursor-themed", themed);
+		part.cursorDiv.classList.toggle("cursor-image-theme", themed);
 
 		var old = part.cursorDiv.querySelector(".cursor-icon");
 		if(themed && typeof CursorLooks !== "undefined" && CursorLooks.buildCursorIcon) {
@@ -1664,12 +1665,20 @@ Rect.prototype.contains = function(x, y) {
 		if(part.id === gClient.participantId) {
 			var look = (typeof gCursorLooks !== "undefined" && gCursorLooks) ? gCursorLooks.getMyLook() : null;
 			var followerOn = !!(look && look.follower !== "default" && look.follower !== "none");
-			var customOn = !!(look && (look.cursor !== "default" || followerOn));
 			document.body.classList.toggle("harmony-custom-cursor", themed);
 			document.body.classList.toggle("harmony-custom-follower", followerOn);
 			part.cursorDiv.classList.toggle("cursor-self", true);
-			// Hide classic duplicate arrow when not using a themed cursor (unless #seeowncursor).
-			part.cursorDiv.classList.toggle("cursor-self-plain", !themed && !gSeeOwnCursor);
+			// Use native CSS cursor for self (instant), hide the overlay duplicate.
+			if(themed && typeof CursorLooks !== "undefined" && CursorLooks.cssCursorValue) {
+				var cssVal = CursorLooks.cssCursorValue(def);
+				document.body.style.cursor = cssVal;
+				document.documentElement.style.setProperty("--harmony-cursor", cssVal);
+				part.cursorDiv.classList.add("cursor-self-plain");
+			} else {
+				document.body.style.cursor = "";
+				document.documentElement.style.removeProperty("--harmony-cursor");
+				part.cursorDiv.classList.toggle("cursor-self-plain", !gSeeOwnCursor);
+			}
 		}
 	}
 
@@ -8115,16 +8124,22 @@ Rect.prototype.contains = function(x, y) {
 				CursorLooks.CURSORS.forEach(function(c) {
 					var btn = document.createElement("button");
 					btn.type = "button";
-					var isAnim = !!(c.anim && c.anim !== "bob");
-					btn.className = "mp3-look-chip" + (c.emoji || isAnim ? "" : " mp3-look-text") + (isAnim ? " mp3-look-anim" : "");
+					btn.className = "mp3-look-chip mp3-look-img-chip";
 					btn.setAttribute("data-cursor", c.id);
-					btn.title = c.label + (isAnim ? " (animated)" : "");
-					if(isAnim && typeof CursorLooks.buildCursorIcon === "function") {
-						var preview = CursorLooks.buildCursorIcon(c);
-						preview.classList.add("mp3-look-preview");
-						btn.appendChild(preview);
+					btn.title = c.label;
+					if(c.image) {
+						var img = document.createElement("img");
+						img.src = c.image;
+						img.alt = c.label;
+						img.className = "mp3-cursor-preview-img";
+						img.draggable = false;
+						btn.appendChild(img);
+						var cap = document.createElement("span");
+						cap.className = "mp3-look-caption";
+						cap.textContent = c.label;
+						btn.appendChild(cap);
 					} else {
-						btn.textContent = c.emoji || "Classic";
+						btn.textContent = c.label || c.id;
 					}
 					host.appendChild(btn);
 				});

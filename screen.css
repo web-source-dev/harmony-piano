@@ -1145,9 +1145,35 @@ body.harmony-custom-follower #cursor-looks-btn {
 	border-color: #e8a;
 }
 
-/* Own themed cursor: hide OS arrow so the custom one is clear */
+/* Image cursors (Mochi / Goma) for other players */
+.cursor.cursor-themed.cursor-image-theme {
+	width: 36px;
+	height: 36px;
+	background: none !important;
+	margin-left: -4px;
+	margin-top: -4px;
+}
+.cursor.cursor-image-theme .cursor-icon.cursor-image {
+	width: 36px;
+	height: 36px;
+	filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+.cursor.cursor-image-theme .ca-cursor-img {
+	display: block;
+	width: 32px;
+	height: 32px;
+	object-fit: contain;
+	pointer-events: none;
+	user-select: none;
+}
+.cursor.cursor-image-theme .name {
+	left: 30px;
+	top: 12px;
+}
+
+/* Own cursor uses native CSS url() — keep interactive controls clickable */
 body.harmony-custom-cursor {
-	cursor: none;
+	cursor: var(--harmony-cursor, auto);
 }
 body.harmony-custom-cursor a,
 body.harmony-custom-cursor button,
@@ -1161,7 +1187,32 @@ body.harmony-custom-cursor .dj-btn,
 body.harmony-custom-cursor .hack-chip,
 body.harmony-custom-cursor .mp3-look-chip,
 body.harmony-custom-cursor .link {
-	cursor: pointer;
+	cursor: var(--harmony-cursor, pointer);
+}
+
+.mp3-look-chip.mp3-look-img-chip {
+	display: inline-flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	min-width: 88px;
+	height: auto;
+	padding: 8px 10px;
+}
+.mp3-cursor-preview-img {
+	width: 36px;
+	height: 36px;
+	object-fit: contain;
+	display: block;
+	pointer-events: none;
+}
+.mp3-look-caption {
+	font-size: 10px;
+	font-weight: 700;
+	color: #543;
+	text-shadow: none;
+	line-height: 1.1;
 }
 .cursor.cursor-self-plain {
 	background: none !important;
