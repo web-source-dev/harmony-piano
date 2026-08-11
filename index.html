@@ -5,7 +5,7 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20260812a"/>
+    <link rel="stylesheet" href="./screen.css?v=20260812b"/>
     <link rel="canonical" href="https://multiplayerpiano.com/">
 
     <script>
@@ -556,29 +556,47 @@
 
 <div id="mp3-transport" class="mp3-transport" hidden>
     <div class="mp3-transport-inner">
-        <span class="transport-label">MP3</span>
-        <span class="mp3-track-name" title="">No file loaded</span>
-        <span class="time-current">0:00</span><span class="time-sep">/</span><span class="time-total">0:00</span>
-        <input type="range" name="seek" min="0" max="1000" value="0" step="0.1" class="seek-slider" title="Seek"/>
-        <button type="button" class="tb-btn restart" title="Restart">⏮</button>
-        <button type="button" class="tb-btn back" title="-5 sec">⏪</button>
-        <button type="button" class="tb-btn play">▶</button>
-        <button type="button" class="tb-btn pause">⏸</button>
-        <button type="button" class="tb-btn stop">⏹</button>
-        <button type="button" class="tb-btn forward" title="+5 sec">⏩</button>
-        <span class="speed-label">Speed</span>
-        <input type="range" name="tempo" min="25" max="300" value="100" class="tempo-slider" title="Playback speed"/>
-        <span class="tempo-label">100%</span>
-        <button type="button" class="tb-btn speed-half">½×</button>
-        <button type="button" class="tb-btn speed-one">1×</button>
-        <button type="button" class="tb-btn speed-double">2×</button>
-        <label class="loop-label"><input type="checkbox" name="loop"/> Loop</label>
-        <label class="mp3-vol-label" title="MP3 volume">
-            <span class="vol-label">Vol</span>
-            <input type="range" name="volume" min="0" max="1" step="0.01" value="0.9" class="mp3-volume-slider"/>
-        </label>
-        <button type="button" class="tb-btn mp3-change-file" title="Choose another file">📁</button>
-        <button type="button" class="tb-btn mp3-close" title="Close player">✕</button>
+        <div class="mp3-drag-head" title="Drag to move">
+            <span class="mp3-drag-grip" aria-hidden="true">⠿</span>
+            <span class="transport-label">MP3</span>
+            <span class="mp3-track-name" title="">No file loaded</span>
+            <span class="mp3-drag-hint">drag</span>
+            <button type="button" class="tb-btn mp3-looks-toggle" title="Cursor &amp; follower looks">💕</button>
+            <button type="button" class="tb-btn mp3-change-file" title="Choose another file">📁</button>
+            <button type="button" class="tb-btn mp3-close" title="Close player">✕</button>
+        </div>
+        <div class="mp3-transport-controls">
+            <span class="time-current">0:00</span><span class="time-sep">/</span><span class="time-total">0:00</span>
+            <input type="range" name="seek" min="0" max="1000" value="0" step="0.1" class="seek-slider" title="Seek"/>
+            <button type="button" class="tb-btn restart" title="Restart">⏮</button>
+            <button type="button" class="tb-btn back" title="-5 sec">⏪</button>
+            <button type="button" class="tb-btn play">▶</button>
+            <button type="button" class="tb-btn pause">⏸</button>
+            <button type="button" class="tb-btn stop">⏹</button>
+            <button type="button" class="tb-btn forward" title="+5 sec">⏩</button>
+            <span class="speed-label">Speed</span>
+            <input type="range" name="tempo" min="25" max="300" value="100" class="tempo-slider" title="Playback speed"/>
+            <span class="tempo-label">100%</span>
+            <button type="button" class="tb-btn speed-half">½×</button>
+            <button type="button" class="tb-btn speed-one">1×</button>
+            <button type="button" class="tb-btn speed-double">2×</button>
+            <label class="loop-label"><input type="checkbox" name="loop"/> Loop</label>
+            <label class="mp3-vol-label" title="MP3 volume">
+                <span class="vol-label">Vol</span>
+                <input type="range" name="volume" min="0" max="1" step="0.01" value="0.9" class="mp3-volume-slider"/>
+            </label>
+        </div>
+        <div class="mp3-looks-panel" hidden>
+            <div class="mp3-looks-row">
+                <span class="mp3-looks-label">Cursor</span>
+                <div class="mp3-looks-chips" data-looks="cursor"></div>
+            </div>
+            <div class="mp3-looks-row">
+                <span class="mp3-looks-label">Follower</span>
+                <div class="mp3-looks-chips" data-looks="follower"></div>
+            </div>
+            <p class="mp3-looks-hint">Everyone in the room sees your cursor &amp; trail. Love &amp; couple looks included.</p>
+        </div>
     </div>
 </div>
 
@@ -737,6 +755,17 @@
                 <button type="button" class="tb-btn play">▶ Play</button>
                 <button type="button" class="tb-btn stop">⏹ Stop</button>
             </p>
+            <div class="mp3-looks-dialog">
+                <p class="sheet-row sheet-title-sm">Cursor &amp; follower (everyone sees yours)</p>
+                <div class="mp3-looks-row">
+                    <span class="mp3-looks-label">Cursor</span>
+                    <div class="mp3-looks-chips" data-looks="cursor"></div>
+                </div>
+                <div class="mp3-looks-row">
+                    <span class="mp3-looks-label">Follower</span>
+                    <div class="mp3-looks-chips" data-looks="follower"></div>
+                </div>
+            </div>
         </div>
         <div id="fun-video" class="dialog fun-video-dialog">
             <div class="fun-video-dialog-inner">
@@ -963,6 +992,7 @@
 <script src="./desktopDoodler.js?v=20260618i"></script>
 <script src="./emojiParty.js"></script>
 <script src="./nameColor.js"></script>
+<script src="./cursorLooks.js"></script>
 <script src="./soundBoard.js"></script>
 <script src="./partyGame.js"></script>
 <script src="./balloonPop.js?v=20260712c"></script>
@@ -979,7 +1009,7 @@
 <script src="./screenShare.js?v=20260712c"></script>
 <script src="./shareImage.js?v=20260712b"></script>
 <!--<script src="/ebsprite.js"></script>-->
-<script src="./script.js?v=20260812a"></script>
+<script src="./script.js?v=20260812b"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->
 </body>
 </html>

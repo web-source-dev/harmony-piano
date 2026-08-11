@@ -1615,6 +1615,37 @@ Rect.prototype.contains = function(x, y) {
 		}
 	}
 
+	function applyCursorLookTo(part) {
+		if(!part || !part.cursorDiv) return;
+		var emoji = "";
+		if(typeof gCursorLooks !== "undefined" && gCursorLooks) {
+			emoji = gCursorLooks.cursorEmojiFor(part) || "";
+		}
+		var themed = !!emoji;
+		part.cursorDiv.classList.toggle("cursor-themed", themed);
+		var icon = part.cursorDiv.querySelector(".cursor-icon");
+		if(themed) {
+			if(!icon) {
+				icon = document.createElement("span");
+				icon.className = "cursor-icon";
+				part.cursorDiv.insertBefore(icon, part.cursorDiv.firstChild);
+			}
+			icon.textContent = emoji;
+			icon.style.display = "block";
+		} else if(icon) {
+			icon.textContent = "";
+			icon.style.display = "none";
+		}
+	}
+
+	function applyAllCursorLooks() {
+		if(!gClient || !gClient.ppl) return;
+		for(var id in gClient.ppl) {
+			if(gClient.ppl.hasOwnProperty(id)) applyCursorLookTo(gClient.ppl[id]);
+		}
+		if(typeof window.syncCursorLooksUI === "function") window.syncCursorLooksUI();
+	}
+
 	// Handle changes to participants
 	(function() {
 		gClient.on("participant added", function(part) {
@@ -1671,6 +1702,7 @@ Rect.prototype.contains = function(x, y) {
 				div.textContent = part.name || "";
 				part.cursorDiv.appendChild(div);
 				applyNameColorTo(part);
+				applyCursorLookTo(part);
 
 			} else {
 				part.cursorDiv = undefined;
@@ -1693,6 +1725,7 @@ Rect.prototype.contains = function(x, y) {
 			part.nameDiv.textContent = name;
 			$(part.cursorDiv).find(".name").text(name);
 			applyNameColorTo(part);
+			applyCursorLookTo(part);
 		});
 		gClient.on("ch", function(msg) {
 			for(var id in gClient.ppl) {
@@ -1725,6 +1758,11 @@ Rect.prototype.contains = function(x, y) {
 		});
 		var TRAIL_EMOJIS = ["✨", "💫", "⭐", "🌟", "💖", "🔥", "🌈", "🦄", "🍭", "🎈"];
 		function trailEmojiFor(part) {
+			if(typeof gCursorLooks !== "undefined" && gCursorLooks) {
+				var custom = gCursorLooks.nextTrailEmoji(part, null);
+				if(custom === "") return ""; // follower off
+				if(custom) return custom;
+			}
 			if(part._trailEmoji) return part._trailEmoji;
 			var key = String(part._id || part.id || "");
 			var h = 0;
@@ -1734,9 +1772,12 @@ Rect.prototype.contains = function(x, y) {
 		}
 		var $cursors = $("#cursors");
 		function spawnTrail(xPct, yPct, emoji) {
-			if(!$cursors.length) return;
+			if(!$cursors.length || !emoji) return;
 			var s = document.createElement("span");
 			s.className = "cursor-trail";
+			if(/[❤️💕💖💗💘💝💞💋🌹💍💑💏😍🥰]/.test(emoji)) {
+				s.className += " cursor-trail-love";
+			}
 			s.textContent = emoji;
 			s.style.left = xPct + "%";
 			s.style.top = yPct + "%";
@@ -3547,6 +3588,10 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gNameColor !== "undefined" && gNameColor) gNameColor.tryHandleChat(msg);
 			return true;
 		}
+		if(typeof CursorLooks !== "undefined" && CursorLooks.isSyncText(chatLine)) {
+			if(typeof gCursorLooks !== "undefined" && gCursorLooks) gCursorLooks.tryHandleChat(msg);
+			return true;
+		}
 		if(typeof ScreenShare !== "undefined" && ScreenShare.isSyncText(chatLine)) {
 			ScreenShare.tryHandleChat(msg);
 			return true;
@@ -3720,6 +3765,7 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof ReactionRoyale !== "undefined" && ReactionRoyale.isSyncText(chatLine)) return;
 				if(typeof TugOfWar !== "undefined" && TugOfWar.isSyncText(chatLine)) return;
 				if(typeof NameColor !== "undefined" && NameColor.isSyncText(chatLine)) return;
+				if(typeof CursorLooks !== "undefined" && CursorLooks.isSyncText(chatLine)) return;
 				if(typeof ScreenShare !== "undefined" && ScreenShare.isSyncText(chatLine)) return;
 				if(typeof ShareImage !== "undefined" && ShareImage.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
@@ -4620,6 +4666,7 @@ Rect.prototype.contains = function(x, y) {
 	var gReactionRoyale;
 	var gTugOfWar;
 	var gNameColor;
+	var gCursorLooks;
 	var gUselessButton;
 	var gPixelPet;
 	var gEvilCursor;
@@ -4727,6 +4774,19 @@ Rect.prototype.contains = function(x, y) {
 				if(gNameColor) gNameColor.requestAll();
 			}, 600);
 		});
+	}
+	if(typeof CursorLooks !== "undefined") {
+		gCursorLooks = new CursorLooks({
+			client: gClient,
+			onChange: function() { applyAllCursorLooks(); }
+		});
+		window.gCursorLooks = gCursorLooks;
+		gClient.on("ch", function() {
+			setTimeout(function() {
+				if(gCursorLooks) gCursorLooks.requestAll();
+			}, 700);
+		});
+		applyAllCursorLooks();
 	}
 	if(typeof SoundBoard !== "undefined") {
 		gSoundBoard = new SoundBoard({ client: gClient });
@@ -5569,6 +5629,9 @@ Rect.prototype.contains = function(x, y) {
 				e.preventDefault();
 				e.stopPropagation();
 				openModal("#play-mp3");
+				if(typeof window.showMp3TransportPanel === "function") {
+					window.showMp3TransportPanel(true);
+				}
 			});
 		}
 
@@ -7922,6 +7985,131 @@ Rect.prototype.contains = function(x, y) {
 			e.preventDefault();
 			stopMp3();
 			showMp3Transport(false);
+		});
+
+		// --- Drag anywhere via the header ---
+		(function bindMp3Drag() {
+			var panel = $transport[0];
+			var head = panel.querySelector(".mp3-drag-head");
+			if(!head) return;
+			var dragging = false;
+			var ox = 0;
+			var oy = 0;
+
+			head.addEventListener("pointerdown", function(e) {
+				if(e.target.closest && e.target.closest("button, input, label, a, select, textarea")) return;
+				if(e.button != null && e.button !== 0) return;
+				e.preventDefault();
+				var r = panel.getBoundingClientRect();
+				panel.classList.add("mp3-dragged");
+				panel.style.left = r.left + "px";
+				panel.style.top = r.top + "px";
+				panel.style.right = "auto";
+				panel.style.bottom = "auto";
+				panel.style.transform = "none";
+				ox = e.clientX - r.left;
+				oy = e.clientY - r.top;
+				dragging = true;
+				panel.classList.add("mp3-dragging");
+				try { head.setPointerCapture(e.pointerId); } catch(err) {}
+			});
+
+			head.addEventListener("pointermove", function(e) {
+				if(!dragging) return;
+				var w = panel.offsetWidth || 320;
+				var h = panel.offsetHeight || 80;
+				var nx = Math.max(0, Math.min(window.innerWidth - Math.min(w, 120), e.clientX - ox));
+				var ny = Math.max(0, Math.min(window.innerHeight - Math.min(h, 48), e.clientY - oy));
+				panel.style.left = nx + "px";
+				panel.style.top = ny + "px";
+			});
+
+			function endDrag() {
+				if(!dragging) return;
+				dragging = false;
+				panel.classList.remove("mp3-dragging");
+			}
+			head.addEventListener("pointerup", endDrag);
+			head.addEventListener("pointercancel", endDrag);
+			head.addEventListener("lostpointercapture", endDrag);
+		})();
+
+		// --- Shared cursor + follower look pickers ---
+		function fillLooksChips($root) {
+			if(typeof CursorLooks === "undefined" || !$root || !$root.length) return;
+			$root.find(".mp3-looks-chips[data-looks=cursor]").each(function() {
+				var host = this;
+				if(host.getAttribute("data-filled")) return;
+				host.setAttribute("data-filled", "1");
+				host.innerHTML = "";
+				CursorLooks.CURSORS.forEach(function(c) {
+					var btn = document.createElement("button");
+					btn.type = "button";
+					btn.className = "mp3-look-chip" + (c.emoji ? "" : " mp3-look-text");
+					btn.setAttribute("data-cursor", c.id);
+					btn.title = c.label;
+					btn.textContent = c.emoji || "Classic";
+					host.appendChild(btn);
+				});
+			});
+			$root.find(".mp3-looks-chips[data-looks=follower]").each(function() {
+				var host = this;
+				if(host.getAttribute("data-filled")) return;
+				host.setAttribute("data-filled", "1");
+				host.innerHTML = "";
+				CursorLooks.FOLLOWERS.forEach(function(f) {
+					var btn = document.createElement("button");
+					btn.type = "button";
+					btn.className = "mp3-look-chip" + (f.id === "default" || f.id === "none" ? " mp3-look-text" : "");
+					btn.setAttribute("data-follower", f.id);
+					btn.title = f.label;
+					btn.textContent = (f.id === "default") ? "Auto" : (f.id === "none" ? "Off" : f.emoji);
+					host.appendChild(btn);
+				});
+			});
+		}
+
+		function syncCursorLooksUI() {
+			if(typeof gCursorLooks === "undefined" || !gCursorLooks) return;
+			var look = gCursorLooks.getMyLook();
+			$(".mp3-look-chip[data-cursor]").each(function() {
+				this.classList.toggle("active", this.getAttribute("data-cursor") === look.cursor);
+			});
+			$(".mp3-look-chip[data-follower]").each(function() {
+				this.classList.toggle("active", this.getAttribute("data-follower") === look.follower);
+			});
+		}
+		window.syncCursorLooksUI = syncCursorLooksUI;
+		window.showMp3TransportPanel = showMp3Transport;
+
+		fillLooksChips($transport);
+		fillLooksChips($dlg);
+		syncCursorLooksUI();
+
+		function onLookChipClick(e) {
+			var btn = e.currentTarget;
+			if(typeof gCursorLooks === "undefined" || !gCursorLooks) return;
+			e.preventDefault();
+			e.stopPropagation();
+			var cursorId = btn.getAttribute("data-cursor");
+			var followerId = btn.getAttribute("data-follower");
+			if(cursorId) gCursorLooks.setMyCursor(cursorId);
+			if(followerId) gCursorLooks.setMyFollower(followerId);
+			syncCursorLooksUI();
+			showMp3Transport(true);
+			var $looks = $transport.find(".mp3-looks-panel");
+			if($looks.length) $looks.prop("hidden", false).removeAttr("hidden");
+		}
+
+		$(document).on("click", ".mp3-look-chip", onLookChipClick);
+
+		$transport.on("click", ".mp3-looks-toggle", function(e) {
+			e.preventDefault();
+			var $looks = $transport.find(".mp3-looks-panel");
+			var open = $looks.is("[hidden]");
+			if(open) $looks.prop("hidden", false).removeAttr("hidden");
+			else $looks.prop("hidden", true).attr("hidden", "hidden");
+			this.classList.toggle("stuck", open);
 		});
 
 		applyMp3Volume();
