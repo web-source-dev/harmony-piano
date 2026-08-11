@@ -1,8 +1,8 @@
 /**
  * CursorLooks — shared cursor + mouse-follower styles for everyone in the room.
  *
- * Synced over Harmony's room relay (same transport as NameColor), so each user's
- * chosen look is visible to everyone else on this domain.
+ * Supports classic emoji looks and animated multi-layer cursors/trails.
+ * Synced over Harmony's room relay (same transport as NameColor).
  *
  * Protocol (chat/relay text, "CL|" prefixed):
  *   CL|s|cursorId|followerId  -> announce / update look
@@ -14,42 +14,77 @@
 	var SYNC_PREFIX = "CL|";
 	var STORE_KEY = "harmonyCursorLooks";
 
+	// anim: CSS modifier class (ca-<anim>). layers: extra decorative nodes.
 	var CURSORS = [
-		{ id: "default", label: "Classic", emoji: "" },
-		{ id: "heart", label: "Heart", emoji: "❤️" },
-		{ id: "sparkleheart", label: "Sparkle", emoji: "💖" },
-		{ id: "growing", label: "Growing", emoji: "💗" },
-		{ id: "twohearts", label: "Two hearts", emoji: "💕" },
-		{ id: "revolving", label: "Revolving", emoji: "💞" },
-		{ id: "cupid", label: "Cupid", emoji: "💘" },
-		{ id: "gift", label: "Gift heart", emoji: "💝" },
-		{ id: "kiss", label: "Kiss", emoji: "💋" },
-		{ id: "rose", label: "Rose", emoji: "🌹" },
-		{ id: "ring", label: "Ring", emoji: "💍" },
-		{ id: "couple", label: "Couple", emoji: "💑" },
-		{ id: "couplekiss", label: "Couple kiss", emoji: "💏" },
-		{ id: "holding", label: "Holding hands", emoji: "👫" },
-		{ id: "loveface", label: "In love", emoji: "😍" },
-		{ id: "smilinghearts", label: "Heart eyes", emoji: "🥰" },
-		{ id: "blush", label: "Blush", emoji: "😊" },
-		{ id: "loveyou", label: "Love you", emoji: "🤟" },
-		{ id: "bouquet", label: "Bouquet", emoji: "💐" },
-		{ id: "cherry", label: "Cherry", emoji: "🍒" }
+		{ id: "default", label: "Classic", emoji: "", anim: "" },
+
+		// Animated (shown first)
+		{ id: "pulseheart", label: "Pulse heart", emoji: "❤️", anim: "pulseheart", layers: ["ring", "ring2"] },
+		{ id: "glowheart", label: "Glow heart", emoji: "💖", anim: "glowheart", layers: ["ring", "ring2", "spark1", "spark2"] },
+		{ id: "beatwave", label: "Heartbeat", emoji: "💗", anim: "beatwave", layers: ["ring", "ring2", "ring3"] },
+		{ id: "twinorbit", label: "Orbit hearts", emoji: "💕", anim: "twinorbit", layers: ["orb1", "orb2"] },
+		{ id: "spinring", label: "Spin ring", emoji: "💍", anim: "spinring", layers: ["halo"] },
+		{ id: "kisspop", label: "Kiss pop", emoji: "💋", anim: "kisspop", layers: ["burst1", "burst2"] },
+		{ id: "rosewirl", label: "Rose swirl", emoji: "🌹", anim: "rosewirl", layers: ["petal1", "petal2"] },
+		{ id: "couplebounce", label: "Couple bounce", emoji: "💑", anim: "couplebounce", layers: ["spark1"] },
+		{ id: "sparklespin", label: "Sparkle spin", emoji: "✨", anim: "sparklespin", layers: ["spark1", "spark2", "spark3"] },
+		{ id: "arrowshot", label: "Cupid arrow", emoji: "💘", anim: "arrowshot", layers: ["trail"] },
+		{ id: "rainbowbeat", label: "Rainbow beat", emoji: "❤️", anim: "rainbowbeat", layers: ["ring"] },
+		{ id: "lovefire", label: "Love fire", emoji: "🔥", anim: "lovefire", layers: ["flame1", "flame2"] },
+		{ id: "cssheart", label: "Neon heart", emoji: "", anim: "cssheart", layers: ["ring", "heart"] },
+		{ id: "jellyheart", label: "Jelly heart", emoji: "💗", anim: "jellyheart", layers: ["ring"] },
+		{ id: "couplekiss", label: "Couple kiss", emoji: "💏", anim: "couplekiss", layers: ["spark1", "spark2"] },
+
+		// Classic emoji (light bob)
+		{ id: "heart", label: "Heart", emoji: "❤️", anim: "bob" },
+		{ id: "sparkleheart", label: "Sparkle", emoji: "💖", anim: "bob" },
+		{ id: "growing", label: "Growing", emoji: "💗", anim: "bob" },
+		{ id: "twohearts", label: "Two hearts", emoji: "💕", anim: "bob" },
+		{ id: "revolving", label: "Revolving", emoji: "💞", anim: "bob" },
+		{ id: "cupid", label: "Cupid", emoji: "💘", anim: "bob" },
+		{ id: "gift", label: "Gift heart", emoji: "💝", anim: "bob" },
+		{ id: "kiss", label: "Kiss", emoji: "💋", anim: "bob" },
+		{ id: "rose", label: "Rose", emoji: "🌹", anim: "bob" },
+		{ id: "ring", label: "Ring", emoji: "💍", anim: "bob" },
+		{ id: "couple", label: "Couple", emoji: "💑", anim: "bob" },
+		{ id: "holding", label: "Holding hands", emoji: "👫", anim: "bob" },
+		{ id: "loveface", label: "In love", emoji: "😍", anim: "bob" },
+		{ id: "smilinghearts", label: "Heart eyes", emoji: "🥰", anim: "bob" },
+		{ id: "blush", label: "Blush", emoji: "😊", anim: "bob" },
+		{ id: "loveyou", label: "Love you", emoji: "🤟", anim: "bob" },
+		{ id: "bouquet", label: "Bouquet", emoji: "💐", anim: "bob" },
+		{ id: "cherry", label: "Cherry", emoji: "🍒", anim: "bob" }
 	];
 
 	var FOLLOWERS = [
-		{ id: "default", label: "Auto", emoji: "✨", trail: null },
-		{ id: "hearts", label: "Hearts", emoji: "💖", trail: ["💖", "💗", "💕", "❤️", "💞"] },
-		{ id: "softhearts", label: "Soft hearts", emoji: "🤍", trail: ["🤍", "🩷", "❣️", "💕"] },
-		{ id: "roses", label: "Roses", emoji: "🌹", trail: ["🌹", "🥀", "🌺", "💐"] },
-		{ id: "kisses", label: "Kisses", emoji: "💋", trail: ["💋", "😘", "😻", "💗"] },
-		{ id: "cupid", label: "Cupid", emoji: "💘", trail: ["💘", "🏹", "✨", "💖"] },
-		{ id: "sparkles", label: "Sparkles", emoji: "✨", trail: ["✨", "💫", "⭐", "🌟"] },
-		{ id: "couple", label: "Couple", emoji: "💑", trail: ["💑", "💏", "💕", "💞"] },
-		{ id: "rings", label: "Rings", emoji: "💍", trail: ["💍", "💎", "✨", "💖"] },
-		{ id: "loveburst", label: "Love burst", emoji: "😍", trail: ["😍", "🥰", "💖", "💘", "💞"] },
-		{ id: "petals", label: "Petals", emoji: "🌸", trail: ["🌸", "🌼", "💮", "🏵️"] },
-		{ id: "none", label: "Off", emoji: "🚫", trail: [] }
+		{ id: "default", label: "Auto", emoji: "✨", trail: null, trailAnim: "" },
+
+		// Animated trails
+		{ id: "pulsehearts", label: "Pulse hearts", emoji: "💓", trail: ["❤️", "💖", "💗", "💕"], trailAnim: "pulse", life: 1100 },
+		{ id: "floathearts", label: "Float hearts", emoji: "💕", trail: ["💖", "💗", "🤍", "❤️"], trailAnim: "float", life: 1300 },
+		{ id: "orbitdust", label: "Orbit dust", emoji: "💫", trail: ["✨", "💖", "⭐", "💫"], trailAnim: "orbit", life: 1200 },
+		{ id: "sparklefall", label: "Sparkle fall", emoji: "✨", trail: ["✨", "⭐", "🌟", "💫"], trailAnim: "fall", life: 1200 },
+		{ id: "petalspin", label: "Petal spin", emoji: "🌸", trail: ["🌸", "🌺", "💮", "🌹"], trailAnim: "spin", life: 1250 },
+		{ id: "kissburst", label: "Kiss burst", emoji: "💋", trail: ["💋", "😘", "💗", "💕"], trailAnim: "burst", life: 1000 },
+		{ id: "ringspin", label: "Ring spin", emoji: "💍", trail: ["💍", "💎", "✨", "💖"], trailAnim: "spin", life: 1200 },
+		{ id: "coupletrail", label: "Couple trail", emoji: "💑", trail: ["💑", "💏", "💕", "💞"], trailAnim: "bounce", life: 1200 },
+		{ id: "rainbowdust", label: "Rainbow dust", emoji: "🌈", trail: ["❤️", "🧡", "💛", "💚", "💙", "💜"], trailAnim: "rainbow", life: 1300 },
+		{ id: "glowtrail", label: "Glow trail", emoji: "🔆", trail: ["💖", "✨", "💗", "⭐"], trailAnim: "glow", life: 1150 },
+		{ id: "heartstorm", label: "Heart storm", emoji: "💘", trail: ["💘", "💖", "💕", "❤️", "💗"], trailAnim: "storm", life: 1400 },
+		{ id: "roseshower", label: "Rose shower", emoji: "🌹", trail: ["🌹", "🥀", "🌺", "💐"], trailAnim: "fall", life: 1350 },
+
+		// Classic
+		{ id: "hearts", label: "Hearts", emoji: "💖", trail: ["💖", "💗", "💕", "❤️", "💞"], trailAnim: "love", life: 900 },
+		{ id: "softhearts", label: "Soft hearts", emoji: "🤍", trail: ["🤍", "🩷", "❣️", "💕"], trailAnim: "love", life: 900 },
+		{ id: "roses", label: "Roses", emoji: "🌹", trail: ["🌹", "🥀", "🌺", "💐"], trailAnim: "love", life: 900 },
+		{ id: "kisses", label: "Kisses", emoji: "💋", trail: ["💋", "😘", "😻", "💗"], trailAnim: "love", life: 900 },
+		{ id: "cupid", label: "Cupid", emoji: "💘", trail: ["💘", "🏹", "✨", "💖"], trailAnim: "love", life: 900 },
+		{ id: "sparkles", label: "Sparkles", emoji: "✨", trail: ["✨", "💫", "⭐", "🌟"], trailAnim: "", life: 900 },
+		{ id: "couple", label: "Couple", emoji: "💑", trail: ["💑", "💏", "💕", "💞"], trailAnim: "love", life: 900 },
+		{ id: "rings", label: "Rings", emoji: "💍", trail: ["💍", "💎", "✨", "💖"], trailAnim: "love", life: 900 },
+		{ id: "loveburst", label: "Love burst", emoji: "😍", trail: ["😍", "🥰", "💖", "💘", "💞"], trailAnim: "burst", life: 1000 },
+		{ id: "petals", label: "Petals", emoji: "🌸", trail: ["🌸", "🌼", "💮", "🏵️"], trailAnim: "spin", life: 1000 },
+		{ id: "none", label: "Off", emoji: "🚫", trail: [], trailAnim: "", life: 0 }
 	];
 
 	var CURSOR_BY_ID = {};
@@ -57,8 +92,58 @@
 	for (var i = 0; i < CURSORS.length; i++) CURSOR_BY_ID[CURSORS[i].id] = CURSORS[i];
 	for (var j = 0; j < FOLLOWERS.length; j++) FOLLOWER_BY_ID[FOLLOWERS[j].id] = FOLLOWERS[j];
 
+	var LAYER_CLASS = {
+		ring: "ca-ring",
+		ring2: "ca-ring ca-ring-2",
+		ring3: "ca-ring ca-ring-3",
+		spark1: "ca-spark ca-spark-1",
+		spark2: "ca-spark ca-spark-2",
+		spark3: "ca-spark ca-spark-3",
+		orb1: "ca-orb ca-orb-1",
+		orb2: "ca-orb ca-orb-2",
+		halo: "ca-halo",
+		burst1: "ca-burst ca-burst-1",
+		burst2: "ca-burst ca-burst-2",
+		petal1: "ca-petal ca-petal-1",
+		petal2: "ca-petal ca-petal-2",
+		trail: "ca-shot-trail",
+		flame1: "ca-flame ca-flame-1",
+		flame2: "ca-flame ca-flame-2",
+		heart: "ca-heart-shape"
+	};
+
 	function isCursorId(id) { return !!(id && CURSOR_BY_ID[id]); }
 	function isFollowerId(id) { return !!(id && FOLLOWER_BY_ID[id]); }
+
+	function buildCursorIcon(def) {
+		var wrap = document.createElement("span");
+		if (!def || !def.anim && !def.emoji) {
+			wrap.className = "cursor-icon";
+			wrap.style.display = "none";
+			return wrap;
+		}
+		var anim = def.anim || "bob";
+		wrap.className = "cursor-icon cursor-anim ca-" + anim;
+		wrap.style.display = "block";
+
+		var layers = def.layers || [];
+		for (var i = 0; i < layers.length; i++) {
+			var cls = LAYER_CLASS[layers[i]];
+			if (!cls) continue;
+			var node = document.createElement("span");
+			node.className = cls;
+			node.setAttribute("aria-hidden", "true");
+			wrap.appendChild(node);
+		}
+
+		if (def.emoji || anim === "cssheart") {
+			var core = document.createElement("span");
+			core.className = "ca-core";
+			if (def.emoji) core.textContent = def.emoji;
+			wrap.appendChild(core);
+		}
+		return wrap;
+	}
 
 	function CursorLooks(opts) {
 		opts = opts || {};
@@ -77,6 +162,7 @@
 	CursorLooks.FOLLOWERS = FOLLOWERS;
 	CursorLooks.isCursorId = isCursorId;
 	CursorLooks.isFollowerId = isFollowerId;
+	CursorLooks.buildCursorIcon = buildCursorIcon;
 
 	CursorLooks.isSyncText = function (text) {
 		return !!(text && typeof text === "string" && text.indexOf(SYNC_PREFIX) === 0);
@@ -126,10 +212,15 @@
 		return this.lookFor(part).cursor;
 	};
 
+	CursorLooks.prototype.cursorDefFor = function (part) {
+		return CURSOR_BY_ID[this.cursorFor(part)] || CURSOR_BY_ID.default;
+	};
+
 	CursorLooks.prototype.cursorEmojiFor = function (part) {
-		var id = this.cursorFor(part);
-		var def = CURSOR_BY_ID[id];
-		return def && def.emoji ? def.emoji : "";
+		var def = this.cursorDefFor(part);
+		if (!def) return "";
+		if (def.anim && def.anim !== "bob") return def.emoji || "♥";
+		return def.emoji || "";
 	};
 
 	CursorLooks.prototype.followerFor = function (part) {
@@ -137,15 +228,33 @@
 	};
 
 	CursorLooks.prototype.nextTrailEmoji = function (part, fallbackEmoji) {
+		var p = this.nextTrailParticle(part, fallbackEmoji);
+		if (!p) return fallbackEmoji;
+		return p.text;
+	};
+
+	CursorLooks.prototype.nextTrailParticle = function (part, fallbackEmoji) {
 		var fid = this.followerFor(part);
 		var def = FOLLOWER_BY_ID[fid];
-		if (!def || def.trail === null) return fallbackEmoji;
-		if (!def.trail.length) return "";
+		if (!def || def.trail === null) {
+			return fallbackEmoji ? { text: fallbackEmoji, anim: "", life: 900 } : null;
+		}
+		if (!def.trail.length) return { text: "", anim: "", life: 0 };
+
 		var key = String((part && (part._id || part.id)) || "x");
 		var idx = this._trailIdx[key] || 0;
 		var emoji = def.trail[idx % def.trail.length];
 		this._trailIdx[key] = idx + 1;
-		return emoji;
+
+		var jitter = ((idx * 37) % 7) - 3;
+		return {
+			text: emoji,
+			anim: def.trailAnim || "",
+			life: def.life || 1000,
+			dx: jitter,
+			dy: ((idx * 19) % 5) - 2,
+			scale: 0.85 + ((idx % 4) * 0.08)
+		};
 	};
 
 	CursorLooks.prototype.setMyLook = function (cursorId, followerId) {

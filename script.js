@@ -1617,24 +1617,23 @@ Rect.prototype.contains = function(x, y) {
 
 	function applyCursorLookTo(part) {
 		if(!part || !part.cursorDiv) return;
-		var emoji = "";
+		var def = null;
 		if(typeof gCursorLooks !== "undefined" && gCursorLooks) {
-			emoji = gCursorLooks.cursorEmojiFor(part) || "";
+			def = gCursorLooks.cursorDefFor(part);
 		}
-		var themed = !!emoji;
+		var themed = !!(def && def.id && def.id !== "default");
 		part.cursorDiv.classList.toggle("cursor-themed", themed);
-		var icon = part.cursorDiv.querySelector(".cursor-icon");
-		if(themed) {
-			if(!icon) {
-				icon = document.createElement("span");
-				icon.className = "cursor-icon";
-				part.cursorDiv.insertBefore(icon, part.cursorDiv.firstChild);
-			}
-			icon.textContent = emoji;
-			icon.style.display = "block";
-		} else if(icon) {
-			icon.textContent = "";
-			icon.style.display = "none";
+
+		var old = part.cursorDiv.querySelector(".cursor-icon");
+		if(themed && typeof CursorLooks !== "undefined" && CursorLooks.buildCursorIcon) {
+			var icon = CursorLooks.buildCursorIcon(def);
+			if(old) part.cursorDiv.replaceChild(icon, old);
+			else part.cursorDiv.insertBefore(icon, part.cursorDiv.firstChild);
+		} else if(old) {
+			old.textContent = "";
+			old.className = "cursor-icon";
+			old.style.display = "none";
+			old.innerHTML = "";
 		}
 	}
 
@@ -1757,32 +1756,37 @@ Rect.prototype.contains = function(x, y) {
 			}
 		});
 		var TRAIL_EMOJIS = ["✨", "💫", "⭐", "🌟", "💖", "🔥", "🌈", "🦄", "🍭", "🎈"];
-		function trailEmojiFor(part) {
-			if(typeof gCursorLooks !== "undefined" && gCursorLooks) {
-				var custom = gCursorLooks.nextTrailEmoji(part, null);
-				if(custom === "") return ""; // follower off
-				if(custom) return custom;
+		function trailParticleFor(part) {
+			if(typeof gCursorLooks !== "undefined" && gCursorLooks && gCursorLooks.nextTrailParticle) {
+				var custom = gCursorLooks.nextTrailParticle(part, null);
+				if(custom) {
+					if(!custom.text) return null; // follower off
+					return custom;
+				}
 			}
-			if(part._trailEmoji) return part._trailEmoji;
-			var key = String(part._id || part.id || "");
-			var h = 0;
-			for(var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-			part._trailEmoji = TRAIL_EMOJIS[h % TRAIL_EMOJIS.length];
-			return part._trailEmoji;
+			if(!part._trailEmoji) {
+				var key = String(part._id || part.id || "");
+				var h = 0;
+				for(var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+				part._trailEmoji = TRAIL_EMOJIS[h % TRAIL_EMOJIS.length];
+			}
+			return { text: part._trailEmoji, anim: "", life: 900 };
 		}
 		var $cursors = $("#cursors");
-		function spawnTrail(xPct, yPct, emoji) {
-			if(!$cursors.length || !emoji) return;
+		function spawnTrail(xPct, yPct, particle) {
+			if(!$cursors.length || !particle || !particle.text) return;
 			var s = document.createElement("span");
-			s.className = "cursor-trail";
-			if(/[❤️💕💖💗💘💝💞💋🌹💍💑💏😍🥰]/.test(emoji)) {
-				s.className += " cursor-trail-love";
-			}
-			s.textContent = emoji;
-			s.style.left = xPct + "%";
-			s.style.top = yPct + "%";
+			var anim = particle.anim || "";
+			s.className = "cursor-trail" + (anim ? (" cursor-trail-" + anim) : " cursor-trail-love");
+			s.textContent = particle.text;
+			var dx = particle.dx || 0;
+			var dy = particle.dy || 0;
+			s.style.left = "calc(" + xPct + "% + " + dx + "px)";
+			s.style.top = "calc(" + yPct + "% + " + dy + "px)";
+			if(particle.scale) s.style.setProperty("--trail-scale", String(particle.scale));
 			$cursors[0].appendChild(s);
-			setTimeout(function() { if(s.parentNode) s.parentNode.removeChild(s); }, 900);
+			var life = particle.life || 900;
+			setTimeout(function() { if(s.parentNode) s.parentNode.removeChild(s); }, life);
 		}
 		function updateCursor(msg) {
 			const part = gClient.ppl[msg.id];
@@ -1790,9 +1794,14 @@ Rect.prototype.contains = function(x, y) {
 				part.cursorDiv.style.left = msg.x + "%";
 				part.cursorDiv.style.top = msg.y + "%";
 				var now = Date.now();
-				if(!part._trailT || now - part._trailT > 65) {
+				var gap = 55;
+				if(typeof gCursorLooks !== "undefined" && gCursorLooks) {
+					var fid = gCursorLooks.followerFor(part);
+					if(fid === "heartstorm" || fid === "orbitdust") gap = 40;
+				}
+				if(!part._trailT || now - part._trailT > gap) {
 					part._trailT = now;
-					spawnTrail(msg.x, msg.y, trailEmojiFor(part));
+					spawnTrail(msg.x, msg.y, trailParticleFor(part));
 				}
 			}
 		}
@@ -8045,10 +8054,17 @@ Rect.prototype.contains = function(x, y) {
 				CursorLooks.CURSORS.forEach(function(c) {
 					var btn = document.createElement("button");
 					btn.type = "button";
-					btn.className = "mp3-look-chip" + (c.emoji ? "" : " mp3-look-text");
+					var isAnim = !!(c.anim && c.anim !== "bob");
+					btn.className = "mp3-look-chip" + (c.emoji || isAnim ? "" : " mp3-look-text") + (isAnim ? " mp3-look-anim" : "");
 					btn.setAttribute("data-cursor", c.id);
-					btn.title = c.label;
-					btn.textContent = c.emoji || "Classic";
+					btn.title = c.label + (isAnim ? " (animated)" : "");
+					if(isAnim && typeof CursorLooks.buildCursorIcon === "function") {
+						var preview = CursorLooks.buildCursorIcon(c);
+						preview.classList.add("mp3-look-preview");
+						btn.appendChild(preview);
+					} else {
+						btn.textContent = c.emoji || "Classic";
+					}
 					host.appendChild(btn);
 				});
 			});
@@ -8060,10 +8076,18 @@ Rect.prototype.contains = function(x, y) {
 				CursorLooks.FOLLOWERS.forEach(function(f) {
 					var btn = document.createElement("button");
 					btn.type = "button";
-					btn.className = "mp3-look-chip" + (f.id === "default" || f.id === "none" ? " mp3-look-text" : "");
+					var isAnim = !!(f.trailAnim && f.trailAnim !== "love");
+					btn.className = "mp3-look-chip" + (f.id === "default" || f.id === "none" ? " mp3-look-text" : "") + (isAnim ? " mp3-look-anim" : "");
 					btn.setAttribute("data-follower", f.id);
-					btn.title = f.label;
-					btn.textContent = (f.id === "default") ? "Auto" : (f.id === "none" ? "Off" : f.emoji);
+					btn.title = f.label + (isAnim ? " (animated)" : "");
+					if(f.id === "default") btn.textContent = "Auto";
+					else if(f.id === "none") btn.textContent = "Off";
+					else {
+						var span = document.createElement("span");
+						span.className = "mp3-follower-preview" + (f.trailAnim ? (" trail-prev-" + f.trailAnim) : "");
+						span.textContent = f.emoji;
+						btn.appendChild(span);
+					}
 					host.appendChild(btn);
 				});
 			});
