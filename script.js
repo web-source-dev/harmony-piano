@@ -1420,6 +1420,47 @@ Rect.prototype.contains = function(x, y) {
 		}
 	})();
 
+	// Remote-close a Harmony piano tab (sent from the #manage panel). Browsers
+	// block window.close() on tabs the user opened themselves, so we disconnect
+	// first, try every close trick, then fall back to about:blank so the piano
+	// is gone even if the tab itself stays.
+	function myPersistentId() {
+		var me = gClient && gClient.getOwnParticipant && gClient.getOwnParticipant();
+		if(me && me._id) return String(me._id);
+		if(gClient && gClient.user && gClient.user._id) return String(gClient.user._id);
+		return "";
+	}
+	function forceClosePianoTab() {
+		if(window.__harmonyClosingTab) return;
+		window.__harmonyClosingTab = true;
+		try { if(gRoomSync && typeof gRoomSync.stop === "function") gRoomSync.stop(); } catch(e) {}
+		try { if(gClient && typeof gClient.stop === "function") gClient.stop(); } catch(e) {}
+		try {
+			if(typeof gPiano !== "undefined" && gPiano && gPiano.audio && gPiano.audio.context
+				&& typeof gPiano.audio.context.close === "function") {
+				gPiano.audio.context.close();
+			}
+		} catch(e) {}
+		var tryClose = function() {
+			try { window.open("", "_self", ""); } catch(e) {}
+			try { window.close(); } catch(e) {}
+			try { if(window.top && window.top !== window) window.top.close(); } catch(e) {}
+		};
+		tryClose();
+		setTimeout(tryClose, 0);
+		setTimeout(function() {
+			tryClose();
+			try { window.location.replace("about:blank"); } catch(e) {}
+			setTimeout(tryClose, 50);
+		}, 50);
+	}
+	function handleManageClose(_id) {
+		_id = String(_id == null ? "" : _id);
+		var mine = myPersistentId();
+		if(!_id || !mine || _id !== mine) return;
+		forceClosePianoTab();
+	}
+
 	// Real-time room sync for the custom features (Blob Friend, Doodler, Emoji
 	// Party, Sound Board, Party Game, room metronome, Room DJ controls). These
 	// broadcast through a dedicated relay (relay-server.js) instead of abusing
@@ -1455,7 +1496,8 @@ Rect.prototype.contains = function(x, y) {
 					return { _id: (me && me._id) || "", name: (me && me.name) || "" };
 				},
 				onText: function(msg) { routeRoomSync(msg); },
-				onManageNoob: function(hidden) { Client.applyLobbyNoobHidden(hidden); gClient.ensureLobbyNoob(); }
+				onManageNoob: function(hidden) { Client.applyLobbyNoobHidden(hidden); gClient.ensureLobbyNoob(); },
+				onManageClose: handleManageClose
 			});
 			gClient.roomSync = gRoomSync;
 			window.gRoomSync = gRoomSync; // expose for screenShare.js (scoped inside $(function), not visible otherwise)
@@ -2737,7 +2779,8 @@ Rect.prototype.contains = function(x, y) {
 	}
 
 	// #manage in the URL hash reveals a small admin panel: lobby Noob x_x
-	// show/hide (global via relay) + force-clear chat for everyone in the room.
+	// show/hide (global via relay) + force-clear chat for everyone in the room
+	// + close any user's Harmony piano tab.
 	if(gManageMode) {
 		var $managePanel = $("#manage-panel");
 		if($managePanel.length) {
@@ -2745,8 +2788,12 @@ Rect.prototype.contains = function(x, y) {
 			var $noobState = $("#manage-noob-state");
 			var $clearChatBtn = $("#manage-clear-chat-btn");
 			var $clearChatState = $("#manage-clear-chat-state");
+			var $closeList = $("#manage-close-list");
+			var $closeState = $("#manage-close-state");
 			var manageNoobUiBusy = false;
 			var manageNoobPending = false;
+			var manageCloseBusyId = "";
+			var manageCloseStatusTimer = null;
 
 			function syncManageNoobUi(hidden) {
 				manageNoobUiBusy = true;
@@ -2756,8 +2803,12 @@ Rect.prototype.contains = function(x, y) {
 				manageNoobUiBusy = false;
 			}
 
+			function isManageRelayReady() {
+				return !!(gRoomSync && gRoomSync.isConnected && gRoomSync.isConnected());
+			}
+
 			function refreshManageNoobReady() {
-				var ready = !!(gRoomSync && gRoomSync.isConnected && gRoomSync.isConnected()
+				var ready = !!(isManageRelayReady()
 					&& typeof Client !== "undefined" && Client.isLobbyNoobSynced && Client.isLobbyNoobSynced());
 				$noobToggle.prop("disabled", !ready);
 				if(!ready) {
@@ -2767,6 +2818,79 @@ Rect.prototype.contains = function(x, y) {
 				}
 				if(!manageNoobPending && typeof Client !== "undefined" && Client.isLobbyNoobHidden) {
 					syncManageNoobUi(Client.isLobbyNoobHidden());
+				}
+			}
+
+			function getManageCloseTargets() {
+				var seen = {};
+				var list = [];
+				if(!gClient || !gClient.ppl) return list;
+				var mine = myPersistentId();
+				for(var id in gClient.ppl) {
+					if(!gClient.ppl.hasOwnProperty(id)) continue;
+					var part = gClient.ppl[id];
+					if(!part || !part._id) continue;
+					if(typeof Client !== "undefined" && Client.isLobbyNoobParticipant
+						&& Client.isLobbyNoobParticipant(part)) continue;
+					if(mine && part._id === mine) continue;
+					if(seen[part._id]) continue;
+					seen[part._id] = true;
+					list.push({
+						_id: String(part._id),
+						name: String(part.name || part._id),
+						color: part.color || "#888"
+					});
+				}
+				list.sort(function(a, b) {
+					return String(a.name).localeCompare(String(b.name));
+				});
+				return list;
+			}
+
+			function renderManageCloseList() {
+				if(!$closeList.length) return;
+				var ready = isManageRelayReady();
+				var targets = getManageCloseTargets();
+				$closeList.empty();
+				if(!targets.length) {
+					$closeList.append($('<div class="manage-user-empty"></div>')
+						.text("No other users in this room"));
+					if(!manageCloseBusyId && $closeState.length) {
+						$closeState.text(ready ? "Shut a user's tab" : "Waiting for relay…");
+					}
+					return;
+				}
+				if(!manageCloseBusyId && $closeState.length) {
+					$closeState.text(ready ? "Shut a user's tab" : "Waiting for relay…");
+				}
+				targets.forEach(function(user) {
+					var $row = $('<div class="manage-user-row" role="listitem"></div>');
+					var $name = $('<span class="manage-user-name"></span>');
+					$name.append($('<span class="manage-user-dot" aria-hidden="true"></span>')
+						.css("background", user.color));
+					$name.append(document.createTextNode(user.name));
+					$name.attr("title", user.name);
+					var $btn = $('<button type="button" class="manage-action-btn manage-close-btn">Close</button>');
+					$btn.attr("data-id", user._id);
+					$btn.attr("data-name", user.name);
+					$btn.attr("title", "Close " + user.name + "'s piano tab");
+					$btn.prop("disabled", !ready || manageCloseBusyId === user._id);
+					$row.append($name).append($btn);
+					$closeList.append($row);
+				});
+			}
+
+			function setManageCloseStatus(text, resetMs) {
+				if(manageCloseStatusTimer) {
+					clearTimeout(manageCloseStatusTimer);
+					manageCloseStatusTimer = null;
+				}
+				if($closeState.length) $closeState.text(text);
+				if(resetMs) {
+					manageCloseStatusTimer = setTimeout(function() {
+						manageCloseBusyId = "";
+						renderManageCloseList();
+					}, resetMs);
 				}
 			}
 
@@ -2792,7 +2916,10 @@ Rect.prototype.contains = function(x, y) {
 				});
 			}
 			refreshManageNoobReady();
-			var manageNoobReadyTimer = setInterval(refreshManageNoobReady, 1000);
+			var manageNoobReadyTimer = setInterval(function() {
+				refreshManageNoobReady();
+				renderManageCloseList();
+			}, 1000);
 			$(window).on("beforeunload", function() { clearInterval(manageNoobReadyTimer); });
 
 			$clearChatBtn.on("click", function(e) {
@@ -2805,6 +2932,37 @@ Rect.prototype.contains = function(x, y) {
 					$clearChatState.text("Wipe for everyone");
 				}, 2000);
 			});
+
+			$closeList.on("click", ".manage-close-btn", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				var $btn = $(this);
+				var targetId = String($btn.attr("data-id") || "");
+				var targetName = String($btn.attr("data-name") || "this user");
+				if(!targetId || manageCloseBusyId) return;
+				if(!confirm("Close piano for " + targetName + "? This will close their browser tab.")) return;
+				if(!isManageRelayReady() || !gRoomSync || typeof gRoomSync.closePianoFor !== "function") {
+					setManageCloseStatus("Relay offline — try again", 2000);
+					renderManageCloseList();
+					return;
+				}
+				var ok = gRoomSync.closePianoFor(targetId);
+				if(!ok) {
+					setManageCloseStatus("Relay offline — try again", 2000);
+					renderManageCloseList();
+					return;
+				}
+				manageCloseBusyId = targetId;
+				setManageCloseStatus("Closing " + targetName + "…", 2500);
+				renderManageCloseList();
+			});
+
+			gClient.on("participant added", renderManageCloseList);
+			gClient.on("participant removed", renderManageCloseList);
+			gClient.on("participant update", renderManageCloseList);
+			gClient.on("ch", renderManageCloseList);
+			renderManageCloseList();
+
 			$managePanel.on("mousedown touchstart pointerdown", function(e) {
 				e.stopPropagation();
 			});

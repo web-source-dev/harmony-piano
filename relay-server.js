@@ -18,7 +18,9 @@
  *
  * Relay protocol (JSON per frame):
  *   client -> {m:"hi"|"join", ch, p:{_id,name}} | {m:"b", ch, text, p} | {m:"ping"}
+ *           | {m:"manage-noob-set", hidden} | {m:"manage-close-set", _id}
  *   relay  -> {m:"b", text, p}  (a peer's broadcast; never echoed to sender)
+ *           | {m:"manage-noob", hidden} | {m:"manage-close", _id}
  */
 "use strict";
 
@@ -219,6 +221,13 @@ wss.on("connection", function (socket) {
 			case "manage-noob-set":
 				setLobbyNoobHidden(m.hidden);
 				break;
+			case "manage-close-set": {
+				var closeId = String(m._id == null ? "" : m._id).slice(0, MAX_ID);
+				if (!closeId) break;
+				// Reach every Harmony tab with this account, regardless of room.
+				broadcastAll({ m: "manage-close", _id: closeId });
+				break;
+			}
 		}
 	});
 	socket.on("close", function () { leaveRoom(socket); });

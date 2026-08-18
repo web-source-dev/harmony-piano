@@ -5,7 +5,7 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20260812g"/>
+    <link rel="stylesheet" href="./screen.css?v=20260818a"/>
     <link rel="canonical" href="https://multiplayerpiano.com/">
 
     <script>
@@ -148,6 +148,13 @@
             </span>
             <button type="button" id="manage-clear-chat-btn" class="manage-action-btn" title="Force-clear the chat log for everyone in this room">Clear</button>
         </div>
+        <div class="manage-panel-row manage-panel-row-divider manage-panel-row-stack">
+            <span class="manage-panel-row-text">
+                <span class="manage-panel-row-title">Close piano</span>
+                <span class="manage-panel-row-sub" id="manage-close-state">Shut a user's tab</span>
+            </span>
+        </div>
+        <div id="manage-close-list" class="manage-user-list" role="list"></div>
     </div>
 </aside>
 
@@ -984,7 +991,7 @@
 <script src="./jquery.min.js"></script>
 <script src="./util.js"></script>
 <script src="./client.js?v=20260712c"></script>
-<script src="./roomSync.js?v=20260712c"></script>
+<script src="./roomSync.js?v=20260818a"></script>
 <script src="./funSounds.js"></script>
 <script src="./NoteQuota.js"></script>
 <script src="./lame.min.js"></script>
@@ -1014,7 +1021,7 @@
 <script src="./screenShare.js?v=20260712c"></script>
 <script src="./shareImage.js?v=20260712b"></script>
 <!--<script src="/ebsprite.js"></script>-->
-<script src="./script.js?v=20260812g"></script>
+<script src="./script.js?v=20260818a"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->
 </body>
 </html>
