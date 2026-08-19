@@ -1026,6 +1026,27 @@ body.mp3-transport-active #play-mp3-btn {
 	pointer-events: none;
 }
 .mp3-transport .transport-label { font-weight: bold; color: #8cf; }
+.mp3-transport .mp3-sync-status {
+	font-size: 10px;
+	font-weight: bold;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: #9fd;
+	background: rgba(80, 160, 140, 0.28);
+	border: 1px solid rgba(140, 220, 200, 0.35);
+	border-radius: 999px;
+	padding: 1px 8px;
+	pointer-events: none;
+	white-space: nowrap;
+}
+.mp3-transport.mp3-needs-unlock .mp3-sync-status {
+	color: #fe8;
+	background: rgba(180, 140, 40, 0.35);
+	border-color: rgba(240, 200, 80, 0.45);
+}
+.mp3-transport.mp3-is-sync .mp3-sync-status {
+	color: #bfe;
+}
 .mp3-transport .mp3-track-name {
 	max-width: 200px;
 	overflow: hidden;

@@ -5,7 +5,7 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20260818a"/>
+    <link rel="stylesheet" href="./screen.css?v=20260820a"/>
     <link rel="canonical" href="https://multiplayerpiano.com/">
 
     <script>
@@ -567,6 +567,7 @@
         <div class="mp3-drag-head" title="Drag to move">
             <span class="mp3-drag-grip" aria-hidden="true">⠿</span>
             <span class="transport-label">MP3</span>
+            <span class="mp3-sync-status" title="Everyone in the room hears this together">room sync</span>
             <span class="mp3-track-name" title="">No file loaded</span>
             <span class="mp3-drag-hint">drag me</span>
             <button type="button" class="tb-btn mp3-change-file" title="Choose another file">📁</button>
@@ -746,7 +747,7 @@
         <div id="play-mp3" class="dialog sheet-dialog play-mp3-dialog">
             <p class="sheet-title">Play MP3 — listen along</p>
             <p class="sheet-row"><label>Audio file: <input type="file" name="mp3file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac,.opus"/></label></p>
-            <p class="file-info">Pick an MP3 (or other audio). It plays as sound only — not on the piano keys. Use speed controls like Sheet Play.</p>
+            <p class="file-info">Pick an MP3 (or other audio). It uploads to the room so every device plays it together — play, pause, skip, and speed stay locked. Sound only, not on the piano keys.</p>
             <p class="sheet-row sheet-actions-row">
                 <button type="button" class="tb-btn play">▶ Play</button>
                 <button type="button" class="tb-btn stop">⏹ Stop</button>
@@ -998,6 +999,7 @@
 <script src="./color.js"></script>
 <script src="./sheetPlayer.js"></script>
 <script src="./roomMedia.js?v=20260712b"></script>
+<script src="./playMp3.js?v=20260820a"></script>
 <script src="./pianoLearn.js"></script>
 <script src="./metronome.js"></script>
 <script src="./blobFriend.js?v=20260712c"></script>
@@ -1021,7 +1023,7 @@
 <script src="./screenShare.js?v=20260712c"></script>
 <script src="./shareImage.js?v=20260712b"></script>
 <!--<script src="/ebsprite.js"></script>-->
-<script src="./script.js?v=20260818a"></script>
+<script src="./script.js?v=20260820a"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->
 </body>
 </html>

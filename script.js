@@ -3750,6 +3750,10 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gRoomMetronome !== "undefined" && gRoomMetronome) gRoomMetronome.tryHandleChat(msg);
 			return true;
 		}
+		if(typeof PlayMp3Sync !== "undefined" && PlayMp3Sync.isSyncText(chatLine)) {
+			if(typeof gPlayMp3 !== "undefined" && gPlayMp3) gPlayMp3.tryHandleChat(msg);
+			return true;
+		}
 		if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) {
 			if(typeof gRoomMedia !== "undefined" && gRoomMedia) gRoomMedia.tryHandleChat(msg);
 			return true;
@@ -3961,6 +3965,7 @@ Rect.prototype.contains = function(x, y) {
 					return;
 				}
 				if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) return;
+				if(typeof PlayMp3Sync !== "undefined" && PlayMp3Sync.isSyncText(chatLine)) return;
 				if(typeof BlobFriend !== "undefined" && BlobFriend.isSyncText(chatLine)) return;
 				if(typeof DesktopDoodler !== "undefined" && DesktopDoodler.isSyncText(chatLine)) return;
 				if(typeof EmojiParty !== "undefined" && EmojiParty.isSyncText(chatLine)) return;
@@ -4440,6 +4445,7 @@ Rect.prototype.contains = function(x, y) {
 			if(gCarDodge) gCarDodge.requestSync();
 			if(gReactionRoyale) gReactionRoyale.requestSync();
 			if(gTugOfWar) gTugOfWar.requestSync();
+			if(typeof gPlayMp3 !== "undefined" && gPlayMp3) gPlayMp3.requestSync();
 			updateMetronomeUI();
 		}, 400);
 	});
@@ -4618,6 +4624,7 @@ Rect.prototype.contains = function(x, y) {
 
 	// Room DJ — shared audio/video (not piano)
 	var gRoomMedia;
+	var gPlayMp3;
 	var $roomMediaTransport = $("#room-media-transport");
 	var $roomMediaDialog = $("#room-media");
 	var $roomMediaVideoWrap = $("#room-media-video-wrap");
@@ -4858,6 +4865,18 @@ Rect.prototype.contains = function(x, y) {
 			}
 		});
 		$roomMediaTransport.find("input[name=volume]").val(gRoomMedia.volume);
+	}
+
+	if(typeof PlayMp3Sync !== "undefined") {
+		gPlayMp3 = new PlayMp3Sync({
+			client: gClient,
+			getRoomMedia: function() { return gRoomMedia; },
+			ensureAudio: ensureAudioReady
+		});
+		window.gPlayMp3 = gPlayMp3;
+		setTimeout(function() {
+			if(gPlayMp3 && gPlayMp3.requestSync) gPlayMp3.requestSync();
+		}, 800);
 	}
 
 	// Blob Friend + Desktop Doodler + party toys
@@ -7834,6 +7853,7 @@ Rect.prototype.contains = function(x, y) {
 		soundSelector: gSoundSelector,
 		sheetPlayer: gSheetPlayer,
 		roomMedia: gRoomMedia,
+		playMp3: gPlayMp3,
 		shareImage: gShareImage,
 		blobFriend: gBlobFriend,
 		desktopDoodler: gDesktopDoodler,
@@ -7905,25 +7925,15 @@ Rect.prototype.contains = function(x, y) {
 		}
 	})();
 
-	// play mp3 — local audio file player (voice/sound only, not through piano keys)
+	// play mp3 — room-synced audio (play / pause / seek stay locked on every device)
 	(function() {
 		var $dlg = $("#play-mp3");
 		var $transport = $("#mp3-transport");
 		if(!$dlg.length || !$transport.length) return;
+		if(!gPlayMp3) return;
 
-		var audioEl = document.createElement("audio");
-		audioEl.preload = "auto";
-		audioEl.style.display = "none";
-		// Keep pitch stable when changing speed (like Sheet Play tempo)
-		audioEl.preservesPitch = true;
-		audioEl.mozPreservesPitch = true;
-		audioEl.webkitPreservesPitch = true;
-		document.body.appendChild(audioEl);
-
-		var objectUrl = null;
-		var fileName = "";
-		var progressTimer = null;
 		var seekDragging = false;
+		var applyingRemoteUi = false;
 
 		function formatMp3Time(sec) {
 			if(!isFinite(sec) || sec < 0) sec = 0;
@@ -7941,7 +7951,6 @@ Rect.prototype.contains = function(x, y) {
 			if(show) {
 				$transport.prop("hidden", false).removeAttr("hidden");
 				document.body.classList.add("mp3-transport-active");
-				// Modal overlay sits above the old z-index and blocks clicks — close it.
 				if(typeof closeModal === "function" && typeof gModal !== "undefined" && gModal) {
 					closeModal();
 				}
@@ -7958,26 +7967,35 @@ Rect.prototype.contains = function(x, y) {
 			return pct / 100;
 		}
 
-		function applyMp3Speed() {
+		function applyMp3Speed(broadcast) {
 			var pct = $transport.find("input[name=tempo]").val();
 			$transport.find(".tempo-label").text(pct + "%");
-			try {
-				audioEl.playbackRate = mp3TempoScale();
-			} catch(err) {}
+			gPlayMp3.setRate(mp3TempoScale(), broadcast !== false);
 		}
 
 		function applyMp3Volume() {
 			var el = $transport.find("input[name=volume]")[0];
 			var v = el ? parseFloat(el.value) : 0.9;
 			if(!isFinite(v)) v = 0.9;
-			audioEl.volume = Math.max(0, Math.min(1, v));
+			gPlayMp3.setVolume(v);
 		}
 
 		function applyMp3Loop() {
-			audioEl.loop = !!$transport.find("input[name=loop]").prop("checked");
+			gPlayMp3.setLoop(!!$transport.find("input[name=loop]").prop("checked"));
 		}
 
-		function updateMp3Progress(cur, dur) {
+		function syncStatusText(info) {
+			if(info.uploading) return "Sharing with room…";
+			if(info.needsUnlock) return "Tap ▶ to hear with the room";
+			if(info.sync) return info.playing ? "Room sync · playing" : "Room sync · ready";
+			if(info.title) return "This device only";
+			return "room sync";
+		}
+
+		function updateMp3Progress(info) {
+			info = info || {};
+			var cur = info.current || 0;
+			var dur = info.duration || 0;
 			if(!isFinite(cur)) cur = 0;
 			if(!isFinite(dur) || dur < 0) dur = 0;
 			$transport.find(".time-current").text(formatMp3Time(cur));
@@ -7987,134 +8005,96 @@ Rect.prototype.contains = function(x, y) {
 				seek.max = Math.max(dur || 1, 0.001);
 				seek.value = Math.min(cur, seek.max);
 			}
-			$dlg.find(".file-info").text(
-				fileName
-					? (fileName + " — " + formatMp3Time(cur) + " / " + formatMp3Time(dur) +
-						(audioEl.paused ? (cur > 0.05 ? " (paused)" : " (ready)") : " (playing)"))
-					: "Pick an MP3 (or other audio). It plays as sound only — not on the piano keys. Use speed controls like Sheet Play."
-			);
-		}
-
-		function stopProgressTimer() {
-			if(progressTimer) {
-				clearInterval(progressTimer);
-				progressTimer = null;
+			if(info.title) {
+				$transport.find(".mp3-track-name").text(info.title).attr("title", info.title);
 			}
-		}
-
-		function startProgressTimer() {
-			stopProgressTimer();
-			progressTimer = setInterval(function() {
-				updateMp3Progress(audioEl.currentTime || 0, audioEl.duration || 0);
-			}, 100);
-		}
-
-		function clearLoadedFile() {
-			stopProgressTimer();
-			audioEl.pause();
-			audioEl.removeAttribute("src");
-			try { audioEl.load(); } catch(err) {}
-			if(objectUrl) {
-				URL.revokeObjectURL(objectUrl);
-				objectUrl = null;
+			$transport.find(".mp3-sync-status").text(syncStatusText(info));
+			$transport.toggleClass("is-playing", !!info.playing);
+			$transport.toggleClass("mp3-needs-unlock", !!info.needsUnlock);
+			$transport.toggleClass("mp3-is-sync", !!info.sync);
+			applyingRemoteUi = true;
+			if(info.rate) {
+				var pct = Math.round(info.rate * 100);
+				$transport.find("input[name=tempo]").val(pct);
+				$transport.find(".tempo-label").text(pct + "%");
 			}
-			fileName = "";
-			$transport.find(".mp3-track-name").text("No file loaded").attr("title", "");
-			updateMp3Progress(0, 0);
+			$transport.find("input[name=loop]").prop("checked", !!info.loop);
+			applyingRemoteUi = false;
+			var state = !info.title ? "Pick an MP3. It shares to the room so every device plays, pauses, and skips together."
+				: (info.title + " — " + formatMp3Time(cur) + " / " + formatMp3Time(dur) +
+					(info.uploading ? " (sharing…)" : (info.playing ? " (playing · room sync)" : (cur > 0.05 ? " (paused · room sync)" : " (ready · room sync)"))));
+			$dlg.find(".file-info").text(state);
 		}
+
+		gPlayMp3.onProgress = updateMp3Progress;
+		gPlayMp3.onTrackChange = function(info) {
+			if(info && info.closed) {
+				showMp3Transport(false);
+				$transport.find(".mp3-track-name").text("No file loaded").attr("title", "");
+				updateMp3Progress({ current: 0, duration: 0, playing: false, title: "", sync: false });
+				return;
+			}
+			showMp3Transport(true);
+			if(info && info.title) {
+				$transport.find(".mp3-track-name").text(info.title).attr("title", info.title);
+			}
+		};
+		gPlayMp3.onStatus = function(msg) {
+			if(msg) {
+				$dlg.find(".file-info").text(msg);
+				$("#status").text(msg);
+			}
+		};
+		gPlayMp3.onUnlockNeeded = function() {
+			showMp3Transport(true);
+			new Notification({
+				id: "mp3-unlock",
+				title: "Room MP3",
+				text: "Tap Play on this device to hear the track with everyone else.",
+				duration: 6000
+			});
+		};
 
 		function loadMp3File(file, autoPlay) {
 			if(!file) return;
-			clearLoadedFile();
-			fileName = file.name || "Audio file";
-			objectUrl = URL.createObjectURL(file);
-			audioEl.src = objectUrl;
-			applyMp3Speed();
 			applyMp3Volume();
-			applyMp3Loop();
-			$transport.find(".mp3-track-name").text(fileName).attr("title", fileName);
-			$dlg.find(".file-info").text("Loading “" + fileName + "”…");
+			$transport.find(".mp3-track-name").text(file.name || "Audio file").attr("title", file.name || "");
 			showMp3Transport(true);
-
-			var onReady = function() {
-				audioEl.removeEventListener("loadedmetadata", onReady);
-				updateMp3Progress(0, audioEl.duration || 0);
-				if(autoPlay) playMp3();
-			};
-			audioEl.addEventListener("loadedmetadata", onReady);
-			try { audioEl.load(); } catch(err) {}
+			gPlayMp3.loadFile(file, autoPlay);
 		}
 
 		function playMp3() {
-			if(!audioEl.src) {
+			if(!gPlayMp3.hasTrack()) {
+				var fileInput = $dlg.find("input[name=mp3file]")[0];
+				if(fileInput && fileInput.files && fileInput.files[0]) {
+					loadMp3File(fileInput.files[0], true);
+					return;
+				}
 				alert("Choose an MP3 (or other audio) file first.");
 				return;
 			}
 			if(typeof ensureAudioReady === "function") ensureAudioReady();
-			applyMp3Speed();
-			applyMp3Volume();
-			applyMp3Loop();
 			showMp3Transport(true);
-			var p = audioEl.play();
-			if(p && typeof p.then === "function") {
-				p.then(function() {
-					startProgressTimer();
-					updateMp3Progress(audioEl.currentTime || 0, audioEl.duration || 0);
-				}).catch(function(err) {
-					alert("Could not play audio: " + (err && err.message ? err.message : err));
-				});
-			} else {
-				startProgressTimer();
-				updateMp3Progress(audioEl.currentTime || 0, audioEl.duration || 0);
-			}
+			gPlayMp3.play();
 		}
 
 		function pauseMp3() {
-			audioEl.pause();
-			stopProgressTimer();
-			updateMp3Progress(audioEl.currentTime || 0, audioEl.duration || 0);
+			gPlayMp3.pause();
 			showMp3Transport(true);
 		}
 
 		function stopMp3() {
-			audioEl.pause();
-			try { audioEl.currentTime = 0; } catch(err) {}
-			stopProgressTimer();
-			updateMp3Progress(0, audioEl.duration || 0);
-			showMp3Transport(!!audioEl.src);
+			gPlayMp3.stop();
+			showMp3Transport(gPlayMp3.hasTrack());
 		}
 
 		function seekMp3(sec) {
-			if(!audioEl.src || !isFinite(sec)) return;
-			var dur = audioEl.duration;
-			if(isFinite(dur) && dur > 0) {
-				sec = Math.max(0, Math.min(dur, sec));
-			} else {
-				sec = Math.max(0, sec);
-			}
-			try { audioEl.currentTime = sec; } catch(err) {}
-			updateMp3Progress(audioEl.currentTime || sec, audioEl.duration || 0);
+			gPlayMp3.seekTo(sec);
 		}
 
 		function seekMp3By(delta) {
-			seekMp3((audioEl.currentTime || 0) + delta);
+			gPlayMp3.seekBy(delta);
 		}
-
-		audioEl.addEventListener("ended", function() {
-			if(audioEl.loop) return;
-			stopProgressTimer();
-			updateMp3Progress(audioEl.duration || 0, audioEl.duration || 0);
-		});
-		audioEl.addEventListener("error", function() {
-			var code = audioEl.error && audioEl.error.code;
-			$dlg.find(".file-info").text("Could not load this audio file" + (code ? " (error " + code + ")" : "") + ".");
-			new Notification({
-				id: "mp3-play",
-				title: "MP3 play error",
-				text: "That file could not be decoded. Try another MP3, M4A, WAV, or OGG.",
-				duration: 6000
-			});
-		});
 
 		$dlg.on("change", "input[name=mp3file]", function(evt) {
 			var file = evt.target.files && evt.target.files[0];
@@ -8125,11 +8105,6 @@ Rect.prototype.contains = function(x, y) {
 		$dlg.on("click", ".play", function(e) {
 			e.preventDefault();
 			e.stopPropagation();
-			var fileInput = $dlg.find("input[name=mp3file]")[0];
-			if(!audioEl.src && fileInput && fileInput.files && fileInput.files[0]) {
-				loadMp3File(fileInput.files[0], true);
-				return;
-			}
 			playMp3();
 		});
 
@@ -8139,23 +8114,48 @@ Rect.prototype.contains = function(x, y) {
 			stopMp3();
 		});
 
-		$transport.on("input", "input[name=tempo]", applyMp3Speed);
-		$transport.on("change", "input[name=loop]", applyMp3Loop);
+		$transport.on("input", "input[name=tempo]", function() {
+			if(applyingRemoteUi) return;
+			var pct = $transport.find("input[name=tempo]").val();
+			$transport.find(".tempo-label").text(pct + "%");
+		});
+		$transport.on("change", "input[name=tempo]", function() {
+			if(applyingRemoteUi) return;
+			applyMp3Speed(true);
+		});
+		$transport.on("change", "input[name=loop]", function() {
+			if(applyingRemoteUi) return;
+			applyMp3Loop();
+		});
 		$transport.on("input", "input[name=volume]", applyMp3Volume);
 		$transport.on("mousedown touchstart pointerdown", "input[name=seek]", function(e) {
 			e.stopPropagation();
 			seekDragging = true;
+			gPlayMp3.seekDragging = true;
 		});
 		$transport.on("mouseup touchend pointerup", "input[name=seek]", function() {
 			seekDragging = false;
+			gPlayMp3.endSeekDrag();
 		});
 		$transport.on("input", "input[name=seek]", function() {
 			var sec = parseFloat(this.value) || 0;
-			updateMp3Progress(sec, audioEl.duration || 0);
+			gPlayMp3.previewSeek(sec);
+			updateMp3Progress({
+				current: sec,
+				duration: gPlayMp3.getDuration(),
+				playing: gPlayMp3.playing,
+				title: gPlayMp3.title,
+				rate: gPlayMp3.rate,
+				loop: gPlayMp3.loop,
+				sync: gPlayMp3.syncEnabled,
+				uploading: gPlayMp3.uploading,
+				needsUnlock: gPlayMp3.needsUnlock
+			});
 		});
 		$transport.on("change", "input[name=seek]", function() {
 			seekMp3(parseFloat(this.value) || 0);
 			seekDragging = false;
+			gPlayMp3.endSeekDrag();
 		});
 
 		// Drag via header — robust document listeners (buttons in header stay clickable)
@@ -8242,30 +8242,32 @@ Rect.prototype.contains = function(x, y) {
 			if(btn.classList.contains("play")) playMp3();
 			else if(btn.classList.contains("pause")) pauseMp3();
 			else if(btn.classList.contains("stop")) stopMp3();
-			else if(btn.classList.contains("restart")) { seekMp3(0); playMp3(); }
+			else if(btn.classList.contains("restart")) {
+				seekMp3(0);
+				if(!gPlayMp3.playing) playMp3();
+			}
 			else if(btn.classList.contains("back")) seekMp3By(-5);
 			else if(btn.classList.contains("forward")) seekMp3By(5);
 			else if(btn.classList.contains("speed-half")) {
 				$transport.find("input[name=tempo]").val(50);
-				applyMp3Speed();
+				applyMp3Speed(true);
 			} else if(btn.classList.contains("speed-one")) {
 				$transport.find("input[name=tempo]").val(100);
-				applyMp3Speed();
+				applyMp3Speed(true);
 			} else if(btn.classList.contains("speed-double")) {
 				$transport.find("input[name=tempo]").val(200);
-				applyMp3Speed();
+				applyMp3Speed(true);
 			} else if(btn.classList.contains("mp3-change-file")) {
 				openModal("#play-mp3");
 			} else if(btn.classList.contains("mp3-close")) {
-				stopMp3();
-				showMp3Transport(false);
+				gPlayMp3.close();
 			}
 		}, true);
 
 		window.showMp3TransportPanel = showMp3Transport;
 		applyMp3Volume();
-		applyMp3Speed();
-		updateMp3Progress(0, 0);
+		applyMp3Speed(false);
+		updateMp3Progress({ current: 0, duration: 0, playing: false, title: "", sync: false });
 	})();
 
 	// Cursor Looks — separate popup (not inside Play MP3)
