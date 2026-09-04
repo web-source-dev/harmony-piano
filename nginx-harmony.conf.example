@@ -16,7 +16,22 @@ server {
     # Required for Room DJ uploads (up to 80 MB)
     client_max_body_size 80m;
 
+    gzip on;
+    gzip_min_length 256;
+    gzip_types text/css text/javascript application/javascript application/json image/svg+xml;
+
+    # Service worker must not be cached — browsers revalidate it to pick up UI cache bumps.
+    location = /sw.js {
+        proxy_pass http://127.0.0.1:8550;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_hide_header Cache-Control;
+        add_header Cache-Control "no-cache, must-revalidate";
+    }
+
     # App, static files, and the /relay WebSocket — all on 8550.
+    # Cache-Control for UI/sounds is set by relay-server.js (pass-through).
     location / {
         proxy_pass http://127.0.0.1:8550;
         proxy_http_version 1.1;

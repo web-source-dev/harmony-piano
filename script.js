@@ -448,35 +448,70 @@ Rect.prototype.contains = function(x, y) {
 		};
 	};
 
+	// Cap parallel sample downloads. Firing all 88 XHRs at once saturates
+	// HTTP/1.1 (6 connections/host) and is why the piano sometimes never finishes
+	// loading. The service worker + Cache-Control then make repeat visits instant.
+	var SOUND_LOAD_LIMIT = 4;
+	var soundLoadActive = 0;
+	var soundLoadQueue = [];
+
+	function soundLoadRelease() {
+		soundLoadActive--;
+		if (soundLoadActive < 0) soundLoadActive = 0;
+		if (soundLoadQueue.length) soundLoadQueue.shift()();
+	}
+
 	AudioEngineWeb.prototype.load = function(id, url, cb, fallbackUrl) {
 		var audio = this;
-		var req = new XMLHttpRequest();
-		req.open("GET", url);
-		req.responseType = "arraybuffer";
-		req.addEventListener("readystatechange", function(evt) {
-			if(req.readyState !== 4) return;
-			if(req.status !== 200 || !req.response || !req.response.byteLength) {
-				if(fallbackUrl && fallbackUrl !== url) {
-					audio.load(id, fallbackUrl, cb);
-					return;
-				}
-				new Notification({id: "audio-download-error", title: "Problem", text: "Could not load sound \"" + id + "\" (" + req.status + "). Check that sounds/mppclassic/ exists.",
-					target: "#piano", duration: 10000});
+		var attempt = function() {
+			if (soundLoadActive >= SOUND_LOAD_LIMIT) {
+				soundLoadQueue.push(attempt);
 				return;
 			}
-			audio.context.decodeAudioData(req.response, function(buffer) {
-				audio.sounds[id] = buffer;
-				if(cb) cb();
-			}, function() {
-				if(fallbackUrl && fallbackUrl !== url) {
+			soundLoadActive++;
+			var req = new XMLHttpRequest();
+			req.open("GET", url);
+			req.responseType = "arraybuffer";
+			req.timeout = 20000;
+			var settled = false;
+			var finish = function() {
+				if (settled) return;
+				settled = true;
+				soundLoadRelease();
+			};
+			var fail = function(status) {
+				finish();
+				if (fallbackUrl && fallbackUrl !== url) {
 					audio.load(id, fallbackUrl, cb);
 					return;
 				}
-				new Notification({id: "audio-download-error", title: "Problem", text: "Could not decode sound \"" + id + "\".",
+				new Notification({id: "audio-download-error", title: "Problem", text: "Could not load sound \"" + id + "\" (" + status + "). Check that sounds/mppclassic/ exists.",
 					target: "#piano", duration: 10000});
+			};
+			req.addEventListener("load", function() {
+				if (req.status !== 200 || !req.response || !req.response.byteLength) {
+					fail(req.status);
+					return;
+				}
+				var buf = req.response;
+				finish();
+				audio.context.decodeAudioData(buf, function(buffer) {
+					audio.sounds[id] = buffer;
+					if (cb) cb();
+				}, function() {
+					if (fallbackUrl && fallbackUrl !== url) {
+						audio.load(id, fallbackUrl, cb);
+						return;
+					}
+					new Notification({id: "audio-download-error", title: "Problem", text: "Could not decode sound \"" + id + "\".",
+						target: "#piano", duration: 10000});
+				});
 			});
-		});
-		req.send();
+			req.addEventListener("error", function() { fail(0); });
+			req.addEventListener("timeout", function() { fail("timeout"); });
+			req.send();
+		};
+		attempt();
 	};
 
 	AudioEngineWeb.prototype.actualPlay = function(id, vol, time, part_id) { //the old play(), but with time insted of delay_ms.

@@ -11,6 +11,9 @@
     <script>
       window.gDontShow = !!(window.location.hash && window.location.hash.match(/^(?:#.+)*#dontshow(?:#.+)*$/i));
       if (window.gDontShow) document.documentElement.classList.add('dontshow');
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(function () {});
+      }
     </script>
 
     <script>
@@ -1023,7 +1026,7 @@
 <script src="./screenShare.js?v=20260712c"></script>
 <script src="./shareImage.js?v=20260712b"></script>
 <!--<script src="/ebsprite.js"></script>-->
-<script src="./script.js?v=20260820a"></script>
+<script src="./script.js?v=20260905a"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->
 </body>
 </html>

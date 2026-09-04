@@ -83,6 +83,21 @@ function saveChatLog(body, cb) {
 	} catch (e) { cb(e); }
 }
 
+function cacheControlFor(urlPath) {
+	// Service worker must revalidate so CACHE_NAME bumps take effect.
+	if (urlPath === "/sw.js") return "no-cache, must-revalidate";
+	// Note samples + images almost never change — let the browser keep them.
+	if (urlPath.indexOf("/sounds/") === 0) return "public, max-age=31536000, immutable";
+	if (/\.(png|jpg|jpeg|gif|ico|webp|woff2?|ttf|mp3|wav|ogg|m4a)$/i.test(urlPath)) {
+		return "public, max-age=31536000, immutable";
+	}
+	// HTML: revalidate with ETag so deploys still show up (SW serves instantly).
+	if (/\.html$/i.test(urlPath)) return "no-cache";
+	// JS/CSS: short cache + ETag 304s. Query-string ?v= busts when we bump it.
+	if (/\.(js|css)$/i.test(urlPath)) return "public, max-age=3600, stale-while-revalidate=86400";
+	return "public, max-age=3600";
+}
+
 function serveStatic(req, res) {
 	var urlPath = decodeURIComponent((req.url.split("?")[0] || "/"));
 	if (urlPath === "/") urlPath = "/index.html";
@@ -91,9 +106,17 @@ function serveStatic(req, res) {
 	if (filePath.indexOf(ROOT) !== 0) { res.writeHead(403); res.end("Forbidden"); return; }
 	fs.stat(filePath, function (err, st) {
 		if (err || !st.isFile()) { res.writeHead(404); res.end("Not found"); return; }
+		var etag = '"' + st.size.toString(16) + "-" + Math.floor(Number(st.mtimeMs) || st.mtime.getTime()).toString(16) + '"';
 		res.setHeader("Content-Type", MIME[path.extname(filePath).toLowerCase()] || "application/octet-stream");
-		res.setHeader("Content-Length", st.size);
 		res.setHeader("Accept-Ranges", "bytes");
+		res.setHeader("ETag", etag);
+		res.setHeader("Cache-Control", cacheControlFor(urlPath));
+		if (req.headers["if-none-match"] === etag) {
+			res.writeHead(304);
+			res.end();
+			return;
+		}
+		res.setHeader("Content-Length", st.size);
 		fs.createReadStream(filePath).on("error", function () { try { res.end(); } catch (e) {} }).pipe(res);
 	});
 }
@@ -105,7 +128,7 @@ var server = http.createServer(function (req, res) {
 	if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
 
 	if (req.method === "GET" && (route === "/health" || route === "/relay/health" || route === "/api/media/health")) {
-		res.writeHead(200, { "Content-Type": "application/json" });
+		res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
 		res.end(JSON.stringify({ ok: true, service: "harmony-app", port: PORT, clients: countClients() }));
 		return;
 	}
