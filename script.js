@@ -2802,7 +2802,10 @@ Rect.prototype.contains = function(x, y) {
 	// #manage in the URL hash reveals a small admin panel: lobby Noob x_x
 	// show/hide (global via relay) + force-clear chat for everyone in the room
 	// + close any user's Harmony piano tab.
+	// Media delete controls appear inside Media Library when gManageMode is on.
 	if(gManageMode) {
+		document.body.classList.add("manage-mode");
+		$(".media-library-manage-hint").removeAttr("hidden");
 		var $managePanel = $("#manage-panel");
 		if($managePanel.length) {
 			var $noobToggle = $("#manage-noob-toggle");
@@ -2811,16 +2814,10 @@ Rect.prototype.contains = function(x, y) {
 			var $clearChatState = $("#manage-clear-chat-state");
 			var $closeList = $("#manage-close-list");
 			var $closeState = $("#manage-close-state");
-			var $mediaList = $("#manage-media-list");
-			var $mediaState = $("#manage-media-state");
-			var $mediaRefreshBtn = $("#manage-media-refresh-btn");
 			var manageNoobUiBusy = false;
 			var manageNoobPending = false;
 			var manageCloseBusyId = "";
 			var manageCloseStatusTimer = null;
-			var manageMediaBusyId = "";
-			var manageMediaStatusTimer = null;
-			var manageMediaLoading = false;
 
 			function syncManageNoobUi(hidden) {
 				manageNoobUiBusy = true;
@@ -2921,85 +2918,6 @@ Rect.prototype.contains = function(x, y) {
 				}
 			}
 
-			function setManageMediaStatus(text, resetMs) {
-				if(manageMediaStatusTimer) {
-					clearTimeout(manageMediaStatusTimer);
-					manageMediaStatusTimer = null;
-				}
-				if($mediaState.length) $mediaState.text(text);
-				if(resetMs) {
-					manageMediaStatusTimer = setTimeout(function() {
-						manageMediaBusyId = "";
-						if(!manageMediaLoading) {
-							$mediaState.text("Remove library files");
-						}
-					}, resetMs);
-				}
-			}
-
-			function formatManageMediaMeta(item) {
-				var kind = (item.kind || "audio").toUpperCase();
-				var source = (item.source || "library") === "recent" ? "Recent" : "Library";
-				var size = (typeof RoomMedia !== "undefined" && RoomMedia.formatBytes)
-					? RoomMedia.formatBytes(item.size)
-					: ((item.size || 0) + " B");
-				return source + " · " + kind + " · " + size;
-			}
-
-			function renderManageMediaList(items) {
-				if(!$mediaList.length) return;
-				$mediaList.empty();
-				if(!items || !items.length) {
-					$mediaList.append($('<div class="manage-user-empty"></div>')
-						.text("Library is empty"));
-					if(!manageMediaBusyId) setManageMediaStatus("Remove library files");
-					return;
-				}
-				if(!manageMediaBusyId) {
-					setManageMediaStatus(items.length + " file" + (items.length === 1 ? "" : "s"));
-				}
-				items.forEach(function(item) {
-					var $row = $('<div class="manage-user-row" role="listitem"></div>');
-					var $name = $('<span class="manage-user-name"></span>');
-					$name.append($('<span></span>').text(item.title || item.name || "Media"));
-					$name.append($('<span class="manage-media-meta"></span>')
-						.text(formatManageMediaMeta(item)));
-					$name.attr("title", item.name || item.title || "");
-					var $btn = $('<button type="button" class="manage-action-btn manage-media-delete-btn">Delete</button>');
-					$btn.attr("data-id", item.id || "");
-					$btn.attr("data-url", item.url || item.absUrl || "");
-					$btn.attr("data-title", item.title || item.name || "Media");
-					$btn.attr("title", "Delete " + (item.title || item.name || "media"));
-					$btn.prop("disabled", !!manageMediaBusyId || manageMediaLoading);
-					$row.append($name).append($btn);
-					$mediaList.append($row);
-				});
-			}
-
-			function refreshManageMediaList() {
-				if(!$mediaList.length) return;
-				if(typeof RoomMedia === "undefined" || !RoomMedia.listLibrary) {
-					$mediaList.empty().append($('<div class="manage-user-empty"></div>')
-						.text("Media module missing"));
-					setManageMediaStatus("Unavailable");
-					return;
-				}
-				manageMediaLoading = true;
-				if($mediaRefreshBtn.length) $mediaRefreshBtn.prop("disabled", true);
-				setManageMediaStatus("Loading…");
-				RoomMedia.listLibrary().then(function(items) {
-					manageMediaLoading = false;
-					if($mediaRefreshBtn.length) $mediaRefreshBtn.prop("disabled", false);
-					renderManageMediaList(items);
-				}).catch(function(err) {
-					manageMediaLoading = false;
-					if($mediaRefreshBtn.length) $mediaRefreshBtn.prop("disabled", false);
-					$mediaList.empty().append($('<div class="manage-user-empty"></div>')
-						.text(err.message || "Could not load library"));
-					setManageMediaStatus("Media server offline");
-				});
-			}
-
 			$noobToggle.on("change", function(e) {
 				e.stopPropagation();
 				if(manageNoobUiBusy) return;
@@ -3063,51 +2981,11 @@ Rect.prototype.contains = function(x, y) {
 				renderManageCloseList();
 			});
 
-			$mediaList.on("click", ".manage-media-delete-btn", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				var $btn = $(this);
-				var itemId = String($btn.attr("data-id") || "");
-				var itemUrl = String($btn.attr("data-url") || "");
-				var itemTitle = String($btn.attr("data-title") || "media");
-				var key = itemId || itemUrl;
-				if(!key || manageMediaBusyId || manageMediaLoading) return;
-				if(!confirm("Delete \"" + itemTitle + "\" from the media library?\nThis cannot be undone.")) return;
-				if(typeof RoomMedia === "undefined" || !RoomMedia.deleteLibraryItem) {
-					setManageMediaStatus("Delete unavailable", 2000);
-					return;
-				}
-				manageMediaBusyId = key;
-				setManageMediaStatus("Deleting " + itemTitle + "…");
-				$mediaList.find(".manage-media-delete-btn").prop("disabled", true);
-				RoomMedia.deleteLibraryItem(itemId || itemUrl).then(function() {
-					manageMediaBusyId = "";
-					setManageMediaStatus("Deleted " + itemTitle, 2000);
-					refreshManageMediaList();
-					if(typeof window.refreshMediaLibraryDialog === "function") {
-						window.refreshMediaLibraryDialog();
-					}
-				}).catch(function(err) {
-					manageMediaBusyId = "";
-					setManageMediaStatus(err.message || "Delete failed", 2500);
-					refreshManageMediaList();
-				});
-			});
-
-			if($mediaRefreshBtn.length) {
-				$mediaRefreshBtn.on("click", function(e) {
-					e.preventDefault();
-					e.stopPropagation();
-					refreshManageMediaList();
-				});
-			}
-
 			gClient.on("participant added", renderManageCloseList);
 			gClient.on("participant removed", renderManageCloseList);
 			gClient.on("participant update", renderManageCloseList);
 			gClient.on("ch", renderManageCloseList);
 			renderManageCloseList();
-			refreshManageMediaList();
 
 			$managePanel.on("mousedown touchstart pointerdown", function(e) {
 				e.stopPropagation();
@@ -6159,6 +6037,14 @@ Rect.prototype.contains = function(x, y) {
 					$play.attr("title", "Load and share in Room DJ");
 					$actions.append($play);
 				}
+				if(gManageMode) {
+					var $del = $('<button type="button" class="ml-btn ml-btn-danger media-library-delete">Delete</button>');
+					$del.attr("data-id", item.id || "");
+					$del.attr("data-url", url);
+					$del.attr("data-title", title);
+					$del.attr("title", "Delete this file (manage mode)");
+					$actions.append($del);
+				}
 				$body.append($actions);
 				$card.append($thumb).append($body);
 				$list.append($card);
@@ -6177,9 +6063,13 @@ Rect.prototype.contains = function(x, y) {
 			return RoomMedia.listLibrary().then(function(items) {
 				gMediaLibraryItems = items || [];
 				renderMediaLibraryList();
-				setMediaLibraryStatus(gMediaLibraryItems.length
+				var countMsg = gMediaLibraryItems.length
 					? (gMediaLibraryItems.length + " file" + (gMediaLibraryItems.length === 1 ? "" : "s"))
-					: "Library is empty");
+					: "Library is empty";
+				if(gManageMode && gMediaLibraryItems.length) {
+					countMsg += " · delete available";
+				}
+				setMediaLibraryStatus(countMsg);
 				return gMediaLibraryItems;
 			}).catch(function(err) {
 				gMediaLibraryItems = [];
@@ -6189,6 +6079,34 @@ Rect.prototype.contains = function(x, y) {
 			});
 		}
 		window.refreshMediaLibraryDialog = refreshMediaLibraryDialog;
+
+		var mediaLibraryDeleteBusy = false;
+
+		function deleteMediaLibraryItem(itemId, itemUrl, itemTitle) {
+			if(!gManageMode) {
+				return Promise.reject(new Error("Delete requires #manage in the URL"));
+			}
+			if(mediaLibraryDeleteBusy) {
+				return Promise.reject(new Error("Delete already in progress"));
+			}
+			if(typeof RoomMedia === "undefined" || !RoomMedia.deleteLibraryItem) {
+				return Promise.reject(new Error("Delete unavailable"));
+			}
+			var key = itemId || itemUrl;
+			if(!key) return Promise.reject(new Error("Missing media item"));
+			mediaLibraryDeleteBusy = true;
+			$mediaLibraryDialog.find(".media-library-delete").prop("disabled", true);
+			setMediaLibraryStatus("Deleting " + (itemTitle || "media") + "…");
+			return RoomMedia.deleteLibraryItem(itemId || itemUrl).then(function() {
+				mediaLibraryDeleteBusy = false;
+				setMediaLibraryStatus("Deleted " + (itemTitle || "media"));
+				return refreshMediaLibraryDialog();
+			}).catch(function(err) {
+				mediaLibraryDeleteBusy = false;
+				$mediaLibraryDialog.find(".media-library-delete").prop("disabled", false);
+				throw err;
+			});
+		}
 
 		function collectLibraryImages() {
 			return (gMediaLibraryItems || []).filter(function(item) {
@@ -6324,6 +6242,20 @@ Rect.prototype.contains = function(x, y) {
 				$btn.attr("data-title"),
 				$btn.attr("data-kind")
 			).catch(function(err) {
+				setMediaLibraryStatus(err.message || String(err));
+				alert(err.message || String(err));
+			});
+		});
+		$mediaLibraryDialog.on("click", ".media-library-delete", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			if(!gManageMode) return;
+			var $btn = $(this);
+			var itemId = String($btn.attr("data-id") || "");
+			var itemUrl = String($btn.attr("data-url") || "");
+			var itemTitle = String($btn.attr("data-title") || "media");
+			if(!confirm("Delete \"" + itemTitle + "\"?\nThis cannot be undone.")) return;
+			deleteMediaLibraryItem(itemId, itemUrl, itemTitle).catch(function(err) {
 				setMediaLibraryStatus(err.message || String(err));
 				alert(err.message || String(err));
 			});

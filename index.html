@@ -158,14 +158,6 @@
             </span>
         </div>
         <div id="manage-close-list" class="manage-user-list" role="list"></div>
-        <div class="manage-panel-row manage-panel-row-divider manage-panel-row-stack">
-            <span class="manage-panel-row-text">
-                <span class="manage-panel-row-title">Delete media</span>
-                <span class="manage-panel-row-sub" id="manage-media-state">Remove library files</span>
-            </span>
-            <button type="button" id="manage-media-refresh-btn" class="manage-action-btn manage-refresh-btn" title="Refresh media library list">Refresh</button>
-        </div>
-        <div id="manage-media-list" class="manage-user-list manage-media-list" role="list"></div>
     </div>
 </aside>
 
@@ -883,7 +875,7 @@
                 <header class="media-library-header">
                     <div class="media-library-header-text">
                         <h2 class="media-library-title">Media Library</h2>
-                        <p class="media-library-sub">Includes saved library files plus recent uploads from <code>room-media</code>.</p>
+                        <p class="media-library-sub">Includes saved library files plus recent uploads from <code>room-media</code>. <span class="media-library-manage-hint" hidden>Delete buttons are on each card while <code>#manage</code> is in the URL.</span></p>
                     </div>
                     <div class="media-library-header-actions">
                         <button type="button" class="ml-btn ml-btn-ghost media-library-refresh" title="Refresh library">Refresh</button>
@@ -1110,7 +1102,7 @@
 <script src="./screenShare.js?v=20260712c"></script>
 <script src="./shareImage.js?v=20260712b"></script>
 <!--<script src="/ebsprite.js"></script>-->
-<script src="./script.js?v=20260919b"></script>
+<script src="./script.js?v=20260919c"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->
 </body>
 </html>
