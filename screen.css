@@ -3646,6 +3646,7 @@ body.learn-panel-open #social {
 	max-height: calc(100dvh - 24px);
 }
 .media-library-shell {
+	position: relative;
 	display: flex;
 	flex-direction: column;
 	max-height: calc(100dvh - 24px);
@@ -4014,6 +4015,33 @@ body.manage-mode .media-library-manage-hint {
 .media-library-drop:hover {
 	border-color: #2f6fed;
 	background: #14161c;
+}
+.media-library-drop.ml-drop-hover,
+.media-library-shell.ml-drop-active .media-library-drop {
+	border-color: #2f6fed;
+	border-style: solid;
+	background: #141820;
+}
+.media-library-shell.ml-drop-active .media-library-stage {
+	outline: 1px dashed #2f6fed;
+	outline-offset: -6px;
+}
+.media-library-shell.ml-drop-active::after {
+	content: "Drop to upload";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	z-index: 5;
+	padding: 10px 16px;
+	font-size: 13px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	color: #dce8ff;
+	background: #12161e;
+	border: 1px solid #2f6fed;
+	border-radius: 8px;
+	pointer-events: none;
 }
 .media-library-drop input {
 	position: absolute;

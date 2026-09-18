@@ -6181,9 +6181,7 @@ Rect.prototype.contains = function(x, y) {
 			return Promise.resolve();
 		}
 
-		function uploadLibrarySelection() {
-			var fileInput = $mediaLibraryDialog.find("input[name=libraryfile]")[0];
-			var file = fileInput && fileInput.files && fileInput.files[0];
+		function uploadLibraryFile(file) {
 			if(!file) return Promise.reject(new Error("Choose an audio, video, or image file"));
 			if(typeof RoomMedia === "undefined" || !RoomMedia.uploadToLibrary) {
 				return Promise.reject(new Error("Media module missing"));
@@ -6194,7 +6192,63 @@ Rect.prototype.contains = function(x, y) {
 			}).then(function(info) {
 				resetMediaLibraryUploadForm();
 				setMediaLibraryStatus("Added: " + (info.title || info.name));
-				return refreshMediaLibraryDialog();
+				return refreshMediaLibraryDialog().then(function() {
+					return info;
+				});
+			});
+		}
+
+		function uploadLibrarySelection() {
+			var fileInput = $mediaLibraryDialog.find("input[name=libraryfile]")[0];
+			var file = fileInput && fileInput.files && fileInput.files[0];
+			return uploadLibraryFile(file);
+		}
+
+		function isLibraryDropFile(file) {
+			if(!file) return false;
+			var type = String(file.type || "");
+			var name = String(file.name || "").toLowerCase();
+			if(/^audio\//.test(type) || /^video\//.test(type) || /^image\//.test(type)) return true;
+			return /\.(mp3|m4a|wav|ogg|aac|flac|opus|weba|mp4|webm|mov|mkv|m4v|ogv|png|jpe?g|gif|webp|bmp|svg)$/i.test(name);
+		}
+
+		function assignLibraryFileInput(file) {
+			var input = $mediaLibraryDialog.find("input[name=libraryfile]")[0];
+			if(!input || !file) return false;
+			try {
+				var dt = new DataTransfer();
+				dt.items.add(file);
+				input.files = dt.files;
+			} catch (err) {
+				return false;
+			}
+			$mediaLibraryDialog.find(".media-library-drop-name").text(file.name);
+			$mediaLibraryDialog.find(".media-library-drop-text").text("Selected file");
+			return true;
+		}
+
+		function handleLibraryDroppedFiles(fileList) {
+			var files = [];
+			if(fileList && fileList.length) {
+				for(var i = 0; i < fileList.length; i++) {
+					if(isLibraryDropFile(fileList[i])) files.push(fileList[i]);
+				}
+			}
+			if(!files.length) {
+				setMediaLibraryStatus("Drop an audio, video, or image file");
+				return;
+			}
+			assignLibraryFileInput(files[0]);
+			var chain = Promise.resolve();
+			files.forEach(function(file, idx) {
+				chain = chain.then(function() {
+					if(idx > 0) assignLibraryFileInput(file);
+					return uploadLibraryFile(file);
+				});
+			});
+			chain.catch(function(err) {
+				setMediaLibraryStatus(err.message || String(err));
+				alert(err.message || String(err));
 			});
 		}
 
@@ -6287,6 +6341,57 @@ Rect.prototype.contains = function(x, y) {
 			}
 		});
 		$mediaLibraryDialog.on("click", ".ml-btn", function(e) { e.stopPropagation(); });
+
+		(function bindMediaLibraryDragDrop() {
+			var shell = $mediaLibraryDialog.find(".media-library-shell")[0]
+				|| $mediaLibraryDialog[0];
+			var dropZone = $mediaLibraryDialog.find(".media-library-drop")[0];
+			if(!shell) return;
+			var dragDepth = 0;
+
+			function setDropHover(on) {
+				shell.classList.toggle("ml-drop-active", !!on);
+				if(dropZone) dropZone.classList.toggle("ml-drop-hover", !!on);
+			}
+
+			function isFileDrag(e) {
+				var types = e.dataTransfer && e.dataTransfer.types;
+				if(!types) return false;
+				for(var i = 0; i < types.length; i++) {
+					if(types[i] === "Files") return true;
+				}
+				return false;
+			}
+
+			shell.addEventListener("dragenter", function(e) {
+				if(!isFileDrag(e)) return;
+				e.preventDefault();
+				e.stopPropagation();
+				dragDepth += 1;
+				setDropHover(true);
+			});
+			shell.addEventListener("dragover", function(e) {
+				if(!isFileDrag(e)) return;
+				e.preventDefault();
+				e.stopPropagation();
+				if(e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+				setDropHover(true);
+			});
+			shell.addEventListener("dragleave", function(e) {
+				if(!isFileDrag(e)) return;
+				e.preventDefault();
+				e.stopPropagation();
+				dragDepth = Math.max(0, dragDepth - 1);
+				if(dragDepth === 0) setDropHover(false);
+			});
+			shell.addEventListener("drop", function(e) {
+				e.preventDefault();
+				e.stopPropagation();
+				dragDepth = 0;
+				setDropHover(false);
+				handleLibraryDroppedFiles(e.dataTransfer && e.dataTransfer.files);
+			});
+		})();
 
 		$mediaLibraryViewer.on("click", "[data-viewer-close]", function(e) {
 			e.preventDefault();
