@@ -2939,10 +2939,11 @@ Rect.prototype.contains = function(x, y) {
 
 			function formatManageMediaMeta(item) {
 				var kind = (item.kind || "audio").toUpperCase();
+				var source = (item.source || "library") === "recent" ? "Recent" : "Library";
 				var size = (typeof RoomMedia !== "undefined" && RoomMedia.formatBytes)
 					? RoomMedia.formatBytes(item.size)
 					: ((item.size || 0) + " B");
-				return kind + " · " + size;
+				return source + " · " + kind + " · " + size;
 			}
 
 			function renderManageMediaList(items) {
@@ -6053,9 +6054,10 @@ Rect.prototype.contains = function(x, y) {
 		}
 
 		function updateMediaLibraryCounts(items) {
-			var counts = { all: 0, image: 0, audio: 0, video: 0 };
+			var counts = { all: 0, recent: 0, image: 0, audio: 0, video: 0 };
 			(items || []).forEach(function(item) {
 				counts.all += 1;
+				if((item.source || "library") === "recent") counts.recent += 1;
 				var kind = item.kind || "audio";
 				if(counts[kind] != null) counts[kind] += 1;
 			});
@@ -6069,9 +6071,14 @@ Rect.prototype.contains = function(x, y) {
 			var q = (gMediaLibraryQuery || "").trim().toLowerCase();
 			return (gMediaLibraryItems || []).filter(function(item) {
 				var kind = item.kind || "audio";
-				if(gMediaLibraryFilter !== "all" && kind !== gMediaLibraryFilter) return false;
+				var source = item.source || "library";
+				if(gMediaLibraryFilter === "recent") {
+					if(source !== "recent") return false;
+				} else if(gMediaLibraryFilter !== "all" && kind !== gMediaLibraryFilter) {
+					return false;
+				}
 				if(!q) return true;
-				var hay = ((item.title || "") + " " + (item.name || "")).toLowerCase();
+				var hay = ((item.title || "") + " " + (item.name || "") + " " + source).toLowerCase();
 				return hay.indexOf(q) >= 0;
 			});
 		}
@@ -6091,23 +6098,28 @@ Rect.prototype.contains = function(x, y) {
 					emptyCopy.text("Try another filter or clear the search.");
 				} else {
 					emptyTitle.text("Nothing here yet");
-					emptyCopy.text("Upload audio, video, or an image to build the shared library.");
+					emptyCopy.text("Upload a file, or use Room DJ / Share Image — recent uploads from room-media show up here.");
 				}
 				return;
 			}
 			$empty.attr("hidden", "hidden");
 			items.forEach(function(item) {
 				var kind = item.kind || "audio";
+				var source = item.source || "library";
 				var url = libraryItemUrl(item);
 				var title = item.title || item.name || "Media";
 				var $card = $('<article class="media-library-card" role="listitem"></article>');
 				$card.attr("data-kind", kind);
+				$card.attr("data-source", source);
 				$card.attr("data-id", item.id || "");
 				$card.attr("data-url", url);
 				$card.attr("data-title", title);
 
 				var $thumb = $('<div class="media-library-card-thumb"></div>');
-				$thumb.append($('<span class="media-library-card-badge"></span>').text(kind));
+				var badgeText = source === "recent" ? ("recent · " + kind) : kind;
+				$thumb.append($('<span class="media-library-card-badge"></span>')
+					.toggleClass("is-recent", source === "recent")
+					.text(badgeText));
 				if(kind === "image" && url) {
 					var $img = $('<img alt="" loading="lazy"/>');
 					$img.attr("src", url);
@@ -6126,7 +6138,7 @@ Rect.prototype.contains = function(x, y) {
 				$body.append($('<div class="media-library-card-title"></div>')
 					.text(title)
 					.attr("title", item.name || title));
-				var meta = kind.toUpperCase();
+				var meta = (source === "recent" ? "Recent · " : "") + kind.toUpperCase();
 				if(typeof RoomMedia !== "undefined" && RoomMedia.formatBytes) {
 					meta += " · " + RoomMedia.formatBytes(item.size);
 				}

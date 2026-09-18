@@ -3718,6 +3718,14 @@ body.learn-panel-open #social {
 	line-height: 1.4;
 	color: #8a8a94;
 }
+.media-library-sub code {
+	font-size: 11px;
+	padding: 1px 5px;
+	background: #1c1c20;
+	border: 1px solid #323238;
+	border-radius: 4px;
+	color: #c8c8d0;
+}
 .media-library-header-actions {
 	display: flex;
 	flex: 0 0 auto;
@@ -3928,6 +3936,11 @@ body.learn-panel-open #social {
 	background: rgba(12, 12, 14, 0.82);
 	border: 1px solid #3a3a42;
 	border-radius: 4px;
+}
+.media-library-card-badge.is-recent {
+	color: #ffe8a8;
+	border-color: #6a5a28;
+	background: #1a160c;
 }
 .media-library-card-body {
 	display: flex;

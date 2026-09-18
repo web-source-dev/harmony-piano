@@ -207,6 +207,8 @@ class MediaHandler(BaseHTTPRequestHandler):
         items = load_library_index()
         out = []
         changed = False
+        seen_urls = set()
+
         for item in items:
             if not isinstance(item, dict):
                 changed = True
@@ -220,6 +222,7 @@ class MediaHandler(BaseHTTPRequestHandler):
                 changed = True
                 continue
             rel = "/media-library/" + file_name
+            seen_urls.add(rel)
             out.append({
                 "id": item.get("id") or file_name,
                 "url": rel,
@@ -228,8 +231,10 @@ class MediaHandler(BaseHTTPRequestHandler):
                 "title": item.get("title") or library_title_from_name(item.get("name") or file_name),
                 "kind": item.get("kind") or media_kind(os.path.splitext(file_name)[1].lower()),
                 "size": item.get("size") or os.path.getsize(file_path),
-                "added": item.get("added") or 0,
+                "added": item.get("added") or int(os.path.getmtime(file_path)),
+                "source": "library",
             })
+
         if changed:
             save_library_index([{
                 "id": i["id"],
@@ -239,9 +244,51 @@ class MediaHandler(BaseHTTPRequestHandler):
                 "kind": i["kind"],
                 "size": i["size"],
                 "added": i["added"],
-            } for i in out])
+            } for i in out if i.get("source") == "library"])
+
+        # Include recent Room DJ / Share Image uploads from room-media/
+        try:
+            os.makedirs(MEDIA_DIR, exist_ok=True)
+            for file_name in os.listdir(MEDIA_DIR):
+                if file_name.startswith("."):
+                    continue
+                file_path = os.path.join(MEDIA_DIR, file_name)
+                if not os.path.isfile(file_path):
+                    continue
+                ext = os.path.splitext(file_name)[1].lower()
+                if ext not in ALLOWED_MEDIA_EXT:
+                    continue
+                rel = "/room-media/" + file_name
+                if rel in seen_urls:
+                    continue
+                try:
+                    st = os.stat(file_path)
+                    mtime = int(st.st_mtime)
+                    size = int(st.st_size)
+                except OSError:
+                    continue
+                out.append({
+                    "id": "room-" + os.path.splitext(file_name)[0],
+                    "url": rel,
+                    "absUrl": abs_url(self, rel),
+                    "name": file_name,
+                    "title": library_title_from_name(file_name),
+                    "kind": media_kind(ext),
+                    "size": size,
+                    "added": mtime,
+                    "source": "recent",
+                })
+        except OSError:
+            pass
+
         out.sort(key=lambda x: (-(x.get("added") or 0), str(x.get("title") or "").lower()))
-        self._json(200, {"ok": True, "items": out, "count": len(out)})
+        self._json(200, {
+            "ok": True,
+            "items": out,
+            "count": len(out),
+            "libraryCount": sum(1 for i in out if i.get("source") == "library"),
+            "recentCount": sum(1 for i in out if i.get("source") == "recent"),
+        })
 
     def _serve_file(self, path, base_dir, url_prefix):
         rel = path[len(url_prefix):].replace("\\", "/").lstrip("/")
@@ -390,6 +437,33 @@ class MediaHandler(BaseHTTPRequestHandler):
             data = json.loads(raw or "{}")
             target_id = (data.get("id") or "").strip()
             target_url = data.get("url") or data.get("path") or ""
+
+            # Recent Room DJ uploads live in room-media/
+            if target_url and "/room-media/" in str(target_url):
+                file_path = media_path_from_url(target_url, MEDIA_DIR, "/room-media/")
+                if not file_path or not os.path.isfile(file_path):
+                    raise ValueError("Recent media not found")
+                name = os.path.basename(file_path)
+                os.remove(file_path)
+                self._json(200, {"ok": True, "removed": True, "name": name, "source": "recent"})
+                return
+
+            if target_id.startswith("room-"):
+                file_stem = target_id[len("room-"):]
+                for file_name in os.listdir(MEDIA_DIR) if os.path.isdir(MEDIA_DIR) else []:
+                    if os.path.splitext(file_name)[0] == file_stem:
+                        file_path = os.path.join(MEDIA_DIR, file_name)
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                            self._json(200, {
+                                "ok": True,
+                                "removed": True,
+                                "name": file_name,
+                                "source": "recent",
+                            })
+                            return
+                raise ValueError("Recent media not found")
+
             items = load_library_index()
             kept = []
             removed = False
@@ -399,7 +473,6 @@ class MediaHandler(BaseHTTPRequestHandler):
                     continue
                 file_name = os.path.basename(item.get("file") or "")
                 item_id = str(item.get("id") or "")
-                rel = "/media-library/" + file_name if file_name else ""
                 match = False
                 if target_id and (item_id == target_id or file_name.startswith(target_id)):
                     match = True
@@ -430,7 +503,13 @@ class MediaHandler(BaseHTTPRequestHandler):
             if not removed:
                 raise ValueError("Library item not found")
             save_library_index(kept)
-            self._json(200, {"ok": True, "removed": True, "name": removed_name, "count": len(kept)})
+            self._json(200, {
+                "ok": True,
+                "removed": True,
+                "name": removed_name,
+                "count": len(kept),
+                "source": "library",
+            })
         except Exception as e:
             self._json(400, {"ok": False, "error": str(e)})
 
