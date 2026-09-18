@@ -5,8 +5,9 @@
  * page comes up even when the origin is slow. Live traffic is never cached:
  *   /relay        WebSocket room sync
  *   /api/*        chat logs, media API
- *   /room-media/  Room DJ uploads
- *   /health       health checks
+ *   /room-media/     Room DJ uploads (ephemeral)
+ *   /media-library/  Persistent media library
+ *   /health          health checks
  *
  * Bump CACHE_NAME when you need everyone to drop the old shell (rare — JS/CSS
  * also refresh in the background via stale-while-revalidate).
@@ -66,6 +67,7 @@ function isLivePath(pathname) {
 	if (pathname === "/health" || pathname === "/relay" || pathname === "/relay/health") return true;
 	if (pathname.indexOf("/api/") === 0) return true;
 	if (pathname.indexOf("/room-media/") === 0) return true;
+	if (pathname.indexOf("/media-library/") === 0) return true;
 	return false;
 }
 

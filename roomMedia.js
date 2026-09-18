@@ -110,6 +110,22 @@
 		return base ? base + "/api/media" : "/api/media";
 	}
 
+	function apiLibraryUrl() {
+		return apiMediaUrl() + "/library";
+	}
+
+	function isLibraryMediaUrl(url) {
+		var path = (url || "").split("?")[0].split("#")[0];
+		return /\/media-library\/[^/?#]+$/i.test(path);
+	}
+
+	function formatBytes(n) {
+		n = Number(n) || 0;
+		if (n < 1024) return n + " B";
+		if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+		return (n / (1024 * 1024)).toFixed(1) + " MB";
+	}
+
 	function chatText(msg) {
 		if (!msg) return "";
 		return msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
@@ -323,14 +339,117 @@
 
 	RoomMedia.SYNC_PREFIX = SYNC_PREFIX;
 	RoomMedia.formatTime = formatTime;
+	RoomMedia.formatBytes = formatBytes;
 	RoomMedia.isSyncText = function (text) { return syncPayload(text) !== null; };
 	RoomMedia.initMediaServer = initMediaServer;
 	RoomMedia.getMediaServerBase = getMediaServerBase;
 	RoomMedia.parseYouTubeId = parseYouTubeId;
 	RoomMedia.isYouTubeUrl = function (url) { return !!parseYouTubeId(url); };
 	RoomMedia.isExternalStreamUrl = isExternalStreamUrl;
+	RoomMedia.isLibraryMediaUrl = isLibraryMediaUrl;
+
+	RoomMedia.listLibrary = function () {
+		return initMediaServer().then(function (base) {
+			if (!base) {
+				throw new Error("Media server not running. Run: python media-server.py 8551");
+			}
+			return fetch(apiLibraryUrl(), { method: "GET", cache: "no-store" })
+				.then(function (r) {
+					return r.json().then(function (data) {
+						return { status: r.status, data: data };
+					}).catch(function () {
+						return { status: r.status, data: { ok: false, error: "Could not load library" } };
+					});
+				})
+				.then(function (res) {
+					var data = res.data;
+					if (!data || !data.ok) {
+						throw new Error((data && data.error) || "Could not load library (" + res.status + ")");
+					}
+					return data.items || [];
+				});
+		});
+	};
+
+	RoomMedia.uploadToLibrary = function (file) {
+		if (!file) return Promise.reject(new Error("No file selected"));
+		return initMediaServer().then(function (base) {
+			if (!base) {
+				throw new Error("Media server not running. Run: python media-server.py 8551");
+			}
+			var fd = new FormData();
+			fd.append("file", file, file.name);
+			return fetch(apiLibraryUrl(), { method: "POST", body: fd, cache: "no-store" })
+				.then(function (r) {
+					return r.json().then(function (data) {
+						return { status: r.status, data: data };
+					}).catch(function () {
+						return { status: r.status, data: { ok: false, error: "Upload failed (" + r.status + ")" } };
+					});
+				})
+				.then(function (res) {
+					if (res.status === 413) {
+						throw new Error(
+							"File too large for the server (413). " +
+							"On nginx add: client_max_body_size 80m; then reload nginx."
+						);
+					}
+					var data = res.data;
+					if (!data || !data.ok) throw new Error((data && data.error) || "Upload failed (" + res.status + ")");
+					return {
+						id: data.id,
+						url: data.absUrl || resolveMediaUrl(data.url),
+						relUrl: data.url,
+						title: data.title || clampTitle(file.name.replace(/\.[^.]+$/, "")),
+						name: data.name || file.name,
+						kind: data.kind || kindFromName(file.name),
+						size: data.size || file.size || 0,
+						added: data.added || 0
+					};
+				});
+		});
+	};
+
+	RoomMedia.deleteLibraryItem = function (idOrUrl) {
+		var body = {};
+		if (!idOrUrl) return Promise.reject(new Error("Missing library item"));
+		if (/\/media-library\//i.test(String(idOrUrl)) || /^https?:\/\//i.test(String(idOrUrl))) {
+			body.url = String(idOrUrl);
+		} else {
+			body.id = String(idOrUrl);
+		}
+		return initMediaServer().then(function (base) {
+			if (!base) {
+				throw new Error("Media server not running. Run: python media-server.py 8551");
+			}
+			return fetch(apiLibraryUrl(), {
+				method: "DELETE",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(body),
+				cache: "no-store"
+			}).then(function (r) {
+				return r.json().then(function (data) {
+					return { status: r.status, data: data };
+				}).catch(function () {
+					return { status: r.status, data: { ok: false, error: "Delete failed" } };
+				});
+			}).then(function (res) {
+				var data = res.data;
+				if (!data || !data.ok) {
+					throw new Error((data && data.error) || "Delete failed (" + res.status + ")");
+				}
+				return data;
+			});
+		});
+	};
 
 	RoomMedia.prototype._markServerMedia = function (url) {
+		// Library files are persistent — never mark them for auto-delete.
+		if (isLibraryMediaUrl(url)) {
+			this.serverMediaUrl = null;
+			this.serverDeletePending = false;
+			return;
+		}
 		this.serverMediaUrl = normalizeServerMediaUrl(url);
 		this.serverDeletePending = false;
 	};

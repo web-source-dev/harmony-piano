@@ -158,6 +158,14 @@
             </span>
         </div>
         <div id="manage-close-list" class="manage-user-list" role="list"></div>
+        <div class="manage-panel-row manage-panel-row-divider manage-panel-row-stack">
+            <span class="manage-panel-row-text">
+                <span class="manage-panel-row-title">Delete media</span>
+                <span class="manage-panel-row-sub" id="manage-media-state">Remove library files</span>
+            </span>
+            <button type="button" id="manage-media-refresh-btn" class="manage-action-btn manage-refresh-btn" title="Refresh media library list">Refresh</button>
+        </div>
+        <div id="manage-media-list" class="manage-user-list manage-media-list" role="list"></div>
     </div>
 </aside>
 
@@ -297,6 +305,7 @@
         <div id="room-settings-btn" class="ugly-button">Room Settings</div>
         <div id="server-btn" class="ugly-button" title="Switch between public MPP and the Harmony backup server">Server: MPP</div>
         <div id="room-media-btn" class="ugly-button room-dj-btn">Room DJ</div>
+        <div id="media-library-btn" class="ugly-button room-dj-btn" title="Browse and upload shared audio, video, and images">Media Library</div>
         <div id="midi-btn" class="ugly-button translate">MIDI In/Out</div>
         <div id="record-btn" class="ugly-button translate">Record MP3</div>
         <div id="play-mp3-btn" class="ugly-button translate">Play MP3</div>
@@ -868,6 +877,80 @@
                 </div>
             </div>
         </div>
+
+        <div id="media-library" class="dialog room-media-dialog media-library-dialog">
+            <div class="room-media-dialog-inner media-library-shell">
+                <header class="media-library-header">
+                    <div class="media-library-header-text">
+                        <h2 class="media-library-title">Media Library</h2>
+                        <p class="media-library-sub">Browse, upload, and play shared audio, video, and images.</p>
+                    </div>
+                    <div class="media-library-header-actions">
+                        <button type="button" class="ml-btn ml-btn-ghost media-library-refresh" title="Refresh library">Refresh</button>
+                        <button type="button" class="ml-btn ml-btn-ghost media-library-open-dj" title="Open Room DJ">Room DJ</button>
+                    </div>
+                </header>
+
+                <nav class="media-library-nav" aria-label="Library filters">
+                    <button type="button" class="media-library-tab is-active" data-filter="all">All <span class="media-library-tab-count" data-count="all">0</span></button>
+                    <button type="button" class="media-library-tab" data-filter="image">Images <span class="media-library-tab-count" data-count="image">0</span></button>
+                    <button type="button" class="media-library-tab" data-filter="audio">Audio <span class="media-library-tab-count" data-count="audio">0</span></button>
+                    <button type="button" class="media-library-tab" data-filter="video">Video <span class="media-library-tab-count" data-count="video">0</span></button>
+                </nav>
+
+                <div class="media-library-toolbar">
+                    <label class="media-library-search-wrap">
+                        <span class="media-library-search-label">Search</span>
+                        <input type="search" class="media-library-search" name="librarysearch" placeholder="Filter by name…" maxlength="120" autocomplete="off"/>
+                    </label>
+                    <p class="media-library-status" aria-live="polite">Ready</p>
+                </div>
+
+                <div class="media-library-stage">
+                    <div id="media-library-list" class="media-library-grid" role="list"></div>
+                    <div class="media-library-empty" hidden>
+                        <div class="media-library-empty-icon" aria-hidden="true">◇</div>
+                        <p class="media-library-empty-title">Nothing here yet</p>
+                        <p class="media-library-empty-copy">Upload audio, video, or an image to build the shared library.</p>
+                    </div>
+                </div>
+
+                <footer class="media-library-footer">
+                    <label class="media-library-drop">
+                        <input type="file" name="libraryfile" accept="audio/*,video/*,image/*,.mp3,.m4a,.wav,.ogg,.mp4,.webm,.mov,.mkv,.png,.jpg,.jpeg,.gif,.webp"/>
+                        <span class="media-library-drop-main">
+                            <span class="media-library-drop-title">Add to library</span>
+                            <span class="media-library-drop-text">Drop a file or click to browse</span>
+                            <span class="media-library-drop-name"></span>
+                        </span>
+                    </label>
+                    <button type="button" class="ml-btn ml-btn-accent media-library-upload">Upload</button>
+                </footer>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="media-library-viewer" class="media-library-viewer" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-label="Image viewer">
+    <div class="media-library-viewer-backdrop" data-viewer-close="1"></div>
+    <div class="media-library-viewer-frame">
+        <header class="media-library-viewer-bar">
+            <div class="media-library-viewer-meta">
+                <span class="media-library-viewer-title">Image</span>
+                <span class="media-library-viewer-index">1 / 1</span>
+            </div>
+            <div class="media-library-viewer-actions">
+                <button type="button" class="ml-viewer-btn media-library-viewer-prev" title="Previous (←)" aria-label="Previous image">‹</button>
+                <button type="button" class="ml-viewer-btn media-library-viewer-next" title="Next (→)" aria-label="Next image">›</button>
+                <button type="button" class="ml-viewer-btn media-library-viewer-close" title="Close (Esc)" aria-label="Close viewer" data-viewer-close="1">✕</button>
+            </div>
+        </header>
+        <div class="media-library-viewer-stage">
+            <button type="button" class="media-library-viewer-nav media-library-viewer-nav-prev" title="Previous" aria-label="Previous image">‹</button>
+            <img class="media-library-viewer-img" alt=""/>
+            <button type="button" class="media-library-viewer-nav media-library-viewer-nav-next" title="Next" aria-label="Next image">›</button>
+        </div>
+        <p class="media-library-viewer-hint">← → navigate · Esc close</p>
     </div>
 </div>
 
@@ -1001,7 +1084,7 @@
 <script src="./lame.min.js"></script>
 <script src="./color.js"></script>
 <script src="./sheetPlayer.js"></script>
-<script src="./roomMedia.js?v=20260712b"></script>
+<script src="./roomMedia.js?v=20260919b"></script>
 <script src="./playMp3.js?v=20260820a"></script>
 <script src="./pianoLearn.js"></script>
 <script src="./metronome.js"></script>
@@ -1026,7 +1109,7 @@
 <script src="./screenShare.js?v=20260712c"></script>
 <script src="./shareImage.js?v=20260712b"></script>
 <!--<script src="/ebsprite.js"></script>-->
-<script src="./script.js?v=20260905a"></script>
+<script src="./script.js?v=20260919a"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->
 </body>
 </html>
