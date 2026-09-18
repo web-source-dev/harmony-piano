@@ -2805,7 +2805,6 @@ Rect.prototype.contains = function(x, y) {
 	// Media delete controls appear inside Media Library when gManageMode is on.
 	if(gManageMode) {
 		document.body.classList.add("manage-mode");
-		$(".media-library-manage-hint").removeAttr("hidden");
 		var $managePanel = $("#manage-panel");
 		if($managePanel.length) {
 			var $noobToggle = $("#manage-noob-toggle");
@@ -5905,13 +5904,12 @@ Rect.prototype.contains = function(x, y) {
 		var $mediaLibraryViewer = $("#media-library-viewer");
 		var mediaLibraryBtn = document.getElementById("media-library-btn");
 		var gMediaLibraryItems = [];
-		var gMediaLibraryFilter = "all";
-		var gMediaLibraryQuery = "";
 		var gMediaLibraryImages = [];
 		var gMediaLibraryViewerIndex = 0;
 
 		function setMediaLibraryStatus(msg) {
-			$mediaLibraryDialog.find(".media-library-status").text(msg || "Ready");
+			// Status line removed from library UI — keep brief feedback in the page status bar.
+			if(msg) $("#status").text(msg);
 		}
 
 		function resetMediaLibraryUploadForm() {
@@ -5931,53 +5929,15 @@ Rect.prototype.contains = function(x, y) {
 			return "♪";
 		}
 
-		function updateMediaLibraryCounts(items) {
-			var counts = { all: 0, recent: 0, image: 0, audio: 0, video: 0 };
-			(items || []).forEach(function(item) {
-				counts.all += 1;
-				if((item.source || "library") === "recent") counts.recent += 1;
-				var kind = item.kind || "audio";
-				if(counts[kind] != null) counts[kind] += 1;
-			});
-			$mediaLibraryDialog.find(".media-library-tab-count").each(function() {
-				var key = this.getAttribute("data-count");
-				this.textContent = String(counts[key] || 0);
-			});
-		}
-
-		function getFilteredMediaLibraryItems() {
-			var q = (gMediaLibraryQuery || "").trim().toLowerCase();
-			return (gMediaLibraryItems || []).filter(function(item) {
-				var kind = item.kind || "audio";
-				var source = item.source || "library";
-				if(gMediaLibraryFilter === "recent") {
-					if(source !== "recent") return false;
-				} else if(gMediaLibraryFilter !== "all" && kind !== gMediaLibraryFilter) {
-					return false;
-				}
-				if(!q) return true;
-				var hay = ((item.title || "") + " " + (item.name || "") + " " + source).toLowerCase();
-				return hay.indexOf(q) >= 0;
-			});
-		}
-
 		function renderMediaLibraryList() {
 			var $list = $("#media-library-list");
 			var $empty = $mediaLibraryDialog.find(".media-library-empty");
-			var items = getFilteredMediaLibraryItems();
+			var items = gMediaLibraryItems || [];
 			$list.empty();
-			updateMediaLibraryCounts(gMediaLibraryItems);
 			if(!items.length) {
 				$empty.removeAttr("hidden");
-				var emptyTitle = $empty.find(".media-library-empty-title");
-				var emptyCopy = $empty.find(".media-library-empty-copy");
-				if((gMediaLibraryItems || []).length && (gMediaLibraryFilter !== "all" || gMediaLibraryQuery)) {
-					emptyTitle.text("No matches");
-					emptyCopy.text("Try another filter or clear the search.");
-				} else {
-					emptyTitle.text("Nothing here yet");
-					emptyCopy.text("Upload a file, or use Room DJ / Share Image — recent uploads from room-media show up here.");
-				}
+				$empty.find(".media-library-empty-title").text("Nothing here yet");
+				$empty.find(".media-library-empty-copy").text("Upload audio, video, or an image to build the shared library.");
 				return;
 			}
 			$empty.attr("hidden", "hidden");
@@ -6054,27 +6014,17 @@ Rect.prototype.contains = function(x, y) {
 		function refreshMediaLibraryDialog() {
 			if(!$mediaLibraryDialog.length) return Promise.resolve([]);
 			if(typeof RoomMedia === "undefined" || !RoomMedia.listLibrary) {
-				setMediaLibraryStatus("Media module missing");
 				gMediaLibraryItems = [];
 				renderMediaLibraryList();
 				return Promise.reject(new Error("Media module missing"));
 			}
-			setMediaLibraryStatus("Loading library…");
 			return RoomMedia.listLibrary().then(function(items) {
 				gMediaLibraryItems = items || [];
 				renderMediaLibraryList();
-				var countMsg = gMediaLibraryItems.length
-					? (gMediaLibraryItems.length + " file" + (gMediaLibraryItems.length === 1 ? "" : "s"))
-					: "Library is empty";
-				if(gManageMode && gMediaLibraryItems.length) {
-					countMsg += " · delete available";
-				}
-				setMediaLibraryStatus(countMsg);
 				return gMediaLibraryItems;
 			}).catch(function(err) {
 				gMediaLibraryItems = [];
 				renderMediaLibraryList();
-				setMediaLibraryStatus(err.message || "Could not load library");
 				throw err;
 			});
 		}
@@ -6261,19 +6211,6 @@ Rect.prototype.contains = function(x, y) {
 			});
 		}
 
-		$mediaLibraryDialog.on("click", ".media-library-tab", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			var filter = this.getAttribute("data-filter") || "all";
-			gMediaLibraryFilter = filter;
-			$mediaLibraryDialog.find(".media-library-tab").removeClass("is-active");
-			$(this).addClass("is-active");
-			renderMediaLibraryList();
-		});
-		$mediaLibraryDialog.on("input", ".media-library-search", function() {
-			gMediaLibraryQuery = this.value || "";
-			renderMediaLibraryList();
-		});
 		$mediaLibraryDialog.on("click", ".media-library-refresh", function(e) {
 			e.preventDefault();
 			e.stopPropagation();
@@ -6325,12 +6262,6 @@ Rect.prototype.contains = function(x, y) {
 			if(e.key !== "Enter" && e.key !== " ") return;
 			e.preventDefault();
 			openMediaLibraryViewer($(this).closest("[data-url]").attr("data-url"));
-		});
-		$mediaLibraryDialog.on("click", ".media-library-open-dj", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			closeModal();
-			openModal("#room-media");
 		});
 		$mediaLibraryDialog.on("change", "input[name=libraryfile]", function() {
 			var f = this.files && this.files[0];
