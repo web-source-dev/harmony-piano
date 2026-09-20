@@ -47,6 +47,7 @@
 		this.openModal = opts.openModal || null;
 		this.closeModal = opts.closeModal || null;
 		this.messages = [];
+		this.deletedIds = {};
 		this.roomId = null;
 		this.ignoreSelfUntil = 0;
 		this.syncReplyTimer = null;
@@ -104,6 +105,19 @@
 				self.postFromForm();
 			}
 		});
+
+		this.$list.on("click", ".leave-msg-delete", function (e) {
+			e.preventDefault();
+			e.stopPropagation();
+			if (!self.isManageMode()) return;
+			var id = $(this).attr("data-id");
+			if (!id) return;
+			self.deleteMessage(id, true);
+		});
+	};
+
+	LeaveMsg.prototype.isManageMode = function () {
+		return !!(global.document && document.body && document.body.classList.contains("manage-mode"));
 	};
 
 	LeaveMsg.prototype.getUserName = function () {
@@ -117,17 +131,33 @@
 		return STORAGE_PREFIX + (this.roomId || "lobby");
 	};
 
+	LeaveMsg.prototype.deletedStorageKey = function () {
+		return STORAGE_PREFIX + "del:" + (this.roomId || "lobby");
+	};
+
 	LeaveMsg.prototype.setRoom = function (roomId) {
 		roomId = roomId || "lobby";
 		if (this.roomId === roomId) return;
 		this.roomId = roomId;
 		this.messages = [];
+		this.deletedIds = {};
 		this.loadLocal();
 		this.render();
 		this.requestSync();
 	};
 
 	LeaveMsg.prototype.loadLocal = function () {
+		try {
+			var rawDel = global.localStorage && localStorage.getItem(this.deletedStorageKey());
+			if (rawDel) {
+				var dels = JSON.parse(rawDel);
+				if (Array.isArray(dels)) {
+					for (var d = 0; d < dels.length; d++) {
+						if (dels[d]) this.deletedIds[String(dels[d])] = true;
+					}
+				}
+			}
+		} catch (e) {}
 		try {
 			var raw = global.localStorage && localStorage.getItem(this.storageKey());
 			if (!raw) return;
@@ -144,16 +174,21 @@
 		try {
 			if (!global.localStorage) return;
 			localStorage.setItem(this.storageKey(), JSON.stringify(this.messages.slice(-MAX_MESSAGES)));
+			var delKeys = Object.keys(this.deletedIds || {});
+			if (delKeys.length > 200) delKeys = delKeys.slice(delKeys.length - 200);
+			localStorage.setItem(this.deletedStorageKey(), JSON.stringify(delKeys));
 		} catch (e) {}
 	};
 
 	LeaveMsg.prototype._upsert = function (entry, persist) {
 		if (!entry || !entry.id || !entry.text) return false;
+		var id = String(entry.id).slice(0, 24);
+		if (this.deletedIds && this.deletedIds[id]) return false;
 		for (var i = 0; i < this.messages.length; i++) {
-			if (this.messages[i].id === entry.id) return false;
+			if (this.messages[i].id === id) return false;
 		}
 		this.messages.push({
-			id: String(entry.id).slice(0, 24),
+			id: id,
 			ts: Number(entry.ts) || Date.now(),
 			name: clampText(entry.name || "Guest", MAX_NAME),
 			text: clampText(entry.text, MAX_TEXT)
@@ -163,6 +198,38 @@
 			this.messages = this.messages.slice(this.messages.length - MAX_MESSAGES);
 		}
 		if (persist !== false) this.saveLocal();
+		return true;
+	};
+
+	LeaveMsg.prototype._removeById = function (id, persist) {
+		id = String(id == null ? "" : id);
+		if (!id) return false;
+		this.deletedIds[id] = true;
+		var next = [];
+		var removed = false;
+		for (var i = 0; i < this.messages.length; i++) {
+			if (this.messages[i].id === id) {
+				removed = true;
+				continue;
+			}
+			next.push(this.messages[i]);
+		}
+		this.messages = next;
+		if (persist !== false) this.saveLocal();
+		return removed;
+	};
+
+	LeaveMsg.prototype.deleteMessage = function (id, broadcast) {
+		if (!this.isManageMode()) return false;
+		id = String(id == null ? "" : id);
+		if (!id) return false;
+		var removed = this._removeById(id, true);
+		if (!removed) return false;
+		if (broadcast) {
+			this.sendSync("d|" + encodePart(id));
+			this.showFeedback("Message deleted.", false);
+		}
+		this.render();
 		return true;
 	};
 
@@ -259,6 +326,12 @@
 			return true;
 		}
 
+		if (kind === "d" && parts.length >= 2) {
+			var delId = decodePart(parts[1]);
+			if (this._removeById(delId, true)) this.render();
+			return true;
+		}
+
 		return true;
 	};
 
@@ -298,14 +371,20 @@
 
 	LeaveMsg.prototype.render = function () {
 		if (!this.$list || !this.$list.length) return;
+		var canDelete = this.isManageMode();
+		if (this.$dialog && this.$dialog.length) {
+			this.$dialog.toggleClass("leave-msg-manage", canDelete);
+		}
 		var html = "";
 		for (var i = 0; i < this.messages.length; i++) {
-			var m = this.messages[i];
 			html +=
 				'<article class="leave-msg-item">' +
 					'<header class="leave-msg-item-meta">' +
 						'<span class="leave-msg-item-name"></span>' +
-						'<span class="leave-msg-item-time"></span>' +
+						'<span class="leave-msg-item-aside">' +
+							'<span class="leave-msg-item-time"></span>' +
+							'<button type="button" class="leave-msg-delete" hidden>Delete</button>' +
+						"</span>" +
 					"</header>" +
 					'<p class="leave-msg-item-text"></p>' +
 				"</article>";
@@ -314,9 +393,15 @@
 		var items = this.$list.children();
 		for (var j = 0; j < this.messages.length; j++) {
 			var el = items.eq(j);
-			el.find(".leave-msg-item-name").text(this.messages[j].name);
-			el.find(".leave-msg-item-time").text(formatTime(this.messages[j].ts));
-			el.find(".leave-msg-item-text").text(this.messages[j].text);
+			var msg = this.messages[j];
+			el.find(".leave-msg-item-name").text(msg.name);
+			el.find(".leave-msg-item-time").text(formatTime(msg.ts));
+			el.find(".leave-msg-item-text").text(msg.text);
+			var $del = el.find(".leave-msg-delete");
+			$del.attr("data-id", msg.id);
+			$del.attr("title", "Delete this message for everyone");
+			if (canDelete) $del.removeAttr("hidden");
+			else $del.attr("hidden", "hidden");
 		}
 
 		var n = this.messages.length;

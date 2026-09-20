@@ -5540,6 +5540,12 @@ body.media-library-viewer-open {
 	gap: 10px;
 	margin-bottom: 6px;
 }
+.leave-msg-item-aside {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex: 0 0 auto;
+}
 .leave-msg-item-name {
 	font-size: 11px;
 	font-weight: 650;
@@ -5547,6 +5553,7 @@ body.media-library-viewer-open {
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+	min-width: 0;
 }
 .leave-msg-item-time {
 	flex: 0 0 auto;
@@ -5554,6 +5561,41 @@ body.media-library-viewer-open {
 	font-variant-numeric: tabular-nums;
 	color: #6f7a90;
 }
+.leave-msg-delete {
+	display: none;
+	flex: 0 0 auto;
+	margin: 0;
+	padding: 3px 8px;
+	font-size: 10px;
+	font-weight: 650;
+	letter-spacing: 0.2px;
+	line-height: 1.2;
+	color: #e8b4b4;
+	background: #2a1f24;
+	border: 1px solid #5a3a3a;
+	border-radius: 5px;
+	cursor: pointer;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+body.manage-mode #leave-msg.leave-msg-manage .leave-msg-delete:not([hidden]),
+body.manage-mode .leave-msg-dialog.leave-msg-manage .leave-msg-delete:not([hidden]) {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.leave-msg-delete:hover {
+	color: #fff;
+	background: #3a2428;
+	border-color: #7a4a4a;
+}
+.leave-msg-delete:active {
+	background: #2e1c20;
+}
+.leave-msg-delete:focus-visible {
+	outline: 2px solid #6b8cae;
+	outline-offset: 1px;
+}
+.leave-msg-delete[hidden] { display: none !important; }
 .leave-msg-item-text {
 	margin: 0;
 	font-size: 8.5px;
