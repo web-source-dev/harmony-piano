@@ -5451,13 +5451,6 @@ body.media-library-viewer-open {
 	color: #f3f6fb;
 	line-height: 1.25;
 }
-.leave-msg-sub {
-	margin: 6px 0 0;
-	font-size: 12.5px;
-	line-height: 1.45;
-	color: #9aa6bd;
-	max-width: 280px;
-}
 .leave-msg-close {
 	flex: 0 0 auto;
 	margin-top: 2px;
@@ -5548,7 +5541,7 @@ body.media-library-viewer-open {
 	margin-bottom: 6px;
 }
 .leave-msg-item-name {
-	font-size: 12.5px;
+	font-size: 11px;
 	font-weight: 650;
 	color: #d7deea;
 	overflow: hidden;
@@ -5557,14 +5550,14 @@ body.media-library-viewer-open {
 }
 .leave-msg-item-time {
 	flex: 0 0 auto;
-	font-size: 11px;
+	font-size: 10px;
 	font-variant-numeric: tabular-nums;
 	color: #6f7a90;
 }
 .leave-msg-item-text {
 	margin: 0;
-	font-size: 13.5px;
-	line-height: 1.5;
+	font-size: 8.5px;
+	line-height: 1.55;
 	color: #c5cddd;
 	white-space: pre-wrap;
 	word-break: break-word;
@@ -5657,7 +5650,6 @@ body.media-library-viewer-open {
 		max-height: 220px;
 		min-height: 120px;
 	}
-	.leave-msg-sub { max-width: none; }
 }
 @media (prefers-reduced-motion: reduce) {
 	.leave-msg-close,

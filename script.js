@@ -3591,6 +3591,8 @@ Rect.prototype.contains = function(x, y) {
 	function modalHandleEsc(evt) {
 		if(evt.keyCode == 27) {
 			if(document.body.classList.contains("media-library-viewer-open")) return;
+			// Leave-a-message popup: Close button only (no Esc / outside click).
+			if(gModal === "#leave-msg") return;
 			closeModal();
 			evt.preventDefault();
 			evt.stopPropagation();
@@ -3628,6 +3630,7 @@ Rect.prototype.contains = function(x, y) {
 	var modal_bg = $("#modal .bg")[0];
 	$(modal_bg).on("click", function(evt) {
 		if(evt.target != modal_bg) return;
+		if(gModal === "#leave-msg") return;
 		closeModal();
 	});
 
@@ -5163,6 +5166,10 @@ Rect.prototype.contains = function(x, y) {
 		setTimeout(function() {
 			if(gLeaveMsg && gLeaveMsg.requestSync) gLeaveMsg.requestSync();
 		}, 900);
+		// Show on every visit; user must click Close (outside click / Esc do nothing).
+		setTimeout(function() {
+			if(gLeaveMsg && typeof gLeaveMsg.open === "function") gLeaveMsg.open();
+		}, 450);
 	}
 	if(typeof PartyGame !== "undefined") {
 		gPartyGame = new PartyGame({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
