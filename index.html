@@ -5,7 +5,7 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20260820a"/>
+    <link rel="stylesheet" href="./screen.css?v=20260920a"/>
     <link rel="canonical" href="https://multiplayerpiano.com/">
 
     <script>
@@ -141,6 +141,16 @@
             </span>
             <label class="manage-toggle" title="Show or hide Noob x_x in the lobby for everyone">
                 <input type="checkbox" id="manage-noob-toggle" checked>
+                <span class="manage-toggle-track" aria-hidden="true"><span class="manage-toggle-thumb"></span></span>
+            </label>
+        </div>
+        <div class="manage-panel-row manage-panel-row-divider">
+            <span class="manage-panel-row-text">
+                <span class="manage-panel-row-title">Anonymous</span>
+                <span class="manage-panel-row-sub" id="manage-anon-state">Show in mybot (backup)</span>
+            </span>
+            <label class="manage-toggle" title="Show or hide Anonymous in the mybot room on the backup server">
+                <input type="checkbox" id="manage-anon-toggle">
                 <span class="manage-toggle-track" aria-hidden="true"><span class="manage-toggle-thumb"></span></span>
             </label>
         </div>
@@ -309,6 +319,7 @@
         <div id="hacks-toggle-btn" class="ugly-button">Hacks ▼</div>
         <div id="screen-share-btn" class="ugly-button" title="Share your screen, a window, or a tab&#10;Keyboard shortcuts: F = fullscreen · P = PiP · S = cycle size">⊡ Share</div>
         <div id="share-image-btn" class="ugly-button" title="Share an image with everyone in the room">Share Image</div>
+        <div id="leave-msg-btn" class="ugly-button" title="Leave a message everyone in the room can read">Leave a msg</div>
         <div id="sound-btn" class="ugly-button sound-btn">Sound Select</div>
         <div id="status"></div>
         <div id="volume">
@@ -823,6 +834,32 @@
                 </div>
             </div>
         </div>
+        <div id="leave-msg" class="dialog leave-msg-dialog" role="dialog" aria-labelledby="leave-msg-title" aria-modal="true">
+            <div class="leave-msg-inner">
+                <header class="leave-msg-head">
+                    <div class="leave-msg-head-text">
+                        <h2 id="leave-msg-title" class="leave-msg-title">Leave a message</h2>
+                        <p class="leave-msg-sub">Write something for everyone in this room. Messages stay visible here.</p>
+                    </div>
+                    <button type="button" class="leave-msg-close" title="Close">Close</button>
+                </header>
+                <div class="leave-msg-body">
+                    <div class="leave-msg-list-meta">
+                        <span class="leave-msg-count">No messages yet</span>
+                    </div>
+                    <div class="leave-msg-list" aria-live="polite"></div>
+                    <p class="leave-msg-empty" hidden>Be the first to leave a note behind.</p>
+                </div>
+                <form class="leave-msg-form">
+                    <label class="leave-msg-label" for="leave-msg-input">Your message</label>
+                    <textarea id="leave-msg-input" class="leave-msg-input" rows="3" maxlength="180" placeholder="Say hello, leave a note, or write something kind…" autocomplete="off"></textarea>
+                    <div class="leave-msg-form-row">
+                        <p class="leave-msg-feedback" hidden></p>
+                        <button type="submit" class="leave-msg-submit">Post message</button>
+                    </div>
+                </form>
+            </div>
+        </div>
         <div id="room-media" class="dialog room-media-dialog">
             <div class="room-media-dialog-inner">
                 <header class="room-media-dialog-header">
@@ -1052,8 +1089,8 @@
 
 <script src="./jquery.min.js"></script>
 <script src="./util.js"></script>
-<script src="./client.js?v=20260712c"></script>
-<script src="./roomSync.js?v=20260818a"></script>
+<script src="./client.js?v=20260920b"></script>
+<script src="./roomSync.js?v=20260920b"></script>
 <script src="./funSounds.js"></script>
 <script src="./NoteQuota.js"></script>
 <script src="./lame.min.js"></script>
@@ -1083,8 +1120,9 @@
 <script src="./funVideoPopup.js"></script>
 <script src="./screenShare.js?v=20260712c"></script>
 <script src="./shareImage.js?v=20260712b"></script>
+<script src="./leaveMsg.js?v=20260920a"></script>
 <!--<script src="/ebsprite.js"></script>-->
-<script src="./script.js?v=20260919e"></script>
+<script src="./script.js?v=20260920b"></script>
 <!--<script src="https://mppclone.com/script.js"></script>-->
 </body>
 </html>

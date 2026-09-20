@@ -1515,6 +1515,10 @@ Rect.prototype.contains = function(x, y) {
 				},
 				onText: function(msg) { routeRoomSync(msg); },
 				onManageNoob: function(hidden) { Client.applyLobbyNoobHidden(hidden); gClient.ensureLobbyNoob(); },
+				onManageAnon: function(hidden) {
+					Client.applyMybotAnonymousHidden(hidden);
+					gClient.ensureMybotAnonymous();
+				},
 				onManageClose: handleManageClose
 			});
 			gClient.roomSync = gRoomSync;
@@ -2800,8 +2804,8 @@ Rect.prototype.contains = function(x, y) {
 	}
 
 	// #manage in the URL hash reveals a small admin panel: lobby Noob x_x
-	// show/hide (global via relay) + force-clear chat for everyone in the room
-	// + close any user's Harmony piano tab.
+	// show/hide (global via relay) + Anonymous in mybot on backup + force-clear
+	// chat for everyone in the room + close any user's Harmony piano tab.
 	// Media delete controls appear inside Media Library when gManageMode is on.
 	if(gManageMode) {
 		document.body.classList.add("manage-mode");
@@ -2809,12 +2813,16 @@ Rect.prototype.contains = function(x, y) {
 		if($managePanel.length) {
 			var $noobToggle = $("#manage-noob-toggle");
 			var $noobState = $("#manage-noob-state");
+			var $anonToggle = $("#manage-anon-toggle");
+			var $anonState = $("#manage-anon-state");
 			var $clearChatBtn = $("#manage-clear-chat-btn");
 			var $clearChatState = $("#manage-clear-chat-state");
 			var $closeList = $("#manage-close-list");
 			var $closeState = $("#manage-close-state");
 			var manageNoobUiBusy = false;
 			var manageNoobPending = false;
+			var manageAnonUiBusy = false;
+			var manageAnonPending = false;
 			var manageCloseBusyId = "";
 			var manageCloseStatusTimer = null;
 
@@ -2824,6 +2832,24 @@ Rect.prototype.contains = function(x, y) {
 				$noobToggle.prop("checked", !hidden);
 				$noobState.text(hidden ? "Hidden in lobby" : "Shown in lobby");
 				manageNoobUiBusy = false;
+			}
+
+			function isOnBackupServerNow() {
+				return !!(gClient && typeof gClient.isOnBackupServer === "function" && gClient.isOnBackupServer());
+			}
+
+			function syncManageAnonUi(hidden) {
+				manageAnonUiBusy = true;
+				manageAnonPending = false;
+				$anonToggle.prop("checked", !hidden);
+				if(!isOnBackupServerNow()) {
+					$anonState.text(hidden
+						? "Off — backup mybot only"
+						: "On — visible on backup mybot");
+				} else {
+					$anonState.text(hidden ? "Hidden in mybot" : "Shown in mybot");
+				}
+				manageAnonUiBusy = false;
 			}
 
 			function isManageRelayReady() {
@@ -2844,6 +2870,32 @@ Rect.prototype.contains = function(x, y) {
 				}
 			}
 
+			function refreshManageAnonReady() {
+				if(!$anonToggle.length) return;
+				var onBackup = isOnBackupServerNow();
+				var synced = !!(typeof Client !== "undefined" && Client.isMybotAnonymousSynced
+					&& Client.isMybotAnonymousSynced());
+				var ready = !!(isManageRelayReady() && synced && onBackup);
+				$anonToggle.prop("disabled", !ready);
+				if(!isManageRelayReady() || !synced) {
+					manageAnonPending = false;
+					$anonState.text("Waiting for relay…");
+					return;
+				}
+				if(!onBackup) {
+					manageAnonPending = false;
+					if(typeof Client !== "undefined" && Client.isMybotAnonymousHidden) {
+						syncManageAnonUi(Client.isMybotAnonymousHidden());
+					} else {
+						$anonState.text("Switch to backup server");
+					}
+					return;
+				}
+				if(!manageAnonPending && typeof Client !== "undefined" && Client.isMybotAnonymousHidden) {
+					syncManageAnonUi(Client.isMybotAnonymousHidden());
+				}
+			}
+
 			function getManageCloseTargets() {
 				var seen = {};
 				var list = [];
@@ -2855,6 +2907,8 @@ Rect.prototype.contains = function(x, y) {
 					if(!part || !part._id) continue;
 					if(typeof Client !== "undefined" && Client.isLobbyNoobParticipant
 						&& Client.isLobbyNoobParticipant(part)) continue;
+					if(typeof Client !== "undefined" && Client.isMybotAnonymousParticipant
+						&& Client.isMybotAnonymousParticipant(part)) continue;
 					if(mine && part._id === mine) continue;
 					if(seen[part._id]) continue;
 					seen[part._id] = true;
@@ -2933,17 +2987,54 @@ Rect.prototype.contains = function(x, y) {
 				$noobState.text(hide ? "Hiding…" : "Showing…");
 			});
 
+			$anonToggle.on("change", function(e) {
+				e.stopPropagation();
+				if(manageAnonUiBusy) return;
+				if(!isOnBackupServerNow()) {
+					manageAnonPending = false;
+					refreshManageAnonReady();
+					return;
+				}
+				var hide = !$anonToggle.prop("checked");
+				var ok = !!(gRoomSync && typeof gRoomSync.setMybotAnonymousHidden === "function"
+					&& gRoomSync.setMybotAnonymousHidden(hide));
+				if(!ok) {
+					manageAnonPending = false;
+					$anonState.text("Relay offline — try again");
+					refreshManageAnonReady();
+					return;
+				}
+				manageAnonPending = true;
+				$anonState.text(hide ? "Hiding…" : "Showing…");
+			});
+
 			if(typeof Client !== "undefined" && Client.onLobbyNoobHiddenChange) {
 				Client.onLobbyNoobHiddenChange(function(hidden) {
 					syncManageNoobUi(hidden);
 				});
 			}
+			if(typeof Client !== "undefined" && Client.onMybotAnonymousHiddenChange) {
+				Client.onMybotAnonymousHiddenChange(function(hidden) {
+					syncManageAnonUi(hidden);
+					if(gClient && gClient.ensureMybotAnonymous) gClient.ensureMybotAnonymous();
+				});
+			}
 			refreshManageNoobReady();
+			refreshManageAnonReady();
 			var manageNoobReadyTimer = setInterval(function() {
 				refreshManageNoobReady();
+				refreshManageAnonReady();
 				renderManageCloseList();
 			}, 1000);
 			$(window).on("beforeunload", function() { clearInterval(manageNoobReadyTimer); });
+
+			gClient.on("server", function() {
+				refreshManageAnonReady();
+				if(gClient && gClient.ensureMybotAnonymous) gClient.ensureMybotAnonymous();
+			});
+			gClient.on("ch", function() {
+				if(gClient && gClient.ensureMybotAnonymous) gClient.ensureMybotAnonymous();
+			});
 
 			$clearChatBtn.on("click", function(e) {
 				e.preventDefault();
@@ -3834,6 +3925,10 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gShareImage !== "undefined" && gShareImage) gShareImage.tryHandleChat(msg);
 			return true;
 		}
+		if(typeof LeaveMsg !== "undefined" && LeaveMsg.isSyncText(chatLine)) {
+			if(typeof gLeaveMsg !== "undefined" && gLeaveMsg) gLeaveMsg.tryHandleChat(msg);
+			return true;
+		}
 		return false;
 	}
 
@@ -4003,6 +4098,7 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof CursorLooks !== "undefined" && CursorLooks.isSyncText(chatLine)) return;
 				if(typeof ScreenShare !== "undefined" && ScreenShare.isSyncText(chatLine)) return;
 				if(typeof ShareImage !== "undefined" && ShareImage.isSyncText(chatLine)) return;
+				if(typeof LeaveMsg !== "undefined" && LeaveMsg.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
 
@@ -4909,6 +5005,7 @@ Rect.prototype.contains = function(x, y) {
 	var gEmojiParty;
 	var gSoundBoard;
 	var gShareImage;
+	var gLeaveMsg;
 	var gPartyGame;
 	var gBalloonPop;
 	var gCarDodge;
@@ -5049,6 +5146,23 @@ Rect.prototype.contains = function(x, y) {
 			}
 		});
 		window.gShareImage = gShareImage;
+	}
+	if(typeof LeaveMsg !== "undefined") {
+		gLeaveMsg = new LeaveMsg({
+			client: gClient,
+			openModal: openModal,
+			closeModal: closeModal
+		});
+		window.gLeaveMsg = gLeaveMsg;
+		var leaveRoomId = (gClient && gClient.desiredChannelId) || (gClient && gClient.channel && gClient.channel._id) || channel_id || "lobby";
+		gLeaveMsg.setRoom(leaveRoomId);
+		gClient.on("ch", function(msg) {
+			var ch = (gClient && gClient.desiredChannelId) || (msg && msg.ch && msg.ch._id) || "lobby";
+			if(gLeaveMsg) gLeaveMsg.setRoom(ch);
+		});
+		setTimeout(function() {
+			if(gLeaveMsg && gLeaveMsg.requestSync) gLeaveMsg.requestSync();
+		}, 900);
 	}
 	if(typeof PartyGame !== "undefined") {
 		gPartyGame = new PartyGame({ client: gClient, onLayoutChange: updateHarmonyToolsUi });

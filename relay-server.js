@@ -18,9 +18,11 @@
  *
  * Relay protocol (JSON per frame):
  *   client -> {m:"hi"|"join", ch, p:{_id,name}} | {m:"b", ch, text, p} | {m:"ping"}
- *           | {m:"manage-noob-set", hidden} | {m:"manage-close-set", _id}
+ *           | {m:"manage-noob-set", hidden} | {m:"manage-anon-set", hidden}
+ *           | {m:"manage-close-set", _id}
  *   relay  -> {m:"b", text, p}  (a peer's broadcast; never echoed to sender)
- *           | {m:"manage-noob", hidden} | {m:"manage-close", _id}
+ *           | {m:"manage-noob", hidden} | {m:"manage-anon", hidden}
+ *           | {m:"manage-close", _id}
  */
 "use strict";
 
@@ -220,6 +222,20 @@ function setLobbyNoobHidden(hidden) {
 	broadcastAll({ m: "manage-noob", hidden: gLobbyNoobHidden });
 }
 
+function setMybotAnonymousHidden(hidden) {
+	hidden = !!hidden;
+	if (hidden !== gMybotAnonymousHidden) {
+		gMybotAnonymousHidden = hidden;
+		persistManageState();
+		// Backup-server only: refresh the mybot room list so everyone already
+		// connected there gains/loses the Anonymous ghost immediately.
+		for (var id in mppRooms) {
+			if (mppRooms.hasOwnProperty(id) && isMybotRoomId(id)) mppBroadcastCh(mppRooms[id]);
+		}
+	}
+	broadcastAll({ m: "manage-anon", hidden: gMybotAnonymousHidden });
+}
+
 wss.on("connection", function (socket) {
 	socket._room = null;
 	socket.isAlive = true;
@@ -233,6 +249,7 @@ wss.on("connection", function (socket) {
 				joinRoom(socket, m.ch);
 				// Sync the joining client with the current global state right away.
 				try { socket.send(JSON.stringify({ m: "manage-noob", hidden: gLobbyNoobHidden })); } catch (e) {}
+				try { socket.send(JSON.stringify({ m: "manage-anon", hidden: gMybotAnonymousHidden })); } catch (e) {}
 				break;
 			case "ping": try { socket.send('{"m":"pong"}'); } catch (e) {} break;
 			case "b":
@@ -243,6 +260,9 @@ wss.on("connection", function (socket) {
 				break;
 			case "manage-noob-set":
 				setLobbyNoobHidden(m.hidden);
+				break;
+			case "manage-anon-set":
+				setMybotAnonymousHidden(m.hidden);
 				break;
 			case "manage-close-set": {
 				var closeId = String(m._id == null ? "" : m._id).slice(0, MAX_ID);
@@ -281,6 +301,17 @@ var LOBBY_NOOB = {
 	y: 50
 };
 
+// Ghost participant for the "mybot" room on THIS backup MPP server only.
+// Controlled by #manage → Anonymous. Never connects to public MPP.
+var MYBOT_ANONYMOUS = {
+	id: "harmony-mybot-anon",
+	_id: "harmony-anon-xx",
+	name: "Anonymous",
+	color: "#6b7280",
+	x: 50,
+	y: 50
+};
+
 // Global show/hide flag for LOBBY_NOOB, controlled by the #manage panel in the
 // web client (relay message "manage-noob-set"). This is the ONE authoritative
 // flag — persisted to disk so a restart doesn't quietly flip it back, and
@@ -288,24 +319,43 @@ var LOBBY_NOOB = {
 // participant list below, the real persistent bot (see startMppLobbyNoobBot),
 // and every relay-connected browser (via broadcastAll). Flipping the switch
 // therefore changes what ALL users see, not just the browser that toggled it.
+// mybotAnonymousHidden defaults to true (hidden) — Anonymous only appears in
+// the backup-server "mybot" room after an admin turns it on.
 var MANAGE_STATE_FILE = path.join(ROOT, "manage-state.json");
 var gLobbyNoobHidden = false;
+var gMybotAnonymousHidden = true;
 (function loadManageState() {
 	try {
 		var raw = JSON.parse(fs.readFileSync(MANAGE_STATE_FILE, "utf8"));
 		gLobbyNoobHidden = !!raw.lobbyNoobHidden;
+		if (raw && Object.prototype.hasOwnProperty.call(raw, "mybotAnonymousHidden")) {
+			gMybotAnonymousHidden = !!raw.mybotAnonymousHidden;
+		}
 	} catch (e) {}
 })();
 function persistManageState() {
-	try { fs.writeFileSync(MANAGE_STATE_FILE, JSON.stringify({ lobbyNoobHidden: gLobbyNoobHidden })); } catch (e) {}
+	try {
+		fs.writeFileSync(MANAGE_STATE_FILE, JSON.stringify({
+			lobbyNoobHidden: gLobbyNoobHidden,
+			mybotAnonymousHidden: gMybotAnonymousHidden
+		}));
+	} catch (e) {}
 }
 
 function isLobbyRoomId(id) {
 	return id === "lobby" || /^lobby\d+$/.test(id);
 }
 
+function isMybotRoomId(id) {
+	return id === "mybot";
+}
+
 function isNoobProtectedName(name) {
 	return !!(name && /noob/i.test(String(name)));
+}
+
+function isMybotAnonymousParticipant(p) {
+	return !!(p && (p.id === MYBOT_ANONYMOUS.id || p._id === MYBOT_ANONYMOUS._id));
 }
 
 function mppGenId(prefix) {
@@ -331,6 +381,13 @@ function mppPplArray(room) {
 		}
 		if (!hasNoob) arr.push(LOBBY_NOOB);
 	}
+	if (isMybotRoomId(room._id) && !gMybotAnonymousHidden) {
+		var hasAnon = false;
+		for (var j = 0; j < arr.length; j++) {
+			if (isMybotAnonymousParticipant(arr[j])) { hasAnon = true; break; }
+		}
+		if (!hasAnon) arr.push(MYBOT_ANONYMOUS);
+	}
 	return arr;
 }
 
@@ -340,6 +397,11 @@ function mppRoomParticipantCount(room) {
 		var hasNoob = false;
 		room.parts.forEach(function (p) { if (isNoobProtectedName(p.name)) hasNoob = true; });
 		if (!hasNoob) ++n;
+	}
+	if (isMybotRoomId(room._id) && !gMybotAnonymousHidden) {
+		var hasAnon = false;
+		room.parts.forEach(function (p) { if (isMybotAnonymousParticipant(p)) hasAnon = true; });
+		if (!hasAnon) ++n;
 	}
 	return n;
 }
@@ -501,9 +563,11 @@ function mppHandle(sock, msg) {
 		case "kickban":
 			if (room && room.crown && room.crown.participantId === st.pid && msg._id) {
 				if (msg._id === LOBBY_NOOB._id) break;
+				if (msg._id === MYBOT_ANONYMOUS._id) break;
 				var targets = [];
 				room.parts.forEach(function (p) {
-					if (p._id === msg._id && p.sock !== sock && !isNoobProtectedName(p.name)) targets.push(p.sock);
+					if (p._id === msg._id && p.sock !== sock && !isNoobProtectedName(p.name)
+						&& !isMybotAnonymousParticipant(p)) targets.push(p.sock);
 				});
 				targets.forEach(function (tsock) {
 					mppSend(tsock, { m: "notification", title: "Notice", text: "You were kicked from the room.", duration: 7000 });

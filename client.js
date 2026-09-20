@@ -400,14 +400,37 @@ Client.LOBBY_NOOB = {
 	y: 50
 };
 
+Client.MYBOT_ANONYMOUS_ID = "harmony-mybot-anon";
+Client.MYBOT_ANONYMOUS = {
+	id: Client.MYBOT_ANONYMOUS_ID,
+	_id: "harmony-anon-xx",
+	name: "Anonymous",
+	color: "#6b7280",
+	x: 50,
+	y: 50
+};
+
 Client.prototype.isLobbyChannel = function() {
 	var id = (this.channel && this.channel._id) || this.desiredChannelId || "";
 	if(id === "lobby") return true;
 	return /^lobby\d+$/.test(id);
 };
 
+Client.prototype.isMybotChannel = function() {
+	var id = (this.channel && this.channel._id) || this.desiredChannelId || "";
+	return id === "mybot";
+};
+
+Client.prototype.isOnBackupServer = function() {
+	return this.serverIndex > 0;
+};
+
 Client.isLobbyNoobParticipant = function(part) {
 	return !!(part && (part.id === Client.LOBBY_NOOB_ID || part._id === Client.LOBBY_NOOB._id));
+};
+
+Client.isMybotAnonymousParticipant = function(part) {
+	return !!(part && (part.id === Client.MYBOT_ANONYMOUS_ID || part._id === Client.MYBOT_ANONYMOUS._id));
 };
 
 // Global show/hide switch for the lobby ghost, exposed via the #manage panel
@@ -443,9 +466,45 @@ Client.onLobbyNoobHiddenChange = function(fn) {
 	if(typeof fn === "function") Client._lobbyNoobHiddenListeners.push(fn);
 };
 
+// Same pattern for Anonymous in the backup-server "mybot" room. Defaults to
+// hidden until the relay says otherwise; never injects on the public MPP server.
+Client._mybotAnonymousHidden = true;
+Client._mybotAnonymousSynced = false;
+Client._mybotAnonymousHiddenListeners = [];
+
+Client.isMybotAnonymousHidden = function() {
+	return !!Client._mybotAnonymousHidden;
+};
+
+Client.isMybotAnonymousSynced = function() {
+	return !!Client._mybotAnonymousSynced;
+};
+
+Client.applyMybotAnonymousHidden = function(hidden) {
+	hidden = !!hidden;
+	Client._mybotAnonymousSynced = true;
+	Client._mybotAnonymousHidden = hidden;
+	Client._mybotAnonymousHiddenListeners.forEach(function(fn) {
+		try { fn(hidden); } catch(e) {}
+	});
+};
+
+Client.onMybotAnonymousHiddenChange = function(fn) {
+	if(typeof fn === "function") Client._mybotAnonymousHiddenListeners.push(fn);
+};
+
 Client.prototype.hasNoobNamedParticipant = function() {
 	for(var id in this.ppl) {
 		if(this.ppl.hasOwnProperty(id) && isNoobProtectedName(this.ppl[id].name)) {
+			return true;
+		}
+	}
+	return false;
+};
+
+Client.prototype.hasMybotAnonymousParticipant = function() {
+	for(var id in this.ppl) {
+		if(this.ppl.hasOwnProperty(id) && Client.isMybotAnonymousParticipant(this.ppl[id])) {
 			return true;
 		}
 	}
@@ -479,11 +538,38 @@ Client.prototype.removeLobbyNoob = function() {
 	}
 };
 
+Client.prototype.ensureMybotAnonymous = function() {
+	// Backup server + mybot room only. Public MPP never gets this ghost.
+	if(!this.isConnected() || !this.isOnBackupServer() || !this.isMybotChannel()
+		|| Client.isMybotAnonymousHidden()) {
+		this.removeMybotAnonymous();
+		return;
+	}
+	if(this.hasMybotAnonymousParticipant()) {
+		return;
+	}
+	var relay = this.roomSync;
+	if(!relay || !relay.isConnected() || !Client.isMybotAnonymousSynced()) {
+		this.removeMybotAnonymous();
+		return;
+	}
+	if(!this.ppl[Client.MYBOT_ANONYMOUS_ID]) {
+		this.participantUpdate(Client.MYBOT_ANONYMOUS);
+	}
+};
+
+Client.prototype.removeMybotAnonymous = function() {
+	if(this.ppl[Client.MYBOT_ANONYMOUS_ID]) {
+		this.removeParticipant(Client.MYBOT_ANONYMOUS_ID);
+	}
+};
+
 Client.prototype.setParticipants = function(ppl) {
 	// remove participants who left
 	for(var id in this.ppl) {
 		if(!this.ppl.hasOwnProperty(id)) continue;
 		if(id === Client.LOBBY_NOOB_ID && this.isLobbyChannel()) continue;
+		if(id === Client.MYBOT_ANONYMOUS_ID && this.isMybotChannel() && this.isOnBackupServer()) continue;
 		var found = false;
 		for(var j = 0; j < ppl.length; j++) {
 			if(ppl[j].id === id) {
@@ -500,6 +586,7 @@ Client.prototype.setParticipants = function(ppl) {
 		this.participantUpdate(ppl[i]);
 	}
 	this.ensureLobbyNoob();
+	this.ensureMybotAnonymous();
 };
 
 Client.prototype.countParticipants = function() {

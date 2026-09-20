@@ -17,6 +17,7 @@
 		this.getIdentity = opts.getIdentity || function () { return { _id: "", name: "" }; };
 		this.onText = opts.onText || function () {};
 		this.onManageNoob = opts.onManageNoob || function () {};
+		this.onManageAnon = opts.onManageAnon || function () {};
 		this.onManageClose = opts.onManageClose || function () {};
 		this.ws = null;
 		this.canConnect = false;
@@ -79,6 +80,8 @@
 					self.onText({ message: m.text, p: m.p || { _id: "", name: "" } });
 				} else if (m && m.m === "manage-noob") {
 					self.onManageNoob(!!m.hidden);
+				} else if (m && m.m === "manage-anon") {
+					self.onManageAnon(!!m.hidden);
 				} else if (m && m.m === "manage-close") {
 					self.onManageClose(String(m._id == null ? "" : m._id));
 				}
@@ -127,6 +130,11 @@
 	// arrives via onManageNoob. Returns false if the relay isn't reachable.
 	RoomSync.prototype.setLobbyNoobHidden = function (hidden) {
 		return this._send({ m: "manage-noob-set", hidden: !!hidden });
+	};
+
+	// Global show/hide for the backup-server "mybot" Anonymous ghost.
+	RoomSync.prototype.setMybotAnonymousHidden = function (hidden) {
+		return this._send({ m: "manage-anon-set", hidden: !!hidden });
 	};
 
 	// Asks the relay to tell the Harmony tab(s) for this user _id to close.
