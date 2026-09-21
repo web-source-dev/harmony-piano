@@ -17,9 +17,13 @@ import sys
 import uuid
 from datetime import datetime
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 LOG_DIR = os.path.join(ROOT, "chat-logs")
+LEAVE_MSG_DIR = os.path.join(ROOT, "leave-msgs")
+LEAVE_MSG_MAX = 2000
+LEAVE_MSG_DELETED_MAX = 500
 MEDIA_DIR = os.path.join(ROOT, "room-media")
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8550
 MAX_MEDIA_BYTES = 80 * 1024 * 1024
@@ -82,6 +86,80 @@ def abs_url(handler, path):
     return f"{proto}://{host}{path}"
 
 
+def leave_msg_path(room):
+    return os.path.join(LEAVE_MSG_DIR, sanitize_room(room) + ".json")
+
+
+def sanitize_leave_entry(m):
+    if not isinstance(m, dict):
+        return None
+    mid = str(m.get("id") or "")[:24]
+    text = re.sub(r"\s+", " ", str(m.get("text") or "")).strip()[:180]
+    name = re.sub(r"\s+", " ", str(m.get("name") or "")).strip()[:40]
+    if not mid or not text:
+        return None
+    try:
+        ts = int(m.get("ts") or 0)
+    except (TypeError, ValueError):
+        ts = 0
+    if ts <= 0:
+        ts = int(datetime.now().timestamp() * 1000)
+    return {"id": mid, "ts": ts, "name": name or "Guest", "text": text}
+
+
+def read_leave_msg(room):
+    path = leave_msg_path(room)
+    if not os.path.isfile(path):
+        return {"messages": [], "deletedIds": []}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {"messages": [], "deletedIds": []}
+        msgs = data.get("messages")
+        dels = data.get("deletedIds")
+        return {
+            "messages": msgs if isinstance(msgs, list) else [],
+            "deletedIds": dels if isinstance(dels, list) else [],
+        }
+    except Exception:
+        return {"messages": [], "deletedIds": []}
+
+
+def merge_leave_msg(existing, incoming):
+    deleted = {}
+    for coll in (existing.get("deletedIds") or [], incoming.get("deletedIds") or []):
+        for d in coll:
+            if d:
+                deleted[str(d)] = True
+    by_id = {}
+    for coll in (existing.get("messages") or [], incoming.get("messages") or []):
+        if not isinstance(coll, list):
+            continue
+        for raw in coll:
+            m = sanitize_leave_entry(raw)
+            if not m or deleted.get(m["id"]):
+                continue
+            prev = by_id.get(m["id"])
+            if not prev or m["ts"] >= prev["ts"]:
+                by_id[m["id"]] = m
+    messages = sorted(by_id.values(), key=lambda x: x["ts"])
+    if len(messages) > LEAVE_MSG_MAX:
+        messages = messages[-LEAVE_MSG_MAX:]
+    del_keys = list(deleted.keys())
+    if len(del_keys) > LEAVE_MSG_DELETED_MAX:
+        del_keys = del_keys[-LEAVE_MSG_DELETED_MAX:]
+    return {"messages": messages, "deletedIds": del_keys}
+
+
+def write_leave_msg(room, incoming):
+    os.makedirs(LEAVE_MSG_DIR, exist_ok=True)
+    merged = merge_leave_msg(read_leave_msg(room), incoming)
+    with open(leave_msg_path(room), "w", encoding="utf-8") as f:
+        json.dump(merged, f, ensure_ascii=False)
+    return merged
+
+
 def sanitize_log_filename(name):
     name = os.path.basename(name or "")
     name = re.sub(r'[\\/:*?"<>|]', "_", name)
@@ -103,7 +181,7 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
 
     def do_OPTIONS(self):
         path = self.path.split("?", 1)[0].rstrip("/")
-        if path in ("/api/chat-log", "/api/e", "/api/media", "/api/media/health") or path.startswith("/room-media/"):
+        if path in ("/api/chat-log", "/api/e", "/api/media", "/api/media/health", "/api/leave-msg") or path.startswith("/room-media/"):
             self.send_response(204)
             self.end_headers()
             return
@@ -111,6 +189,20 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?", 1)[0]
+        if path.rstrip("/") == "/api/leave-msg":
+            qs = parse_qs(urlparse(self.path).query)
+            room = sanitize_room((qs.get("room") or ["lobby"])[0])
+            state = read_leave_msg(room)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "ok": True,
+                "room": room,
+                "messages": state["messages"],
+                "deletedIds": state["deletedIds"],
+            }).encode("utf-8"))
+            return
         if path.rstrip("/") == "/api/media/health":
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -175,6 +267,31 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
         path = self.path.split("?", 1)[0].rstrip("/")
         if path == "/api/media":
             self.handle_media_upload()
+            return
+        if path == "/api/leave-msg":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                raw = self.rfile.read(length).decode("utf-8")
+                data = json.loads(raw)
+                room = sanitize_room(data.get("room", "lobby"))
+                merged = write_leave_msg(room, {
+                    "messages": data.get("messages"),
+                    "deletedIds": data.get("deletedIds"),
+                })
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "ok": True,
+                    "room": room,
+                    "messages": merged["messages"],
+                    "deletedIds": merged["deletedIds"],
+                }).encode("utf-8"))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(e)}).encode("utf-8"))
             return
         if path not in ("/api/chat-log", "/api/e"):
             self.send_error(404)
@@ -331,10 +448,12 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     os.makedirs(LOG_DIR, exist_ok=True)
+    os.makedirs(LEAVE_MSG_DIR, exist_ok=True)
     os.makedirs(MEDIA_DIR, exist_ok=True)
     server = ThreadingHTTPServer(("0.0.0.0", PORT), ChatSaveHandler)
     print(f"Serving {ROOT}")
     print(f"Chat logs -> {LOG_DIR} (*_joins.txt, *_prompts.txt)")
+    print(f"Leave-a-msg -> {LEAVE_MSG_DIR}")
     print(f"Room media -> {MEDIA_DIR}")
     print(f"Open http://localhost:{PORT}/")
     try:

@@ -8,7 +8,9 @@
 
 	var SYNC_PREFIX = "LM|";
 	var STORAGE_PREFIX = "harmony_leave_msgs:";
-	var MAX_MESSAGES = 40;
+	var API_PATH = "/api/leave-msg";
+	var PERSIST_DEBOUNCE_MS = 400;
+	var MAX_MESSAGES = 500;
 	var MAX_TEXT = 180;
 	var MAX_NAME = 40;
 
@@ -52,6 +54,9 @@
 		this.ignoreSelfUntil = 0;
 		this.syncReplyTimer = null;
 		this.pendingSync = false;
+		this.useFileApi = null;
+		this.persistTimer = null;
+		this.loadRequestId = 0;
 
 		this.$dialog = null;
 		this.$list = null;
@@ -143,7 +148,113 @@
 		this.deletedIds = {};
 		this.loadLocal();
 		this.render();
+		this.loadFromServer(true);
 		this.requestSync();
+	};
+
+	LeaveMsg.prototype._deletedIdList = function () {
+		return Object.keys(this.deletedIds || {});
+	};
+
+	LeaveMsg.prototype.probeFileApi = function () {
+		var self = this;
+		if (typeof fetch !== "function") return Promise.resolve(false);
+		return fetch(API_PATH, { method: "OPTIONS", cache: "no-store" })
+			.then(function (r) { return !!(r && (r.ok || r.status === 204 || r.status === 405)); })
+			.catch(function () { return false; })
+			.then(function (ok) {
+				self.useFileApi = ok;
+				return ok;
+			});
+	};
+
+	LeaveMsg.prototype.applyServerPayload = function (data, replace) {
+		if (!data || !data.ok) return false;
+		var changed = false;
+		if (Array.isArray(data.deletedIds)) {
+			for (var d = 0; d < data.deletedIds.length; d++) {
+				if (data.deletedIds[d]) this.deletedIds[String(data.deletedIds[d])] = true;
+			}
+		}
+		if (replace) {
+			this.messages = [];
+			changed = true;
+		}
+		if (Array.isArray(data.messages)) {
+			for (var i = 0; i < data.messages.length; i++) {
+				if (this._upsert(data.messages[i], false)) changed = true;
+			}
+		}
+		if (changed) {
+			this.saveLocal();
+			this.render();
+		}
+		return changed;
+	};
+
+	LeaveMsg.prototype.loadFromServer = function (replace) {
+		var self = this;
+		var room = this.roomId || "lobby";
+		var reqId = ++this.loadRequestId;
+		if (typeof fetch !== "function") return Promise.resolve(false);
+		return this.probeFileApi().then(function (ok) {
+			if (!ok || reqId !== self.loadRequestId) return false;
+			return fetch(API_PATH + "?room=" + encodeURIComponent(room), { cache: "no-store" })
+				.then(function (r) {
+					if (!r.ok) throw new Error("load failed");
+					return r.json();
+				})
+				.then(function (data) {
+					if (reqId !== self.loadRequestId) return false;
+					self.applyServerPayload(data, !!replace);
+					return true;
+				})
+				.catch(function () {
+					self.useFileApi = false;
+					return false;
+				});
+		});
+	};
+
+	LeaveMsg.prototype.schedulePersistToServer = function () {
+		var self = this;
+		if (this.useFileApi === false) return;
+		clearTimeout(this.persistTimer);
+		this.persistTimer = setTimeout(function () {
+			self.persistToServer();
+		}, PERSIST_DEBOUNCE_MS);
+	};
+
+	LeaveMsg.prototype.persistToServer = function () {
+		var self = this;
+		if (typeof fetch !== "function") return Promise.resolve(false);
+		var room = this.roomId || "lobby";
+		var doPost = function () {
+			return fetch(API_PATH, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				cache: "no-store",
+				body: JSON.stringify({
+					room: room,
+					messages: self.messages,
+					deletedIds: self._deletedIdList()
+				})
+			}).then(function (r) {
+				if (!r.ok) throw new Error("save failed");
+				return r.json();
+			}).then(function (data) {
+				if (data && data.ok) self.useFileApi = true;
+				return !!(data && data.ok);
+			}).catch(function () {
+				self.useFileApi = false;
+				return false;
+			});
+		};
+		if (this.useFileApi === true) return doPost();
+		return this.probeFileApi().then(function (ok) {
+			if (!ok) return false;
+			return doPost();
+		});
 	};
 
 	LeaveMsg.prototype.loadLocal = function () {
@@ -178,6 +289,7 @@
 			if (delKeys.length > 200) delKeys = delKeys.slice(delKeys.length - 200);
 			localStorage.setItem(this.deletedStorageKey(), JSON.stringify(delKeys));
 		} catch (e) {}
+		this.schedulePersistToServer();
 	};
 
 	LeaveMsg.prototype._upsert = function (entry, persist) {
@@ -422,6 +534,7 @@
 
 	LeaveMsg.prototype.open = function () {
 		this.render();
+		this.loadFromServer(false);
 		this.requestSync();
 		if (this.openModal) this.openModal("#leave-msg", ".leave-msg-input");
 		var self = this;

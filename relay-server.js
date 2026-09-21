@@ -29,11 +29,15 @@
 var http = require("http");
 var fs = require("fs");
 var path = require("path");
+var url = require("url");
 var ws = require("ws");
 var WebSocketServer = ws.WebSocketServer || ws.Server;
 
 var ROOT = __dirname;
 var LOG_DIR = path.join(ROOT, "chat-logs");
+var LEAVE_MSG_DIR = path.join(ROOT, "leave-msgs");
+var LEAVE_MSG_MAX = 2000;
+var LEAVE_MSG_DELETED_MAX = 500;
 var PORT = parseInt(process.argv[2], 10) || parseInt(process.env.PORT, 10) || 8550;
 var MAX_TEXT = 65536;  // large enough for WebRTC SDP offers (~2-5 KB) plus JSON wrapping
 var MAX_ID = 64;
@@ -63,6 +67,74 @@ function setCors(res) {
 	res.setHeader("Access-Control-Allow-Origin", "*");
 	res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
 	res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Filename");
+}
+
+function leaveMsgFile(room) {
+	return path.join(LEAVE_MSG_DIR, sanitizeRoom(room) + ".json");
+}
+
+function readLeaveMsg(room) {
+	var file = leaveMsgFile(room);
+	try {
+		if (!fs.existsSync(file)) return { messages: [], deletedIds: [] };
+		var data = JSON.parse(fs.readFileSync(file, "utf8"));
+		if (!data || typeof data !== "object") return { messages: [], deletedIds: [] };
+		return {
+			messages: Array.isArray(data.messages) ? data.messages : [],
+			deletedIds: Array.isArray(data.deletedIds) ? data.deletedIds : []
+		};
+	} catch (e) {
+		return { messages: [], deletedIds: [] };
+	}
+}
+
+function sanitizeLeaveEntry(m) {
+	if (!m || typeof m !== "object") return null;
+	var id = String(m.id == null ? "" : m.id).slice(0, 24);
+	var text = String(m.text == null ? "" : m.text).replace(/\s+/g, " ").trim().slice(0, 180);
+	var name = String(m.name == null ? "" : m.name).replace(/\s+/g, " ").trim().slice(0, 40);
+	if (!id || !text) return null;
+	return {
+		id: id,
+		ts: Number(m.ts) || Date.now(),
+		name: name || "Guest",
+		text: text
+	};
+}
+
+function mergeLeaveMsg(existing, incoming) {
+	var deleted = Object.create(null);
+	var i;
+	for (i = 0; i < (existing.deletedIds || []).length; i++) deleted[String(existing.deletedIds[i])] = true;
+	for (i = 0; i < (incoming.deletedIds || []).length; i++) deleted[String(incoming.deletedIds[i])] = true;
+	var byId = Object.create(null);
+	function addList(list) {
+		if (!Array.isArray(list)) return;
+		for (i = 0; i < list.length; i++) {
+			var m = sanitizeLeaveEntry(list[i]);
+			if (!m || deleted[m.id]) continue;
+			var prev = byId[m.id];
+			if (!prev || m.ts >= prev.ts) byId[m.id] = m;
+		}
+	}
+	addList(existing.messages);
+	addList(incoming.messages);
+	var messages = Object.keys(byId).map(function (k) { return byId[k]; });
+	messages.sort(function (a, b) { return a.ts - b.ts; });
+	if (messages.length > LEAVE_MSG_MAX) messages = messages.slice(messages.length - LEAVE_MSG_MAX);
+	var delKeys = Object.keys(deleted);
+	if (delKeys.length > LEAVE_MSG_DELETED_MAX) delKeys = delKeys.slice(delKeys.length - LEAVE_MSG_DELETED_MAX);
+	return { messages: messages, deletedIds: delKeys };
+}
+
+function writeLeaveMsg(room, data, cb) {
+	try {
+		fs.mkdirSync(LEAVE_MSG_DIR, { recursive: true });
+		var file = leaveMsgFile(room);
+		var merged = mergeLeaveMsg(readLeaveMsg(room), data);
+		fs.writeFileSync(file, JSON.stringify(merged), "utf8");
+		cb(null, merged);
+	} catch (e) { cb(e); }
 }
 
 function saveChatLog(body, cb) {
@@ -132,6 +204,39 @@ var server = http.createServer(function (req, res) {
 	if (req.method === "GET" && (route === "/health" || route === "/relay/health" || route === "/api/media/health")) {
 		res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
 		res.end(JSON.stringify({ ok: true, service: "harmony-app", port: PORT, clients: countClients() }));
+		return;
+	}
+
+	if (req.method === "GET" && route === "/api/leave-msg") {
+		var q = url.parse(req.url, true).query || {};
+		var roomGet = sanitizeRoom(q.room || "lobby");
+		var state = readLeaveMsg(roomGet);
+		res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+		res.end(JSON.stringify({ ok: true, room: roomGet, messages: state.messages, deletedIds: state.deletedIds }));
+		return;
+	}
+
+	if (req.method === "POST" && route === "/api/leave-msg") {
+		var lmBody = "";
+		req.on("data", function (c) { lmBody += c; if (lmBody.length > 2e6) req.destroy(); });
+		req.on("end", function () {
+			var data;
+			try { data = JSON.parse(lmBody || "{}"); } catch (e) {
+				res.writeHead(400, { "Content-Type": "application/json" });
+				res.end(JSON.stringify({ ok: false, error: "Invalid JSON" }));
+				return;
+			}
+			var roomPost = sanitizeRoom(data.room || "lobby");
+			writeLeaveMsg(roomPost, {
+				messages: data.messages,
+				deletedIds: data.deletedIds
+			}, function (err, merged) {
+				res.writeHead(err ? 500 : 200, { "Content-Type": "application/json" });
+				res.end(JSON.stringify(err
+					? { ok: false, error: String(err && err.message || err) }
+					: { ok: true, room: roomPost, messages: merged.messages, deletedIds: merged.deletedIds }));
+			});
+		});
 		return;
 	}
 
@@ -717,10 +822,12 @@ server.on("upgrade", function (req, socket, head) {
 
 server.listen(PORT, function () {
 	try { fs.mkdirSync(LOG_DIR, { recursive: true }); } catch (e) {}
+	try { fs.mkdirSync(LEAVE_MSG_DIR, { recursive: true }); } catch (e) {}
 	console.log("Harmony app + real-time relay listening on http://localhost:" + PORT);
 	console.log("  relay WebSocket: ws://localhost:" + PORT + "/relay");
 	console.log("  backup MPP server (failover): ws://localhost:" + PORT + "/mpp");
 	console.log("  chat logs -> " + LOG_DIR);
+	console.log("  leave-a-msg -> " + LEAVE_MSG_DIR);
 	console.log("  Open http://localhost:" + PORT + "/  (media uploads still need media-server.py on :8551)");
 	startMppLobbyNoobBot();
 });
