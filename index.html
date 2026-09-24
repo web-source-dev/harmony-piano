@@ -5,7 +5,7 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20260925a"/>
+    <link rel="stylesheet" href="./screen.css?v=20260925b"/>
     <link rel="canonical" href="https://multiplayerpiano.com/">
 
     <!-- Password gate: hide the whole app until the password is verified. -->
@@ -541,7 +541,7 @@
         <div id="share-image-btn" class="ugly-button" title="Share an image with everyone in the room">Share Image</div>
         <div id="leave-msg-btn" class="ugly-button" title="Leave a message everyone in the room can read">Leave a msg</div>
         <div id="kiss-btn" class="ugly-button" title="Send a big kiss — everyone in the room sees and hears it">💋 Send Kiss</div>
-        <div id="love-btn" class="ugly-button" title="Love Corner — room weather, heart strings, love meter, blow a kiss">💞 Love</div>
+        <div id="love-btn" class="ugly-button" title="Love Corner">💞 Love</div>
         <div id="sound-btn" class="ugly-button sound-btn">Sound Select</div>
         <div id="status"></div>
         <div id="volume">
@@ -1058,30 +1058,22 @@
                 <p id="love-title" class="love-title">💞 Love Corner</p>
                 <button type="button" class="love-close" aria-label="Close">✕</button>
             </div>
-            <section class="love-section" aria-labelledby="love-weather-title">
-                <p id="love-weather-title" class="love-section-title">Room weather</p>
-                <p class="love-sub">Everyone in the room sees it.</p>
+            <section class="love-section" aria-label="Room weather">
                 <div class="love-weather-grid"></div>
-                <label class="love-check"><input type="checkbox" class="love-weather-view" checked/> Show weather on my screen</label>
             </section>
-            <section class="love-section" aria-labelledby="love-person-title">
-                <p id="love-person-title" class="love-section-title">Your special someone</p>
-                <select class="love-person" aria-labelledby="love-person-title"></select>
+            <section class="love-section" aria-label="Love">
                 <div class="love-actions">
-                    <button type="button" class="love-act" data-love-act="kiss"><span aria-hidden="true">😘</span> <span class="love-act-label">Blow a Kiss</span></button>
-                    <button type="button" class="love-act" data-love-act="hug"><span aria-hidden="true">🤗</span> <span class="love-act-label">Hug</span></button>
-                    <button type="button" class="love-act love-act-wide" data-love-act="link"><span aria-hidden="true">🧵</span> <span class="love-act-label">Tie a heart string</span></button>
-                    <button type="button" class="love-act love-act-wide love-act-soft" data-love-act="unlink" hidden><span aria-hidden="true">✂️</span> <span class="love-act-label">Untie</span></button>
+                    <button type="button" class="love-act" data-love-act="kiss"><span class="love-act-emoji" aria-hidden="true">😘</span> Blow a Kiss</button>
+                    <button type="button" class="love-act" data-love-act="hug"><span class="love-act-emoji" aria-hidden="true">🤗</span> Hug</button>
                 </div>
-                <div class="love-meter" hidden>
-                    <div class="love-meter-top"><span class="love-meter-names"></span><span class="love-meter-pct">0%</span></div>
+                <div class="love-meter">
+                    <div class="love-meter-top"><span aria-hidden="true">💖</span><span class="love-meter-pct">0%</span></div>
                     <div class="love-meter-bar" role="progressbar" aria-label="Love meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div class="love-meter-fill"></div></div>
-                    <p class="love-sub">Kisses 😘 +12 · hugs 🤗 +10 · tap the heart on your string +3. At 100% a big heart bursts for everyone 💖</p>
                 </div>
             </section>
             <div class="love-foot">
-                <label class="love-check"><input type="checkbox" class="love-sound-toggle" checked/> Play love sounds for me</label>
-                <span class="love-status" role="status" aria-live="polite"></span>
+                <label class="love-check"><input type="checkbox" class="love-weather-view" checked/> Show weather</label>
+                <label class="love-check"><input type="checkbox" class="love-sound-toggle" checked/> Sounds</label>
             </div>
         </div>
         <div id="fun-video" class="dialog fun-video-dialog">
@@ -1413,7 +1405,7 @@
         "./shareImage.js?v=20260712b",
         "./leaveMsg.js?v=20260922a",
         "./kissBlast.js?v=20260924b",
-        "./loveBits.js?v=20260925a",
+        "./loveBits.js?v=20260925b",
         "./script.js?v=20260925a"
     ];
 </script>

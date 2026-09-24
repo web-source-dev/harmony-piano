@@ -1,27 +1,29 @@
 /**
- * LoveBits — little romantic extras for two people in the room.
+ * LoveBits — little romantic extras for the two people in the room.
  *
- *   • Room Weather   — cherry blossoms, snow, rain or fireflies; everyone sees it.
- *   • Heart String   — two people agree to link; a red string ties their cursors
- *                      together on every screen, with a heart in the middle.
- *   • Love Meter     — that heart fills up with blown kisses, hugs and taps.
- *                      When it hits 100% a giant heart bursts on every screen.
- *   • Blow a Kiss    — a 😘 flies from your cursor and lands on theirs.
+ *   • Room Weather — cherry blossoms, snow, rain or fireflies; both of you see it.
+ *   • Heart String — a soft, bouncy rope always ties your two cursors together.
+ *   • Love Meter   — the heart on the string fills up. Every time your cursors
+ *                    touch it's a kiss (+1). Tapping the heart +1, a blown
+ *                    kiss +5, a hug +5. At 100 a giant heart bursts.
+ *   • Blow a Kiss  — a 😘 flies from your cursor and lands on theirs.
+ *   • Hug          — two little mochi friends squeeze each other.
  *
- * Synced over the Harmony room relay. People are addressed by MPP `_id`
- * (the relay only carries `_id` + `name`).
+ * The room is meant for exactly two people: when there are two real
+ * participants they are tied together automatically.
  *
- * Protocol (relay text, "LV|" prefixed; sender = msg.p._id):
- *   LV|w|type|seed|ts     set room weather (type: none/sakura/snow/rain/fireflies)
- *   LV|q                  "what's the state?" — sent after joining a room
- *   LV|s|{json}           state reply: { w, ws, wt, links: [[a, b, meter]] }
- *   LV|lr|target          ask `target` to tie a heart string with the sender
- *   LV|la|requester       accept -> everyone links sender + requester
- *   LV|ld|requester       decline
- *   LV|lu|other           untie sender + other
- *   LV|b|target|seed      blow a kiss at `target`
- *   LV|h|target           hug `target`
- *   LV|m|pairKey|amount   tap the heart on a string (fills the meter)
+ * People are addressed by MPP participant `id` (unique per connection), which
+ * the sender writes into every message — the relay only forwards `_id`, and
+ * two people on the same network share an `_id`.
+ *
+ * Protocol (relay text):  LV|<senderId>|<cmd>|...
+ *   w|type|seed|ts   set room weather (none/sakura/snow/rain/fireflies)
+ *   q                "what's the state?" (sent after joining)
+ *   s|{json}         state reply { w, ws, wt, m }
+ *   b|seed           blow a kiss at the other person
+ *   h                hug the other person
+ *   t                cursors touched (sent only by the "lower" id, so it counts once)
+ *   m                tapped the heart
  */
 (function (global) {
 	"use strict";
@@ -29,6 +31,8 @@
 	var SYNC_PREFIX = "LV|";
 	var SOUND_KEY = "harmonyLoveSound";
 	var WEATHER_VIEW_KEY = "harmonyLoveWeatherView";
+	var METER_KEY = "harmonyLoveMeter:";
+
 	var WEATHERS = [
 		{ id: "none", emoji: "☀️", label: "Clear" },
 		{ id: "sakura", emoji: "🌸", label: "Blossoms" },
@@ -39,13 +43,24 @@
 	var WEATHER_BY_ID = {};
 	for (var wi = 0; wi < WEATHERS.length; wi++) WEATHER_BY_ID[WEATHERS[wi].id] = WEATHERS[wi];
 
-	var METER_KISS = 12;
-	var METER_HUG = 10;
-	var METER_TAP = 3;
+	var PTS_TOUCH = 1;
+	var PTS_TAP = 1;
+	var PTS_KISS = 5;
+	var PTS_HUG = 5;
+
+	var TOUCH_IN = 30;   // px — cursors this close = a kiss
+	var TOUCH_OUT = 70;  // px — must move this far apart before the next one counts
+	var TOUCH_COOLDOWN_MS = 350;
 	var SEND_COOLDOWN_MS = 800;
-	var TAP_COOLDOWN_MS = 180;
-	var REQUEST_COOLDOWN_MS = 5000;
-	var REQUEST_LIFE_MS = 20000;
+	var TAP_COOLDOWN_MS = 120;
+
+	// Rope
+	var ROPE_N = 18;
+	var ROPE_GRAVITY = 1400;
+	var ROPE_DAMP = 0.975;
+	var ROPE_ITER = 10;
+	var ROPE_SLACK = 1.12;
+	var ROPE_STEP = 1 / 120;
 
 	function rng(seed) {
 		var a = (seed >>> 0) || 1;
@@ -64,12 +79,15 @@
 		return n;
 	}
 
-	function pairKey(a, b) {
-		return a < b ? a + "~" + b : b + "~" + a;
-	}
-
 	function reducedMotion() {
 		try { return !!(global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) { return false; }
+	}
+
+	function sprite(size, draw) {
+		var c = document.createElement("canvas");
+		c.width = c.height = size;
+		draw(c.getContext("2d"), size);
+		return c;
 	}
 
 	function LoveBits(opts) {
@@ -81,13 +99,14 @@
 		this.weather = "none";
 		this.weatherSeed = 1;
 		this.weatherTs = 0;
-		this.links = {}; // pairKey -> { a, b, meter }
+		this.meter = 0;
 		this.channelId = null;
+		this.partner = null; // participant id of the other person, or null
 		this.lastSentAt = 0;
 		this.lastTapAt = 0;
-		this.lastRequestAt = 0;
-		this.pendingOut = null; // _id we asked
-		this.requestToasts = {}; // requester _id -> toast node
+		this.touchArmed = true;
+		this.lastTouchAt = 0;
+		this.mouse = null;
 
 		this.soundOn = true;
 		this.weatherView = true;
@@ -97,18 +116,22 @@
 		} catch (e) {}
 
 		this.layer = null;
-		this.svg = null;
-		this.stringEls = {}; // pairKey -> { path, glow, heart, fill, pct }
-		this._raf = 0;
-		this._tick = this._tick.bind(this);
-
+		this.ropeCanvas = null;
+		this.rope = null;
+		this.knot = null;
 		this.weatherCanvas = null;
 		this.weatherParts = [];
-		this._wRaf = 0;
-		this._wLast = 0;
-		this._weatherTick = this._weatherTick.bind(this);
-		this._onResize = this._onResize.bind(this);
-		global.addEventListener("resize", this._onResize);
+		this.weatherType = "none";
+		this.smooth = {}; // participant id -> smoothed {x, y}
+		this._dpr = 1;
+		this._raf = 0;
+		this._last = 0;
+		this._acc = 0;
+		this._frame = this._frame.bind(this);
+
+		var self = this;
+		global.addEventListener("resize", function () { self._resize(); });
+		global.addEventListener("pointermove", function (e) { self.mouse = { x: e.clientX, y: e.clientY }; }, { passive: true });
 
 		this._bindUi();
 		this._bindClient();
@@ -122,62 +145,61 @@
 
 	// ---- people ---------------------------------------------------------
 
-	LoveBits.prototype._me = function () {
-		return (this.client && this.client.getOwnParticipant && this.client.getOwnParticipant()) || null;
-	};
-
 	LoveBits.prototype._myId = function () {
-		var me = this._me();
-		return (me && me._id) || "";
+		return (this.client && this.client.participantId) || "";
 	};
 
 	LoveBits.prototype._isFake = function (p) {
 		var C = global.Client;
-		if (!p || !p._id) return true;
+		if (!p || !p.id) return true;
 		if (C && C.isLobbyNoobParticipant && C.isLobbyNoobParticipant(p)) return true;
 		if (C && C.isMybotAnonymousParticipant && C.isMybotAnonymousParticipant(p)) return true;
 		return false;
 	};
 
-	LoveBits.prototype._part = function (_id) {
-		if (!_id || !this.client || !this.client.findParticipantByUnderscoreId) return null;
-		return this.client.findParticipantByUnderscoreId(_id);
+	// The other person — only when there are exactly two real people here.
+	LoveBits.prototype._findPartner = function () {
+		var myId = this._myId();
+		var ppl = (this.client && this.client.ppl) || {};
+		var other = null, count = 0;
+		for (var id in ppl) {
+			if (!ppl.hasOwnProperty(id) || this._isFake(ppl[id])) continue;
+			count++;
+			if (id !== myId) other = id;
+		}
+		return count === 2 && myId && ppl[myId] ? other : null;
 	};
 
-	LoveBits.prototype._name = function (_id) {
-		if (_id && _id === this._myId()) return "You";
-		var p = this._part(_id);
-		return (p && p.name) || "Someone";
+	LoveBits.prototype._refreshPartner = function () {
+		var p = this._findPartner();
+		if (p === this.partner) return;
+		this.partner = p;
+		this.touchArmed = true;
+		if (p) this._makeRope();
+		else this._dropRope();
+		this._renderPanel();
 	};
 
-	LoveBits.prototype._color = function (_id) {
-		var p = this._part(_id);
-		return (p && p.color) || "";
-	};
-
-	// Screen position of someone's cursor (MPP sends x/y as % of the window).
-	LoveBits.prototype._pos = function (_id) {
-		var p = this._part(_id);
+	// Where a cursor is on screen right now.
+	LoveBits.prototype._pos = function (id, dt) {
+		var ppl = (this.client && this.client.ppl) || {};
+		var p = ppl[id];
 		if (!p) return null;
+		if (id === this._myId() && this.mouse) return this.mouse;
+		// Follow the drawn cursor (it already eases between network updates).
+		if (p.cursorDiv) {
+			var r = p.cursorDiv.getBoundingClientRect();
+			if (r.width || r.height || r.left || r.top) return { x: r.left, y: r.top };
+		}
 		var x = parseFloat(p.x), y = parseFloat(p.y);
-		if (!isFinite(x) || !isFinite(y)) {
-			if (p.cursorDiv) {
-				x = parseFloat(p.cursorDiv.style.left);
-				y = parseFloat(p.cursorDiv.style.top);
-			}
-		}
 		if (!isFinite(x) || !isFinite(y)) return null;
-		return { x: x / 100 * global.innerWidth, y: y / 100 * global.innerHeight };
-	};
-
-	LoveBits.prototype._partnerOf = function (_id) {
-		for (var k in this.links) {
-			if (!this.links.hasOwnProperty(k)) continue;
-			var l = this.links[k];
-			if (l.a === _id) return l.b;
-			if (l.b === _id) return l.a;
-		}
-		return "";
+		var target = { x: x / 100 * global.innerWidth, y: y / 100 * global.innerHeight };
+		var s = this.smooth[id];
+		if (!s) { this.smooth[id] = target; return target; }
+		var k = 1 - Math.exp(-(dt || 0.016) * 16);
+		s.x += (target.x - s.x) * k;
+		s.y += (target.y - s.y) * k;
+		return s;
 	};
 
 	// ---- client wiring --------------------------------------------------
@@ -188,40 +210,25 @@
 		if (!c || !c.on) return;
 		function onChannel() {
 			var id = c.channel && c.channel._id;
-			if (!id || id === self.channelId) return;
-			self.channelId = id;
-			self._resetRoom();
-			setTimeout(function () { self._send("q"); }, 900 + Math.random() * 400);
+			if (id && id !== self.channelId) {
+				self.channelId = id;
+				self._setWeather("none", 1, 0);
+				self.meter = self._loadMeter();
+				self._paintMeter();
+				setTimeout(function () { self._send("q"); }, 900 + Math.random() * 400);
+			}
+			self._refreshPartner();
 		}
 		c.on("ch", onChannel);
+		c.on("participant added", function () { self._refreshPartner(); });
+		c.on("participant removed", function () { self._refreshPartner(); });
 		onChannel(); // in case we were created after joining
-		c.on("participant removed", function (part) {
-			if (!part || !part._id) return;
-			// Same _id may still be here in another tab.
-			if (self._part(part._id)) return;
-			var changed = false;
-			for (var k in self.links) {
-				if (self.links.hasOwnProperty(k) && (self.links[k].a === part._id || self.links[k].b === part._id)) {
-					self._removeLink(k);
-					changed = true;
-				}
-			}
-			if (self.pendingOut === part._id) self.pendingOut = null;
-			self._dismissRequest(part._id);
-			if (changed || self._isOpen()) self._renderPanel();
-		});
-		c.on("participant added", function () { if (self._isOpen()) self._renderPeople(); });
-	};
-
-	LoveBits.prototype._resetRoom = function () {
-		for (var k in this.links) if (this.links.hasOwnProperty(k)) this._removeLink(k);
-		for (var r in this.requestToasts) if (this.requestToasts.hasOwnProperty(r)) this._dismissRequest(r);
-		this.pendingOut = null;
-		this._setWeather("none", 1, 0);
 	};
 
 	LoveBits.prototype._send = function (body) {
-		return !!(this.client && this.client.broadcastRoom && this.client.broadcastRoom(SYNC_PREFIX + body));
+		var me = this._myId();
+		if (!me) return false;
+		return !!(this.client && this.client.broadcastRoom && this.client.broadcastRoom(SYNC_PREFIX + me + "|" + body));
 	};
 
 	// ---- UI -------------------------------------------------------------
@@ -239,9 +246,6 @@
 		var dlg = document.getElementById("love-panel");
 		if (!dlg) return;
 		this.dialog = dlg;
-		this.status = dlg.querySelector(".love-status");
-		this.select = dlg.querySelector(".love-person");
-		this.meterBox = dlg.querySelector(".love-meter");
 
 		var wGrid = dlg.querySelector(".love-weather-grid");
 		if (wGrid && !wGrid.childNodes.length) {
@@ -250,7 +254,7 @@
 				b.type = "button";
 				b.setAttribute("data-weather", w.id);
 				b.setAttribute("aria-pressed", "false");
-				b.title = w.id === "none" ? "Clear the sky for everyone" : w.label + " for everyone in the room";
+				b.title = w.label;
 				var em = el("span", "love-weather-emoji", w.emoji);
 				em.setAttribute("aria-hidden", "true");
 				b.appendChild(em);
@@ -266,12 +270,9 @@
 			var act = t.closest && t.closest("[data-love-act]");
 			if (act) {
 				e.preventDefault();
-				var who = self.select ? self.select.value : "";
 				var a = act.getAttribute("data-love-act");
-				if (a === "kiss") self.blowKiss(who);
-				else if (a === "hug") self.hug(who);
-				else if (a === "link") self.requestLink(who);
-				else if (a === "unlink") self.unlink();
+				if (a === "kiss") self.blowKiss();
+				else if (a === "hug") self.hug();
 				return;
 			}
 			if (t.closest && t.closest(".love-close")) {
@@ -279,7 +280,6 @@
 				if (self.closeModal) self.closeModal();
 			}
 		});
-		if (this.select) this.select.addEventListener("change", function () { self._renderActions(); });
 
 		var sound = dlg.querySelector(".love-sound-toggle");
 		if (sound) {
@@ -300,20 +300,9 @@
 		}
 	};
 
-	LoveBits.prototype._isOpen = function () {
-		var modal = document.getElementById("modal");
-		if (!this.dialog || !modal) return false;
-		return global.getComputedStyle(modal).display !== "none" && global.getComputedStyle(this.dialog).display !== "none";
-	};
-
 	LoveBits.prototype.open = function () {
-		this._say("");
 		this._renderPanel();
-		if (this.openModal) this.openModal("#love-panel", ".love-person");
-	};
-
-	LoveBits.prototype._say = function (text) {
-		if (this.status) this.status.textContent = text || "";
+		if (this.openModal) this.openModal("#love-panel", ".love-weather-opt.is-on");
 	};
 
 	LoveBits.prototype._renderPanel = function () {
@@ -324,76 +313,9 @@
 			opts[i].classList.toggle("is-on", on);
 			opts[i].setAttribute("aria-pressed", on ? "true" : "false");
 		}
-		this._renderPeople();
-	};
-
-	LoveBits.prototype._renderPeople = function () {
-		var sel = this.select;
-		if (!sel) return;
-		var myId = this._myId();
-		var partner = this._partnerOf(myId);
-		var prev = sel.value || partner;
-		var seen = {};
-		var people = [];
-		var ppl = (this.client && this.client.ppl) || {};
-		for (var id in ppl) {
-			if (!ppl.hasOwnProperty(id)) continue;
-			var p = ppl[id];
-			if (this._isFake(p) || p._id === myId || seen[p._id]) continue;
-			seen[p._id] = 1;
-			people.push(p);
-		}
-		people.sort(function (x, y) { return String(x.name).localeCompare(String(y.name)); });
-		while (sel.firstChild) sel.removeChild(sel.firstChild);
-		if (!people.length) {
-			var none = el("option", null, "Nobody else is here yet 🥺");
-			none.value = "";
-			sel.appendChild(none);
-		}
-		for (var j = 0; j < people.length; j++) {
-			var o = el("option", null, (people[j]._id === partner ? "💞 " : "") + (people[j].name || "Anonymous"));
-			o.value = people[j]._id;
-			sel.appendChild(o);
-		}
-		if (prev && seen[prev]) sel.value = prev;
-		sel.disabled = !people.length;
-		this._renderActions();
-	};
-
-	LoveBits.prototype._renderActions = function () {
-		if (!this.dialog) return;
-		var myId = this._myId();
-		var partner = this._partnerOf(myId);
-		var who = this.select ? this.select.value : "";
-		var linkBtn = this.dialog.querySelector("[data-love-act='link']");
-		var unlinkBtn = this.dialog.querySelector("[data-love-act='unlink']");
-		var btns = this.dialog.querySelectorAll("[data-love-act='kiss'], [data-love-act='hug'], [data-love-act='link']");
-		for (var i = 0; i < btns.length; i++) btns[i].disabled = !who;
-		if (linkBtn) linkBtn.hidden = !!partner;
-		if (unlinkBtn) {
-			unlinkBtn.hidden = !partner;
-			var ul = unlinkBtn.querySelector(".love-act-label");
-			if (ul) ul.textContent = "Untie from " + this._name(partner);
-		}
-		if (linkBtn && this.pendingOut && this.pendingOut === who) linkBtn.disabled = true;
-
-		var box = this.meterBox;
-		if (!box) return;
-		if (!partner) {
-			box.hidden = true;
-			return;
-		}
-		var link = this.links[pairKey(myId, partner)];
-		var pct = Math.round(link ? link.meter : 0);
-		box.hidden = false;
-		var names = box.querySelector(".love-meter-names");
-		if (names) names.textContent = "You 💞 " + this._name(partner);
-		var fill = box.querySelector(".love-meter-fill");
-		if (fill) fill.style.width = pct + "%";
-		var num = box.querySelector(".love-meter-pct");
-		if (num) num.textContent = pct + "%";
-		var bar = box.querySelector(".love-meter-bar");
-		if (bar) bar.setAttribute("aria-valuenow", String(pct));
+		var acts = this.dialog.querySelectorAll("[data-love-act]");
+		for (var j = 0; j < acts.length; j++) acts[j].disabled = !this.partner;
+		this._paintMeter();
 	};
 
 	// ---- weather --------------------------------------------------------
@@ -402,12 +324,9 @@
 		if (!WEATHER_BY_ID[type]) return;
 		var seed = Math.floor(Math.random() * 2147483647) + 1;
 		var ts = Date.now();
-		var ok = this._send("w|" + type + "|" + seed + "|" + ts);
+		this._send("w|" + type + "|" + seed + "|" + ts);
 		this._setWeather(type, seed, ts);
 		this._renderPanel();
-		var w = WEATHER_BY_ID[type];
-		if (!ok) this._say("Room sync is offline — only you see the weather.");
-		else this._say(type === "none" ? "The sky is clear ☀️" : w.emoji + " " + w.label + " for everyone!");
 	};
 
 	LoveBits.prototype._setWeather = function (type, seed, ts) {
@@ -420,9 +339,8 @@
 
 	LoveBits.prototype._applyWeather = function () {
 		var type = this.weatherView ? this.weather : "none";
+		this.weatherType = type;
 		if (type === "none") {
-			if (this._wRaf) cancelAnimationFrame(this._wRaf);
-			this._wRaf = 0;
 			this.weatherParts = [];
 			if (this.weatherCanvas && this.weatherCanvas.parentNode) this.weatherCanvas.parentNode.removeChild(this.weatherCanvas);
 			this.weatherCanvas = null;
@@ -434,594 +352,629 @@
 			document.body.appendChild(cv);
 			this.weatherCanvas = cv;
 			this.weatherCtx = cv.getContext("2d");
-			this._onResize();
+			this._sizeCanvas(cv, this.weatherCtx);
 		}
+		this._sprites();
 		this._spawnWeather(type);
-		if (!this._wRaf) {
-			this._wLast = 0;
-			this._wRaf = requestAnimationFrame(this._weatherTick);
-		}
+		this._run();
 	};
 
-	LoveBits.prototype._onResize = function () {
-		var cv = this.weatherCanvas;
-		if (!cv) return;
-		var dpr = Math.min(global.devicePixelRatio || 1, 2);
-		cv.width = Math.round(global.innerWidth * dpr);
-		cv.height = Math.round(global.innerHeight * dpr);
-		cv.style.width = global.innerWidth + "px";
-		cv.style.height = global.innerHeight + "px";
-		this.weatherCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+	// Pre-drawn particles: drawing a bitmap is far cheaper than shadowBlur.
+	LoveBits.prototype._sprites = function () {
+		if (this.spr) return;
+		var petal = function (color) {
+			return sprite(32, function (g) {
+				g.translate(16, 16);
+				var grd = g.createLinearGradient(0, -14, 0, 14);
+				grd.addColorStop(0, "#fff0f5");
+				grd.addColorStop(1, color);
+				g.fillStyle = grd;
+				g.beginPath();
+				g.moveTo(0, 13);
+				g.bezierCurveTo(11, 6, 10, -8, 3, -13);
+				g.lineTo(0, -9);
+				g.lineTo(-3, -13);
+				g.bezierCurveTo(-10, -8, -11, 6, 0, 13);
+				g.fill();
+			});
+		};
+		var glow = function (inner, outer) {
+			return sprite(48, function (g) {
+				var grd = g.createRadialGradient(24, 24, 0, 24, 24, 24);
+				grd.addColorStop(0, inner);
+				grd.addColorStop(0.25, inner);
+				grd.addColorStop(0.5, outer);
+				grd.addColorStop(1, "rgba(0,0,0,0)");
+				g.fillStyle = grd;
+				g.fillRect(0, 0, 48, 48);
+			});
+		};
+		this.spr = {
+			petals: [petal("#ffb3cc"), petal("#ff9fbf"), petal("#ffc9da")],
+			snow: glow("rgba(255,255,255,1)", "rgba(220,235,255,0.35)"),
+			fly: glow("rgba(255,252,190,1)", "rgba(200,255,110,0.35)")
+		};
 	};
 
 	LoveBits.prototype._spawnWeather = function (type) {
 		var W = global.innerWidth, H = global.innerHeight;
-		var area = Math.max(0.4, Math.min(1.6, (W * H) / (1280 * 720)));
-		var base = { sakura: 42, snow: 90, rain: 150, fireflies: 38 }[type] || 0;
+		var area = Math.max(0.4, Math.min(1.5, (W * H) / (1280 * 720)));
+		var base = { sakura: 38, snow: 80, rain: 120, fireflies: 32 }[type] || 0;
 		var n = Math.round(base * area * (reducedMotion() ? 0.35 : 1));
 		var r = rng(this.weatherSeed);
+		this._rand = r;
 		var parts = [];
 		for (var i = 0; i < n; i++) parts.push(this._newParticle(type, r, true));
 		this.weatherParts = parts;
-		this.weatherType = type;
-		this._rand = r;
 	};
 
 	LoveBits.prototype._newParticle = function (type, r, anywhere) {
 		var W = global.innerWidth, H = global.innerHeight;
-		var p = { x: r() * W, y: anywhere ? r() * H : -20 - r() * 60, ph: r() * Math.PI * 2 };
+		var p = { x: r() * W, y: anywhere ? r() * H : -30 - r() * 60, ph: r() * Math.PI * 2 };
 		if (type === "sakura") {
-			p.s = 6 + r() * 7;
-			p.vy = 28 + r() * 36;
-			p.vx = 10 + r() * 22;
+			p.s = 0.45 + r() * 0.45;
+			p.vy = 30 + r() * 34;
+			p.vx = 12 + r() * 20;
 			p.rot = r() * Math.PI * 2;
-			p.vr = (r() - 0.5) * 2.4;
-			p.hue = r() < 0.7 ? "#ffb7cf" : (r() < 0.5 ? "#ffd3e2" : "#ff9fc0");
+			p.vr = (r() - 0.5) * 2.2;
+			p.k = Math.floor(r() * 3);
+			if (!anywhere) p.x = r() * W * 1.1 - W * 0.1;
 		} else if (type === "snow") {
-			p.s = 1.4 + r() * 3.4;
-			p.vy = 18 + p.s * 12 + r() * 12;
+			p.s = 5 + r() * 9;
+			p.vy = 20 + p.s * 4 + r() * 10;
 			p.vx = (r() - 0.5) * 14;
-			p.a = 0.55 + r() * 0.45;
+			p.a = 0.6 + r() * 0.4;
 		} else if (type === "rain") {
-			p.len = 10 + r() * 16;
-			p.vy = 620 + r() * 380;
-			p.vx = -60 - r() * 40;
-			p.a = 0.25 + r() * 0.35;
+			p.len = 12 + r() * 14;
+			p.vy = 700 + r() * 300;
+			p.vx = -70;
+			p.x = r() * (W + 140);
 		} else if (type === "fireflies") {
-			p.y = anywhere ? H * 0.15 + r() * H * 0.85 : r() * H;
-			p.s = 1.6 + r() * 2.2;
+			p.y = r() * H;
+			p.s = 14 + r() * 12;
 			p.vx = (r() - 0.5) * 30;
 			p.vy = (r() - 0.5) * 30;
-			p.blink = 0.6 + r() * 1.4;
+			p.blink = 0.6 + r() * 1.3;
 		}
 		return p;
 	};
 
-	LoveBits.prototype._weatherTick = function (now) {
-		this._wRaf = 0;
-		var cv = this.weatherCanvas, ctx = this.weatherCtx;
-		if (!cv || !ctx) return;
-		var dt = this._wLast ? Math.min(0.05, (now - this._wLast) / 1000) : 0.016;
-		this._wLast = now;
+	LoveBits.prototype._drawWeather = function (dt, t) {
+		var ctx = this.weatherCtx;
+		if (!ctx) return;
 		var W = global.innerWidth, H = global.innerHeight;
 		var type = this.weatherType;
 		var r = this._rand || Math.random;
-		var t = now / 1000;
+		var spr = this.spr;
+		var parts = this.weatherParts;
+		var d = this._dpr;
+		var i, p;
+		ctx.setTransform(d, 0, 0, d, 0, 0);
 		ctx.clearRect(0, 0, W, H);
+		if (type === "rain") {
+			ctx.strokeStyle = "rgba(150, 185, 235, 0.45)";
+			ctx.lineWidth = 1.2;
+			ctx.beginPath();
+			for (i = 0; i < parts.length; i++) {
+				p = parts[i];
+				p.x += p.vx * dt;
+				p.y += p.vy * dt;
+				ctx.moveTo(p.x, p.y);
+				ctx.lineTo(p.x - p.len * 0.08, p.y + p.len);
+				if (p.y > H) parts[i] = this._newParticle(type, r, false);
+			}
+			ctx.stroke();
+			return;
+		}
 		if (type === "fireflies") {
-			// soft dusk so the glow shows up on light backgrounds
-			ctx.fillStyle = "rgba(24, 18, 58, 0.16)";
+			ctx.fillStyle = "rgba(24, 18, 58, 0.14)";
 			ctx.fillRect(0, 0, W, H);
 		}
-		var parts = this.weatherParts;
-		for (var i = 0; i < parts.length; i++) {
-			var p = parts[i];
+		for (i = 0; i < parts.length; i++) {
+			p = parts[i];
 			if (type === "sakura") {
 				p.x += (p.vx + Math.sin(t * 1.3 + p.ph) * 18) * dt;
 				p.y += p.vy * dt;
 				p.rot += p.vr * dt;
-				var flip = Math.abs(Math.cos(t * 2 + p.ph)) * 0.7 + 0.3;
-				ctx.save();
-				ctx.translate(p.x, p.y);
-				ctx.rotate(p.rot);
-				ctx.scale(1, flip);
-				ctx.fillStyle = p.hue;
-				ctx.globalAlpha = 0.9;
-				ctx.beginPath();
-				// petal: a teardrop with a little notch
-				ctx.moveTo(0, -p.s);
-				ctx.bezierCurveTo(p.s * 0.9, -p.s * 0.6, p.s * 0.7, p.s * 0.8, 0, p.s);
-				ctx.bezierCurveTo(-p.s * 0.7, p.s * 0.8, -p.s * 0.9, -p.s * 0.6, 0, -p.s);
-				ctx.fill();
-				ctx.restore();
-				if (p.y > H + 20 || p.x > W + 30) {
-					parts[i] = this._newParticle(type, r, false);
-					parts[i].x = r() * W * 1.1 - W * 0.1;
-				}
+				var flip = Math.abs(Math.cos(t * 2 + p.ph)) * 0.75 + 0.25;
+				var c = Math.cos(p.rot), s = Math.sin(p.rot);
+				ctx.setTransform(c * p.s * d, s * p.s * d, -s * p.s * flip * d, c * p.s * flip * d, p.x * d, p.y * d);
+				ctx.globalAlpha = 0.92;
+				ctx.drawImage(spr.petals[p.k], -16, -16);
+				if (p.y > H + 20 || p.x > W + 30) parts[i] = this._newParticle(type, r, false);
 			} else if (type === "snow") {
 				p.x += (p.vx + Math.sin(t * 0.8 + p.ph) * 10) * dt;
 				p.y += p.vy * dt;
 				ctx.globalAlpha = p.a;
-				ctx.fillStyle = "#ffffff";
-				ctx.shadowColor = "rgba(160, 190, 230, 0.9)";
-				ctx.shadowBlur = 3;
-				ctx.beginPath();
-				ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2);
-				ctx.fill();
+				ctx.drawImage(spr.snow, p.x - p.s, p.y - p.s, p.s * 2, p.s * 2);
 				if (p.y > H + 10) parts[i] = this._newParticle(type, r, false);
-			} else if (type === "rain") {
-				p.x += p.vx * dt;
-				p.y += p.vy * dt;
-				ctx.globalAlpha = p.a;
-				ctx.strokeStyle = "#8fb4e6";
-				ctx.lineWidth = 1.2;
-				ctx.beginPath();
-				ctx.moveTo(p.x, p.y);
-				ctx.lineTo(p.x + p.vx * 0.02, p.y + p.len);
-				ctx.stroke();
-				if (p.y > H) {
-					// tiny splash ring
-					ctx.globalAlpha = p.a * 0.8;
-					ctx.beginPath();
-					ctx.ellipse(p.x, H - 3, 4, 1.4, 0, 0, Math.PI * 2);
-					ctx.stroke();
-					parts[i] = this._newParticle(type, r, false);
-					parts[i].x = r() * (W + 120);
-				}
 			} else if (type === "fireflies") {
-				p.vx += (r() - 0.5) * 40 * dt;
-				p.vy += (r() - 0.5) * 40 * dt;
-				p.vx = Math.max(-26, Math.min(26, p.vx));
-				p.vy = Math.max(-26, Math.min(26, p.vy));
+				p.vx = Math.max(-26, Math.min(26, p.vx + (r() - 0.5) * 40 * dt));
+				p.vy = Math.max(-26, Math.min(26, p.vy + (r() - 0.5) * 40 * dt));
 				p.x += p.vx * dt;
 				p.y += p.vy * dt;
-				if (p.x < -10) p.x = W + 10; else if (p.x > W + 10) p.x = -10;
-				if (p.y < -10) p.y = H + 10; else if (p.y > H + 10) p.y = -10;
-				var glow = 0.25 + 0.75 * Math.pow(Math.max(0, Math.sin(t * p.blink + p.ph)), 2);
-				ctx.globalAlpha = glow;
-				ctx.fillStyle = "#fff6a8";
-				ctx.shadowColor = "rgba(214, 255, 120, 1)";
-				ctx.shadowBlur = 14;
-				ctx.beginPath();
-				ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2);
-				ctx.fill();
+				if (p.x < -20) p.x = W + 20; else if (p.x > W + 20) p.x = -20;
+				if (p.y < -20) p.y = H + 20; else if (p.y > H + 20) p.y = -20;
+				var glow = Math.sin(t * p.blink + p.ph);
+				ctx.globalAlpha = 0.2 + 0.8 * glow * glow;
+				ctx.drawImage(spr.fly, p.x - p.s, p.y - p.s, p.s * 2, p.s * 2);
 			}
 		}
 		ctx.globalAlpha = 1;
-		ctx.shadowBlur = 0;
-		this._wRaf = requestAnimationFrame(this._weatherTick);
 	};
 
-	// ---- heart string ---------------------------------------------------
+	// ---- canvases / main loop -------------------------------------------
 
-	LoveBits.prototype.requestLink = function (target) {
-		var myId = this._myId();
-		if (!target || !myId) return;
-		if (target === myId) return;
-		var mine = this._partnerOf(myId);
-		if (mine) { this._say("You're already tied to " + this._name(mine) + " 💞"); return; }
-		if (this._partnerOf(target)) { this._say(this._name(target) + " is already tied to someone 💔"); return; }
-		var now = Date.now();
-		if (now - this.lastRequestAt < REQUEST_COOLDOWN_MS) { this._say("Give them a moment to answer 🥺"); return; }
-		this.lastRequestAt = now;
-		if (!this._send("lr|" + target)) { this._say("Room sync is offline — can't reach them right now."); return; }
-		this.pendingOut = target;
-		this._renderActions();
-		this._say("Asked " + this._name(target) + " to tie a heart string with you… 💌");
-		var self = this;
-		setTimeout(function () {
-			if (self.pendingOut === target) { self.pendingOut = null; self._renderActions(); }
-		}, REQUEST_LIFE_MS);
+	LoveBits.prototype._sizeCanvas = function (cv, ctx) {
+		var dpr = Math.min(global.devicePixelRatio || 1, 1.5);
+		this._dpr = dpr;
+		cv.width = Math.round(global.innerWidth * dpr);
+		cv.height = Math.round(global.innerHeight * dpr);
+		cv.style.width = global.innerWidth + "px";
+		cv.style.height = global.innerHeight + "px";
+		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 	};
 
-	LoveBits.prototype.unlink = function () {
-		var myId = this._myId();
-		var partner = this._partnerOf(myId);
-		if (!partner) return;
-		this._send("lu|" + partner);
-		this._removeLink(pairKey(myId, partner));
-		this._renderPanel();
-		this._say("Untied 💔");
+	LoveBits.prototype._resize = function () {
+		if (this.weatherCanvas) this._sizeCanvas(this.weatherCanvas, this.weatherCtx);
+		if (this.ropeCanvas) this._sizeCanvas(this.ropeCanvas, this.ropeCtx);
 	};
 
-	LoveBits.prototype._addLink = function (a, b, meter) {
-		if (!a || !b || a === b) return;
-		if (!this._part(a) || !this._part(b)) return;
-		var key = pairKey(a, b);
-		if (this.links[key]) {
-			if (meter != null && meter > this.links[key].meter) this.links[key].meter = meter;
-			return;
-		}
-		// One string per person — a newer link replaces an older one.
-		var oa = this._partnerOf(a), ob = this._partnerOf(b);
-		if (oa) this._removeLink(pairKey(a, oa));
-		if (ob) this._removeLink(pairKey(b, ob));
-		this.links[key] = { a: a, b: b, meter: Math.max(0, Math.min(99, meter || 0)) };
-		this._ensureLayer();
-		var g = document.createElementNS("http://www.w3.org/2000/svg", "g");
-		var glow = document.createElementNS("http://www.w3.org/2000/svg", "path");
-		glow.setAttribute("class", "love-string-glow");
-		var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-		path.setAttribute("class", "love-string");
-		g.appendChild(glow);
-		g.appendChild(path);
-		this.svg.appendChild(g);
-
-		var heart = el("button", "love-knot");
-		heart.type = "button";
-		var myId = this._myId();
-		var mine = a === myId || b === myId;
-		heart.classList.toggle("is-mine", mine);
-		heart.tabIndex = mine ? 0 : -1;
-		heart.title = mine ? "Tap to fill your love meter 💖" : this._name(a) + " 💞 " + this._name(b);
-		heart.setAttribute("aria-label", mine ? "Fill your love meter" : "Love meter of " + this._name(a) + " and " + this._name(b));
-		var back = el("span", "love-knot-back", "🤍");
-		var fill = el("span", "love-knot-fill", "❤️");
-		var pct = el("span", "love-knot-pct");
-		back.setAttribute("aria-hidden", "true");
-		fill.setAttribute("aria-hidden", "true");
-		heart.appendChild(back);
-		heart.appendChild(fill);
-		heart.appendChild(pct);
-		var self = this;
-		heart.addEventListener("click", function (e) {
-			e.preventDefault();
-			e.stopPropagation();
-			if (mine) self.tapHeart(key);
-		});
-		this.layer.appendChild(heart);
-		this.stringEls[key] = { g: g, path: path, glow: glow, heart: heart, fill: fill, pct: pct };
-		this._paintMeter(key);
-		if (!this._raf) this._raf = requestAnimationFrame(this._tick);
+	LoveBits.prototype._run = function () {
+		if (this._raf) return;
+		this._last = 0;
+		this._raf = requestAnimationFrame(this._frame);
 	};
 
-	LoveBits.prototype._removeLink = function (key) {
-		var els = this.stringEls[key];
-		if (els) {
-			if (els.g.parentNode) els.g.parentNode.removeChild(els.g);
-			if (els.heart.parentNode) els.heart.parentNode.removeChild(els.heart);
-		}
-		delete this.stringEls[key];
-		delete this.links[key];
+	// One loop drives both the weather and the string.
+	LoveBits.prototype._frame = function (now) {
+		this._raf = 0;
+		var dt = this._last ? Math.min(0.05, (now - this._last) / 1000) : 0.016;
+		this._last = now;
+		var busy = false;
+		if (this.weatherCanvas) { this._drawWeather(dt, now / 1000); busy = true; }
+		if (this.partner && this.ropeCanvas) { this._stepRope(dt); busy = true; }
+		if (busy) this._raf = requestAnimationFrame(this._frame);
 	};
+
+	// ---- heart string (verlet rope) -------------------------------------
 
 	LoveBits.prototype._ensureLayer = function () {
 		if (this.layer && this.layer.parentNode) return this.layer;
 		var layer = el("div", "love-layer");
-		layer.setAttribute("aria-live", "polite");
-		var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-		svg.setAttribute("class", "love-strings");
-		svg.setAttribute("aria-hidden", "true");
-		layer.appendChild(svg);
+		layer.setAttribute("aria-hidden", "true");
 		document.body.appendChild(layer);
 		this.layer = layer;
-		this.svg = svg;
 		return layer;
 	};
 
-	LoveBits.prototype._tick = function (now) {
-		this._raf = 0;
-		var any = false;
-		var t = now / 1000;
-		for (var key in this.links) {
-			if (!this.links.hasOwnProperty(key)) continue;
-			any = true;
-			var l = this.links[key], els = this.stringEls[key];
-			if (!els) continue;
-			var A = this._pos(l.a), B = this._pos(l.b);
-			var show = !!(A && B);
-			els.g.style.display = show ? "" : "none";
-			els.heart.style.display = show ? "" : "none";
-			if (!show) continue;
-			var dx = B.x - A.x, dy = B.y - A.y;
-			var dist = Math.sqrt(dx * dx + dy * dy);
-			var sag = Math.min(140, 24 + dist * 0.2) + Math.sin(t * 1.6) * 6;
-			var cx = (A.x + B.x) / 2 + Math.sin(t * 1.1) * 8;
-			var cy = (A.y + B.y) / 2 + sag;
-			var d = "M" + A.x.toFixed(1) + " " + A.y.toFixed(1) + " Q" + cx.toFixed(1) + " " + cy.toFixed(1) + " " + B.x.toFixed(1) + " " + B.y.toFixed(1);
-			els.path.setAttribute("d", d);
-			els.glow.setAttribute("d", d);
-			// Midpoint of the quadratic curve (t = 0.5).
-			var mx = 0.25 * A.x + 0.5 * cx + 0.25 * B.x;
-			var my = 0.25 * A.y + 0.5 * cy + 0.25 * B.y;
-			els.heart.style.transform = "translate(" + mx.toFixed(1) + "px," + my.toFixed(1) + "px) translate(-50%,-50%)";
+	LoveBits.prototype._makeRope = function () {
+		var layer = this._ensureLayer();
+		if (!this.ropeCanvas) {
+			var cv = el("canvas", "love-rope");
+			layer.insertBefore(cv, layer.firstChild);
+			this.ropeCanvas = cv;
+			this.ropeCtx = cv.getContext("2d");
+			this._sizeCanvas(cv, this.ropeCtx);
 		}
-		if (any) this._raf = requestAnimationFrame(this._tick);
+		if (!this.knot) {
+			var self = this;
+			var k = el("button", "love-knot");
+			k.type = "button";
+			k.title = "Tap to fill the love meter";
+			k.setAttribute("aria-label", "Love meter");
+			var fill = el("span", "love-knot-fill", "❤️");
+			var pct = el("span", "love-knot-pct");
+			k.appendChild(el("span", "love-knot-back", "🤍"));
+			k.appendChild(fill);
+			k.appendChild(pct);
+			k.addEventListener("click", function (e) {
+				e.preventDefault();
+				e.stopPropagation();
+				self.tapHeart();
+			});
+			layer.appendChild(k);
+			this.knot = k;
+			this.knotFill = fill;
+			this.knotPct = pct;
+		}
+		this.rope = null; // rebuilt from the cursors on the next frame
+		this.ropeCanvas.style.display = "";
+		this.knot.style.display = "none";
+		this._paintMeter();
+		this._run();
 	};
 
-	LoveBits.prototype._paintMeter = function (key) {
-		var l = this.links[key], els = this.stringEls[key];
-		if (!l || !els) return;
-		var pct = Math.round(l.meter);
-		els.fill.style.clipPath = "inset(" + (100 - pct) + "% 0 0 0)";
-		els.fill.style.webkitClipPath = els.fill.style.clipPath;
-		els.pct.textContent = pct + "%";
-		els.heart.style.setProperty("--love-level", String(pct / 100));
-		var myId = this._myId();
-		if (l.a === myId || l.b === myId) this._renderActions();
+	LoveBits.prototype._clearRope = function () {
+		if (!this.ropeCanvas) return;
+		this.ropeCtx.setTransform(1, 0, 0, 1, 0, 0);
+		this.ropeCtx.clearRect(0, 0, this.ropeCanvas.width, this.ropeCanvas.height);
 	};
 
-	LoveBits.prototype._pulseKnot = function (key) {
-		var els = this.stringEls[key];
-		if (!els) return;
-		els.heart.classList.remove("is-pulse");
-		void els.heart.offsetWidth;
-		els.heart.classList.add("is-pulse");
+	LoveBits.prototype._dropRope = function () {
+		this.rope = null;
+		this._clearRope();
+		if (this.ropeCanvas) this.ropeCanvas.style.display = "none";
+		if (this.knot) this.knot.style.display = "none";
+	};
+
+	LoveBits.prototype._stepRope = function (dt) {
+		var A = this._pos(this._myId(), dt);
+		var B = this._pos(this.partner, dt);
+		if (!A || !B) {
+			// They'll show up once their cursor moves — hide until then.
+			if (this.rope) { this._clearRope(); this.knot.style.display = "none"; }
+			this.rope = null;
+			return;
+		}
+		var pts = this.rope && this.rope.pts;
+		if (!pts) {
+			pts = [];
+			for (var i = 0; i < ROPE_N; i++) {
+				var f = i / (ROPE_N - 1);
+				var x = A.x + (B.x - A.x) * f, y = A.y + (B.y - A.y) * f;
+				pts.push({ x: x, y: y, px: x, py: y });
+			}
+			this.rope = { pts: pts, seg: 0 };
+			this.knot.style.display = "";
+		}
+		var dx = B.x - A.x, dy = B.y - A.y;
+		var dist = Math.sqrt(dx * dx + dy * dy);
+		// Rope length follows the distance (so it never goes taut), with a
+		// little extra that droops and swings.
+		var want = Math.max(dist * ROPE_SLACK, dist + 26, 40) / (ROPE_N - 1);
+		this.rope.seg = this.rope.seg ? this.rope.seg + (want - this.rope.seg) * Math.min(1, dt * 6) : want;
+
+		this._acc = Math.min(this._acc + dt, 0.05);
+		while (this._acc >= ROPE_STEP) {
+			this._acc -= ROPE_STEP;
+			this._verlet(pts, A, B, this.rope.seg, ROPE_STEP);
+		}
+		this._drawRope(pts);
+
+		var mid = pts[Math.floor(ROPE_N / 2)];
+		this.knot.style.transform = "translate3d(" + mid.x.toFixed(1) + "px," + mid.y.toFixed(1) + "px,0) translate(-50%,-50%)";
+
+		this._checkTouch(dist);
+	};
+
+	LoveBits.prototype._verlet = function (pts, A, B, seg, h) {
+		var n = pts.length, i, p;
+		var g = ROPE_GRAVITY * h * h;
+		for (i = 1; i < n - 1; i++) {
+			p = pts[i];
+			var vx = (p.x - p.px) * ROPE_DAMP, vy = (p.y - p.py) * ROPE_DAMP;
+			p.px = p.x; p.py = p.y;
+			p.x += vx;
+			p.y += vy + g;
+		}
+		var a0 = pts[0], an = pts[n - 1];
+		a0.x = a0.px = A.x; a0.y = a0.py = A.y;
+		an.x = an.px = B.x; an.y = an.py = B.y;
+		for (var it = 0; it < ROPE_ITER; it++) {
+			for (i = 0; i < n - 1; i++) {
+				var a = pts[i], b = pts[i + 1];
+				var ddx = b.x - a.x, ddy = b.y - a.y;
+				var dd = Math.sqrt(ddx * ddx + ddy * ddy) || 0.0001;
+				var diff = (dd - seg) / dd;
+				// Ends are pinned to the cursors; inner points share the correction.
+				var wa = i === 0 ? 0 : (i + 1 === n - 1 ? 1 : 0.5);
+				var wb = i + 1 === n - 1 ? 0 : (i === 0 ? 1 : 0.5);
+				a.x += ddx * diff * wa; a.y += ddy * diff * wa;
+				b.x -= ddx * diff * wb; b.y -= ddy * diff * wb;
+			}
+		}
+	};
+
+	LoveBits.prototype._tracePath = function (ctx, pts) {
+		ctx.beginPath();
+		ctx.moveTo(pts[0].x, pts[0].y);
+		for (var i = 1; i < pts.length - 1; i++) {
+			var mx = (pts[i].x + pts[i + 1].x) / 2, my = (pts[i].y + pts[i + 1].y) / 2;
+			ctx.quadraticCurveTo(pts[i].x, pts[i].y, mx, my);
+		}
+		var l = pts[pts.length - 1];
+		ctx.lineTo(l.x, l.y);
+	};
+
+	LoveBits.prototype._drawRope = function (pts) {
+		var ctx = this.ropeCtx;
+		var W = global.innerWidth, H = global.innerHeight;
+		ctx.setTransform(this._dpr, 0, 0, this._dpr, 0, 0);
+		ctx.clearRect(0, 0, W, H);
+		ctx.lineCap = "round";
+		ctx.lineJoin = "round";
+		this._tracePath(ctx, pts);
+		// soft glow
+		ctx.strokeStyle = "rgba(255, 90, 150, 0.22)";
+		ctx.lineWidth = 9;
+		ctx.stroke();
+		// the string
+		var a = pts[0], b = pts[pts.length - 1];
+		var grd = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+		grd.addColorStop(0, "#ff5a92");
+		grd.addColorStop(0.5, "#ff2d6f");
+		grd.addColorStop(1, "#ff5a92");
+		ctx.strokeStyle = grd;
+		ctx.lineWidth = 3;
+		ctx.stroke();
+		// shine
+		ctx.save();
+		ctx.translate(0, -0.8);
+		ctx.strokeStyle = "rgba(255, 225, 238, 0.7)";
+		ctx.lineWidth = 1;
+		ctx.stroke();
+		ctx.restore();
+		// little hearts along the string
+		ctx.fillStyle = "#ff3d7f";
+		var spots = [Math.floor(ROPE_N * 0.25), Math.floor(ROPE_N * 0.75)];
+		for (var s = 0; s < spots.length; s++) {
+			var p = pts[spots[s]], q = pts[spots[s] + 1];
+			this._heart(ctx, p.x, p.y, 6, Math.atan2(q.y - p.y, q.x - p.x) * 0.3);
+		}
+		// tiny hearts where it's tied to each cursor
+		this._heart(ctx, a.x, a.y + 1, 4.5, 0);
+		this._heart(ctx, b.x, b.y + 1, 4.5, 0);
+	};
+
+	LoveBits.prototype._heart = function (ctx, x, y, s, rot) {
+		ctx.save();
+		ctx.translate(x, y);
+		ctx.rotate(rot || 0);
+		ctx.beginPath();
+		ctx.moveTo(0, s * 0.9);
+		ctx.bezierCurveTo(-s * 1.6, -s * 0.1, -s * 0.8, -s * 1.3, 0, -s * 0.45);
+		ctx.bezierCurveTo(s * 0.8, -s * 1.3, s * 1.6, -s * 0.1, 0, s * 0.9);
+		ctx.fill();
+		ctx.restore();
+	};
+
+	// ---- touching cursors = kiss ----------------------------------------
+
+	LoveBits.prototype._checkTouch = function (dist) {
+		if (dist > TOUCH_OUT) { this.touchArmed = true; return; }
+		if (!this.touchArmed || dist > TOUCH_IN) return;
+		this.touchArmed = false;
+		// Only one of the two screens decides, so each touch counts once.
+		if (String(this._myId()) > String(this.partner)) return;
+		var now = Date.now();
+		if (now - this.lastTouchAt < TOUCH_COOLDOWN_MS) return;
+		this.lastTouchAt = now;
+		this._send("t");
+		this._touchKiss();
+	};
+
+	LoveBits.prototype._touchKiss = function () {
+		var A = this._pos(this._myId()), B = this.partner ? this._pos(this.partner) : null;
+		var at = A && B ? { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 } : (A || B);
+		if (at) this._pop(at.x, at.y, "💋", 34, 6);
+		this._sound("kiss", 0.45);
+		this._addMeter(PTS_TOUCH);
 	};
 
 	// ---- love meter -----------------------------------------------------
 
-	LoveBits.prototype.tapHeart = function (key) {
+	LoveBits.prototype._loadMeter = function () {
+		try { return Math.max(0, Math.min(99, parseInt(localStorage.getItem(METER_KEY + this.channelId), 10) || 0)); } catch (e) { return 0; }
+	};
+
+	LoveBits.prototype._saveMeter = function () {
+		try { localStorage.setItem(METER_KEY + this.channelId, String(this.meter)); } catch (e) {}
+	};
+
+	LoveBits.prototype.tapHeart = function () {
+		if (!this.partner) return;
 		var now = Date.now();
 		if (now - this.lastTapAt < TAP_COOLDOWN_MS) return;
 		this.lastTapAt = now;
-		this._send("m|" + key + "|" + METER_TAP);
-		this._addMeter(key, METER_TAP);
-		this._sparkAt(key);
-	};
-
-	LoveBits.prototype._addMeter = function (key, amount) {
-		var l = this.links[key];
-		if (!l) return;
-		l.meter = Math.max(0, l.meter + amount);
-		this._pulseKnot(key);
-		if (l.meter >= 100) {
-			l.meter = 0;
-			this._paintMeter(key);
-			this._bigHeart(l.a, l.b);
-			return;
+		this._send("m");
+		this._addMeter(PTS_TAP);
+		if (this.knot) {
+			var r = this.knot.getBoundingClientRect();
+			this._pop(r.left + r.width / 2, r.top + r.height / 2, null, 0, 4);
 		}
-		this._paintMeter(key);
+		this._sound("pop", 0.35);
 	};
 
-	LoveBits.prototype._sparkAt = function (key) {
-		var els = this.stringEls[key];
-		if (!els || !this.layer) return;
-		var r = els.heart.getBoundingClientRect();
-		for (var i = 0; i < 4; i++) {
-			var s = el("span", "love-spark", Math.random() < 0.5 ? "💕" : "💗");
-			s.style.left = (r.left + r.width / 2) + "px";
-			s.style.top = (r.top + r.height / 2) + "px";
-			s.style.setProperty("--dx", Math.round((Math.random() - 0.5) * 70) + "px");
-			s.style.setProperty("--dy", Math.round(-30 - Math.random() * 50) + "px");
-			this.layer.appendChild(s);
-			this._later(s, 900);
+	LoveBits.prototype._addMeter = function (amount) {
+		this.meter += amount;
+		var full = this.meter >= 100;
+		if (full) this.meter -= 100;
+		this._saveMeter();
+		this._paintMeter();
+		if (this.knot) {
+			this.knot.classList.remove("is-pulse");
+			void this.knot.offsetWidth;
+			this.knot.classList.add("is-pulse");
 		}
+		if (full) this._bigHeart();
 	};
 
-	LoveBits.prototype._bigHeart = function (a, b) {
+	LoveBits.prototype._paintMeter = function () {
+		var pct = Math.round(this.meter);
+		if (this.knotFill) {
+			var clip = "inset(" + (100 - pct) + "% 0 0 0)";
+			this.knotFill.style.clipPath = clip;
+			this.knotFill.style.webkitClipPath = clip;
+			this.knotPct.textContent = pct + "%";
+		}
+		if (!this.dialog) return;
+		var box = this.dialog.querySelector(".love-meter");
+		if (!box) return;
+		var fill = box.querySelector(".love-meter-fill");
+		if (fill) fill.style.width = pct + "%";
+		var num = box.querySelector(".love-meter-pct");
+		if (num) num.textContent = pct + "%";
+		var bar = box.querySelector(".love-meter-bar");
+		if (bar) bar.setAttribute("aria-valuenow", String(pct));
+	};
+
+	LoveBits.prototype._bigHeart = function () {
 		var layer = this._ensureLayer();
 		var box = el("div", "love-burst");
 		box.appendChild(el("div", "love-burst-glow"));
-		var big = el("span", "love-burst-heart", "💖");
-		big.setAttribute("aria-hidden", "true");
-		box.appendChild(big);
-		var n = reducedMotion() ? 10 : 34;
-		var bits = ["💖", "💕", "💗", "💘", "❤️", "✨", "💞"];
+		box.appendChild(el("span", "love-burst-heart", "💖"));
+		var n = reducedMotion() ? 10 : 30;
+		var bits = ["💖", "💕", "💗", "💘", "❤️", "💞"];
 		for (var i = 0; i < n; i++) {
 			var ang = (i / n) * Math.PI * 2 + Math.random() * 0.4;
-			var dist = 180 + Math.random() * 360;
+			var dist = 180 + Math.random() * 340;
 			var s = el("span", "love-burst-bit", bits[i % bits.length]);
 			s.style.setProperty("--dx", Math.round(Math.cos(ang) * dist) + "px");
 			s.style.setProperty("--dy", Math.round(Math.sin(ang) * dist) + "px");
-			s.style.setProperty("--sz", (18 + Math.random() * 26).toFixed(0) + "px");
-			s.style.animationDelay = (0.9 + Math.random() * 0.2).toFixed(2) + "s";
+			s.style.setProperty("--sz", (18 + Math.random() * 24).toFixed(0) + "px");
+			s.style.animationDelay = (0.95 + Math.random() * 0.15).toFixed(2) + "s";
 			box.appendChild(s);
 		}
-		var cap = el("div", "love-burst-caption");
-		cap.appendChild(this._nameTag(a));
-		cap.appendChild(document.createTextNode(" & "));
-		cap.appendChild(this._nameTag(b));
-		cap.appendChild(el("span", "love-burst-sub", "filled the love meter! 💖"));
-		box.appendChild(cap);
 		layer.appendChild(box);
 		this._sound("lovekiss");
-		this._later(box, 4200);
+		this._later(box, 3800);
 	};
 
-	// ---- blow a kiss / hug ----------------------------------------------
+	// ---- blow a kiss ----------------------------------------------------
 
 	LoveBits.prototype._canSend = function () {
 		var now = Date.now();
-		if (now - this.lastSentAt < SEND_COOLDOWN_MS) { this._say("One sec… catching your breath 😘"); return false; }
+		if (!this.partner || now - this.lastSentAt < SEND_COOLDOWN_MS) return false;
 		this.lastSentAt = now;
 		return true;
 	};
 
-	LoveBits.prototype.blowKiss = function (target) {
-		var myId = this._myId();
-		if (!target || !myId || target === myId || !this._part(target)) return;
+	LoveBits.prototype.blowKiss = function () {
 		if (!this._canSend()) return;
 		var seed = Math.floor(Math.random() * 2147483647) + 1;
-		var ok = this._send("b|" + target + "|" + seed);
+		this._send("b|" + seed);
 		if (this.closeModal) this.closeModal();
-		this._showKiss(myId, target, seed, !ok);
+		this._showKiss(this._myId(), this.partner, seed);
 	};
 
-	LoveBits.prototype.hug = function (target) {
-		var myId = this._myId();
-		if (!target || !myId || target === myId || !this._part(target)) return;
-		if (!this._canSend()) return;
-		var ok = this._send("h|" + target);
-		if (this.closeModal) this.closeModal();
-		this._showHug(myId, target, !ok);
-	};
-
-	LoveBits.prototype._showKiss = function (from, to, seed, offline) {
+	LoveBits.prototype._showKiss = function (from, to, seed) {
 		var layer = this._ensureLayer();
 		var r = rng(seed);
 		var W = global.innerWidth, H = global.innerHeight;
-		var start = this._pos(from) || { x: r() < 0.5 ? -40 : W + 40, y: H * (0.3 + r() * 0.4) };
+		var s0 = this._pos(from) || { x: W / 2, y: H + 40 };
+		var start = { x: s0.x, y: s0.y };
 		var self = this;
 		var kiss = el("span", "love-flykiss", "😘");
-		kiss.setAttribute("aria-hidden", "true");
 		layer.appendChild(kiss);
-		var arc = (r() < 0.5 ? -1 : 1) * (80 + r() * 120);
-		var dur = reducedMotion() ? 700 : 1500;
+		var arc = (r() < 0.5 ? -1 : 1) * (60 + r() * 100);
+		var dur = reducedMotion() ? 700 : 1300;
 		var t0 = 0, lastTrail = 0;
 		this._sound("mwah");
-		this._caption(from, to, "blew a kiss to", "blew you a kiss", "😘", offline);
 
 		function step(now) {
 			if (!t0) t0 = now;
 			var k = Math.min(1, (now - t0) / dur);
 			var end = self._pos(to) || { x: W / 2, y: H / 2 };
 			var e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-			var mx = (start.x + end.x) / 2, my = (start.y + end.y) / 2 - Math.abs(arc);
-			var x = (1 - e) * (1 - e) * start.x + 2 * (1 - e) * e * (mx + arc * 0.3) + e * e * end.x;
-			var y = (1 - e) * (1 - e) * start.y + 2 * (1 - e) * e * my + e * e * end.y;
-			var sc = 0.7 + Math.sin(k * Math.PI) * 0.9;
-			kiss.style.transform = "translate(" + x.toFixed(1) + "px," + y.toFixed(1) + "px) translate(-50%,-50%) scale(" + sc.toFixed(2) + ") rotate(" + Math.round(Math.sin(k * 9) * 14) + "deg)";
-			if (now - lastTrail > 70 && k < 0.95) {
+			var cx = (start.x + end.x) / 2 + arc * 0.4, cy = (start.y + end.y) / 2 - Math.abs(arc);
+			var x = (1 - e) * (1 - e) * start.x + 2 * (1 - e) * e * cx + e * e * end.x;
+			var y = (1 - e) * (1 - e) * start.y + 2 * (1 - e) * e * cy + e * e * end.y;
+			var sc = 0.6 + Math.sin(k * Math.PI) * 0.8;
+			kiss.style.transform = "translate3d(" + x.toFixed(1) + "px," + y.toFixed(1) + "px,0) translate(-50%,-50%) scale(" + sc.toFixed(2) + ") rotate(" + Math.round(Math.sin(k * 8) * 12) + "deg)";
+			if (now - lastTrail > 90 && k < 0.92) {
 				lastTrail = now;
-				var tr = el("span", "love-trail", r() < 0.6 ? "💕" : "✨");
-				tr.style.left = x + "px";
-				tr.style.top = y + "px";
+				var tr = el("span", "love-trail", r() < 0.7 ? "💕" : "✨");
+				tr.style.transform = "translate3d(" + x.toFixed(0) + "px," + y.toFixed(0) + "px,0) translate(-50%,-50%)";
 				layer.appendChild(tr);
 				self._later(tr, 800);
 			}
 			if (k < 1) { requestAnimationFrame(step); return; }
 			if (kiss.parentNode) kiss.parentNode.removeChild(kiss);
-			self._landKiss(end.x, end.y, to);
-			var key = pairKey(from, to);
-			if (self.links[key]) self._addMeter(key, METER_KISS);
+			self._pop(end.x, end.y, "💋", 50, 10);
+			self._sound("kiss");
+			if (to === self._myId()) {
+				document.body.classList.remove("love-got-kiss");
+				void document.body.offsetWidth;
+				document.body.classList.add("love-got-kiss");
+				setTimeout(function () { document.body.classList.remove("love-got-kiss"); }, 1000);
+			}
+			self._addMeter(PTS_KISS);
 		}
 		requestAnimationFrame(step);
 	};
 
-	LoveBits.prototype._landKiss = function (x, y, to) {
+	// A stamp plus a ring of little hearts.
+	LoveBits.prototype._pop = function (x, y, stamp, size, hearts) {
 		var layer = this._ensureLayer();
-		var stamp = el("span", "love-stamp", "💋");
-		stamp.style.left = x + "px";
-		stamp.style.top = y + "px";
-		layer.appendChild(stamp);
-		this._later(stamp, 1600);
-		for (var i = 0; i < 10; i++) {
-			var ang = (i / 10) * Math.PI * 2;
+		var box = el("div", "love-pop");
+		box.style.transform = "translate3d(" + x.toFixed(0) + "px," + y.toFixed(0) + "px,0)";
+		if (stamp) {
+			var st = el("span", "love-stamp", stamp);
+			st.style.fontSize = size + "px";
+			box.appendChild(st);
+		}
+		for (var i = 0; i < hearts; i++) {
+			var ang = (i / hearts) * Math.PI * 2 + Math.random() * 0.5;
+			var d = 30 + Math.random() * 30;
 			var b = el("span", "love-spark", i % 2 ? "💗" : "💖");
-			b.style.left = x + "px";
-			b.style.top = y + "px";
-			b.style.setProperty("--dx", Math.round(Math.cos(ang) * 60) + "px");
-			b.style.setProperty("--dy", Math.round(Math.sin(ang) * 60) + "px");
-			layer.appendChild(b);
-			this._later(b, 900);
+			b.style.setProperty("--dx", Math.round(Math.cos(ang) * d) + "px");
+			b.style.setProperty("--dy", Math.round(Math.sin(ang) * d - 10) + "px");
+			box.appendChild(b);
 		}
-		this._sound("kiss");
-		if (to === this._myId()) {
-			document.body.classList.add("love-got-kiss");
-			setTimeout(function () { document.body.classList.remove("love-got-kiss"); }, 900);
-		}
+		layer.appendChild(box);
+		this._later(box, stamp ? 1400 : 800);
 	};
 
-	LoveBits.prototype._showHug = function (from, to, offline) {
+	// ---- hug ------------------------------------------------------------
+
+	var HUG_SVG =
+		'<svg class="love-hug-svg" viewBox="0 0 240 170" aria-hidden="true">' +
+		'<defs>' +
+		'<radialGradient id="lhPink" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#ffe3ec"/><stop offset="1" stop-color="#ffa3c0"/></radialGradient>' +
+		'<radialGradient id="lhCream" cx="60%" cy="35%" r="70%"><stop offset="0" stop-color="#fffaf3"/><stop offset="1" stop-color="#f1d6ba"/></radialGradient>' +
+		'</defs>' +
+		'<ellipse class="lh-shadow" cx="120" cy="160" rx="96" ry="8"/>' +
+		'<g class="lh-squeeze">' +
+		'<g class="lh-left">' +
+		'<ellipse cx="54" cy="62" rx="11" ry="17" fill="#ffa3c0" transform="rotate(-20 54 62)"/>' +
+		'<ellipse cx="96" cy="56" rx="11" ry="17" fill="#ffa3c0" transform="rotate(14 96 56)"/>' +
+		'<ellipse cx="84" cy="106" rx="58" ry="52" fill="url(#lhPink)"/>' +
+		'<path d="M84 98 q6 -7 12 0" class="lh-eye"/><path d="M106 98 q6 -7 12 0" class="lh-eye"/>' +
+		'<ellipse cx="84" cy="112" rx="8" ry="5" class="lh-blush"/><ellipse cx="118" cy="112" rx="8" ry="5" class="lh-blush"/>' +
+		'<path d="M97 112 q4 4 8 0" class="lh-mouth"/>' +
+		'</g>' +
+		'<g class="lh-right">' +
+		'<ellipse cx="144" cy="56" rx="11" ry="17" fill="#f1d6ba" transform="rotate(-14 144 56)"/>' +
+		'<ellipse cx="186" cy="62" rx="11" ry="17" fill="#f1d6ba" transform="rotate(20 186 62)"/>' +
+		'<ellipse cx="156" cy="106" rx="58" ry="52" fill="url(#lhCream)"/>' +
+		'<path d="M122 98 q6 -7 12 0" class="lh-eye"/><path d="M144 98 q6 -7 12 0" class="lh-eye"/>' +
+		'<ellipse cx="122" cy="112" rx="8" ry="5" class="lh-blush"/><ellipse cx="156" cy="112" rx="8" ry="5" class="lh-blush"/>' +
+		'<path d="M135 112 q4 4 8 0" class="lh-mouth"/>' +
+		'</g>' +
+		'<g class="lh-arm lh-arm-l"><ellipse cx="150" cy="132" rx="26" ry="11" fill="#ffb6cb" transform="rotate(-12 150 132)"/></g>' +
+		'<g class="lh-arm lh-arm-r"><ellipse cx="90" cy="134" rx="26" ry="11" fill="#f6e0c9" transform="rotate(12 90 134)"/></g>' +
+		'</g>' +
+		'<g class="lh-hearts">' +
+		'<path class="lh-h lh-h1" d="M120 40 c-6 -8 -18 -4 -16 6 c1 6 9 10 16 16 c7 -6 15 -10 16 -16 c2 -10 -10 -14 -16 -6z"/>' +
+		'<path class="lh-h lh-h2" d="M90 30 c-4 -5 -12 -3 -11 4 c1 4 6 7 11 11 c5 -4 10 -7 11 -11 c1 -7 -7 -9 -11 -4z"/>' +
+		'<path class="lh-h lh-h3" d="M152 26 c-4 -5 -12 -3 -11 4 c1 4 6 7 11 11 c5 -4 10 -7 11 -11 c1 -7 -7 -9 -11 -4z"/>' +
+		'</g>' +
+		'</svg>';
+
+	LoveBits.prototype.hug = function () {
+		if (!this._canSend()) return;
+		this._send("h");
+		if (this.closeModal) this.closeModal();
+		this._showHug();
+	};
+
+	LoveBits.prototype._showHug = function () {
 		var layer = this._ensureLayer();
-		var A = this._pos(from), B = this._pos(to);
 		var W = global.innerWidth, H = global.innerHeight;
-		var at = A && B ? { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 } : (B || A || { x: W / 2, y: H / 2 });
-		at.x = Math.max(60, Math.min(W - 60, at.x));
-		at.y = Math.max(60, Math.min(H - 60, at.y));
+		var A = this._pos(this._myId()), B = this.partner ? this._pos(this.partner) : null;
+		var at = A && B ? { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 } : { x: W / 2, y: H / 2 };
+		at.x = Math.max(110, Math.min(W - 110, at.x));
+		at.y = Math.max(100, Math.min(H - 90, at.y));
 		var hug = el("div", "love-hug");
-		hug.style.left = at.x + "px";
-		hug.style.top = at.y + "px";
-		var big = el("span", "love-hug-emoji", "🫂");
-		big.setAttribute("aria-hidden", "true");
-		hug.appendChild(big);
-		for (var i = 0; i < 8; i++) {
-			var h = el("span", "love-hug-heart", i % 2 ? "💕" : "💞");
-			h.style.setProperty("--dx", Math.round((i - 3.5) * 16) + "px");
-			h.style.animationDelay = (0.25 + i * 0.08).toFixed(2) + "s";
-			hug.appendChild(h);
-		}
+		hug.style.transform = "translate3d(" + at.x.toFixed(0) + "px," + at.y.toFixed(0) + "px,0)";
+		hug.innerHTML = HUG_SVG;
 		layer.appendChild(hug);
-		this._later(hug, 2400);
+		this._later(hug, 3000);
 		this._sound("chirp");
-		this._caption(from, to, "hugged", "hugged you", "🤗", offline);
-		var key = pairKey(from, to);
-		if (this.links[key]) this._addMeter(key, METER_HUG);
-	};
-
-	LoveBits.prototype._nameTag = function (_id) {
-		var b = el("b", "love-who", this._name(_id));
-		var c = this._color(_id);
-		if (c) b.style.color = c;
-		return b;
-	};
-
-	LoveBits.prototype._caption = function (from, to, verb, verbYou, emoji, offline) {
-		var layer = this._ensureLayer();
-		var myId = this._myId();
-		var cap = el("div", "love-caption" + (to === myId ? " is-for-me" : ""));
-		cap.appendChild(this._nameTag(from));
-		if (to === myId) {
-			cap.appendChild(document.createTextNode(" " + verbYou + " " + emoji));
-		} else {
-			cap.appendChild(document.createTextNode(" " + verb + " "));
-			cap.appendChild(this._nameTag(to));
-			cap.appendChild(document.createTextNode(" " + emoji));
-		}
-		if (offline) cap.appendChild(el("span", "love-offline", "Room sync is offline — only you saw this one."));
-		var old = layer.querySelector(".love-caption");
-		if (old) old.parentNode.removeChild(old);
-		layer.appendChild(cap);
-		this._later(cap, 3200);
-	};
-
-	// ---- link request toast ---------------------------------------------
-
-	LoveBits.prototype._showRequest = function (from) {
-		this._dismissRequest(from);
-		var layer = this._ensureLayer();
 		var self = this;
-		var toast = el("div", "love-request");
-		toast.setAttribute("role", "alertdialog");
-		toast.appendChild(el("span", "love-request-emoji", "🧵"));
-		var msg = el("p", "love-request-text");
-		msg.appendChild(this._nameTag(from));
-		msg.appendChild(document.createTextNode(" wants to tie a red string between your hearts 💞"));
-		toast.appendChild(msg);
-		var row = el("div", "love-request-row");
-		var yes = el("button", "love-request-yes", "Yes 💖");
-		yes.type = "button";
-		var no = el("button", "love-request-no", "Not now");
-		no.type = "button";
-		row.appendChild(yes);
-		row.appendChild(no);
-		toast.appendChild(row);
-		yes.addEventListener("click", function (e) {
-			e.stopPropagation();
-			self._dismissRequest(from);
-			var myId = self._myId();
-			self._send("la|" + from);
-			self._addLink(from, myId, 0);
-			self._sound("sparkle");
-			self._renderPanel();
-		});
-		no.addEventListener("click", function (e) {
-			e.stopPropagation();
-			self._dismissRequest(from);
-			self._send("ld|" + from);
-		});
-		layer.appendChild(toast);
-		this.requestToasts[from] = toast;
-		toast._timer = setTimeout(function () { self._dismissRequest(from); }, REQUEST_LIFE_MS);
-		this._sound("chirp");
-	};
-
-	LoveBits.prototype._dismissRequest = function (from) {
-		var t = this.requestToasts[from];
-		if (!t) return;
-		clearTimeout(t._timer);
-		if (t.parentNode) t.parentNode.removeChild(t);
-		delete this.requestToasts[from];
-	};
-
-	LoveBits.prototype._toast = function (text) {
-		var layer = this._ensureLayer();
-		var n = el("div", "love-caption is-for-me", text);
-		var old = layer.querySelector(".love-caption");
-		if (old) old.parentNode.removeChild(old);
-		layer.appendChild(n);
-		this._later(n, 3200);
+		setTimeout(function () { self._sound("lovekiss", 0.5); }, 650);
+		this._addMeter(PTS_HUG);
 	};
 
 	// ---- receiving ------------------------------------------------------
@@ -1029,70 +982,36 @@
 	LoveBits.prototype.tryHandleChat = function (msg) {
 		var text = msg.a != null ? msg.a : (msg.message != null ? msg.message : "");
 		if (!LoveBits.isSyncText(text)) return false;
-		var body = text.slice(SYNC_PREFIX.length);
-		var parts = body.split("|");
-		var from = String((msg.p && msg.p._id) || "");
+		var parts = text.slice(SYNC_PREFIX.length).split("|");
+		var from = parts[0];
+		var cmd = parts[1];
 		var myId = this._myId();
-		var cmd = parts[0];
-		if (!from) return true;
+		if (!from || from === myId) return true;
+		var fromPartner = !!this.partner && from === this.partner;
 
 		if (cmd === "w") {
-			var ts = parseInt(parts[3], 10) || Date.now();
-			this._setWeather(parts[1], parseInt(parts[2], 10) || 1, ts);
+			this._setWeather(parts[2], parseInt(parts[3], 10) || 1, parseInt(parts[4], 10) || Date.now());
 			this._renderPanel();
 		} else if (cmd === "q") {
 			this._replyState();
 		} else if (cmd === "s") {
-			this._mergeState(body.slice(2));
-		} else if (cmd === "lr") {
-			if (parts[1] === myId && from !== myId) {
-				if (this._partnerOf(myId)) this._send("ld|" + from);
-				else this._showRequest(from);
-			}
-		} else if (cmd === "la") {
-			this._addLink(from, parts[1], 0);
-			if (parts[1] === myId) {
-				this.pendingOut = null;
-				this._toast("💞 " + this._name(from) + " said yes! Your hearts are tied.");
-				this._sound("sparkle");
-			}
-			this._renderPanel();
-		} else if (cmd === "ld") {
-			if (parts[1] === myId) {
-				this.pendingOut = null;
-				this._toast(this._name(from) + " said not right now 🥺");
-				this._renderPanel();
-			}
-		} else if (cmd === "lu") {
-			var k = pairKey(from, parts[1]);
-			if (this.links[k]) {
-				this._removeLink(k);
-				if (parts[1] === myId) this._toast(this._name(from) + " untied the heart string 💔");
-				this._renderPanel();
-			}
-		} else if (cmd === "b") {
-			if (this._part(parts[1])) this._showKiss(from, parts[1], parseInt(parts[2], 10) || 1, false);
-		} else if (cmd === "h") {
-			if (this._part(parts[1])) this._showHug(from, parts[1], false);
-		} else if (cmd === "m") {
-			var key = parts[1];
-			var l = this.links[key];
-			var amt = Math.max(0, Math.min(METER_TAP, parseInt(parts[2], 10) || 0));
-			if (l && (l.a === from || l.b === from) && amt) this._addMeter(key, amt);
+			this._mergeState(parts.slice(2).join("|"));
+		} else if (cmd === "b" && fromPartner) {
+			this._showKiss(from, myId, parseInt(parts[2], 10) || 1);
+		} else if (cmd === "h" && fromPartner) {
+			this._showHug();
+		} else if (cmd === "t" && fromPartner) {
+			this._touchKiss();
+		} else if (cmd === "m" && fromPartner) {
+			this._addMeter(PTS_TAP);
 		}
 		return true;
 	};
 
 	LoveBits.prototype._replyState = function () {
-		var links = [];
-		for (var k in this.links) {
-			if (this.links.hasOwnProperty(k)) links.push([this.links[k].a, this.links[k].b, Math.round(this.links[k].meter)]);
-		}
-		if (this.weather === "none" && !links.length) return;
-		var state = { w: this.weather, ws: this.weatherSeed, wt: this.weatherTs, links: links };
+		var state = { w: this.weather, ws: this.weatherSeed, wt: this.weatherTs, m: Math.round(this.meter) };
 		var self = this;
-		// Spread replies out so a full room doesn't answer all at once.
-		setTimeout(function () { self._send("s|" + JSON.stringify(state)); }, 150 + Math.random() * 900);
+		setTimeout(function () { self._send("s|" + JSON.stringify(state)); }, 150 + Math.random() * 500);
 	};
 
 	LoveBits.prototype._mergeState = function (json) {
@@ -1102,26 +1021,19 @@
 		if (typeof st.w === "string" && (Number(st.wt) || 0) > this.weatherTs) {
 			this._setWeather(st.w, Number(st.ws) || 1, Number(st.wt) || 0);
 		}
-		if (Array.isArray(st.links)) {
-			for (var i = 0; i < st.links.length && i < 50; i++) {
-				var l = st.links[i];
-				if (!Array.isArray(l)) continue;
-				var a = String(l[0] || ""), b = String(l[1] || "");
-				var m = Math.max(0, Math.min(99, Number(l[2]) || 0));
-				if (this._partnerOf(a) && this._partnerOf(a) !== b) continue;
-				if (this._partnerOf(b) && this._partnerOf(b) !== a) continue;
-				this._addLink(a, b, m);
-				var key = pairKey(a, b);
-				if (this.links[key]) this._paintMeter(key);
-			}
+		var m = Math.max(0, Math.min(99, Number(st.m) || 0));
+		if (m > this.meter) {
+			this.meter = m;
+			this._saveMeter();
+			this._paintMeter();
 		}
 		this._renderPanel();
 	};
 
 	// ---- helpers --------------------------------------------------------
 
-	LoveBits.prototype._sound = function (name) {
-		if (this.soundOn && typeof global.funSound === "function") global.funSound(name);
+	LoveBits.prototype._sound = function (name, gain) {
+		if (this.soundOn && typeof global.funSound === "function") global.funSound(name, gain ? { gain: gain } : undefined);
 	};
 
 	LoveBits.prototype._later = function (node, ms) {
