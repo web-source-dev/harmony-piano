@@ -3936,6 +3936,10 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gKissBlast !== "undefined" && gKissBlast) gKissBlast.tryHandleChat(msg);
 			return true;
 		}
+		if(typeof LoveBits !== "undefined" && LoveBits.isSyncText(chatLine)) {
+			if(typeof gLoveBits !== "undefined" && gLoveBits) gLoveBits.tryHandleChat(msg);
+			return true;
+		}
 		return false;
 	}
 
@@ -4107,6 +4111,7 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof ShareImage !== "undefined" && ShareImage.isSyncText(chatLine)) return;
 				if(typeof LeaveMsg !== "undefined" && LeaveMsg.isSyncText(chatLine)) return;
 				if(typeof KissBlast !== "undefined" && KissBlast.isSyncText(chatLine)) return;
+				if(typeof LoveBits !== "undefined" && LoveBits.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
 
@@ -5014,6 +5019,7 @@ Rect.prototype.contains = function(x, y) {
 	var gSoundBoard;
 	var gShareImage;
 	var gKissBlast;
+	var gLoveBits;
 	var gLeaveMsg;
 	var gPartyGame;
 	var gBalloonPop;
@@ -5153,6 +5159,14 @@ Rect.prototype.contains = function(x, y) {
 			closeModal: closeModal
 		});
 		window.gKissBlast = gKissBlast;
+	}
+	if(typeof LoveBits !== "undefined") {
+		gLoveBits = new LoveBits({
+			client: gClient,
+			openModal: openModal,
+			closeModal: closeModal
+		});
+		window.gLoveBits = gLoveBits;
 	}
 	if(typeof ShareImage !== "undefined") {
 		gShareImage = new ShareImage({

@@ -55,6 +55,7 @@ var SHELL = [
 	"./shareImage.js",
 	"./leaveMsg.js",
 	"./kissBlast.js",
+	"./loveBits.js",
 	"./script.js",
 	"./workerTimer.js",
 	"./arrow.png",
