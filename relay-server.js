@@ -30,6 +30,7 @@ var http = require("http");
 var fs = require("fs");
 var path = require("path");
 var url = require("url");
+var crypto = require("crypto");
 var ws = require("ws");
 var WebSocketServer = ws.WebSocketServer || ws.Server;
 
@@ -68,6 +69,102 @@ function setCors(res) {
 	res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
 	res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Filename");
 }
+
+// ---- Piano password gate ----
+// The browser shows a password screen before any of the app loads. The password
+// is checked HERE (never shipped to the browser) and never stored anywhere: a
+// correct guess gets a signed *session* cookie (no Max-Age/Expires), so a page
+// refresh stays unlocked but closing the browser drops it and asks again.
+// Change it with the HARMONY_PASSWORD environment variable.
+var PIANO_PASSWORD = String(process.env.HARMONY_PASSWORD || "9r2ZEPbWCHdYkm");
+var AUTH_COOKIE = "harmony_piano_auth";
+// Derived from the password, so changing the password signs everyone out.
+var AUTH_SECRET = crypto.createHash("sha256").update("harmony-piano-session|" + PIANO_PASSWORD).digest();
+var AUTH_MAX_FAILS = 5;         // wrong guesses allowed before a cool-down
+var AUTH_LOCK_MS = 30 * 1000;   // cool-down length (doubles on each further lock)
+var gAuthFails = Object.create(null);   // ip -> { n, locks, until }
+
+function authSign(nonce) {
+	return crypto.createHmac("sha256", AUTH_SECRET).update(nonce).digest("hex");
+}
+function makeAuthToken() {
+	var nonce = crypto.randomBytes(16).toString("hex");
+	return nonce + "." + authSign(nonce);
+}
+function safeEqual(a, b) {
+	var ha = crypto.createHash("sha256").update(String(a)).digest();
+	var hb = crypto.createHash("sha256").update(String(b)).digest();
+	return crypto.timingSafeEqual(ha, hb);
+}
+function readCookie(req, name) {
+	var raw = req.headers && req.headers.cookie;
+	if (!raw) return "";
+	var parts = raw.split(";");
+	for (var i = 0; i < parts.length; i++) {
+		var eq = parts[i].indexOf("=");
+		if (eq < 0) continue;
+		if (parts[i].slice(0, eq).trim() === name) return parts[i].slice(eq + 1).trim();
+	}
+	return "";
+}
+function isAuthed(req) {
+	var token = readCookie(req, AUTH_COOKIE);
+	var dot = token.indexOf(".");
+	if (dot < 1) return false;
+	return safeEqual(token.slice(dot + 1), authSign(token.slice(0, dot)));
+}
+function clientIp(req) {
+	return String(req.headers["x-real-ip"] || (req.socket && req.socket.remoteAddress) || "?");
+}
+function authCookieHeader(req, value) {
+	var secure = req.headers["x-forwarded-proto"] === "https" || !!(req.socket && req.socket.encrypted);
+	// No Max-Age / Expires = session cookie: survives refresh, gone when the browser closes.
+	return AUTH_COOKIE + "=" + value + "; Path=/; HttpOnly; SameSite=Strict" + (secure ? "; Secure" : "");
+}
+function sendJson(res, status, obj) {
+	res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+	res.end(JSON.stringify(obj));
+}
+function handleAuthPost(req, res) {
+	var ip = clientIp(req);
+	var rec = gAuthFails[ip];
+	var now = Date.now();
+	if (rec && rec.until > now) {
+		sendJson(res, 429, { ok: false, error: "Too many tries. Wait a moment.", retryAfter: Math.ceil((rec.until - now) / 1000) });
+		return;
+	}
+	var body = "";
+	req.on("data", function (c) { body += c; if (body.length > 4096) req.destroy(); });
+	req.on("end", function () {
+		var data;
+		try { data = JSON.parse(body || "{}"); } catch (e) { data = {}; }
+		var guess = typeof data.password === "string" ? data.password : "";
+		if (guess && safeEqual(guess, PIANO_PASSWORD)) {
+			delete gAuthFails[ip];
+			res.setHeader("Set-Cookie", authCookieHeader(req, makeAuthToken()));
+			sendJson(res, 200, { ok: true });
+			return;
+		}
+		rec = gAuthFails[ip] || (gAuthFails[ip] = { n: 0, locks: 0, until: 0 });
+		rec.n++;
+		var retryAfter = 0;
+		if (rec.n >= AUTH_MAX_FAILS) {
+			var lockMs = AUTH_LOCK_MS * Math.pow(2, Math.min(rec.locks, 5));
+			rec.locks++;
+			rec.n = 0;
+			rec.until = Date.now() + lockMs;
+			retryAfter = Math.ceil(lockMs / 1000);
+		}
+		sendJson(res, 401, { ok: false, error: "Wrong password", retryAfter: retryAfter });
+	});
+}
+// Forget stale failure records so the map can't grow forever.
+setInterval(function () {
+	var cutoff = Date.now() - 6 * 60 * 60 * 1000;
+	for (var ip in gAuthFails) {
+		if (gAuthFails[ip].until < cutoff) delete gAuthFails[ip];
+	}
+}, 60 * 60 * 1000).unref();
 
 function leaveMsgFile(room) {
 	return path.join(LEAVE_MSG_DIR, sanitizeRoom(room) + ".json");
@@ -204,6 +301,17 @@ var server = http.createServer(function (req, res) {
 	if (req.method === "GET" && (route === "/health" || route === "/relay/health" || route === "/api/media/health")) {
 		res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
 		res.end(JSON.stringify({ ok: true, service: "harmony-app", port: PORT, clients: countClients() }));
+		return;
+	}
+
+	if (route === "/api/auth") {
+		if (req.method === "GET") { sendJson(res, 200, { ok: true, authed: isAuthed(req) }); return; }
+		if (req.method === "POST") { handleAuthPost(req, res); return; }
+	}
+
+	// Everything room-related needs the password cookie.
+	if (route.indexOf("/api/") === 0 && !isAuthed(req)) {
+		sendJson(res, 401, { ok: false, error: "Password required" });
 		return;
 	}
 
@@ -811,6 +919,11 @@ function startMppLobbyNoobBot() {
 // relay, /mpp -> backup Multiplayer Piano server. Anything else is rejected.
 server.on("upgrade", function (req, socket, head) {
 	var pathname = (req.url || "").split("?")[0].replace(/\/+$/, "") || "/";
+	if ((pathname === "/relay" || pathname === "/mpp") && !isAuthed(req)) {
+		try { socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n"); } catch (e) {}
+		socket.destroy();
+		return;
+	}
 	if (pathname === "/relay") {
 		wss.handleUpgrade(req, socket, head, function (ws) { wss.emit("connection", ws, req); });
 	} else if (pathname === "/mpp") {
@@ -828,6 +941,7 @@ server.listen(PORT, function () {
 	console.log("  backup MPP server (failover): ws://localhost:" + PORT + "/mpp");
 	console.log("  chat logs -> " + LOG_DIR);
 	console.log("  leave-a-msg -> " + LEAVE_MSG_DIR);
+	console.log("  piano password: " + (process.env.HARMONY_PASSWORD ? "from HARMONY_PASSWORD" : "DEFAULT (set HARMONY_PASSWORD to change it)"));
 	console.log("  Open http://localhost:" + PORT + "/  (media uploads still need media-server.py on :8551)");
 	startMppLobbyNoobBot();
 });

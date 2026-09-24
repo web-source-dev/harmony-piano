@@ -1,12 +1,15 @@
 /**
  * CursorLooks — shared cursor + mouse-follower styles for everyone in the room.
  *
- * Cursors: Mochi / Goma cat images (resizable).
+ * Cursors: Mochi / Goma cat images (resizable), or your own uploaded image
+ * ("custom" — shrunk to a small PNG in the browser and sent to the room).
  * Followers: love emoji trails only (hearts, kisses, couple).
  * Synced over Harmony's room relay (same transport as NameColor).
  *
  * Protocol (chat/relay text, "CL|" prefixed):
- *   CL|s|cursorId|followerId|size  -> announce / update look
+ *   CL|s|cursorId|followerId|size[|imageDataUrl|hotspot]
+ *                                  -> announce / update look (image + hotspot
+ *                                     only when cursorId is "custom")
  *   CL|?                           -> newcomer asks everyone to re-announce
  */
 (function (global) {
@@ -17,6 +20,19 @@
 	var MIN_SIZE = 14;
 	var MAX_SIZE = 36;
 	var DEFAULT_SIZE = 18;
+
+	// Uploaded cursor images are resized to a small square PNG so they travel
+	// over the room relay (64 KB frame limit) and stay sharp at every size.
+	var CUSTOM_ID = "custom";
+	var CUSTOM_MAX_CHARS = 40000;
+	var CUSTOM_PIXELS = [64, 48, 40, 32];
+	var CUSTOM_FILE_MAX_BYTES = 15 * 1024 * 1024;
+	var CUSTOM_DATA_RE = /^data:image\/(png|webp);base64,[A-Za-z0-9+\/]+=*$/;
+	// Where the "click point" of an uploaded image sits.
+	var HOTSPOTS = {
+		tl: { label: "Top-left tip", ratio: [0.08, 0.08] },
+		c: { label: "Center", ratio: [0.5, 0.5] }
+	};
 
 	var CURSORS = [
 		{
@@ -56,8 +72,79 @@
 	for (var j = 0; j < FOLLOWERS.length; j++) FOLLOWER_BY_ID[FOLLOWERS[j].id] = FOLLOWERS[j];
 
 	var _sizedCache = {};
+	var _customDefCache = {};
 
-	function isCursorId(id) { return !!(id && CURSOR_BY_ID[id]); }
+	function isCursorId(id) { return !!(id && (id === CUSTOM_ID || CURSOR_BY_ID[id])); }
+	function isCustomImage(url) {
+		return typeof url === "string" && url.length <= CUSTOM_MAX_CHARS && CUSTOM_DATA_RE.test(url);
+	}
+	function cleanHotspot(h) { return HOTSPOTS[h] ? h : "tl"; }
+
+	// Short, stable fingerprint of an image so the sized-cursor cache can tell uploads apart.
+	function hashStr(str) {
+		var h = 5381;
+		for (var i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+		return (h >>> 0).toString(36) + "-" + str.length.toString(36);
+	}
+
+	function customDef(url, hotspot) {
+		if (!isCustomImage(url)) return null;
+		hotspot = cleanHotspot(hotspot);
+		var key = hashStr(url) + hotspot;
+		if (!_customDefCache[key]) {
+			_customDefCache[key] = {
+				id: CUSTOM_ID,
+				label: "My image",
+				image: url,
+				hotspotRatio: HOTSPOTS[hotspot].ratio,
+				cacheKey: key
+			};
+		}
+		return _customDefCache[key];
+	}
+
+	// Read a user-picked image file and shrink it to a transparent square PNG
+	// (keeps the aspect ratio). cb(err, dataUrl).
+	function prepareCustomImage(file, cb) {
+		if (!file) { cb(new Error("No file picked.")); return; }
+		if (file.type && file.type.indexOf("image/") !== 0) { cb(new Error("That file isn't an image. Try a PNG, JPG, GIF or WebP.")); return; }
+		if (file.size > CUSTOM_FILE_MAX_BYTES) { cb(new Error("That image is too big (max 15 MB).")); return; }
+		var objectUrl = null;
+		try { objectUrl = URL.createObjectURL(file); } catch (e) {}
+		if (!objectUrl) { cb(new Error("Couldn't read that image.")); return; }
+		var img = new Image();
+		img.onload = function () {
+			try { URL.revokeObjectURL(objectUrl); } catch (e) {}
+			var w = img.naturalWidth || img.width;
+			var h = img.naturalHeight || img.height;
+			if (!w || !h) { cb(new Error("Couldn't read that image.")); return; }
+			var canvas = document.createElement("canvas");
+			var ctx = canvas.getContext("2d");
+			for (var i = 0; i < CUSTOM_PIXELS.length; i++) {
+				var px = CUSTOM_PIXELS[i];
+				var scale = Math.min(px / w, px / h);
+				var dw = Math.max(1, Math.round(w * scale));
+				var dh = Math.max(1, Math.round(h * scale));
+				canvas.width = px;
+				canvas.height = px;
+				ctx.clearRect(0, 0, px, px);
+				ctx.imageSmoothingEnabled = true;
+				if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high";
+				ctx.drawImage(img, Math.floor((px - dw) / 2), Math.floor((px - dh) / 2), dw, dh);
+				var url;
+				try { url = canvas.toDataURL("image/png"); } catch (e) { cb(new Error("Couldn't read that image.")); return; }
+				if (isCustomImage(url)) { cb(null, url); return; }
+				try { url = canvas.toDataURL("image/webp", 0.9); } catch (e) { url = ""; }
+				if (isCustomImage(url)) { cb(null, url); return; }
+			}
+			cb(new Error("That image is too detailed to use as a cursor. Try a simpler one."));
+		};
+		img.onerror = function () {
+			try { URL.revokeObjectURL(objectUrl); } catch (e) {}
+			cb(new Error("Couldn't open that image. Try a PNG, JPG, GIF or WebP."));
+		};
+		img.src = objectUrl;
+	}
 	function isFollowerId(id) { return !!(id && FOLLOWER_BY_ID[id]); }
 
 	function clampSize(n) {
@@ -95,7 +182,7 @@
 			return;
 		}
 		size = clampSize(size);
-		var key = def.id + "@" + size;
+		var key = (def.cacheKey || def.id) + "@" + size;
 		if (_sizedCache[key]) {
 			cb(_sizedCache[key]);
 			return;
@@ -134,6 +221,8 @@
 		this.myCursor = "goma-arrow";
 		this.myFollower = "default";
 		this.mySize = DEFAULT_SIZE;
+		this.myCustomImg = "";
+		this.myCustomHotspot = "tl";
 		this.ignoreSelfUntil = 0;
 		this._trailIdx = {};
 		this._load();
@@ -148,6 +237,10 @@
 	CursorLooks.isCursorId = isCursorId;
 	CursorLooks.isFollowerId = isFollowerId;
 	CursorLooks.clampSize = clampSize;
+	CursorLooks.CUSTOM_ID = CUSTOM_ID;
+	CursorLooks.HOTSPOTS = HOTSPOTS;
+	CursorLooks.isCustomImage = isCustomImage;
+	CursorLooks.prepareCustomImage = prepareCustomImage;
 	CursorLooks.buildCursorIcon = buildCursorIcon;
 	CursorLooks.makeSizedCssCursor = makeSizedCssCursor;
 
@@ -160,7 +253,10 @@
 			var raw = global.localStorage && localStorage.getItem(STORE_KEY);
 			if (!raw) return;
 			var data = JSON.parse(raw);
-			if (data && isCursorId(data.cursor)) this.myCursor = data.cursor;
+			if (data && isCustomImage(data.customImg)) this.myCustomImg = data.customImg;
+			if (data) this.myCustomHotspot = cleanHotspot(data.customHotspot);
+			if (data && data.cursor === CUSTOM_ID && !this.myCustomImg) this.myCursor = "goma-arrow";
+			else if (data && isCursorId(data.cursor)) this.myCursor = data.cursor;
 			else this.myCursor = "goma-arrow";
 			if (data && isFollowerId(data.follower)) this.myFollower = data.follower;
 			else if (data && data.follower) this.myFollower = "default";
@@ -174,7 +270,9 @@
 				localStorage.setItem(STORE_KEY, JSON.stringify({
 					cursor: this.myCursor,
 					follower: this.myFollower,
-					size: this.mySize
+					size: this.mySize,
+					customImg: this.myCustomImg,
+					customHotspot: this.myCustomHotspot
 				}));
 			}
 		} catch (e) {}
@@ -186,8 +284,24 @@
 		return !!(me && me._id && me._id === part._id);
 	};
 
+	CursorLooks.prototype._myLookRecord = function () {
+		return {
+			cursor: this.myCursor,
+			follower: this.myFollower,
+			size: this.mySize,
+			customImg: this.myCursor === CUSTOM_ID ? this.myCustomImg : "",
+			hotspot: this.myCustomHotspot
+		};
+	};
+
 	CursorLooks.prototype.getMyLook = function () {
-		return { cursor: this.myCursor, follower: this.myFollower, size: this.mySize };
+		return {
+			cursor: this.myCursor,
+			follower: this.myFollower,
+			size: this.mySize,
+			customImg: this.myCustomImg,
+			hotspot: this.myCustomHotspot
+		};
 	};
 
 	CursorLooks.prototype.lookFor = function (part) {
@@ -198,15 +312,16 @@
 			var follower = look.follower || "default";
 			if (cursor && !isCursorId(cursor)) cursor = "goma-arrow";
 			if (!isFollowerId(follower)) follower = "default";
+			if (cursor === CUSTOM_ID && !isCustomImage(look.customImg)) cursor = "goma-arrow";
 			return {
 				cursor: cursor,
 				follower: follower,
-				size: clampSize(look.size != null ? look.size : DEFAULT_SIZE)
+				size: clampSize(look.size != null ? look.size : DEFAULT_SIZE),
+				customImg: cursor === CUSTOM_ID ? look.customImg : "",
+				hotspot: cleanHotspot(look.hotspot)
 			};
 		}
-		if (this._isMe(part)) {
-			return { cursor: this.myCursor, follower: this.myFollower, size: this.mySize };
-		}
+		if (this._isMe(part)) return this._myLookRecord();
 		return { cursor: null, follower: "default", size: DEFAULT_SIZE };
 	};
 
@@ -215,8 +330,10 @@
 	};
 
 	CursorLooks.prototype.cursorDefFor = function (part) {
-		var id = this.cursorFor(part);
-		return id ? (CURSOR_BY_ID[id] || null) : null;
+		var look = this.lookFor(part);
+		if (!look.cursor) return null;
+		if (look.cursor === CUSTOM_ID) return customDef(look.customImg, look.hotspot) || CURSOR_BY_ID["goma-arrow"];
+		return CURSOR_BY_ID[look.cursor] || null;
 	};
 
 	CursorLooks.prototype.sizeFor = function (part) {
@@ -253,6 +370,7 @@
 
 	CursorLooks.prototype.setMyLook = function (cursorId, followerId, size) {
 		var changed = false;
+		if (cursorId === CUSTOM_ID && !this.myCustomImg) cursorId = null;
 		if (isCursorId(cursorId) && cursorId !== this.myCursor) {
 			this.myCursor = cursorId;
 			changed = true;
@@ -271,9 +389,40 @@
 		if (!changed && !(isCursorId(cursorId) || isFollowerId(followerId) || size != null)) return false;
 		this._save();
 		var me = this.client && this.client.getOwnParticipant();
-		if (me && me._id) {
-			this.looks[me._id] = { cursor: this.myCursor, follower: this.myFollower, size: this.mySize };
-		}
+		if (me && me._id) this.looks[me._id] = this._myLookRecord();
+		this.broadcast();
+		this.onChange();
+		return true;
+	};
+
+	// Use an uploaded (already prepared) image as my cursor.
+	CursorLooks.prototype.setMyCustomImage = function (dataUrl, hotspot) {
+		if (!isCustomImage(dataUrl)) return false;
+		this.myCustomImg = dataUrl;
+		if (hotspot != null) this.myCustomHotspot = cleanHotspot(hotspot);
+		this.myCursor = CUSTOM_ID;
+		return this._commitMyLook();
+	};
+
+	CursorLooks.prototype.setMyCustomHotspot = function (hotspot) {
+		hotspot = cleanHotspot(hotspot);
+		if (hotspot === this.myCustomHotspot) return false;
+		this.myCustomHotspot = hotspot;
+		return this._commitMyLook();
+	};
+
+	// Forget the uploaded image (falls back to the Goma cat if it was in use).
+	CursorLooks.prototype.clearMyCustomImage = function () {
+		if (!this.myCustomImg) return false;
+		this.myCustomImg = "";
+		if (this.myCursor === CUSTOM_ID) this.myCursor = "goma-arrow";
+		return this._commitMyLook();
+	};
+
+	CursorLooks.prototype._commitMyLook = function () {
+		this._save();
+		var me = this.client && this.client.getOwnParticipant();
+		if (me && me._id) this.looks[me._id] = this._myLookRecord();
 		this.broadcast();
 		this.onChange();
 		return true;
@@ -295,11 +444,11 @@
 		if (!this.client) return;
 		var me = this.client.getOwnParticipant();
 		if (!me || !me._id) return;
-		this.looks[me._id] = { cursor: this.myCursor, follower: this.myFollower, size: this.mySize };
+		this.looks[me._id] = this._myLookRecord();
 		this.ignoreSelfUntil = Date.now() + 400;
-		this.client.broadcastRoom(
-			SYNC_PREFIX + "s|" + this.myCursor + "|" + this.myFollower + "|" + this.mySize
-		);
+		var text = SYNC_PREFIX + "s|" + this.myCursor + "|" + this.myFollower + "|" + this.mySize;
+		if (this.myCursor === CUSTOM_ID && this.myCustomImg) text += "|" + this.myCustomImg + "|" + this.myCustomHotspot;
+		this.client.broadcastRoom(text);
 	};
 
 	CursorLooks.prototype.requestAll = function () {
@@ -322,12 +471,19 @@
 			var cursor = parts[1];
 			var follower = parts[2];
 			var size = clampSize(parts[3] != null ? parts[3] : DEFAULT_SIZE);
+			var customImg = "";
+			var hotspot = cleanHotspot(parts[5]);
 			if (!fromId) return true;
+			if (cursor === CUSTOM_ID) {
+				customImg = isCustomImage(parts[4]) ? parts[4] : "";
+				if (!customImg) cursor = "goma-arrow";
+			}
 			if (!isCursorId(cursor)) cursor = "goma-arrow";
 			if (!isFollowerId(follower)) follower = "default";
 			var prev = this.looks[fromId];
-			if (!prev || prev.cursor !== cursor || prev.follower !== follower || prev.size !== size) {
-				this.looks[fromId] = { cursor: cursor, follower: follower, size: size };
+			if (!prev || prev.cursor !== cursor || prev.follower !== follower || prev.size !== size ||
+				prev.customImg !== customImg || prev.hotspot !== hotspot) {
+				this.looks[fromId] = { cursor: cursor, follower: follower, size: size, customImg: customImg, hotspot: hotspot };
 				this.onChange();
 			}
 		} else if (parts[0] === "?") {

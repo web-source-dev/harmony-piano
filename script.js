@@ -3932,6 +3932,10 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gLeaveMsg !== "undefined" && gLeaveMsg) gLeaveMsg.tryHandleChat(msg);
 			return true;
 		}
+		if(typeof KissBlast !== "undefined" && KissBlast.isSyncText(chatLine)) {
+			if(typeof gKissBlast !== "undefined" && gKissBlast) gKissBlast.tryHandleChat(msg);
+			return true;
+		}
 		return false;
 	}
 
@@ -4102,6 +4106,7 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof ScreenShare !== "undefined" && ScreenShare.isSyncText(chatLine)) return;
 				if(typeof ShareImage !== "undefined" && ShareImage.isSyncText(chatLine)) return;
 				if(typeof LeaveMsg !== "undefined" && LeaveMsg.isSyncText(chatLine)) return;
+				if(typeof KissBlast !== "undefined" && KissBlast.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
 
@@ -5008,6 +5013,7 @@ Rect.prototype.contains = function(x, y) {
 	var gEmojiParty;
 	var gSoundBoard;
 	var gShareImage;
+	var gKissBlast;
 	var gLeaveMsg;
 	var gPartyGame;
 	var gBalloonPop;
@@ -5139,6 +5145,14 @@ Rect.prototype.contains = function(x, y) {
 	}
 	if(typeof SoundBoard !== "undefined") {
 		gSoundBoard = new SoundBoard({ client: gClient });
+	}
+	if(typeof KissBlast !== "undefined") {
+		gKissBlast = new KissBlast({
+			client: gClient,
+			openModal: openModal,
+			closeModal: closeModal
+		});
+		window.gKissBlast = gKissBlast;
 	}
 	if(typeof ShareImage !== "undefined") {
 		gShareImage = new ShareImage({
@@ -8938,12 +8952,26 @@ Rect.prototype.contains = function(x, y) {
 			$dlg.find(".mp3-look-chip[data-follower]").each(function() {
 				this.classList.toggle("active", this.getAttribute("data-follower") === look.follower);
 			});
+			var hasCustom = !!look.customImg;
+			var customChip = $dlg.find(".cursor-custom-chip")[0];
+			if(customChip) {
+				customChip.hidden = !hasCustom;
+				var prev = customChip.querySelector(".cursor-custom-preview");
+				if(prev && hasCustom && prev.getAttribute("src") !== look.customImg) prev.setAttribute("src", look.customImg);
+			}
+			$dlg.find(".cursor-upload-text").text(hasCustom ? "Change image" : "Upload image");
+			$dlg.find(".cursor-upload-opts").prop("hidden", !hasCustom);
+			$dlg.find(".cursor-hotspot").each(function() {
+				this.classList.toggle("active", this.getAttribute("data-hotspot") === look.hotspot);
+			});
 			var sizeEl = $dlg.find("input[name=cursor-size]")[0];
 			if(sizeEl) sizeEl.value = look.size;
 			$dlg.find(".cursor-size-label").text(look.size + "px");
 			var info = $dlg.find(".file-info");
 			if(info.length) {
-				var cDef = CursorLooks.CURSORS.filter(function(c) { return c.id === look.cursor; })[0];
+				var cDef = look.cursor === CursorLooks.CUSTOM_ID
+					? { label: "My image" }
+					: CursorLooks.CURSORS.filter(function(c) { return c.id === look.cursor; })[0];
 				var fDef = CursorLooks.FOLLOWERS.filter(function(f) { return f.id === look.follower; })[0];
 				info.text(
 					"Now: " + (cDef ? cDef.label : look.cursor) +
@@ -8976,6 +9004,74 @@ Rect.prototype.contains = function(x, y) {
 			if(cursorId) gCursorLooks.setMyCursor(cursorId);
 			if(followerId) gCursorLooks.setMyFollower(followerId);
 			applyLookNow();
+		});
+
+		// ---- Upload your own cursor image ----
+		var uploadStatusTimer = null;
+		function setUploadStatus(text, isError) {
+			var el = $dlg.find(".cursor-upload-status")[0];
+			if(!el) return;
+			clearTimeout(uploadStatusTimer);
+			el.textContent = text || "";
+			el.classList.toggle("is-error", !!isError);
+			if(text && !isError) uploadStatusTimer = setTimeout(function() { el.textContent = ""; }, 3500);
+		}
+		function useCustomFile(file) {
+			if(typeof gCursorLooks === "undefined" || !gCursorLooks) return;
+			if(!file) return;
+			setUploadStatus("Preparing your cursor…");
+			$dlg.find(".cursor-upload-drop").addClass("is-busy");
+			CursorLooks.prepareCustomImage(file, function(err, dataUrl) {
+				$dlg.find(".cursor-upload-drop").removeClass("is-busy");
+				if(err) { setUploadStatus(err.message, true); return; }
+				gCursorLooks.setMyCustomImage(dataUrl);
+				applyLookNow();
+				setUploadStatus("Your image is now your cursor — everyone in the room sees it. 🎉");
+			});
+		}
+		var $uploadInput = $dlg.find(".cursor-upload-input");
+		$dlg.on("click", ".cursor-upload-drop", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			$uploadInput.val("");
+			$uploadInput.trigger("click");
+		});
+		$uploadInput.on("change", function() {
+			var file = this.files && this.files[0];
+			if(file) useCustomFile(file);
+			this.value = "";
+		});
+		$dlg.on("dragenter dragover", ".cursor-upload-drop", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			this.classList.add("is-drag");
+		});
+		$dlg.on("dragleave dragend", ".cursor-upload-drop", function() {
+			this.classList.remove("is-drag");
+		});
+		$dlg.on("drop", ".cursor-upload-drop", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			this.classList.remove("is-drag");
+			var dt = e.originalEvent && e.originalEvent.dataTransfer;
+			var file = dt && dt.files && dt.files[0];
+			if(file) useCustomFile(file);
+			else setUploadStatus("Drop an image file from your computer.", true);
+		});
+		$dlg.on("click", ".cursor-hotspot", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			if(typeof gCursorLooks === "undefined" || !gCursorLooks) return;
+			gCursorLooks.setMyCustomHotspot(this.getAttribute("data-hotspot"));
+			applyLookNow();
+		});
+		$dlg.on("click", ".cursor-custom-remove", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			if(typeof gCursorLooks === "undefined" || !gCursorLooks) return;
+			gCursorLooks.clearMyCustomImage();
+			applyLookNow();
+			setUploadStatus("Removed your image. Back to the Goma cat.");
 		});
 
 		$dlg.on("input", "input[name=cursor-size]", function() {

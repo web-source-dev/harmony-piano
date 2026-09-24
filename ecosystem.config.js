@@ -28,7 +28,8 @@ module.exports = {
 			autorestart: true,
 			max_restarts: 10,
 			env: {
-				NODE_ENV: "production"
+				NODE_ENV: "production",
+				HARMONY_PASSWORD: process.env.HARMONY_PASSWORD || "something"
 			}
 		},
 		{

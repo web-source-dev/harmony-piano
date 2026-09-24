@@ -101,6 +101,37 @@
 		return g;
 	};
 
+	// Lip smack: a wet click of filtered noise plus a quick falling "pop".
+	// pitch scales the brightness (1 = normal, >1 = smaller/cuter lips).
+	FunSounds.prototype._smack = function (t0, k, pitch) {
+		pitch = pitch || 1;
+		this._noise(t0, 0.035, 0.34 * k, "bandpass", 2300 * pitch, 1.6);
+		this._noise(t0 + 0.004, 0.06, 0.12 * k, "highpass", 3800 * pitch);
+		this._tone("sine", 1250 * pitch, t0, 0.07, 0.3 * k, 320 * pitch);
+		this._tone("triangle", 620 * pitch, t0 + 0.01, 0.05, 0.1 * k, 260 * pitch);
+	};
+
+	// Voiced sound with a sweeping formant filter — the "mmm-WAH" of a kiss.
+	FunSounds.prototype._voice = function (t0, dur, f0, f1, formFrom, formTo, gain) {
+		var ctx = this.ctx;
+		var osc = ctx.createOscillator();
+		var filt = ctx.createBiquadFilter();
+		var g = ctx.createGain();
+		osc.type = "sawtooth";
+		osc.frequency.setValueAtTime(f0, t0);
+		osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t0 + dur);
+		filt.type = "bandpass";
+		filt.Q.value = 5;
+		filt.frequency.setValueAtTime(formFrom, t0);
+		filt.frequency.exponentialRampToValueAtTime(Math.max(40, formTo), t0 + dur * 0.8);
+		g.gain.setValueAtTime(0.0001, t0);
+		g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t0 + dur * 0.25);
+		g.gain.setValueAtTime(Math.max(0.0002, gain), t0 + dur * 0.7);
+		g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+		osc.connect(filt); filt.connect(g); g.connect(this._dest());
+		osc.start(t0); osc.stop(t0 + dur + 0.05);
+	};
+
 	// ---- public API -----------------------------------------------------
 
 	// play(name, opts?) — opts.gain scales the effect, opts.throttle (ms) drops
@@ -209,6 +240,45 @@
 				var f = 600 + (i % 2 ? 250 : 0) + i * 40;
 				this._tone("sawtooth", f, t + i * 0.07, 0.08, 0.12 * k, f * 1.4);
 			}
+		},
+
+		// ---- kisses (Send Kiss) ----
+		// quick "smack!"
+		kiss: function (t, k) {
+			this._smack(t, k, 1);
+			this._tone("sine", 1568, t + 0.08, 0.25, 0.05 * k, 2093);
+		},
+		// long "mmm-mwah!" blown kiss
+		mwah: function (t, k) {
+			this._voice(t, 0.26, 190, 230, 380, 520, 0.16 * k);
+			this._voice(t + 0.24, 0.3, 240, 300, 650, 1500, 0.2 * k);
+			this._smack(t + 0.5, k, 1.05);
+			this._tone("triangle", 1319, t + 0.58, 0.35, 0.06 * k, 1760);
+		},
+		// "smack-smack!" (second one higher)
+		doublekiss: function (t, k) {
+			this._smack(t, k, 0.95);
+			this._smack(t + 0.17, k * 0.95, 1.2);
+		},
+		// "mew~" + tiny smack
+		kittykiss: function (t, k) {
+			this._tone("sine", 760, t, 0.22, 0.2 * k, 1180);
+			this._tone("sine", 1180, t + 0.2, 0.22, 0.16 * k, 650);
+			this._tone("triangle", 1520, t, 0.4, 0.05 * k, 1300);
+			this._smack(t + 0.46, k * 0.85, 1.45);
+		},
+		// lots of little smacks raining down
+		kissrain: function (t, k) {
+			var pitches = [1, 1.3, 0.9, 1.15, 1.4, 1.05, 1.25, 0.95, 1.35];
+			for (var i = 0; i < pitches.length; i++) this._smack(t + i * 0.1 + (i % 2) * 0.02, k * 0.7, pitches[i]);
+			this._tone("sine", 1760, t + 0.95, 0.4, 0.05 * k, 2349);
+		},
+		// smack + sparkly love chime
+		lovekiss: function (t, k) {
+			this._smack(t, k, 1);
+			var chime = [1047, 1319, 1568, 2093];
+			for (var i = 0; i < chime.length; i++) this._tone("triangle", chime[i], t + 0.12 + i * 0.07, 0.45, 0.1 * k);
+			this._noise(t + 0.3, 0.45, 0.04 * k, "highpass", 6500);
 		}
 	};
 

@@ -14,7 +14,7 @@
  */
 "use strict";
 
-var CACHE_NAME = "harmony-piano-ui-v1";
+var CACHE_NAME = "harmony-piano-ui-v2";
 
 var SHELL = [
 	"./",
@@ -53,6 +53,8 @@ var SHELL = [
 	"./funVideoPopup.js",
 	"./screenShare.js",
 	"./shareImage.js",
+	"./leaveMsg.js",
+	"./kissBlast.js",
 	"./script.js",
 	"./workerTimer.js",
 	"./arrow.png",
@@ -93,6 +95,16 @@ function cacheFirst(request) {
 	return caches.match(request, { ignoreSearch: true }).then(function (cached) {
 		if (cached) return cached;
 		return fetch(request).then(function (res) { return putInCache(request, res); });
+	});
+}
+
+// The page itself carries the password gate, so always try the network first
+// (a stale cached copy must never be served while online); cache is the offline fallback.
+function networkFirst(request, storeAs) {
+	return fetch(request).then(function (res) {
+		return putInCache(request, res, storeAs || request);
+	}).catch(function () {
+		return caches.match(storeAs || request, { ignoreSearch: true });
 	});
 }
 
@@ -154,10 +166,7 @@ self.addEventListener("fetch", function (event) {
 	if (url.pathname === "/sw.js" || url.pathname.slice(-5) === "/sw.js") return;
 
 	if (request.mode === "navigate" || isHtmlPath(url.pathname)) {
-		event.respondWith(staleWhileRevalidate(request, {
-			ignoreSearch: true,
-			storeAs: "./index.html"
-		}));
+		event.respondWith(networkFirst(request, "./index.html"));
 		return;
 	}
 

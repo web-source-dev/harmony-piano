@@ -5,8 +5,80 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20260920d"/>
+    <link rel="stylesheet" href="./screen.css?v=20260924b"/>
     <link rel="canonical" href="https://multiplayerpiano.com/">
+
+    <!-- Password gate: hide the whole app until the password is verified. -->
+    <script>document.documentElement.classList.add("harmony-locked");</script>
+    <style>
+      html.harmony-locked, html.harmony-locked body { overflow: hidden !important; }
+      html.harmony-locked body > *:not(#harmony-gate) { display: none !important; }
+      html:not(.harmony-locked) #harmony-gate:not(.hg-unlocking) { display: none !important; }
+      #harmony-gate {
+        position: fixed; inset: 0; z-index: 2147483000;
+        display: flex; align-items: center; justify-content: center; padding: 16px;
+        font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+        color: #fff; cursor: auto;
+        background: #1c1a26;
+      }
+      #harmony-gate .hg-card {
+        position: relative; width: 100%; max-width: 380px; box-sizing: border-box;
+        padding: 30px 28px 24px; border-radius: 20px; text-align: center;
+        background: #262433;
+        border: 1px solid #36334a;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+        opacity: 0; transform: translateY(8px);
+        transition: opacity 0.35s ease, transform 0.35s ease;
+      }
+      #harmony-gate.hg-ready .hg-card { opacity: 1; transform: none; }
+      #harmony-gate .hg-icon {
+        width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 18px;
+        display: flex; align-items: center; justify-content: center; font-size: 34px;
+        background: #e8578f;
+      }
+      #harmony-gate h1 { margin: 0 0 6px; font-size: 22px; font-weight: 700; letter-spacing: 0.01em; }
+      #harmony-gate .hg-sub { margin: 0 0 20px; font-size: 14px; color: rgba(255, 255, 255, 0.7); line-height: 1.45; }
+      #harmony-gate form { margin: 0; }
+      #harmony-gate .hg-field { position: relative; }
+      #harmony-gate input[type="password"], #harmony-gate input[type="text"] {
+        width: 100%; box-sizing: border-box; height: 48px; padding: 0 48px 0 16px;
+        border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(0, 0, 0, 0.28); color: #fff; font-size: 16px; outline: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+      #harmony-gate input::placeholder { color: rgba(255, 255, 255, 0.45); }
+      #harmony-gate input:focus { border-color: #ff8cb8; box-shadow: 0 0 0 3px rgba(255, 140, 184, 0.25); }
+      #harmony-gate .hg-eye {
+        position: absolute; right: 6px; top: 6px; width: 36px; height: 36px;
+        border: 0; border-radius: 9px; background: transparent; color: rgba(255, 255, 255, 0.7);
+        font-size: 17px; cursor: pointer; line-height: 36px; padding: 0;
+      }
+      #harmony-gate .hg-eye:hover, #harmony-gate .hg-eye:focus-visible { background: rgba(255, 255, 255, 0.1); color: #fff; outline: none; }
+      #harmony-gate .hg-btn {
+        width: 100%; height: 48px; margin-top: 12px; border: 0; border-radius: 12px; cursor: pointer;
+        font-size: 16px; font-weight: 700; color: #fff; letter-spacing: 0.02em;
+        background: #e8578f;
+        transition: transform 0.1s ease, filter 0.15s ease, opacity 0.15s ease;
+      }
+      #harmony-gate .hg-btn:hover { background: #d44a80; }
+      #harmony-gate .hg-btn:active { transform: translateY(1px); }
+      #harmony-gate .hg-btn:focus-visible { outline: 3px solid rgba(255, 255, 255, 0.6); outline-offset: 2px; }
+      #harmony-gate .hg-btn[disabled] { opacity: 0.55; cursor: default; filter: none; }
+      #harmony-gate .hg-msg { min-height: 20px; margin: 12px 0 0; font-size: 13.5px; color: #ffb3c9; }
+      #harmony-gate .hg-msg.hg-info { color: rgba(255, 255, 255, 0.65); }
+      #harmony-gate .hg-note { margin: 10px 0 0; font-size: 12px; color: rgba(255, 255, 255, 0.45); }
+      #harmony-gate .hg-card.hg-shake { animation: hg-shake 0.42s ease; }
+      @keyframes hg-shake {
+        0%, 100% { transform: translateX(0); }
+        20% { transform: translateX(-9px); } 40% { transform: translateX(8px); }
+        60% { transform: translateX(-5px); } 80% { transform: translateX(3px); }
+      }
+      #harmony-gate.hg-unlocking { opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+      @media (prefers-reduced-motion: reduce) {
+        #harmony-gate .hg-card, #harmony-gate.hg-unlocking { transition: none; }
+        #harmony-gate .hg-card.hg-shake { animation: none; }
+      }
+    </style>
 
     <script>
       window.gDontShow = !!(window.location.hash && window.location.hash.match(/^(?:#.+)*#dontshow(?:#.+)*$/i));
@@ -76,6 +148,154 @@
     </script>
 </head>
 <body>
+
+<div id="harmony-gate" role="dialog" aria-modal="true" aria-labelledby="hg-title">
+    <div class="hg-card">
+        <h1 id="hg-title">Piano</h1>
+        <form class="hg-form" autocomplete="off" novalidate>
+            <div class="hg-field">
+                <label for="hg-password" class="hg-sr" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Password</label>
+                <input id="hg-password" type="password" name="hg-pass" placeholder="Password"
+                       autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="200"/>
+                <button type="button" class="hg-eye" aria-label="Show password" title="Show password">👁</button>
+            </div>
+            <button type="submit" class="hg-btn">Enter</button>
+            <p class="hg-msg hg-info" role="status" aria-live="polite"></p>
+        </form>
+    </div>
+</div>
+<script>
+(function () {
+    "use strict";
+    var gate = document.getElementById("harmony-gate");
+    var card = gate.querySelector(".hg-card");
+    var form = gate.querySelector(".hg-form");
+    var input = document.getElementById("hg-password");
+    var btn = gate.querySelector(".hg-btn");
+    var eye = gate.querySelector(".hg-eye");
+    var msg = gate.querySelector(".hg-msg");
+    var busy = false;
+    var lockTimer = null;
+    var unlocked = false;
+
+    function say(text, info) {
+        msg.textContent = text || "";
+        msg.classList.toggle("hg-info", !!info);
+    }
+    function showCard() {
+        gate.classList.add("hg-ready");
+        setTimeout(function () { try { input.focus(); } catch (e) {} }, 60);
+    }
+    function shake() {
+        card.classList.remove("hg-shake");
+        void card.offsetWidth;
+        card.classList.add("hg-shake");
+    }
+    function lockFor(seconds) {
+        clearInterval(lockTimer);
+        var left = seconds;
+        btn.disabled = true;
+        input.disabled = true;
+        say("Too many tries. Try again in " + left + "s.");
+        lockTimer = setInterval(function () {
+            left--;
+            if (left <= 0) {
+                clearInterval(lockTimer);
+                btn.disabled = false;
+                input.disabled = false;
+                say("");
+                input.focus();
+                return;
+            }
+            say("Too many tries. Try again in " + left + "s.");
+        }, 1000);
+    }
+
+    // Load the app scripts in order (async=false keeps execution order).
+    function loadApp() {
+        if (unlocked) return;
+        unlocked = true;
+        input.value = "";
+        function go() {
+            // Reveal the UI first so the piano can measure its size, then fade the gate out on top.
+            gate.classList.add("hg-unlocking");
+            document.documentElement.classList.remove("harmony-locked");
+            var list = window.HARMONY_APP_SCRIPTS || [];
+            for (var i = 0; i < list.length; i++) {
+                var s = document.createElement("script");
+                s.src = list[i];
+                s.async = false;
+                document.body.appendChild(s);
+            }
+            setTimeout(function () { if (gate.parentNode) gate.parentNode.removeChild(gate); }, 350);
+        }
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", go);
+        else go();
+    }
+
+    function request(method, body) {
+        return fetch("/api/auth", {
+            method: method,
+            credentials: "same-origin",
+            cache: "no-store",
+            headers: body ? { "Content-Type": "application/json" } : undefined,
+            body: body ? JSON.stringify(body) : undefined
+        }).then(function (res) {
+            return res.json().catch(function () { return {}; }).then(function (data) {
+                data.status = res.status;
+                return data;
+            });
+        });
+    }
+
+    eye.addEventListener("click", function () {
+        var show = input.type === "password";
+        input.type = show ? "text" : "password";
+        eye.textContent = show ? "🙈" : "👁";
+        eye.setAttribute("aria-label", show ? "Hide password" : "Show password");
+        eye.title = show ? "Hide password" : "Show password";
+        input.focus();
+    });
+
+    form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (busy || btn.disabled) return;
+        var pw = input.value;
+        if (!pw) { say("Please type the password."); shake(); input.focus(); return; }
+        busy = true;
+        btn.disabled = true;
+        btn.textContent = "Checking…";
+        say("");
+        request("POST", { password: pw }).then(function (data) {
+            busy = false;
+            btn.disabled = false;
+            btn.textContent = "Enter";
+            if (data.ok) { say("Welcome! 🎶", true); loadApp(); return; }
+            input.value = "";
+            shake();
+            if (data.retryAfter) { lockFor(data.retryAfter); return; }
+            say(data.error || "Wrong password");
+            input.focus();
+        }).catch(function () {
+            busy = false;
+            btn.disabled = false;
+            btn.textContent = "Enter";
+            say("Can't reach the piano server. Check your connection and try again.");
+        });
+    });
+
+    // Already unlocked in this browser session (e.g. a refresh)? Skip the screen.
+    // The card only fades in if the check is slow or says no, so refreshes don't flash it.
+    var revealTimer = setTimeout(showCard, 400);
+    request("GET").then(function (data) {
+        if (data && data.authed) { clearTimeout(revealTimer); loadApp(); }
+        else showCard();
+    }).catch(function () {
+        showCard();
+        say("Can't reach the piano server. Check your connection and try again.");
+    });
+})();
+</script>
 
 <style>
     .ad1 {
@@ -320,6 +540,7 @@
         <div id="screen-share-btn" class="ugly-button" title="Share your screen, a window, or a tab&#10;Keyboard shortcuts: F = fullscreen · P = PiP · S = cycle size">⊡ Share</div>
         <div id="share-image-btn" class="ugly-button" title="Share an image with everyone in the room">Share Image</div>
         <div id="leave-msg-btn" class="ugly-button" title="Leave a message everyone in the room can read">Leave a msg</div>
+        <div id="kiss-btn" class="ugly-button" title="Send a big kiss — everyone in the room sees and hears it">💋 Send Kiss</div>
         <div id="sound-btn" class="ugly-button sound-btn">Sound Select</div>
         <div id="status"></div>
         <div id="volume">
@@ -770,11 +991,35 @@
         </div>
         <div id="cursor-looks" class="dialog sheet-dialog cursor-looks-dialog">
             <p class="sheet-title">Cursor &amp; Follower</p>
-            <p class="file-info">Pick a cat cursor + love emoji trail. Everyone in the room sees your look.</p>
+            <p class="file-info">Pick a cat cursor or upload your own image, plus a love emoji trail. Everyone in the room sees your look.</p>
             <div class="cursor-looks-body">
                 <div class="mp3-looks-row">
                     <span class="mp3-looks-label">Cursor</span>
                     <div class="mp3-looks-chips" data-looks="cursor"></div>
+                </div>
+                <div class="mp3-looks-row cursor-upload-row">
+                    <span class="mp3-looks-label">Your image</span>
+                    <div class="cursor-upload">
+                        <div class="cursor-upload-main">
+                            <button type="button" class="mp3-look-chip mp3-look-img-chip cursor-custom-chip" data-cursor="custom" title="Use my uploaded image" hidden>
+                                <img class="mp3-cursor-preview-img cursor-custom-preview" alt="Your cursor image" draggable="false"/>
+                                <span class="mp3-look-caption">My image</span>
+                            </button>
+                            <button type="button" class="cursor-upload-drop" title="Pick an image from your device">
+                                <span class="cursor-upload-icon" aria-hidden="true">⬆</span>
+                                <span class="cursor-upload-text">Upload image</span>
+                                <span class="cursor-upload-sub">or drop one here · PNG, JPG, GIF, WebP</span>
+                            </button>
+                            <input type="file" class="cursor-upload-input" accept="image/*" hidden/>
+                        </div>
+                        <div class="cursor-upload-opts" hidden>
+                            <span class="cursor-upload-opts-label">Click point</span>
+                            <button type="button" class="tb-btn cursor-hotspot" data-hotspot="tl" title="Clicks land at the top-left tip of the image (like an arrow)">↖ Tip</button>
+                            <button type="button" class="tb-btn cursor-hotspot" data-hotspot="c" title="Clicks land in the middle of the image">⊙ Center</button>
+                            <button type="button" class="tb-btn cursor-custom-remove" title="Remove your uploaded image">Remove</button>
+                        </div>
+                        <p class="cursor-upload-status" role="status" aria-live="polite"></p>
+                    </div>
                 </div>
                 <div class="mp3-looks-row cursor-size-row">
                     <span class="mp3-looks-label">Size</span>
@@ -794,6 +1039,18 @@
             <p class="sheet-row sheet-actions-row">
                 <button type="button" class="tb-btn cursor-looks-done">Done</button>
             </p>
+        </div>
+        <div id="kiss-send" class="dialog kiss-dialog" role="dialog" aria-labelledby="kiss-title" aria-modal="true">
+            <div class="kiss-head">
+                <p id="kiss-title" class="kiss-title">💋 Send a Kiss</p>
+                <button type="button" class="kiss-close" aria-label="Close">✕</button>
+            </div>
+            <p class="kiss-sub">Pick one — it pops up big on everyone's screen in the room, with a kiss sound.</p>
+            <div class="kiss-grid"></div>
+            <div class="kiss-foot">
+                <label class="kiss-sound-label"><input type="checkbox" class="kiss-sound-toggle" checked/> Play kiss sounds for me</label>
+                <span class="kiss-status" role="status" aria-live="polite"></span>
+            </div>
         </div>
         <div id="fun-video" class="dialog fun-video-dialog">
             <div class="fun-video-dialog-inner">
@@ -1086,42 +1343,47 @@
     </div>
 </div>
 
-<script src="./jquery.min.js"></script>
-<script src="./util.js"></script>
-<script src="./client.js?v=20260920b"></script>
-<script src="./roomSync.js?v=20260920b"></script>
-<script src="./funSounds.js"></script>
-<script src="./NoteQuota.js"></script>
-<script src="./lame.min.js"></script>
-<script src="./color.js"></script>
-<script src="./sheetPlayer.js"></script>
-<script src="./roomMedia.js?v=20260919b"></script>
-<script src="./playMp3.js?v=20260820a"></script>
-<script src="./pianoLearn.js"></script>
-<script src="./metronome.js"></script>
-<script src="./blobFriend.js?v=20260712c"></script>
-<script src="./desktopDoodler.js?v=20260618i"></script>
-<script src="./emojiParty.js"></script>
-<script src="./nameColor.js"></script>
-<script src="./cursorLooks.js?v=20260812f"></script>
-<script src="./soundBoard.js"></script>
-<script src="./partyGame.js"></script>
-<script src="./balloonPop.js?v=20260712c"></script>
-<script src="./carDodge.js?v=20260712c"></script>
-<script src="./reactionRoyale.js?v=20260712c"></script>
-<script src="./tugOfWar.js?v=20260712c"></script>
-<script src="./uselessButton.js"></script>
-<script src="./pixelPet.js"></script>
-<script src="./evilCursor.js"></script>
-<script src="./chaosMonkey.js"></script>
-<script src="./chatLogger.js"></script>
-<script src="./cornerBanner.js"></script>
-<script src="./funVideoPopup.js"></script>
-<script src="./screenShare.js?v=20260712c"></script>
-<script src="./shareImage.js?v=20260712b"></script>
-<script src="./leaveMsg.js?v=20260922a"></script>
-<!--<script src="/ebsprite.js"></script>-->
-<script src="./script.js?v=20260920c"></script>
+<!-- App scripts load only after the piano password is verified (see #harmony-gate). -->
+<script>
+    window.HARMONY_APP_SCRIPTS = [
+        "./jquery.min.js",
+        "./util.js",
+        "./client.js?v=20260920b",
+        "./roomSync.js?v=20260920b",
+        "./funSounds.js?v=20260924b",
+        "./NoteQuota.js",
+        "./lame.min.js",
+        "./color.js",
+        "./sheetPlayer.js",
+        "./roomMedia.js?v=20260919b",
+        "./playMp3.js?v=20260820a",
+        "./pianoLearn.js",
+        "./metronome.js",
+        "./blobFriend.js?v=20260712c",
+        "./desktopDoodler.js?v=20260618i",
+        "./emojiParty.js",
+        "./nameColor.js",
+        "./cursorLooks.js?v=20260924b",
+        "./soundBoard.js",
+        "./partyGame.js",
+        "./balloonPop.js?v=20260712c",
+        "./carDodge.js?v=20260712c",
+        "./reactionRoyale.js?v=20260712c",
+        "./tugOfWar.js?v=20260712c",
+        "./uselessButton.js",
+        "./pixelPet.js",
+        "./evilCursor.js",
+        "./chaosMonkey.js",
+        "./chatLogger.js",
+        "./cornerBanner.js",
+        "./funVideoPopup.js",
+        "./screenShare.js?v=20260712c",
+        "./shareImage.js?v=20260712b",
+        "./leaveMsg.js?v=20260922a",
+        "./kissBlast.js?v=20260924b",
+        "./script.js?v=20260924b"
+    ];
+</script>
 <!--<script src="https://mppclone.com/script.js"></script>-->
 </body>
 </html>
