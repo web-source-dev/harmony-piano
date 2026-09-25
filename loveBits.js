@@ -809,31 +809,48 @@
 		if (bar) bar.setAttribute("aria-valuenow", String(pct));
 	};
 
+	// Plain red heart: grows to cover the whole screen by 5s, holds (beating)
+	// for 5s, then bursts at 10s.
+	var BURST_AT_MS = 10000;
+	var HEART_PATH = "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z";
+	function redHeart(cls) {
+		var ns = "http://www.w3.org/2000/svg";
+		var svg = document.createElementNS(ns, "svg");
+		svg.setAttribute("class", cls);
+		svg.setAttribute("viewBox", "2 2.5 20 19.5");
+		svg.setAttribute("aria-hidden", "true");
+		var path = document.createElementNS(ns, "path");
+		path.setAttribute("d", HEART_PATH);
+		svg.appendChild(path);
+		return svg;
+	}
+
 	LoveBits.prototype._bigHeart = function () {
 		var layer = this._ensureLayer();
 		var box = el("div", "love-burst");
 		box.appendChild(el("div", "love-burst-glow"));
-		box.appendChild(el("span", "love-burst-heart", "💖"));
+		var wrap = el("div", "love-burst-heart");
+		wrap.appendChild(redHeart("love-burst-heart-svg"));
+		box.appendChild(wrap);
 		box.appendChild(el("div", "love-burst-flash"));
 		var n = reducedMotion() ? 10 : 40;
-		var bits = ["💖", "💕", "💗", "💘", "❤️", "💞"];
 		for (var i = 0; i < n; i++) {
 			var ang = (i / n) * Math.PI * 2 + Math.random() * 0.4;
 			var dist = 300 + Math.random() * 600;
-			var s = el("span", "love-burst-bit", bits[i % bits.length]);
+			var s = redHeart("love-burst-bit");
 			s.style.setProperty("--dx", Math.round(Math.cos(ang) * dist) + "px");
 			s.style.setProperty("--dy", Math.round(Math.sin(ang) * dist) + "px");
 			s.style.setProperty("--sz", (24 + Math.random() * 36).toFixed(0) + "px");
-			// bits fly out when the screen-filling heart pops (~9.5s in)
-			s.style.animationDelay = (9.5 + Math.random() * 0.2).toFixed(2) + "s";
+			// bits fly out when the screen-filling heart bursts (10s in)
+			s.style.animationDelay = (BURST_AT_MS / 1000 + Math.random() * 0.2).toFixed(2) + "s";
 			box.appendChild(s);
 		}
 		layer.appendChild(box);
 		this._sound("lovekiss");
 		this._burstSong();
 		var self = this;
-		setTimeout(function () { self._sound("pop"); }, 9500);
-		this._later(box, 11500);
+		setTimeout(function () { self._sound("pop"); }, BURST_AT_MS);
+		this._later(box, BURST_AT_MS + 2000);
 	};
 
 	// ---- blow a kiss ----------------------------------------------------
@@ -1041,29 +1058,24 @@
 		if (this.soundOn && typeof global.funSound === "function") global.funSound(name, gain ? { gain: gain } : undefined);
 	};
 
-	// mm.mp3 plays 5 times back to back (~10s) while the big heart grows and bursts.
-	var BURST_SONG_PLAYS = 5;
+	// mm.mp3 loops at 2x speed for 10s while the big heart grows and bursts.
 	LoveBits.prototype._burstSong = function () {
 		if (!this.soundOn || typeof global.Audio !== "function") return;
 		try {
-			var self = this;
 			if (!this._burstAudio) {
 				this._burstAudio = new Audio("mm.mp3");
 				this._burstAudio.preload = "auto";
 				this._burstAudio.volume = 0.8;
-				this._burstAudio.addEventListener("ended", function () {
-					if (--self._burstPlaysLeft > 0 && self.soundOn) {
-						self._burstAudio.currentTime = 0;
-						var q = self._burstAudio.play();
-						if (q && typeof q.catch === "function") q.catch(function () {});
-					}
-				});
+				this._burstAudio.loop = true;
 			}
 			var a = this._burstAudio;
-			this._burstPlaysLeft = BURST_SONG_PLAYS;
+			a.defaultPlaybackRate = 2;
+			a.playbackRate = 2;
 			a.currentTime = 0;
 			var p = a.play();
 			if (p && typeof p.catch === "function") p.catch(function () {});
+			clearTimeout(this._burstSongTimer);
+			this._burstSongTimer = setTimeout(function () { a.pause(); a.currentTime = 0; }, BURST_AT_MS);
 		} catch (e) {}
 	};
 

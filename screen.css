@@ -6304,33 +6304,42 @@ body.love-got-kiss .love-layer { animation: loveBlush 1s ease-out; }
 	position: absolute;
 	inset: 0;
 	background: radial-gradient(circle at 50% 50%, rgba(255, 90, 150, 0.45), rgba(255, 90, 150, 0) 60%);
-	animation: loveBurstGlow 11.5s ease forwards;
+	animation: loveBurstGlow 12s ease forwards;
 }
-/* The heart grows for ~9.5s, speeding up until it covers the screen, then pops. */
+/* Plain red heart: grows until it covers the screen (0-5s), holds with a
+   gentle beat (5-10s), then bursts at 10s. */
 .love-burst-heart {
 	position: absolute;
 	left: 50%;
 	top: 50%;
-	font-size: 100vmax;
-	line-height: 1;
+	width: 100vmax;
+	height: 100vmax;
 	opacity: 0;
 	transform: translate(-50%, -50%) scale(0.03);
-	filter: drop-shadow(0 10px 30px rgba(255, 60, 130, 0.6));
 	will-change: transform, opacity;
-	animation: loveBurstHeart 10s forwards;
+	animation: loveBurstHeart 10.4s forwards;
+}
+.love-burst-heart-svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+	fill: #e0162b;
+	filter: drop-shadow(0 10px 30px rgba(200, 0, 30, 0.55));
 }
 .love-burst-flash {
 	position: absolute;
 	inset: 0;
 	opacity: 0;
-	background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.95), rgba(255, 120, 170, 0.85) 45%, rgba(255, 90, 150, 0) 80%);
-	animation: loveBurstFlash 1.2s ease-out 9.5s forwards;
+	background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.95), rgba(255, 90, 110, 0.85) 45%, rgba(224, 22, 43, 0) 80%);
+	animation: loveBurstFlash 1.2s ease-out 10s forwards;
 }
 .love-burst-bit {
 	position: absolute;
 	left: 50%;
 	top: 50%;
-	font-size: var(--sz, 24px);
+	width: var(--sz, 24px);
+	height: var(--sz, 24px);
+	fill: #e0162b;
 	opacity: 0;
 	transform: translate(-50%, -50%);
 	animation: loveBurstBit 1.8s ease-out forwards;
@@ -6338,9 +6347,16 @@ body.love-got-kiss .love-layer { animation: loveBlush 1s ease-out; }
 @keyframes loveBurstGlow { 0% { opacity: 0; } 10%, 85% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes loveBurstHeart {
 	0% { opacity: 0; transform: translate(-50%, -50%) scale(0.03); animation-timing-function: ease-out; }
-	4% { opacity: 1; transform: translate(-50%, -50%) scale(0.06); animation-timing-function: cubic-bezier(0.8, 0, 1, 0.5); }
-	95% { opacity: 1; transform: translate(-50%, -50%) scale(1.7); animation-timing-function: ease-out; }
-	100% { opacity: 0; transform: translate(-50%, -50%) scale(2.4); }
+	2% { opacity: 1; transform: translate(-50%, -50%) scale(0.06); animation-timing-function: cubic-bezier(0.6, 0, 1, 0.6); }
+	/* 5s: covers the whole screen */
+	48% { transform: translate(-50%, -50%) scale(3.2); animation-timing-function: ease-in-out; }
+	58% { transform: translate(-50%, -50%) scale(3.45); animation-timing-function: ease-in-out; }
+	68% { transform: translate(-50%, -50%) scale(3.2); animation-timing-function: ease-in-out; }
+	78% { transform: translate(-50%, -50%) scale(3.45); animation-timing-function: ease-in-out; }
+	88% { transform: translate(-50%, -50%) scale(3.2); animation-timing-function: ease-in; }
+	/* 10s: burst */
+	96% { opacity: 1; transform: translate(-50%, -50%) scale(3.6); animation-timing-function: ease-out; }
+	100% { opacity: 0; transform: translate(-50%, -50%) scale(5); }
 }
 @keyframes loveBurstFlash { 0% { opacity: 0; } 15% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes loveBurstBit {
