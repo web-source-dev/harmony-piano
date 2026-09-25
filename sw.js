@@ -56,6 +56,7 @@ var SHELL = [
 	"./leaveMsg.js",
 	"./kissBlast.js",
 	"./loveBits.js",
+	"./mm.mp3",
 	"./script.js",
 	"./workerTimer.js",
 	"./arrow.png",

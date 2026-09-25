@@ -814,21 +814,26 @@
 		var box = el("div", "love-burst");
 		box.appendChild(el("div", "love-burst-glow"));
 		box.appendChild(el("span", "love-burst-heart", "💖"));
-		var n = reducedMotion() ? 10 : 30;
+		box.appendChild(el("div", "love-burst-flash"));
+		var n = reducedMotion() ? 10 : 40;
 		var bits = ["💖", "💕", "💗", "💘", "❤️", "💞"];
 		for (var i = 0; i < n; i++) {
 			var ang = (i / n) * Math.PI * 2 + Math.random() * 0.4;
-			var dist = 180 + Math.random() * 340;
+			var dist = 300 + Math.random() * 600;
 			var s = el("span", "love-burst-bit", bits[i % bits.length]);
 			s.style.setProperty("--dx", Math.round(Math.cos(ang) * dist) + "px");
 			s.style.setProperty("--dy", Math.round(Math.sin(ang) * dist) + "px");
-			s.style.setProperty("--sz", (18 + Math.random() * 24).toFixed(0) + "px");
-			s.style.animationDelay = (0.95 + Math.random() * 0.15).toFixed(2) + "s";
+			s.style.setProperty("--sz", (24 + Math.random() * 36).toFixed(0) + "px");
+			// bits fly out when the screen-filling heart pops (~9.5s in)
+			s.style.animationDelay = (9.5 + Math.random() * 0.2).toFixed(2) + "s";
 			box.appendChild(s);
 		}
 		layer.appendChild(box);
 		this._sound("lovekiss");
-		this._later(box, 3800);
+		this._burstSong();
+		var self = this;
+		setTimeout(function () { self._sound("pop"); }, 9500);
+		this._later(box, 11500);
 	};
 
 	// ---- blow a kiss ----------------------------------------------------
@@ -1034,6 +1039,32 @@
 
 	LoveBits.prototype._sound = function (name, gain) {
 		if (this.soundOn && typeof global.funSound === "function") global.funSound(name, gain ? { gain: gain } : undefined);
+	};
+
+	// mm.mp3 plays 5 times back to back (~10s) while the big heart grows and bursts.
+	var BURST_SONG_PLAYS = 5;
+	LoveBits.prototype._burstSong = function () {
+		if (!this.soundOn || typeof global.Audio !== "function") return;
+		try {
+			var self = this;
+			if (!this._burstAudio) {
+				this._burstAudio = new Audio("mm.mp3");
+				this._burstAudio.preload = "auto";
+				this._burstAudio.volume = 0.8;
+				this._burstAudio.addEventListener("ended", function () {
+					if (--self._burstPlaysLeft > 0 && self.soundOn) {
+						self._burstAudio.currentTime = 0;
+						var q = self._burstAudio.play();
+						if (q && typeof q.catch === "function") q.catch(function () {});
+					}
+				});
+			}
+			var a = this._burstAudio;
+			this._burstPlaysLeft = BURST_SONG_PLAYS;
+			a.currentTime = 0;
+			var p = a.play();
+			if (p && typeof p.catch === "function") p.catch(function () {});
+		} catch (e) {}
 	};
 
 	LoveBits.prototype._later = function (node, ms) {
