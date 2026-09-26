@@ -2068,6 +2068,10 @@ body.harmony-custom-cursor .link {
 #chat li .name { font-weight: bold; margin-right: 8px; }
 #chat li .message { margin-right: 6px; }
 #chat li .quote { color: #789922; }
+/* Own chat line shown instantly while the server confirms it (slow internet). */
+#chat li.chat-pending .message { font-style: italic; }
+#chat li .chat-pending-state { font-size: 0.85em; opacity: 0.7; font-style: italic; }
+#chat li.chat-failed .chat-pending-state { color: #ff8a80; opacity: 1; }
 #chat.chatting {
 	background: rgba(64, 80, 80, 0.72);
 	border-radius: 8px 8px 0 0;

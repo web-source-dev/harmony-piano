@@ -451,9 +451,10 @@ function setMybotAnonymousHidden(hidden) {
 
 wss.on("connection", function (socket) {
 	socket._room = null;
-	socket.isAlive = true;
-	socket.on("pong", function () { socket.isAlive = true; });
+	socket.missedPongs = 0;
+	socket.on("pong", function () { socket.missedPongs = 0; });
 	socket.on("message", function (raw) {
+		socket.missedPongs = 0; // any traffic proves the client is still there
 		var m;
 		try { m = JSON.parse(raw.toString()); } catch (e) { return; }
 		if (!m || typeof m !== "object") return;
@@ -668,12 +669,38 @@ function mppLeaveRoom(sock) {
 		if (crownChanged) mppBroadcastCh(room);
 	}
 }
+// Recent chat per room, sent to everyone who (re)joins — like the public MPP
+// server does — so someone who reconnects after a slow-internet blip sees what
+// was said meanwhile. Kept past the room emptying out (a lone user
+// reconnecting shouldn't lose it). Machine sync lines (BF|, CC|, ...) are not
+// stored: replaying them would re-trigger effects such as clearing chat.
+var MPP_CHAT_HISTORY = 50;
+var MPP_CHAT_ROOMS_MAX = 500;
+var mppChatHistory = new Map(); // chId -> [{m:"a", a, p, t}]
+function mppIsSyncText(text) { return /^[A-Za-z0-9]{1,8}\|/.test(text); }
+function mppRememberChat(chId, frame) {
+	if (mppIsSyncText(frame.a)) return;
+	var list = mppChatHistory.get(chId);
+	if (!list) {
+		if (mppChatHistory.size >= MPP_CHAT_ROOMS_MAX) mppChatHistory.delete(mppChatHistory.keys().next().value);
+		list = [];
+	} else {
+		mppChatHistory.delete(chId); // re-insert: keeps Map order = least recently used first
+	}
+	list.push(frame);
+	if (list.length > MPP_CHAT_HISTORY) list.splice(0, list.length - MPP_CHAT_HISTORY);
+	mppChatHistory.set(chId, list);
+}
+function mppSendChatHistory(sock, chId) {
+	mppSend(sock, { m: "c", c: mppChatHistory.get(chId) || [] });
+}
 function mppJoinRoom(sock, chId, set) {
 	var st = sock.mpp;
 	chId = (typeof chId === "string" && chId.length) ? chId.slice(0, 512) : "lobby";
 	if (st.room === chId && mppRooms[chId]) {
 		var cur = mppRooms[chId];
 		mppSend(sock, { m: "ch", ch: mppRoomPublic(cur), p: st.pid, ppl: mppPplArray(cur) });
+		mppSendChatHistory(sock, chId);
 		return;
 	}
 	if (st.room) mppLeaveRoom(sock);
@@ -702,6 +729,7 @@ function mppJoinRoom(sock, chId, set) {
 	}
 	// Joiner: full channel + own participant id + everyone present.
 	mppSend(sock, { m: "ch", ch: mppRoomPublic(room), p: st.pid, ppl: mppPplArray(room) });
+	mppSendChatHistory(sock, chId);
 	// Everyone else: the new participant.
 	mppBroadcast(room, { m: "p", id: part.id, _id: part._id, name: part.name, color: part.color, x: part.x, y: part.y }, sock);
 }
@@ -737,7 +765,9 @@ function mppHandle(sock, msg) {
 			if (room && typeof msg.message === "string") {
 				var p = room.parts.get(st.pid) || { id: st.pid, _id: st.user._id, name: st.user.name, color: st.user.color };
 				// Use MAX_TEXT here — 512 was truncating WebRTC SDP offers (2-5 KB), breaking screen share signaling
-				mppBroadcast(room, { m: "a", a: msg.message.slice(0, MAX_TEXT), p: mppPartPublic(p), t: Date.now() });
+				var chatFrame = { m: "a", a: msg.message.slice(0, MAX_TEXT), p: mppPartPublic(p), t: Date.now() };
+				mppBroadcast(room, chatFrame);
+				mppRememberChat(room._id, chatFrame);
 			}
 			break;
 		case "userset":
@@ -801,14 +831,15 @@ function mppHandle(sock, msg) {
 }
 
 mppWss.on("connection", function (sock) {
-	sock.isAlive = true;
-	sock.on("pong", function () { sock.isAlive = true; });
+	sock.missedPongs = 0;
+	sock.on("pong", function () { sock.missedPongs = 0; });
 	sock.mpp = {
 		user: { _id: mppGenId("u"), name: "Anonymous", color: MPP_COLORS[Math.floor(Math.random() * MPP_COLORS.length)] },
 		pid: mppGenId(""),
 		x: 50, y: 50, room: null, lsSub: false
 	};
 	sock.on("message", function (raw) {
+		sock.missedPongs = 0; // any traffic proves the client is still there
 		var arr;
 		try { arr = JSON.parse(raw.toString()); } catch (e) { return; }
 		if (!Array.isArray(arr)) arr = [arr];
@@ -818,18 +849,21 @@ mppWss.on("connection", function (sock) {
 	sock.on("error", function () { try { sock.close(); } catch (e) {} });
 });
 
+// Heartbeat: drop only connections that are really dead. Users on slow or
+// unstable internet can take a long time to answer a ping, so a socket is only
+// terminated after HEARTBEAT_MAX_MISSED heartbeats in a row with no pong and no
+// other traffic (~75s), instead of after a single missed pong.
+var HEARTBEAT_MS = 25000;
+var HEARTBEAT_MAX_MISSED = 3;
+function heartbeatSocket(socket) {
+	if ((socket.missedPongs || 0) >= HEARTBEAT_MAX_MISSED) { try { socket.terminate(); } catch (e) {} return; }
+	socket.missedPongs = (socket.missedPongs || 0) + 1;
+	try { socket.ping(); } catch (e) {}
+}
 var heartbeat = setInterval(function () {
-	wss.clients.forEach(function (socket) {
-		if (socket.isAlive === false) { try { socket.terminate(); } catch (e) {} return; }
-		socket.isAlive = false;
-		try { socket.ping(); } catch (e) {}
-	});
-	mppWss.clients.forEach(function (socket) {
-		if (socket.isAlive === false) { try { socket.terminate(); } catch (e) {} return; }
-		socket.isAlive = false;
-		try { socket.ping(); } catch (e) {}
-	});
-}, 30000);
+	wss.clients.forEach(heartbeatSocket);
+	mppWss.clients.forEach(heartbeatSocket);
+}, HEARTBEAT_MS);
 wss.on("close", function () { clearInterval(heartbeat); });
 
 // Persistent "Noob x_x" in the public MPP lobby — no browser tab needed. This

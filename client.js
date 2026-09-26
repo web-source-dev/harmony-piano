@@ -48,6 +48,16 @@ function Client(uri) {
 	this.noteBuffer = [];
 	this.noteBufferTime = 0;
 	this.noteFlushInterval = undefined;
+	this.watchdogInterval = undefined;
+	this.connectTimer = undefined;
+	this.joinTimer = undefined;
+	this.reconnectTimer = undefined;
+	this.lastMessageTime = 0;
+	this.joined = false;
+	this.chatQueue = [];       // typed but not sent yet
+	this.chatInFlight = [];    // sent, waiting for the server's echo
+	this._chatSeq = 0;
+	this._probe = undefined;   // background spare connection (see _startProbe)
 	this['🐈'] = 0;
 
 	this.bindEventListeners();
@@ -78,7 +88,12 @@ Client.prototype.start = function() {
 
 Client.prototype.stop = function() {
 	this.canConnect = false;
-	this.ws.close();
+	clearTimeout(this.reconnectTimer);
+	this.reconnectTimer = undefined;
+	this._dropProbe();
+	if(this.ws) {
+		try { this.ws.close(); } catch(e) {}
+	}
 };
 
 // Human-readable info about the current (or given) server slot for the UI.
@@ -119,140 +134,566 @@ Client.prototype.switchServer = function(index) {
 	this.emit("server", this.getServerInfo());
 	if(sameAndLive) return true;
 	if(!this.canConnect) this.canConnect = true;
+	clearTimeout(this.reconnectTimer);
+	this.reconnectTimer = undefined;
 	if(this.ws) {
 		this._switchingServer = true;
-		try {
-			this.ws.close();
-		} catch(e) {
-			this._switchingServer = false;
-			this.ws = undefined;
-			this.connect();
-		}
+		this._abandonSocket("switch server");
 	} else {
 		this.connect();
 	}
 	return true;
 };
 
+// ---------------------------------------------------------------------------
+// Connection resilience (slow / flaky internet)
+// ---------------------------------------------------------------------------
+// Goal: on a slow connection everything may get slower, but chat must never
+// pause, break, or need a page refresh.
+//
+// On a slow or unstable connection a WebSocket can get stuck in ways the
+// browser does not report quickly: the handshake can hang in CONNECTING, or an
+// OPEN socket can silently die (half-open TCP). The client handles this with:
+//   * Make-before-break: when the server has been quiet for probeAfterMs, a
+//     second connection is opened in the background. As soon as it is in the
+//     room it takes over and the old one is closed, with no "disconnect" in
+//     between. If the old connection turns out to be fine (data arrives), the
+//     spare is dropped. Only after staleTimeoutMs of total silence is the old
+//     connection given up the hard way.
+//   * Upload progress counts as life: if our send buffer is draining, the
+//     connection is slow, not dead, so it is left alone.
+//   * Generous connect/join timeouts that retry instead of hanging forever.
+//   * Immediate checks when the browser comes back online or the tab becomes
+//     visible; "device offline" never triggers failover to the backup server.
+//   * Reliable chat: every message typed is tracked until the server echoes it
+//     back. Messages typed while reconnecting are queued; messages that were
+//     in flight on a connection that died are re-sent on the new one (after
+//     checking the room's chat history so nothing is sent twice); messages
+//     the server silently dropped (rate limit) are retried a couple of times.
+//     The UI gets "chat pending" / "chat delivered" / "chat failed" events.
+//   * Cursor-move updates are skipped while the upload is backed up so notes
+//     and chat aren't stuck behind stale mouse positions.
+Client.prototype.connectTimeoutMs = 30000;
+Client.prototype.joinTimeoutMs = 30000;
+Client.prototype.pingIntervalMs = 10000;
+Client.prototype.probeAfterMs = 25000;
+Client.prototype.probeTimeoutMs = 30000;
+Client.prototype.staleTimeoutMs = 90000;
+Client.prototype.watchdogMs = 5000;
+Client.prototype.maxBufferedForCursor = 16 * 1024;
+Client.prototype.chatQueueMax = 30;
+Client.prototype.chatQueueMaxAgeMs = 5 * 60 * 1000;
+Client.prototype.chatMaxTries = 3;
+Client.prototype.chatSendSpacingMs = 700;
+
+Client.prototype.isOnline = function() {
+	return typeof navigator === "undefined" || navigator.onLine !== false;
+};
+
+Client.prototype._clearConnTimers = function() {
+	clearInterval(this.pingInterval);
+	clearInterval(this.noteFlushInterval);
+	clearInterval(this.watchdogInterval);
+	clearTimeout(this.connectTimer);
+	clearTimeout(this.joinTimer);
+	clearTimeout(this._flushTimer);
+	this.pingInterval = undefined;
+	this.noteFlushInterval = undefined;
+	this.watchdogInterval = undefined;
+	this.connectTimer = undefined;
+	this.joinTimer = undefined;
+	this._flushTimer = undefined;
+};
+
+// Drop the current socket right now and run the normal close/reconnect logic,
+// without waiting for the browser's close handshake (which on a dead
+// connection can take a minute or more to fire "close").
+Client.prototype._abandonSocket = function(reason) {
+	var sock = this.ws;
+	if(!sock) return;
+	try { sock.close(); } catch(e) {}
+	this._onSocketClosed(sock, { code: 4000, reason: reason || "abandoned" });
+};
+
+// Force a fresh connection (e.g. after coming back online). Resets backoff.
+Client.prototype.reconnectNow = function(reason) {
+	if(!this.canConnect) return;
+	clearTimeout(this.reconnectTimer);
+	this.reconnectTimer = undefined;
+	this.connectionAttempts = 0;
+	if(this.ws) {
+		this._abandonSocket(reason || "reconnect");
+	} else {
+		this.connect();
+	}
+};
+
+// Time since we last had any sign the current connection is alive.
+Client.prototype._silentFor = function() {
+	return Date.now() - Math.max(this.lastMessageTime || 0, this.lastProgressTime || 0);
+};
+
+// Cheap liveness check: ping if we haven't heard from the server lately, and
+// open a spare connection in the background if it's been quiet for a while.
+Client.prototype.checkConnection = function() {
+	if(!this.canConnect) return;
+	if(this.isConnected()) {
+		var silent = this._silentFor();
+		if(silent > this.probeAfterMs) this._startProbe();
+		if(silent > 3000) this.sendArray([{m: "t", e: Date.now()}]);
+	} else if(!this.isConnecting()) {
+		this.reconnectNow("check");
+	}
+};
+
+Client.prototype._scheduleReconnect = function(ms) {
+	if(!this.canConnect) return;
+	clearTimeout(this.reconnectTimer);
+	if(typeof ms !== "number") {
+		var ms_lut = [50, 1000, 2000, 4000, 6000, 8000];
+		var idx = this.connectionAttempts;
+		if(idx >= ms_lut.length) idx = ms_lut.length - 1;
+		ms = ms_lut[idx];
+		if(idx > 0) ms += Math.floor(Math.random() * 500); // spread reconnects out a bit
+	}
+	var self = this;
+	this.reconnectTimer = setTimeout(function() {
+		self.reconnectTimer = undefined;
+		self.connect();
+	}, ms);
+};
+
+Client.prototype._onSocketClosed = function(sock, evt) {
+	// Each socket is handled exactly once, and only if it's still ours — a late
+	// "close" from an old socket must not tear down its replacement.
+	if(sock._harmonyClosed) return;
+	sock._harmonyClosed = true;
+	if(this.ws !== sock) return;
+	this.ws = undefined;
+	this._dropProbe();
+	this._requeueInFlightChat();
+	this.user = undefined;
+	this.participantId = undefined;
+	this.channel = undefined;
+	this.joined = false;
+	this.setParticipants([]);
+	this._clearConnTimers();
+
+	this.emit("disconnect", evt);
+	this.emit("status", !this.canConnect ? "Offline mode"
+		: this.isOnline() ? "Reconnecting..." : "No internet — will reconnect automatically...");
+
+	// Manual switch: skip auto failover / "return to main" and reconnect ASAP
+	// on the server the user just picked.
+	if(this._switchingServer) {
+		this._switchingServer = false;
+		this.connectionTime = undefined;
+		this.connectionAttempts = 0;
+		this.serverFailCount = 0;
+		this.emit("server", this.getServerInfo());
+		this._scheduleReconnect(50);
+		return;
+	}
+
+	// reconnect (with failover between the main server and backups)
+	if(this.connectionTime) {
+		// We had a live connection that just dropped.
+		this.connectionTime = undefined;
+		this.connectionAttempts = 0;
+		this.serverFailCount = 0;
+		// If that connection was on a backup, prefer the main server again so
+		// the room returns to public MPP as soon as it's reachable — unless the
+		// user manually locked onto a server from the UI.
+		if(this.serverIndex !== 0 && !this.manualServer) {
+			this.serverIndex = 0;
+			this.uri = this.servers[0];
+			this.emit("server", this.getServerInfo());
+		}
+	} else {
+		// Couldn't connect at all.
+		++this.connectionAttempts;
+		// When the device itself is offline every server fails; that says nothing
+		// about the server, so don't let it trigger failover to the backup.
+		if(this.isOnline()) ++this.serverFailCount;
+		// After enough failures on the current server, fail over to the next
+		// one in the list. The list wraps, so a dead backup loops back to the
+		// main server and keeps retrying it. Skip while the user has a manual
+		// server lock so we don't bounce them off their choice.
+		if(!this.manualServer && this.servers.length > 1 && this.serverFailCount >= this.failoverThreshold) {
+			this.serverFailCount = 0;
+			this.serverIndex = (this.serverIndex + 1) % this.servers.length;
+			this.uri = this.servers[this.serverIndex];
+			this.emit("status", this.serverIndex === 0 ? "Retrying main server..." : "Switching to backup server...");
+			this.emit("server", this.getServerInfo());
+		}
+	}
+	// While offline, the browser's "online" event reconnects right away (see
+	// _bindNetworkListeners); keep a slow retry as a safety net.
+	this._scheduleReconnect(this.isOnline() ? undefined : 10000);
+};
+
+Client.prototype._bindNetworkListeners = function() {
+	if(this._networkListenersBound) return;
+	if(typeof window === "undefined" || typeof window.addEventListener !== "function") return;
+	this._networkListenersBound = true;
+	var self = this;
+	window.addEventListener("online", function() {
+		if(!self.canConnect) return;
+		self.serverFailCount = 0;
+		if(self.isConnected()) {
+			// The connection may have survived the outage, or may be half-dead.
+			// Ping it, and if it has been quiet open a spare in the background —
+			// no disconnect either way.
+			self.sendArray([{m: "t", e: Date.now()}]);
+			if(self._silentFor() > 5000) self._startProbe();
+			return;
+		}
+		self.reconnectNow("online");
+	});
+	window.addEventListener("offline", function() {
+		if(self.canConnect && !self.isConnected()) {
+			self.emit("status", "No internet — will reconnect automatically...");
+		}
+	});
+	if(typeof document !== "undefined" && typeof document.addEventListener === "function") {
+		// Background tabs have their timers throttled (and mobile browsers may
+		// freeze them), so check the connection as soon as the tab is visible.
+		document.addEventListener("visibilitychange", function() {
+			if(document.visibilityState === "visible") self.checkConnection();
+		});
+	}
+	window.addEventListener("pageshow", function(evt) {
+		if(evt && evt.persisted) self.checkConnection();
+	});
+};
+
+// Opens a WebSocket and wires it up. The same socket can start life as the
+// main connection (this.ws) or as a background spare (this._probe) that is
+// promoted to main once it has joined the room.
+Client.prototype._createSocket = function(uri, log) {
+	var sock;
+	try {
+		if(typeof module !== "undefined") {
+			// nodejsicle
+			sock = new WebSocket(uri, {
+				origin: "https://game.multiplayerpiano.com"
+			});
+			// Swallow errors so a failed connection can't throw an uncaught
+			// 'error' and crash the node process; "close" handles the retry.
+			sock.on("error", function() {});
+		} else {
+			// browseroni
+			sock = new WebSocket(uri);
+		}
+	} catch(e) {
+		return null;
+	}
+	var self = this;
+	sock.addEventListener("close", function(evt) {
+		log && console.log(`close`, evt)
+		if(sock === self._probe) { self._dropProbe(); return; }
+		self._onSocketClosed(sock, evt);
+	});
+	sock.addEventListener("error", function(err) {
+		log && console.log(`ws error`, err)
+		if(sock === self._probe) { self._dropProbe(); return; }
+		if(self.ws !== sock) return;
+		self.emit("wserror", err);
+		try { sock.close(); } catch(e) {}
+	});
+	sock.addEventListener("open", function(evt) {
+		log && console.log(`ws open`)
+		if(sock === self._probe) {
+			self._sendOn(sock, [{m: "hi", x: 1, y: 1}]);
+			return;
+		}
+		if(self.ws !== sock) return;
+		self._onSocketOpen(sock, false, log);
+	});
+	sock.addEventListener("message", function(evt) {
+		var transmission;
+		try { transmission = JSON.parse(evt.data); } catch(e) { return; }
+		if(!Array.isArray(transmission)) transmission = [transmission];
+		if(sock === self._probe) { self._onProbeMessage(sock, transmission); return; }
+		if(self.ws !== sock) return;
+		self.lastMessageTime = sock._lastRx = Date.now();
+		log && console.log(`message`, transmission)
+		self._dispatch(transmission);
+	});
+	return sock;
+};
+
+Client.prototype._sendOn = function(sock, arr) {
+	try { sock.send(JSON.stringify(arr)); return true; } catch(e) { return false; }
+};
+
+Client.prototype._dispatch = function(transmission) {
+	for(var i = 0; i < transmission.length; i++) {
+		var msg = transmission[i];
+		if(!msg || typeof msg.m !== "string") continue;
+		try {
+			this.emit(msg.m, msg);
+		} catch(e) {
+			// A bug in one feature's handler must not stop the rest of the
+			// batch (e.g. chat) from being processed.
+			try { console.error(e); } catch(e2) {}
+		}
+	}
+};
+
+// Timers and handshake for a socket that has just become the main connection.
+// `promoted` = it's a background spare that already said hi and joined.
+Client.prototype._onSocketOpen = function(sock, promoted, log) {
+	var self = this;
+	clearTimeout(this.connectTimer);
+	this.connectionTime = Date.now();
+	this.lastMessageTime = Date.now();
+	this.lastProgressTime = 0;
+	this.serverFailCount = 0;
+	if(this.serverIndex > 0 && !promoted) this.emit("status", "Connected to backup server");
+	this.emit("server", this.getServerInfo());
+	if(!promoted) this.sendArray([{"m": "hi", "x": 1, "y": 1, "🐈": this['🐈']++ || undefined }]);
+	this.pingInterval = setInterval(function() {
+		self.sendArray([{m: "t", e: Date.now()}]);
+	}, this.pingIntervalMs);
+	this.watchdogInterval = setInterval(function() {
+		if(self.ws !== sock) return;
+		// A draining send buffer means the link is slow, not dead.
+		var buf = sock.bufferedAmount || 0;
+		if(buf > 0 && typeof sock._lastBuf === "number" && buf < sock._lastBuf) self.lastProgressTime = Date.now();
+		sock._lastBuf = buf;
+		var silent = self._silentFor();
+		var hardSilent = Date.now() - (self.lastMessageTime || 0);
+		if(silent > self.staleTimeoutMs || hardSilent > self.staleTimeoutMs * 3) {
+			log && console.log(`connection stale`);
+			self._abandonSocket("stale");
+			return;
+		}
+		if(silent > self.probeAfterMs) self._startProbe();
+		self._expireChat();
+	}, this.watchdogMs);
+	// Connected but never put into a channel: retry instead of sitting on
+	// "Joining channel..." forever — but keep waiting while the server is
+	// still talking to us (just slow).
+	var armJoinTimer = function() {
+		self.joinTimer = setTimeout(function() {
+			if(self.ws !== sock || self.joined) return;
+			if(sock._lastRx && Date.now() - sock._lastRx < 15000) {
+				if(self.desiredChannelId) self.setChannel();
+				armJoinTimer();
+				return;
+			}
+			log && console.log(`join timeout`);
+			self._abandonSocket("join timeout");
+		}, self.joinTimeoutMs);
+	};
+	if(!promoted) armJoinTimer();
+	this.noteBuffer = [];
+	this.noteBufferTime = 0;
+	this.noteFlushInterval = setInterval(function() {
+		if(self.noteBufferTime && self.noteBuffer.length > 0) {
+			self.sendArray([{m: "n", t: self.noteBufferTime + self.serverTimeOffset, n: self.noteBuffer}]);
+			self.noteBufferTime = 0;
+			self.noteBuffer = [];
+		}
+	}, 200);
+
+	this.emit("connect");
+	if(!promoted) this.emit("status", "Joining channel...");
+};
+
+Client.prototype._startProbe = function() {
+	if(this._probe || !this.canConnect || !this.isOnline() || !this.isConnected()) return;
+	var sock = this._createSocket(this.uri);
+	if(!sock) return;
+	this._probe = sock;
+	sock._probeStarted = Date.now();
+	console.log("Connection quiet — opening a spare connection in the background");
+	var self = this;
+	clearTimeout(this._probeTimer);
+	this._probeTimer = setTimeout(function() {
+		if(self._probe === sock) self._dropProbe();
+	}, this.probeTimeoutMs);
+};
+
+Client.prototype._dropProbe = function() {
+	var sock = this._probe;
+	clearTimeout(this._probeTimer);
+	this._probeTimer = undefined;
+	if(!sock) return;
+	this._probe = undefined;
+	sock._harmonyClosed = true;
+	try { sock.close(); } catch(e) {}
+};
+
+Client.prototype._onProbeMessage = function(sock, transmission) {
+	// If the main connection has woken up meanwhile, the spare isn't needed.
+	if((this.lastMessageTime || 0) > sock._probeStarted) { this._dropProbe(); return; }
+	for(var i = 0; i < transmission.length; i++) {
+		var msg = transmission[i];
+		if(!msg) continue;
+		if(msg.m === "hi") {
+			sock._hi = msg;
+			var want = this.lastUserSet;
+			if(want && msg.u && ((want.name && want.name !== msg.u.name) || (want.color && want.color !== msg.u.color))) {
+				this._sendOn(sock, [{m: "userset", set: want}]);
+			}
+			this._sendOn(sock, [{m: "ch", _id: this.desiredChannelId || "lobby", set: this.desiredChannelSettings}]);
+		} else if(msg.m === "ch") {
+			this._promoteProbe(sock, transmission.slice(i));
+			return;
+		}
+	}
+};
+
+// The spare connection is in the room: make it the main connection and close
+// the old one. No "disconnect" is emitted, so chat and the UI never blink.
+Client.prototype._promoteProbe = function(sock, rest) {
+	var old = this.ws;
+	clearTimeout(this._probeTimer);
+	this._probeTimer = undefined;
+	this._probe = undefined;
+	if(old) {
+		old._harmonyClosed = true;
+		try { old.close(); } catch(e) {}
+	}
+	console.log("Switched to a fresh connection (old one was too slow / dead)");
+	this._requeueInFlightChat();
+	this._clearConnTimers();
+	this.ws = sock;
+	this.joined = false;
+	this._onSocketOpen(sock, true);
+	var hi = sock._hi;
+	if(hi) {
+		this.user = hi.u;
+		this.receiveServerTime(hi.t, hi.e || undefined);
+	}
+	this.lastMessageTime = Date.now();
+	this._dispatch(rest);
+};
+
 Client.prototype.connect = function(log) {
 	if(!this.canConnect || !this.isSupported() || this.isConnected() || this.isConnecting())
 		return;
+	clearTimeout(this.reconnectTimer);
+	this.reconnectTimer = undefined;
+	this._bindNetworkListeners();
 	this.uri = this.servers[this.serverIndex] || this.servers[0];
 	var onBackup = this.serverIndex > 0;
 	this.emit("status", onBackup ? "Connecting to backup server..." : "Connecting...");
 	console.log(`Connect to ${this.uri}` + (onBackup ? " (backup server)" : ""))
-	if(typeof module !== "undefined") {
-		// nodejsicle
-		this.ws = new WebSocket(this.uri, {
-			origin: "https://game.multiplayerpiano.com"
-		});
-		this.ws2 = new WebSocket(this.uri, {
-			origin: "wss://mppclone.com/"
-		});
-		// ws2 is unused; swallow its errors so a failed/backup connection can't
-		// throw an uncaught 'error' and crash the node process during failover.
-		this.ws2.on("error", function() {});
-	} else {
-		// browseroni
-		this.ws = new WebSocket(this.uri);
+	var sock = this._createSocket(this.uri, log);
+	if(!sock) {
+		// Bad URL / blocked constructor: treat as a failed attempt and retry.
+		var failed = {};
+		this.ws = failed;
+		this._onSocketClosed(failed, { code: 4001, reason: "construct failed" });
+		return;
 	}
+	this.ws = sock;
+	this.joined = false;
 	var self = this;
-	this.ws.addEventListener("close", function(evt) {
-		log && console.log(`close`, evt)
-		self.user = undefined;
-		self.participantId = undefined;
-		self.channel = undefined;
-		self.setParticipants([]);
-		clearInterval(self.pingInterval);
-		clearInterval(self.noteFlushInterval);
 
-		self.emit("disconnect", evt);
-		self.emit("status", "Offline mode");
-
-		// Manual switch: skip auto failover / "return to main" and reconnect ASAP
-		// on the server the user just picked.
-		if(self._switchingServer) {
-			self._switchingServer = false;
-			self.connectionTime = undefined;
-			self.connectionAttempts = 0;
-			self.serverFailCount = 0;
-			self.emit("server", self.getServerInfo());
-			setTimeout(self.connect.bind(self), 50);
-			return;
+	// Handshake taking too long: give up on this attempt and try again.
+	clearTimeout(this.connectTimer);
+	this.connectTimer = setTimeout(function() {
+		if(self.ws === sock && sock.readyState === WebSocket.CONNECTING) {
+			log && console.log(`connect timeout`);
+			self._abandonSocket("connect timeout");
 		}
+	}, this.connectTimeoutMs);
+};
 
-		// reconnect (with failover between the main server and backups)
-		if(self.connectionTime) {
-			// We had a live connection that just dropped.
-			self.connectionTime = undefined;
-			self.connectionAttempts = 0;
-			self.serverFailCount = 0;
-			// If that connection was on a backup, prefer the main server again so
-			// the room returns to public MPP as soon as it's reachable — unless the
-			// user manually locked onto a server from the UI.
-			if(self.serverIndex !== 0 && !self.manualServer) {
-				self.serverIndex = 0;
-				self.uri = self.servers[0];
-				self.emit("server", self.getServerInfo());
-			}
-		} else {
-			// Couldn't connect at all.
-			++self.connectionAttempts;
-			++self.serverFailCount;
-			// After enough failures on the current server, fail over to the next
-			// one in the list. The list wraps, so a dead backup loops back to the
-			// main server and keeps retrying it. Skip while the user has a manual
-			// server lock so we don't bounce them off their choice.
-			if(!self.manualServer && self.servers.length > 1 && self.serverFailCount >= self.failoverThreshold) {
-				self.serverFailCount = 0;
-				self.serverIndex = (self.serverIndex + 1) % self.servers.length;
-				self.uri = self.servers[self.serverIndex];
-				self.emit("status", self.serverIndex === 0 ? "Retrying main server..." : "Switching to backup server...");
-				self.emit("server", self.getServerInfo());
-			}
-		}
-		var ms_lut = [50, 2950, 7000, 10000];
-		var idx = self.connectionAttempts;
-		if(idx >= ms_lut.length) idx = ms_lut.length - 1;
-		var ms = ms_lut[idx];
-		setTimeout(self.connect.bind(self), ms);
-	});
-	this.ws.addEventListener("error", function(err) {
-		log && console.log(`ws error`, err)
-		self.emit("wserror", err);
-		self.ws.close(); // self.ws.emit("close");
-	});
-	this.ws.addEventListener("open", function(evt) {
-		log && console.log(`ws open`)
-		self.connectionTime = Date.now();
-		self.serverFailCount = 0;
-		if(self.serverIndex > 0) self.emit("status", "Connected to backup server");
-		self.emit("server", self.getServerInfo());
-		self.sendArray([{"m": "hi", "x": 1, "y": 1, "🐈": self['🐈']++ || undefined }]);
-		self.pingInterval = setInterval(function() {
-			self.sendArray([{m: "t", e: Date.now()}]);
-		}, 20000);
-		//self.sendArray([{m: "t", e: Date.now()}]);
-		self.noteBuffer = [];
-		self.noteBufferTime = 0;
-		self.noteFlushInterval = setInterval(function() {
-			if(self.noteBufferTime && self.noteBuffer.length > 0) {
-				self.sendArray([{m: "n", t: self.noteBufferTime + self.serverTimeOffset, n: self.noteBuffer}]);
-				self.noteBufferTime = 0;
-				self.noteBuffer = [];
-			}
-		}, 200);
+// ---------------------------------------------------------------------------
+// Reliable chat
+// ---------------------------------------------------------------------------
+// Send a chat message typed by the user. It is shown as pending right away
+// (via "chat pending"), sent now if we're in a room or queued if we're
+// reconnecting, and tracked until the server echoes it back ("chat
+// delivered"). Returns "sent" or "queued".
+Client.prototype.sendChat = function(message) {
+	var item = { id: ++this._chatSeq, message: message, time: Date.now(), tries: 0, resent: false };
+	this.emit("chat pending", { id: item.id, message: message });
+	if(this.isConnected() && this.joined) {
+		this._transmitChat(item);
+		return "sent";
+	}
+	this.chatQueue.push(item);
+	while(this.chatQueue.length > this.chatQueueMax) this._failChat(this.chatQueue.shift());
+	this.checkConnection();
+	return "queued";
+};
 
-		self.emit("connect");
-		self.emit("status", "Joining channel...");
+Client.prototype._transmitChat = function(item) {
+	item.tries++;
+	item.sentAt = Date.now();
+	this.chatInFlight.push(item);
+	this.sendArray([{m: "a", message: item.message}]);
+};
+
+Client.prototype._failChat = function(item) {
+	if(item) this.emit("chat failed", { id: item.id, message: item.message });
+};
+
+Client.prototype._deliverChat = function(item) {
+	this.emit("chat delivered", { id: item.id, message: item.message });
+};
+
+// Messages sent on a connection that then died may or may not have arrived.
+// Put them back at the front of the queue; they're checked against the room's
+// chat history before being sent again.
+Client.prototype._requeueInFlightChat = function() {
+	if(!this.chatInFlight.length) return;
+	var inflight = this.chatInFlight;
+	this.chatInFlight = [];
+	for(var i = inflight.length - 1; i >= 0; i--) {
+		inflight[i].resent = true;
+		this.chatQueue.unshift(inflight[i]);
+	}
+};
+
+Client.prototype._expireChat = function() {
+	var now = Date.now();
+	var self = this;
+	this.chatInFlight = this.chatInFlight.filter(function(item) {
+		if(now - item.time > self.chatQueueMaxAgeMs) { self._failChat(item); return false; }
+		return true;
 	});
-	this.ws.addEventListener("message", function(evt) {
-		var transmission = JSON.parse(evt.data);
-		log && console.log(`message`, transmission)
-		for(var i = 0; i < transmission.length; i++) {
-			var msg = transmission[i];
-			self.emit(msg.m, msg);
-		}
+};
+
+Client.prototype._isOwnChat = function(msg, allowName) {
+	var p = msg && msg.p;
+	if(!p) return false;
+	if(this.user && p._id && p._id === this.user._id) return true;
+	if(this.participantId && p.id && p.id === this.participantId) return true;
+	if(allowName) {
+		var myName = (this.lastUserSet && this.lastUserSet.name) || (this.user && this.user.name);
+		if(myName && p.name === myName) return true;
+	}
+	return false;
+};
+
+Client.prototype._flushChatQueue = function() {
+	clearTimeout(this._flushTimer);
+	this._flushTimer = undefined;
+	if(!this.chatQueue.length) return;
+	var self = this;
+	var now = Date.now();
+	var pending = this.chatQueue.filter(function(q) {
+		if(now - q.time < self.chatQueueMaxAgeMs) return true;
+		self._failChat(q);
+		return false;
+	});
+	this.chatQueue = [];
+	// Space them out so the server's chat rate limit doesn't drop them.
+	pending.forEach(function(q, i) {
+		setTimeout(function() {
+			if(self.isConnected() && self.joined) {
+				self._transmitChat(q);
+			} else {
+				self.chatQueue.push(q);
+			}
+		}, i * self.chatSendSpacingMs);
 	});
 };
 
@@ -261,20 +702,89 @@ Client.prototype.bindEventListeners = function() {
 	this.on("hi", function(msg) {
 		self.user = msg.u;
 		self.receiveServerTime(msg.t, msg.e || undefined);
+		// After a reconnect some servers (e.g. the Harmony backup) hand out a
+		// fresh identity; restore the name/color the user picked this session.
+		var want = self.lastUserSet;
+		if(want && msg.u && ((want.name && want.name !== msg.u.name) || (want.color && want.color !== msg.u.color))) {
+			self.sendArray([{m: "userset", set: want}]);
+		}
 		if(self.desiredChannelId) {
 			self.setChannel();
 		}
 	});
 	this.on("t", function(msg) {
 		self.receiveServerTime(msg.t, msg.e || undefined);
+		// The server answers in order: if it has answered a ping we sent well
+		// after a chat message but never echoed that message, it dropped it
+		// (e.g. chat rate limit). Retry a couple of times, then report failure.
+		if(msg.e && self.chatInFlight.length) {
+			var dropped = [];
+			self.chatInFlight = self.chatInFlight.filter(function(item) {
+				if(item.sentAt + 3000 < msg.e) { dropped.push(item); return false; }
+				return true;
+			});
+			dropped.forEach(function(item) {
+				if(item.tries < self.chatMaxTries) {
+					self.chatQueue.push(item);
+				} else {
+					self._failChat(item);
+				}
+			});
+			if(dropped.length && self.joined) {
+				clearTimeout(self._flushTimer);
+				self._flushTimer = setTimeout(function() { self._flushChatQueue(); }, 2000);
+			}
+		}
+	});
+	this.on("a", function(msg) {
+		// Our own message came back: it's delivered.
+		if(!self.chatInFlight.length || !self._isOwnChat(msg, false)) return;
+		var text = msg.a != null ? msg.a : msg.message;
+		for(var i = 0; i < self.chatInFlight.length; i++) {
+			if(self.chatInFlight[i].message === text) {
+				var item = self.chatInFlight.splice(i, 1)[0];
+				self._deliverChat(item);
+				return;
+			}
+		}
+	});
+	this.on("c", function(msg) {
+		// Room chat history (sent on join). Anything we were about to re-send
+		// that is already in it did arrive before the old connection died.
+		var hist = (msg && msg.c) || [];
+		if(self.chatQueue.length && hist.length) {
+			self.chatQueue = self.chatQueue.filter(function(item) {
+				if(!item.resent) return true;
+				for(var i = 0; i < hist.length; i++) {
+					var h = hist[i];
+					var text = h.a != null ? h.a : h.message;
+					if(text !== item.message || !self._isOwnChat(h, true)) continue;
+					if(h.t && (h.t - self.serverTimeOffset) < item.time - 30000) continue;
+					self._deliverChat(item);
+					return false;
+				}
+				return true;
+			});
+		}
+		if(self.joined) self._flushChatQueue();
 	});
 	this.on("ch", function(msg) {
+		var firstJoin = !self.joined;
+		self.joined = true;
+		clearTimeout(self.joinTimer);
 		self.desiredChannelId = msg.ch._id;
 		self.desiredChannelSettings = msg.ch.settings;
 		self.channel = msg.ch;
 		if(msg.p) self.participantId = msg.p;
 		self.emit("room participants sync", msg.ppl || []);
 		self.setParticipants(msg.ppl || []);
+		if(firstJoin && self.chatQueue.length) {
+			// Give the server a moment to send chat history ("c") so re-sent
+			// messages can be de-duplicated; fresh ones go right away.
+			var anyResent = self.chatQueue.some(function(q) { return q.resent; });
+			clearTimeout(self._flushTimer);
+			self._flushTimer = setTimeout(function() { self._flushChatQueue(); }, anyResent ? 2000 : 0);
+		}
 	});
 	this.on("p", function(msg) {
 		var part = self.ppl[msg.id];
@@ -301,13 +811,29 @@ Client.prototype.bindEventListeners = function() {
 };
 
 Client.prototype.send = function(raw) {
-	if(this.isConnected()) this.ws.send(raw);
+	if(!this.isConnected()) return false;
+	try {
+		this.ws.send(raw);
+		return true;
+	} catch(e) {
+		return false;
+	}
 };
 
 Client.prototype.sendArray = function(arr) {
+	// Cursor moves are only useful when fresh. On a slow upload, skip them while
+	// the socket's send buffer is backed up so notes and chat go out first.
+	if(Array.isArray(arr) && arr.length === 1 && arr[0] && arr[0].m === "m"
+		&& this.ws && this.ws.bufferedAmount > this.maxBufferedForCursor) {
+		return;
+	}
 	if(Array.isArray(arr)) {
 		for(var i = 0; i < arr.length; i++) {
 			var msg = arr[i];
+			if(msg && msg.m === "userset" && msg.set && typeof msg.set === "object") {
+				if(!this.lastUserSet) this.lastUserSet = {};
+				mixin(this.lastUserSet, msg.set);
+			}
 			if(msg && msg.m === "kickban") {
 				var part = this.findParticipantByUnderscoreId(msg._id);
 				if(part) {

@@ -3961,6 +3961,38 @@ Rect.prototype.contains = function(x, y) {
 					chat.receive(msg.c[i], true);
 				}
 			}
+			chat.reattachPending();
+		});
+
+		// Your own messages show up instantly (dimmed, "sending…") even on a slow
+		// connection; the dimmed line is replaced by the real one when the server
+		// confirms it. Messages are queued/re-sent by the client, so nothing typed
+		// is lost while it reconnects.
+		var pendingLines = {};
+		gClient.on("chat pending", function(info) {
+			var me = gClient.getOwnParticipant();
+			var name = (me && me.name) || (gClient.lastUserSet && gClient.lastUserSet.name) || "You";
+			var li = $('<li class="chat-pending"><span class="name"/><span class="message"/><span class="chat-pending-state"/></li>');
+			li.find(".name").text(name + ":");
+			li.find(".message").text(info.message);
+			li.find(".chat-pending-state").text(" sending…");
+			var color = (typeof gNameColor !== "undefined" && gNameColor && me && me._id)
+				? gNameColor.colorFor(me) : ((me && me.color) || "white");
+			li.css("color", color || "white");
+			pendingLines[info.id] = li;
+			$("#chat ul").append(li);
+			chat.scrollToBottom();
+		});
+		gClient.on("chat delivered", function(info) {
+			var li = pendingLines[info.id];
+			if(li) { li.remove(); delete pendingLines[info.id]; }
+		});
+		gClient.on("chat failed", function(info) {
+			var li = pendingLines[info.id];
+			if(!li) return;
+			delete pendingLines[info.id];
+			li.removeClass("chat-pending").addClass("chat-failed");
+			li.find(".chat-pending-state").text(" (not sent — connection too slow)");
 		});
 		gClient.on("a", function(msg) {
 			// Sync messages arriving over chat are the fallback path (relay off
@@ -4027,19 +4059,19 @@ Rect.prototype.contains = function(x, y) {
 		});
 		$("#chat-input-bar input").on("keydown", function(evt) {
 			if(evt.keyCode == 13) {
-				if(MPP.client.isConnected()) {
-					var message = $(this).val();
-					if(message.length == 0) {
-						setTimeout(function() {
-							chat.blur();
-						}, 100);
-					} else if(message.length <= 512) {
-						chat.send(message);
-						$(this).val("");
-						setTimeout(function() {
-							chat.blur();
-						}, 100);
-					}
+				// Works while reconnecting too: the client queues the message and
+				// sends it as soon as we're back in the room (slow connections).
+				var message = $(this).val();
+				if(message.length == 0) {
+					setTimeout(function() {
+						chat.blur();
+					}, 100);
+				} else if(message.length <= 512) {
+					gClient.sendChat(message);
+					$(this).val("");
+					setTimeout(function() {
+						chat.blur();
+					}, 100);
 				}
 				evt.preventDefault();
 				evt.stopPropagation();
@@ -4066,6 +4098,14 @@ Rect.prototype.contains = function(x, y) {
 
 			clear: function() {
 				$("#chat li").remove();
+			},
+
+			// After the history reload on (re)join, put still-pending lines back.
+			reattachPending: function() {
+				for(var id in pendingLines) {
+					if(pendingLines.hasOwnProperty(id)) $("#chat ul").append(pendingLines[id]);
+				}
+				chat.scrollToBottom();
 			},
 
 			scrollToBottom: function() {
