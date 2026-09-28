@@ -633,6 +633,7 @@ Rect.prototype.contains = function(x, y) {
 	// Phones get a chat-only layout (screen.css hides the piano); same
 	// breakpoint as the phone media query there.
 	function isMobileLayout() {
+		if(window.gForceMobile) return true; // phone in "Desktop site" mode (forceMobile.js)
 		var coarse = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
 		return window.innerWidth <= 760 || (coarse && window.innerWidth <= 1024);
 	}

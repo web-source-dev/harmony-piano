@@ -53,6 +53,7 @@ var SHELL = [
 	"./cornerBanner.js",
 	"./funVideoPopup.js",
 	"./screenShare.js",
+	"./forceMobile.js",
 	"./shareImage.js",
 	"./leaveMsg.js",
 	"./kissBlast.js",
