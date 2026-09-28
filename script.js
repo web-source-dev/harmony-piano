@@ -2284,6 +2284,10 @@ Rect.prototype.contains = function(x, y) {
 	(function setupMobileMenu() {
 		var $btn = $("#mobile-menu-btn");
 		if(!$btn.length) return;
+		// Phone browsers can't share their screen; hide the button there.
+		if(!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)) {
+			document.documentElement.classList.add("no-screen-share");
+		}
 		function setOpen(open) {
 			document.body.classList.toggle("mobile-menu-open", open);
 			$btn.attr("aria-expanded", open ? "true" : "false").text(open ? "✕ Close" : "☰ Menu");
@@ -2790,6 +2794,15 @@ Rect.prototype.contains = function(x, y) {
 	Notification.prototype.constructor = Notification;
 
 	Notification.prototype.position = function() {
+		// Phones: the button a popup points at is usually hidden inside the
+		// collapsed ☰ Menu, so show it as a sheet above the chat box instead
+		// (see .notification-sheet in screen.css).
+		var sheet = isMobileLayout();
+		this.domElement.toggleClass("notification-sheet", sheet);
+		if(sheet) {
+			this.domElement.css({left: "", top: ""});
+			return;
+		}
 		var pos = this.target.offset();
 		var x = pos.left - (this.domElement.width() / 2) + (this.target.width() / 4);
 		var y = pos.top - this.domElement.height() - 8;
@@ -2831,7 +2844,7 @@ Rect.prototype.contains = function(x, y) {
 	var gKeyboardSeq = 0;
 	var gKnowsYouCanUseKeyboard = false;
 	if(localStorage && localStorage.knowsYouCanUseKeyboard) gKnowsYouCanUseKeyboard = true;
-	if(!gKnowsYouCanUseKeyboard) {
+	if(!gKnowsYouCanUseKeyboard && !isMobileLayout()) {
 		window.gKnowsYouCanUseKeyboardTimeout = setTimeout(function() {
 			window.gKnowsYouCanUseKeyboardNotification = new Notification({title: "Did you know!?!",
 				text: "You can play the piano with your keyboard, too.  Try it!", target: "#piano", duration: 10000});
@@ -3550,6 +3563,13 @@ Rect.prototype.contains = function(x, y) {
 	$("#room").on("click", function(evt) {
 		evt.stopPropagation();
 
+		// Phones: the inline list can hold thousands of rooms with no search;
+		// the All Rooms dialog has search + filters and fits the screen.
+		if(isMobileLayout() && !$(evt.target).parents(".more").length) {
+			$("#all-rooms-btn").trigger("click");
+			return false;
+		}
+
 		// clicks on a new room
 		if($(evt.target).hasClass("info") && $(evt.target).parents(".more").length) {
 			$("#room").removeClass("room-list-open");
@@ -3687,11 +3707,28 @@ Rect.prototype.contains = function(x, y) {
 		$("#modal #modals > *").hide();
 		$("#modal").fadeIn(250);
 		$(selector).show();
+		addMobileDialogClose($(selector));
 		setTimeout(function() {
-			$(selector).find(focus).focus();
+			// Phones: don't pop the on-screen keyboard over a dialog that just opened.
+			if(!isMobileLayout()) $(selector).find(focus).focus();
 		}, 100);
 		gModal = selector;
 	};
+
+	// Phones: dialogs nearly fill the screen, leaving little backdrop to tap,
+	// and many have no close button, so add a ✕ that stays pinned at the top.
+	function addMobileDialogClose($dialog) {
+		if(!isMobileLayout() || !$dialog.length || $dialog.children(".mobile-dialog-close").length) return;
+		// Dialogs with their own visible close button (kiss, love, leave a msg…) keep it.
+		if($dialog.find("button[class*='-close']").filter(":visible").length) return;
+		var $x = $('<button type="button" class="mobile-dialog-close" aria-label="Close">✕</button>');
+		$x.on("click", function(evt) {
+			evt.preventDefault();
+			evt.stopPropagation();
+			closeModal();
+		});
+		$dialog.prepend($x);
+	}
 
 	function closeModal() {
 		if(gModal === "#all-rooms") {

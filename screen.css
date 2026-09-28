@@ -6473,8 +6473,6 @@ body.love-got-kiss .love-layer { animation: loveBlush 1s ease-out; }
 	}
 	#room > .info { line-height: 20px; text-overflow: ellipsis; }
 	#room .expand { width: 30px; }
-	#room .more { width: calc(100vw - 16px); min-width: 0; max-height: 60vh; }
-	#room .more > div { min-height: 40px; padding: 10px 12px; display: flex; align-items: center; }
 	.ugly-button { min-height: 38px; padding: 9px 10px; font-size: 13px; line-height: 18px; text-align: center; }
 	#mobile-menu-btn { display: block; flex: 0 0 auto; font-weight: bold; }
 	body:not(.mobile-menu-open) #bottom .toolbar-band > .ugly-button:not(#mobile-menu-btn) { display: none !important; }
@@ -6496,7 +6494,90 @@ body.love-got-kiss .love-layer { animation: loveBlush 1s ease-out; }
 		white-space: normal;
 		word-break: break-word;
 	}
-	body.mobile-menu-open #room .more { display: none; }
+
+	/* Piano-only tools do nothing without a piano (and phones can't screen-share). */
+	#play-alone-btn, #midi-btn, #record-btn, #synth-btn, #sheet-btn, #learn-btn,
+	#sound-btn, #cursor-looks-btn, #learn-panel { display: none !important; }
+	html.no-screen-share #screen-share-btn { display: none !important; }
+
+	/* Room picker: a clean button; tapping it opens the All Rooms dialog. */
+	#room {
+		background: rgba(255, 255, 255, 0.1);
+		border: 1px solid rgba(255, 255, 255, 0.28);
+		border-radius: 10px;
+		box-shadow: none;
+	}
+	#room > .info::before { content: "🏠 "; }
+	#room .expand { background: none; border-left: 1px solid rgba(255, 255, 255, 0.18); }
+	#room .expand::after {
+		content: "▾";
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: #fff;
+		font-size: 18px;
+	}
+	#room .more, #room.room-list-open .more { display: none !important; }
+
+	/* Pop-ups that point at a toolbar button (Server, Sound, Synth…) become a
+	   sheet above the chat box, with a big close button. */
+	.notification.notification-sheet {
+		position: fixed !important;
+		left: 8px !important;
+		right: 8px !important;
+		top: auto !important;
+		bottom: calc(var(--ui-stack-h) + 8px) !important;
+		z-index: 100040;
+	}
+	.notification.notification-sheet .notification-body {
+		width: auto !important;
+		max-height: 55vh;
+		overflow-y: auto;
+		padding: 14px 52px 14px 14px;
+		font-size: 14px;
+		border-radius: 14px;
+		box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+		-webkit-overflow-scrolling: touch;
+	}
+	.notification.notification-sheet .notification-body:after { display: none; }
+	.notification.notification-sheet .x {
+		top: 6px;
+		right: 6px;
+		z-index: 2;
+		width: 40px;
+		height: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 10px;
+		background: rgba(0, 0, 0, 0.08);
+		font-size: 22px;
+	}
+	.notification.notification-sheet .server-pick { padding: 12px; font-size: 13px; overflow-wrap: anywhere; }
+	.notification.notification-sheet .server-pick-uri { display: block; margin-top: 2px; opacity: 0.7; font-size: 11px; }
+
+	/* ✕ added to dialogs without their own close button (script.js). */
+	#modal .dialog > .mobile-dialog-close {
+		position: sticky;
+		top: 0;
+		float: right;
+		align-self: flex-end;
+		z-index: 10;
+		width: 40px;
+		height: 40px;
+		margin: -4px -4px -36px 8px; /* negative bottom: the title flows up beside it */
+		padding: 0;
+		border: 0;
+		border-radius: 50%;
+		background: rgba(0, 0, 0, 0.6);
+		color: #fff;
+		font-size: 18px;
+		line-height: 40px;
+		cursor: pointer;
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	}
 
 	/* ---- Dialogs: always fit the screen, scroll inside when tall ---- */
 	#modal .dialog {
