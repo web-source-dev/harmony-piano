@@ -222,6 +222,13 @@
 		return this._send({ m: "manage-close-set", _id: _id });
 	};
 
+	// Tells the relay who this tab can see in its MPP room, so the /manage page
+	// can list people on the public MPP server (which the relay can't see).
+	// server is "mpp" or "backup"; list is [{_id, name, color}].
+	RoomSync.prototype.reportPeople = function (server, ch, list) {
+		return this._send({ m: "ppl", server: server, ch: ch, ppl: list });
+	};
+
 	if (typeof module !== "undefined" && module.exports) {
 		module.exports = RoomSync;
 	} else {

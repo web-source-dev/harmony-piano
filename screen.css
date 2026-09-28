@@ -6376,3 +6376,189 @@ body.love-got-kiss .love-layer { animation: loveBlush 1s ease-out; }
 	.love-trail { display: none; }
 	.lh-squeeze { animation: none; }
 }
+
+/* ==========================================================================
+   Phones & small touch tablets
+   Same breakpoint as isMobileLayout() in script.js: narrow screens, or any
+   touch screen up to tablet width (so phones in landscape count too).
+   ========================================================================== */
+#mobile-menu-btn { display: none; }
+.piano-scroller[hidden] { display: none !important; }
+
+@media (max-width: 760px), (pointer: coarse) and (max-width: 1024px) {
+	html, body { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+	button, .ugly-button, .harmony-tool-btn, #room { touch-action: manipulation; }
+
+	/* Desktop ad slot (970px wide) and social row only get in the way here. */
+	.ad1, #social { display: none !important; }
+
+	/* ---- Top: participant names as one swipeable row ---- */
+	#names {
+		top: env(safe-area-inset-top, 0px);
+		left: 0;
+		right: 0;
+		width: auto;
+		display: flex;
+		flex-wrap: nowrap;
+		overflow-x: auto;
+		overflow-y: hidden;
+		padding: 10px 6px 2px;
+		box-sizing: border-box;
+		scrollbar-width: none;
+		-webkit-overflow-scrolling: touch;
+	}
+	#names::-webkit-scrollbar { display: none; }
+	#names .name { float: none; flex: 0 0 auto; min-width: 44px; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+	/* ---- Play tools: one swipeable strip under the names ---- */
+	.harmony-tools,
+	html:not(.dontshow) .harmony-tools {
+		top: calc(env(safe-area-inset-top, 0px) + 38px);
+		left: 0;
+		right: 0;
+		max-width: none;
+		align-items: stretch;
+	}
+	.harmony-tools-bar,
+	html:not(.dontshow) .harmony-tools-bar {
+		flex-wrap: nowrap;
+		justify-content: flex-start;
+		overflow-x: auto;
+		overflow-y: hidden;
+		padding: 5px 8px;
+		border-radius: 0;
+		border-left: none;
+		scrollbar-width: none;
+		-webkit-overflow-scrolling: touch;
+	}
+	.harmony-tools-bar::-webkit-scrollbar { display: none; }
+	.harmony-tool-btn { flex: 0 0 auto; min-height: 34px; padding: 6px 12px; font-size: 13px; }
+	.harmony-tools .play-area { width: 100%; padding: 0 6px; box-sizing: border-box; }
+
+	#chat { top: calc(env(safe-area-inset-top, 0px) + 84px); font-size: 14px; }
+	#chat .chat-log { padding: 4px 8px; }
+
+	/* ---- Piano: real-size keys, slid sideways with the scroller ---- */
+	#piano {
+		width: 100%;
+		padding-left: 0;
+		box-sizing: border-box;
+		touch-action: none;
+		-webkit-user-select: none;
+		user-select: none;
+		-webkit-touch-callout: none;
+	}
+	.piano-scroller {
+		position: relative;
+		z-index: 481;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: calc(100% - 16px);
+		max-width: 560px;
+		margin: 8px auto 0;
+		padding: 4px 6px;
+		box-sizing: border-box;
+		border-radius: 12px;
+		background: rgba(20, 30, 32, 0.72);
+		box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+		font-size: 13px;
+	}
+	.piano-scroller-btn {
+		flex: 0 0 40px;
+		height: 36px;
+		border: 1px solid rgba(255, 255, 255, 0.25);
+		border-radius: 9px;
+		background: rgba(255, 255, 255, 0.1);
+		color: #fff;
+		font-size: 14px;
+		cursor: pointer;
+	}
+	.piano-scroller-btn:active { background: rgba(255, 255, 255, 0.25); }
+	.piano-scroller-range { flex: 1 1 auto; min-width: 0; height: 36px; margin: 0; accent-color: #fd0; }
+	.piano-scroller-label { flex: 0 0 auto; min-width: 26px; text-align: center; font-weight: bold; color: #fd0; }
+
+	/* ---- Bottom: chat input + collapsed toolbar ---- */
+	#bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+	#chat-input-bar { height: 46px; padding: 5px 8px; }
+	#chat-input-bar input { font-size: 16px; } /* 16px stops iOS zooming in on focus */
+	#bottom .relative.toolbar-band {
+		flex-wrap: nowrap;
+		gap: 6px;
+		padding: 6px 8px;
+		min-height: 50px;
+	}
+	#room {
+		flex: 1 1 auto;
+		min-width: 0;
+		max-width: none;
+		height: 20px;
+		padding: 8px 34px 8px 10px;
+	}
+	#room > .info { line-height: 20px; text-overflow: ellipsis; }
+	#room .expand { width: 30px; }
+	#room .more { width: calc(100vw - 16px); min-width: 0; max-height: 60vh; }
+	#room .more > div { min-height: 40px; padding: 10px 12px; display: flex; align-items: center; }
+	.ugly-button { min-height: 38px; padding: 9px 10px; font-size: 13px; line-height: 18px; text-align: center; }
+	#mobile-menu-btn { display: block; flex: 0 0 auto; font-weight: bold; }
+	body:not(.mobile-menu-open) #bottom .toolbar-band > .ugly-button:not(#mobile-menu-btn) { display: none !important; }
+	#volume { position: relative; right: auto; top: auto; transform: none; flex: 0 0 84px; width: 84px; height: 38px; }
+	#volume-label { display: none; }
+
+	/* Menu open: every button as an easy-to-tap grid above the chat input. */
+	body.mobile-menu-open #bottom .relative.toolbar-band {
+		flex-wrap: wrap;
+		align-content: flex-start;
+		max-height: min(62vh, 480px);
+		overflow-y: auto;
+		-webkit-overflow-scrolling: touch;
+	}
+	body.mobile-menu-open #room { flex: 1 1 calc(100% - 200px); }
+	body.mobile-menu-open #bottom .toolbar-band > .ugly-button:not(#mobile-menu-btn) {
+		flex: 1 1 calc(33.333% - 6px);
+		min-width: 0;
+		white-space: normal;
+		word-break: break-word;
+	}
+	body.mobile-menu-open #room .more { display: none; }
+
+	/* ---- Dialogs: always fit the screen, scroll inside when tall ---- */
+	#modal .dialog {
+		left: 50% !important;
+		top: 50% !important;
+		right: auto !important;
+		bottom: auto !important;
+		margin: 0 !important;
+		transform: translate(-50%, -50%) !important;
+		max-width: calc(100vw - 16px) !important;
+		max-height: calc(100vh - 16px) !important;
+		max-height: calc(100dvh - 16px) !important;
+		height: auto !important;
+		min-height: 0 !important;
+		overflow-y: auto !important;
+		box-sizing: border-box;
+		-webkit-overflow-scrolling: touch;
+	}
+	#modal .dialog input[type="text"],
+	#modal .dialog input:not([type]),
+	#modal .dialog textarea,
+	#modal .dialog select { font-size: 16px; max-width: 100%; box-sizing: border-box; }
+
+	/* Other floating panels never wider than the screen. */
+	#hacks-dock, #corner-banner, #manage-panel, #room-media-transport, .play-widget { max-width: 100vw; box-sizing: border-box; }
+}
+
+/* Short screens (phones in landscape): trim the chrome so the keys get room. */
+@media (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
+	#chat { top: calc(env(safe-area-inset-top, 0px) + 78px); }
+	.piano-scroller { margin-top: 4px; padding: 2px 6px; }
+	.piano-scroller-btn { height: 30px; }
+	.piano-scroller-range { height: 30px; }
+	#chat-input-bar { height: 40px; }
+	#bottom .relative.toolbar-band { min-height: 44px; padding: 4px 8px; }
+	.ugly-button { min-height: 34px; }
+	#volume { height: 34px; }
+	#room { height: 18px; padding-top: 7px; padding-bottom: 7px; }
+	body.mobile-menu-open #bottom .relative.toolbar-band { max-height: 55vh; }
+	body.mobile-menu-open #bottom .toolbar-band > .ugly-button:not(#mobile-menu-btn) { flex-basis: calc(20% - 6px); }
+}

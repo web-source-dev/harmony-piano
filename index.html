@@ -2,10 +2,12 @@
 <html>
 <head>
     <meta http-equiv="content-type" content="text/html; charset=UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"/>
+    <meta name="theme-color" content="#3b5054"/>
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20260927a"/>
+    <link rel="stylesheet" href="./screen.css?v=20260928m"/>
     <link rel="canonical" href="https://multiplayerpiano.com/">
 
     <!-- Password gate: hide the whole app until the password is verified. -->
@@ -485,6 +487,14 @@
 
 <div id="piano"></div>
 
+<!-- Phones: the keyboard is wider than the screen; slide along it here. -->
+<div id="piano-scroller" class="piano-scroller" hidden>
+    <button type="button" class="piano-scroller-btn" data-dir="-1" aria-label="Lower octave">◀</button>
+    <input type="range" class="piano-scroller-range" min="0" max="100" step="1" value="50" aria-label="Move along the keyboard">
+    <span class="piano-scroller-label" aria-hidden="true">C4</span>
+    <button type="button" class="piano-scroller-btn" data-dir="1" aria-label="Higher octave">▶</button>
+</div>
+
 <div id="cursors"></div>
 
 <div id="chat">
@@ -521,6 +531,7 @@
                 <div class="new translate">New Room...</div>
             </div>
         </div>
+        <div id="mobile-menu-btn" class="ugly-button" role="button" tabindex="0" aria-expanded="false" aria-controls="bottom">☰ Menu</div>
         <div id="all-rooms-btn" class="ugly-button">All Rooms</div>
         <div id="new-room-btn" class="ugly-button translate">New Room...</div>
         <div id="play-alone-btn" class="ugly-button">Play Alone</div>
@@ -1373,7 +1384,7 @@
         "./jquery.min.js",
         "./util.js",
         "./client.js?v=20260927b",
-        "./roomSync.js?v=20260927a",
+        "./roomSync.js?v=20260928m",
         "./funSounds.js?v=20260924b",
         "./NoteQuota.js",
         "./lame.min.js",
@@ -1406,7 +1417,7 @@
         "./leaveMsg.js?v=20260922a",
         "./kissBlast.js?v=20260924b",
         "./loveBits.js?v=20260925b",
-        "./script.js?v=20260927b"
+        "./script.js?v=20260928m"
     ];
 </script>
 <!--<script src="https://mppclone.com/script.js"></script>-->

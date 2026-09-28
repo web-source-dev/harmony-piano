@@ -630,10 +630,45 @@ Rect.prototype.contains = function(x, y) {
 		return this;
 	};
 
+	// Phones: 52 white keys across a ~390px screen are ~7px wide — unplayable.
+	// Below a comfortable key size the canvas is drawn wider than #piano (which
+	// clips it) and scrolled sideways with the piano scroller, at a height that
+	// fits the screen instead of the desktop 5:1 ratio.
+	var MOBILE_WHITE_KEY_PX = 26;
+	function isMobileLayout() {
+		var coarse = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+		return window.innerWidth <= 760 || (coarse && window.innerWidth <= 1024);
+	}
+	// Space the piano + its scroller get between the top strips (names, play
+	// tools) and the bottom UI; matches the #chat top offsets in screen.css.
+	function mobilePianoSize(boxWidth) {
+		if(!isMobileLayout() || boxWidth / 52 >= MOBILE_WHITE_KEY_PX) return null;
+		var winH = window.innerHeight;
+		var topChrome = winH <= 500 ? 78 : 84;
+		var bottomEl = document.getElementById("bottom");
+		var bottomH = document.body.classList.contains("mobile-menu-open") ? 96 : ((bottomEl && bottomEl.offsetHeight) || 96);
+		var scrollerH = winH <= 500 ? 40 : 52;
+		var avail = winH - topChrome - bottomH - scrollerH;
+		var width = 52 * MOBILE_WHITE_KEY_PX;
+		var height = Math.floor(Math.min(width * 0.2, winH * 0.34, avail - 8));
+		height = Math.max(90, Math.min(240, height));
+		return { width: width, height: height, marginTop: topChrome + Math.max(0, Math.floor((avail - height) / 2)) };
+	}
+
 	Renderer.prototype.resize = function(width, height) {
-		if(typeof width == "undefined") width = $(this.piano.rootElement).width();
+		this.scrollable = false;
+		if(typeof width == "undefined") {
+			width = $(this.piano.rootElement).width();
+			var mobile = mobilePianoSize(width);
+			if(mobile) {
+				width = mobile.width;
+				height = mobile.height;
+				this.scrollable = true;
+			}
+		}
 		if(typeof height == "undefined") height = Math.floor(width * 0.2);
-		$(this.piano.rootElement).css({"height": height + "px", marginTop: Math.floor($(window).height() / 2 - height / 2) + "px"});
+		var marginTop = mobile ? mobile.marginTop : Math.floor($(window).height() / 2 - height / 2);
+		$(this.piano.rootElement).css({"height": height + "px", marginTop: marginTop + "px"});
 		this.width = width * window.devicePixelRatio;
 		this.height = height * window.devicePixelRatio;
 	};
@@ -680,19 +715,33 @@ Rect.prototype.contains = function(x, y) {
 				last_key = hit.key;
 			}
 		});
+		// Each finger releases its own note when lifted (like mouseup does).
+		var touch_notes = {};
 		piano.rootElement.addEventListener("touchstart", function(event) {
 			mouse_down = true;
 			//event.stopPropagation();
 			event.preventDefault();
-			for(var i in event.changedTouches) {
-				var pos = CanvasRenderer.translateMouseEvent(event.changedTouches[i]);
+			for(var i = 0; i < event.changedTouches.length; i++) {
+				var touch = event.changedTouches[i];
+				var pos = CanvasRenderer.translateMouseEvent(touch);
 				var hit = self.getHit(pos.x, pos.y);
 				if(hit) {
 					press(hit.key.note, hit.v);
-					last_key = hit.key;
+					touch_notes[touch.identifier] = hit.key.note;
 				}
 			}
 		}, false);
+		var touch_release = function(event) {
+			for(var i = 0; i < event.changedTouches.length; i++) {
+				var id = event.changedTouches[i].identifier;
+				if(touch_notes.hasOwnProperty(id)) {
+					release(touch_notes[id]);
+					delete touch_notes[id];
+				}
+			}
+		};
+		piano.rootElement.addEventListener("touchend", touch_release, false);
+		piano.rootElement.addEventListener("touchcancel", touch_release, false);
 		$(window).mouseup(function(event) {
 			if(last_key) {
 				release(last_key.note);
@@ -716,7 +765,7 @@ Rect.prototype.contains = function(x, y) {
 	CanvasRenderer.prototype.resize = function(width, height) {
 		Renderer.prototype.resize.call(this, width, height);
 		if(this.width < 52 * 2) this.width = 52 * 2;
-		if(this.height < this.width * 0.2) this.height = Math.floor(this.width * 0.2);
+		if(!this.scrollable && this.height < this.width * 0.2) this.height = Math.floor(this.width * 0.2);
 		this.canvas.width = this.width;
 		this.canvas.height = this.height;
 		this.canvas.style.width = this.width / window.devicePixelRatio + "px";
@@ -986,18 +1035,17 @@ Rect.prototype.contains = function(x, y) {
 		return !!(canvas.getContext && canvas.getContext("2d"));
 	};
 
+	// Bounding-rect based so a sideways-scrolled piano (phones) still hits the right key.
 	CanvasRenderer.translateMouseEvent = function(evt) {
 		var element = evt.target;
-		var offx = 0;
-		var offy = 0;
-		do {
-			if(!element) break; // wtf, wtf?
-			offx += element.offsetLeft;
-			offy += element.offsetTop;
-		} while(element = element.offsetParent);
+		if(element && element.tagName !== "CANVAS" && element.querySelector) {
+			element = element.querySelector("canvas") || element;
+		}
+		if(!element || !element.getBoundingClientRect) return { x: -1, y: -1 };
+		var rect = element.getBoundingClientRect();
 		return {
-			x: (evt.pageX - offx) * window.devicePixelRatio,
-			y: (evt.pageY - offy) * window.devicePixelRatio
+			x: (evt.clientX - rect.left) * window.devicePixelRatio,
+			y: (evt.clientY - rect.top) * window.devicePixelRatio
 		}
 	};
 
@@ -1489,6 +1537,37 @@ Rect.prototype.contains = function(x, y) {
 	// The relay is served by relay-server.js on the SAME port as the app, so the
 	// default always matches wherever the page was loaded from. (Serve the app
 	// with `node relay-server.js` — run-servers.bat does this — for full sync.)
+	// Report who this tab sees in its MPP room to the relay (for /manage's
+	// "online now" list). Debounced on join/leave/rename, plus a heartbeat so
+	// the list survives relay reconnects. Client-side ghosts are left out.
+	function startPeopleReports() {
+		var timer = null;
+		function send() {
+			timer = null;
+			if(!gRoomSync || !gClient || !gClient.isConnected || !gClient.isConnected()) return;
+			var ch = gClient.channel && gClient.channel._id;
+			if(!ch) return;
+			var list = [];
+			for(var id in gClient.ppl) {
+				if(!gClient.ppl.hasOwnProperty(id)) continue;
+				var part = gClient.ppl[id];
+				if(!part || !part._id) continue;
+				if(Client.isLobbyNoobParticipant && Client.isLobbyNoobParticipant(part)) continue;
+				if(Client.isMybotAnonymousParticipant && Client.isMybotAnonymousParticipant(part)) continue;
+				list.push({ _id: String(part._id), name: String(part.name || ""), color: String(part.color || "") });
+				if(list.length >= 300) break;
+			}
+			var server = gClient.isOnBackupServer && gClient.isOnBackupServer() ? "backup" : "mpp";
+			gRoomSync.reportPeople(server, ch, list);
+		}
+		function soon() { if(!timer) timer = setTimeout(send, 1000); }
+		gClient.on("ch", soon);
+		gClient.on("participant added", soon);
+		gClient.on("participant removed", soon);
+		gClient.on("participant update", soon);
+		setInterval(send, 20000);
+	}
+
 	var gRoomSync = null;
 	(function() {
 		var relayParam = getParameterByName('relay');
@@ -1524,6 +1603,7 @@ Rect.prototype.contains = function(x, y) {
 			gClient.roomSync = gRoomSync;
 			window.gRoomSync = gRoomSync; // expose for screenShare.js (scoped inside $(function), not visible otherwise)
 			gRoomSync.start();
+			startPeopleReports();
 			try { console.info("[Harmony] real-time sync via relay:", relayUri, "(open the same room/?c= on each client)"); } catch(e) {}
 		} else {
 			try { console.warn("[Harmony] relay disabled (" + (relayParam === 'off' ? "?relay=off" : "no reachable host") + ") — fun features stay local-only (no MPP chat spam)."); } catch(e) {}
@@ -2225,6 +2305,106 @@ Rect.prototype.contains = function(x, y) {
 			ro.observe(bottomEl);
 		}
 	}
+
+	// Phones: the keyboard canvas is wider than #piano (see mobilePianoSize), so
+	// the scroller slides it sideways. Starts centred on middle C and remembers
+	// where you left it.
+	(function setupPianoScroller() {
+		var box = document.getElementById("piano");
+		var bar = document.getElementById("piano-scroller");
+		if(!box || !bar) return;
+		var range = bar.querySelector(".piano-scroller-range");
+		var label = bar.querySelector(".piano-scroller-label");
+		var placed = false;
+		var lastBottomH = 0;
+		function keyWidth() {
+			var canvas = box.querySelector("canvas");
+			return canvas ? canvas.offsetWidth / 52 : 0;
+		}
+		function maxScroll() { return Math.max(0, box.scrollWidth - box.clientWidth); }
+		function updateLabel() {
+			var kw = keyWidth();
+			if(!kw) return;
+			var centre = Math.floor((box.scrollLeft + box.clientWidth / 2) / kw);
+			var octave = centre < 2 ? 0 : Math.floor((centre - 2) / 7) + 1;
+			label.textContent = "C" + Math.min(8, Math.max(1, octave));
+		}
+		function scrollTo(x) {
+			box.scrollLeft = Math.max(0, Math.min(maxScroll(), x));
+			var max = maxScroll();
+			range.value = max ? Math.round(box.scrollLeft / max * 100) : 50;
+			updateLabel();
+			try { localStorage.harmonyPianoScroll = String(max ? box.scrollLeft / max : 0.5); } catch(e) {}
+		}
+		function update() {
+			var scrollable = !!(gPiano && gPiano.renderer && gPiano.renderer.scrollable) && maxScroll() > 0;
+			bar.hidden = !scrollable;
+			document.body.classList.toggle("piano-scrollable", scrollable);
+			if(!scrollable) { box.scrollLeft = 0; return; }
+			var ratio = NaN;
+			if(!placed) {
+				try { ratio = parseFloat(localStorage.harmonyPianoScroll); } catch(e) {}
+				placed = true;
+			}
+			if(isFinite(ratio)) scrollTo(ratio * maxScroll());
+			else if(range.dataset.touched) scrollTo(parseFloat(range.value) / 100 * maxScroll());
+			else scrollTo(23.5 * keyWidth() - box.clientWidth / 2); // middle C (C4)
+		}
+		range.addEventListener("input", function() {
+			range.dataset.touched = "1";
+			scrollTo(parseFloat(range.value) / 100 * maxScroll());
+		});
+		$(bar).on("click", ".piano-scroller-btn", function() {
+			range.dataset.touched = "1";
+			scrollTo(box.scrollLeft + Number(this.getAttribute("data-dir")) * 7 * keyWidth());
+		});
+		$(bar).on("mousedown touchstart pointerdown", function(e) { e.stopPropagation(); });
+		window.addEventListener("resize", function() { setTimeout(update, 0); });
+		// The toolbar's height settles after load (fonts, buttons shown/hidden);
+		// re-fit the keyboard whenever it changes.
+		function refit() {
+			var el = document.getElementById("bottom");
+			var h = el ? el.offsetHeight : 0;
+			if(h !== lastBottomH && !document.body.classList.contains("mobile-menu-open")) {
+				lastBottomH = h;
+				if(gPiano && gPiano.renderer) gPiano.renderer.resize();
+			}
+			update();
+		}
+		if(typeof ResizeObserver !== "undefined" && document.getElementById("bottom")) {
+			new ResizeObserver(function() { setTimeout(refit, 0); }).observe(document.getElementById("bottom"));
+		}
+		refit();
+		setTimeout(refit, 300);
+	})();
+
+	// Phones: the toolbar collapses to room + ☰ Menu + volume. The menu opens
+	// every other button as a grid, and closes again once one is tapped.
+	(function setupMobileMenu() {
+		var $btn = $("#mobile-menu-btn");
+		if(!$btn.length) return;
+		function setOpen(open) {
+			document.body.classList.toggle("mobile-menu-open", open);
+			$btn.attr("aria-expanded", open ? "true" : "false").text(open ? "✕ Close" : "☰ Menu");
+		}
+		$btn.on("click", function(e) {
+			e.stopPropagation();
+			setOpen(!document.body.classList.contains("mobile-menu-open"));
+		});
+		$btn.on("keydown", function(e) {
+			if(e.key === "Enter" || e.key === " ") { e.preventDefault(); $btn.trigger("click"); }
+		});
+		// Capture phase: several buttons stop the click from bubbling.
+		var band = document.querySelector("#bottom .toolbar-band");
+		if(band) band.addEventListener("click", function(e) {
+			var btn = e.target && e.target.closest && e.target.closest(".ugly-button");
+			if(!btn || btn.id === "mobile-menu-btn") return;
+			setTimeout(function() { setOpen(false); }, 0);
+		}, true);
+		window.addEventListener("resize", function() {
+			if(!isMobileLayout()) setOpen(false);
+		});
+	})();
 
 
 

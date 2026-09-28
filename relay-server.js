@@ -511,12 +511,25 @@ function manageRoomsSnapshot() {
 		if (p.color) u.color = p.color;
 		u.where[where] = true;
 	}
+	var now = Date.now();
 	for (var ch in rooms) {
 		var r = room(ch);
 		rooms[ch].forEach(function (s) {
 			r.relayTabs++;
 			addUser(r, s._p, "harmony");
+			// Public-MPP rooms as seen by Harmony tabs (the backup server's own
+			// list below is authoritative for backup rooms).
+			var seen = s._people;
+			if (seen && seen.server === "mpp" && now - seen.at < PEOPLE_STALE_MS) {
+				var pr = room(seen.ch);
+				seen.list.forEach(function (p) { addUser(pr, p, "mpp"); });
+			}
 		});
+	}
+	// The lobby Noob x_x bot sits in the public MPP lobby and sees everyone there.
+	if (gNoobBotLobby.size) {
+		var lr = room("lobby");
+		gNoobBotLobby.forEach(function (p) { addUser(lr, p, "mpp"); });
 	}
 	for (var id in mppRooms) {
 		var mr = mppRooms[id];
@@ -625,7 +638,17 @@ function handleManageApi(req, res, route) {
 	}
 
 	if (sub === "/leave-msgs" && req.method === "GET") {
-		if (q.room) {
+		if (q.all) {
+			// Every note from every room, newest first.
+			var all = [];
+			listLeaveMsgRooms().forEach(function (r) {
+				readLeaveMsg(r.room).messages.forEach(function (m) {
+					all.push({ room: r.room, id: m.id, ts: m.ts, name: m.name, text: m.text });
+				});
+			});
+			all.sort(function (x, y) { return y.ts - x.ts; });
+			done(null, { messages: all });
+		} else if (q.room) {
 			var lm = readLeaveMsg(q.room);
 			done(null, { room: sanitizeRoom(q.room), messages: lm.messages });
 		} else {
@@ -834,6 +857,24 @@ function rememberRelayIdentity(s, p) {
 	var clean = sanitizeP(p);
 	if (clean._id) s._p = clean;
 }
+// Who a Harmony tab sees in its MPP room (sent every ~20s and on changes).
+// The only way /manage can list people on the PUBLIC MPP server.
+var PEOPLE_MAX = 300;
+var PEOPLE_STALE_MS = 60000;
+function rememberRelayPeople(s, m) {
+	if (!Array.isArray(m.ppl) || typeof m.ch !== "string" || !m.ch) return;
+	var list = [];
+	for (var i = 0; i < m.ppl.length && list.length < PEOPLE_MAX; i++) {
+		var p = m.ppl[i];
+		if (!p || typeof p !== "object" || !p._id) continue;
+		list.push({
+			_id: String(p._id).slice(0, MAX_ID),
+			name: String(p.name == null ? "" : p.name).slice(0, MAX_ID),
+			color: /^#[0-9a-fA-F]{3,8}$/.test(String(p.color)) ? String(p.color) : ""
+		});
+	}
+	s._people = { server: m.server === "backup" ? "backup" : "mpp", ch: m.ch.slice(0, 256), list: list, at: Date.now() };
+}
 function broadcast(sender, frame) {
 	var set = rooms[sender._room];
 	if (!set) return;
@@ -857,6 +898,7 @@ function broadcastAll(frame) {
 // Reassigned by startMppLobbyNoobBot() once it runs; no-ops until then (or if
 // the bot is disabled entirely via MPP_NOOB_BOT=0).
 var gNoobBotStart = function () {};
+var gNoobBotLobby = new Map();   // public MPP lobby people seen by the bot: participant id -> {_id,name,color}
 var gNoobBotStop = function () {};
 
 function setLobbyNoobHidden(hidden) {
@@ -911,6 +953,9 @@ wss.on("connection", function (socket) {
 				if (!socket._room) joinRoom(socket, "lobby");
 				rememberRelayIdentity(socket, m.p);
 				broadcast(socket, { m: "b", text: m.text, p: sanitizeP(m.p) });
+				break;
+			case "ppl":
+				rememberRelayPeople(socket, m);
 				break;
 			case "manage-noob-set":
 				setLobbyNoobHidden(m.hidden);
@@ -1362,10 +1407,12 @@ function startMppLobbyNoobBot() {
 				if (msg.m === "ch" && msg.ch && !isLobbyRoomId(msg.ch._id)) {
 					try { bot.send(JSON.stringify([{ m: "ch", _id: "lobby" }])); } catch (e) {}
 				}
+				trackBotLobby(msg);
 			}
 		});
 		bot.on("close", function () {
 			clearInterval(pingIv);
+			gNoobBotLobby.clear();
 			if (socket === bot) socket = null;
 			if (wantConnected) reconnectTimer = setTimeout(connect, reconnectMs);
 		});
@@ -1379,8 +1426,26 @@ function startMppLobbyNoobBot() {
 		wantConnected = true;
 		connect();
 	};
+	// Keep gNoobBotLobby in sync with the public lobby (for /manage). The bot
+	// itself is left out.
+	function trackBotLobby(msg) {
+		function put(p) {
+			if (!p || !p.id || !p._id || p.name === LOBBY_NOOB.name) return;
+			gNoobBotLobby.set(p.id, { _id: String(p._id), name: String(p.name || ""), color: String(p.color || "") });
+		}
+		if (msg.m === "ch") {
+			gNoobBotLobby.clear();
+			if (msg.ch && isLobbyRoomId(msg.ch._id) && Array.isArray(msg.ppl)) msg.ppl.forEach(put);
+		} else if (msg.m === "p") {
+			put(msg);
+		} else if (msg.m === "bye") {
+			gNoobBotLobby.delete(msg.p);
+		}
+	}
+
 	gNoobBotStop = function () {
 		wantConnected = false;
+		gNoobBotLobby.clear();
 		if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
 		if (socket) { try { socket.close(); } catch (e) {} socket = null; }
 	};
