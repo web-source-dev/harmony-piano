@@ -630,45 +630,17 @@ Rect.prototype.contains = function(x, y) {
 		return this;
 	};
 
-	// Phones: 52 white keys across a ~390px screen are ~7px wide — unplayable.
-	// Below a comfortable key size the canvas is drawn wider than #piano (which
-	// clips it) and scrolled sideways with the piano scroller, at a height that
-	// fits the screen instead of the desktop 5:1 ratio.
-	var MOBILE_WHITE_KEY_PX = 26;
+	// Phones get a chat-only layout (screen.css hides the piano); same
+	// breakpoint as the phone media query there.
 	function isMobileLayout() {
 		var coarse = !!(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
 		return window.innerWidth <= 760 || (coarse && window.innerWidth <= 1024);
 	}
-	// Space the piano + its scroller get between the top strips (names, play
-	// tools) and the bottom UI; matches the #chat top offsets in screen.css.
-	function mobilePianoSize(boxWidth) {
-		if(!isMobileLayout() || boxWidth / 52 >= MOBILE_WHITE_KEY_PX) return null;
-		var winH = window.innerHeight;
-		var topChrome = winH <= 500 ? 78 : 84;
-		var bottomEl = document.getElementById("bottom");
-		var bottomH = document.body.classList.contains("mobile-menu-open") ? 96 : ((bottomEl && bottomEl.offsetHeight) || 96);
-		var scrollerH = winH <= 500 ? 40 : 52;
-		var avail = winH - topChrome - bottomH - scrollerH;
-		var width = 52 * MOBILE_WHITE_KEY_PX;
-		var height = Math.floor(Math.min(width * 0.2, winH * 0.34, avail - 8));
-		height = Math.max(90, Math.min(240, height));
-		return { width: width, height: height, marginTop: topChrome + Math.max(0, Math.floor((avail - height) / 2)) };
-	}
 
 	Renderer.prototype.resize = function(width, height) {
-		this.scrollable = false;
-		if(typeof width == "undefined") {
-			width = $(this.piano.rootElement).width();
-			var mobile = mobilePianoSize(width);
-			if(mobile) {
-				width = mobile.width;
-				height = mobile.height;
-				this.scrollable = true;
-			}
-		}
+		if(typeof width == "undefined") width = $(this.piano.rootElement).width();
 		if(typeof height == "undefined") height = Math.floor(width * 0.2);
-		var marginTop = mobile ? mobile.marginTop : Math.floor($(window).height() / 2 - height / 2);
-		$(this.piano.rootElement).css({"height": height + "px", marginTop: marginTop + "px"});
+		$(this.piano.rootElement).css({"height": height + "px", marginTop: Math.floor($(window).height() / 2 - height / 2) + "px"});
 		this.width = width * window.devicePixelRatio;
 		this.height = height * window.devicePixelRatio;
 	};
@@ -765,7 +737,7 @@ Rect.prototype.contains = function(x, y) {
 	CanvasRenderer.prototype.resize = function(width, height) {
 		Renderer.prototype.resize.call(this, width, height);
 		if(this.width < 52 * 2) this.width = 52 * 2;
-		if(!this.scrollable && this.height < this.width * 0.2) this.height = Math.floor(this.width * 0.2);
+		if(this.height < this.width * 0.2) this.height = Math.floor(this.width * 0.2);
 		this.canvas.width = this.width;
 		this.canvas.height = this.height;
 		this.canvas.style.width = this.width / window.devicePixelRatio + "px";
@@ -2305,78 +2277,6 @@ Rect.prototype.contains = function(x, y) {
 			ro.observe(bottomEl);
 		}
 	}
-
-	// Phones: the keyboard canvas is wider than #piano (see mobilePianoSize), so
-	// the scroller slides it sideways. Starts centred on middle C and remembers
-	// where you left it.
-	(function setupPianoScroller() {
-		var box = document.getElementById("piano");
-		var bar = document.getElementById("piano-scroller");
-		if(!box || !bar) return;
-		var range = bar.querySelector(".piano-scroller-range");
-		var label = bar.querySelector(".piano-scroller-label");
-		var placed = false;
-		var lastBottomH = 0;
-		function keyWidth() {
-			var canvas = box.querySelector("canvas");
-			return canvas ? canvas.offsetWidth / 52 : 0;
-		}
-		function maxScroll() { return Math.max(0, box.scrollWidth - box.clientWidth); }
-		function updateLabel() {
-			var kw = keyWidth();
-			if(!kw) return;
-			var centre = Math.floor((box.scrollLeft + box.clientWidth / 2) / kw);
-			var octave = centre < 2 ? 0 : Math.floor((centre - 2) / 7) + 1;
-			label.textContent = "C" + Math.min(8, Math.max(1, octave));
-		}
-		function scrollTo(x) {
-			box.scrollLeft = Math.max(0, Math.min(maxScroll(), x));
-			var max = maxScroll();
-			range.value = max ? Math.round(box.scrollLeft / max * 100) : 50;
-			updateLabel();
-			try { localStorage.harmonyPianoScroll = String(max ? box.scrollLeft / max : 0.5); } catch(e) {}
-		}
-		function update() {
-			var scrollable = !!(gPiano && gPiano.renderer && gPiano.renderer.scrollable) && maxScroll() > 0;
-			bar.hidden = !scrollable;
-			document.body.classList.toggle("piano-scrollable", scrollable);
-			if(!scrollable) { box.scrollLeft = 0; return; }
-			var ratio = NaN;
-			if(!placed) {
-				try { ratio = parseFloat(localStorage.harmonyPianoScroll); } catch(e) {}
-				placed = true;
-			}
-			if(isFinite(ratio)) scrollTo(ratio * maxScroll());
-			else if(range.dataset.touched) scrollTo(parseFloat(range.value) / 100 * maxScroll());
-			else scrollTo(23.5 * keyWidth() - box.clientWidth / 2); // middle C (C4)
-		}
-		range.addEventListener("input", function() {
-			range.dataset.touched = "1";
-			scrollTo(parseFloat(range.value) / 100 * maxScroll());
-		});
-		$(bar).on("click", ".piano-scroller-btn", function() {
-			range.dataset.touched = "1";
-			scrollTo(box.scrollLeft + Number(this.getAttribute("data-dir")) * 7 * keyWidth());
-		});
-		$(bar).on("mousedown touchstart pointerdown", function(e) { e.stopPropagation(); });
-		window.addEventListener("resize", function() { setTimeout(update, 0); });
-		// The toolbar's height settles after load (fonts, buttons shown/hidden);
-		// re-fit the keyboard whenever it changes.
-		function refit() {
-			var el = document.getElementById("bottom");
-			var h = el ? el.offsetHeight : 0;
-			if(h !== lastBottomH && !document.body.classList.contains("mobile-menu-open")) {
-				lastBottomH = h;
-				if(gPiano && gPiano.renderer) gPiano.renderer.resize();
-			}
-			update();
-		}
-		if(typeof ResizeObserver !== "undefined" && document.getElementById("bottom")) {
-			new ResizeObserver(function() { setTimeout(refit, 0); }).observe(document.getElementById("bottom"));
-		}
-		refit();
-		setTimeout(refit, 300);
-	})();
 
 	// Phones: the toolbar collapses to room + ☰ Menu + volume. The menu opens
 	// every other button as a grid, and closes again once one is tapped.
@@ -4364,7 +4264,8 @@ Rect.prototype.contains = function(x, y) {
 				}
 
 				// scroll to bottom if not "chatting" or if not scrolled up
-				if(!$("#chat").hasClass("chatting")) {
+				// (phones: the log is always scrollable, so never yank the reader down)
+				if(!$("#chat").hasClass("chatting") && !isMobileLayout()) {
 					chat.scrollToBottom();
 				} else {
 					var ele = $("#chat .chat-log").get(0);
