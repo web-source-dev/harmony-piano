@@ -116,18 +116,50 @@ function isAuthed(req) {
 function clientIp(req) {
 	return String(req.headers["x-real-ip"] || (req.socket && req.socket.remoteAddress) || "?");
 }
-function authCookieHeader(req, value) {
+function authCookieHeader(req, value, cookieName) {
 	var secure = req.headers["x-forwarded-proto"] === "https" || !!(req.socket && req.socket.encrypted);
 	// No Max-Age / Expires = session cookie: survives refresh, gone when the browser closes.
-	return AUTH_COOKIE + "=" + value + "; Path=/; HttpOnly; SameSite=Strict" + (secure ? "; Secure" : "");
+	return (cookieName || AUTH_COOKIE) + "=" + value + "; Path=/; HttpOnly; SameSite=Strict" + (secure ? "; Secure" : "");
 }
 function sendJson(res, status, obj) {
 	res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
 	res.end(JSON.stringify(obj));
 }
+
+// ---- /manage admin password ----
+// The /manage page uses its OWN password (not the piano one) and its own
+// session cookie, so knowing the piano password never unlocks admin tools.
+// Change it with the HARMONY_MANAGE_PASSWORD environment variable.
+var MANAGE_PASSWORD = String(process.env.HARMONY_MANAGE_PASSWORD || "Hm4nage-Pz7qK2wX");
+var MANAGE_COOKIE = "harmony_manage_auth";
+var MANAGE_SECRET = crypto.createHash("sha256").update("harmony-manage-session|" + MANAGE_PASSWORD).digest();
+var gManageAuthFails = Object.create(null);
+
+function manageSign(nonce) {
+	return crypto.createHmac("sha256", MANAGE_SECRET).update(nonce).digest("hex");
+}
+function isManageAuthed(req) {
+	var token = readCookie(req, MANAGE_COOKIE);
+	var dot = token.indexOf(".");
+	if (dot < 1) return false;
+	return safeEqual(token.slice(dot + 1), manageSign(token.slice(0, dot)));
+}
+function handleManageAuthPost(req, res) {
+	checkPasswordPost(req, res, gManageAuthFails, MANAGE_PASSWORD, function () {
+		var nonce = crypto.randomBytes(16).toString("hex");
+		res.setHeader("Set-Cookie", authCookieHeader(req, nonce + "." + manageSign(nonce), MANAGE_COOKIE));
+	});
+}
+
 function handleAuthPost(req, res) {
+	checkPasswordPost(req, res, gAuthFails, PIANO_PASSWORD, function () {
+		res.setHeader("Set-Cookie", authCookieHeader(req, makeAuthToken()));
+	});
+}
+// Shared password check with per-IP cool-down; onOk sets the session cookie.
+function checkPasswordPost(req, res, fails, password, onOk) {
 	var ip = clientIp(req);
-	var rec = gAuthFails[ip];
+	var rec = fails[ip];
 	var now = Date.now();
 	if (rec && rec.until > now) {
 		sendJson(res, 429, { ok: false, error: "Too many tries. Wait a moment.", retryAfter: Math.ceil((rec.until - now) / 1000) });
@@ -139,13 +171,13 @@ function handleAuthPost(req, res) {
 		var data;
 		try { data = JSON.parse(body || "{}"); } catch (e) { data = {}; }
 		var guess = typeof data.password === "string" ? data.password : "";
-		if (guess && safeEqual(guess, PIANO_PASSWORD)) {
-			delete gAuthFails[ip];
-			res.setHeader("Set-Cookie", authCookieHeader(req, makeAuthToken()));
+		if (guess && safeEqual(guess, password)) {
+			delete fails[ip];
+			onOk();
 			sendJson(res, 200, { ok: true });
 			return;
 		}
-		rec = gAuthFails[ip] || (gAuthFails[ip] = { n: 0, locks: 0, until: 0 });
+		rec = fails[ip] || (fails[ip] = { n: 0, locks: 0, until: 0 });
 		rec.n++;
 		var retryAfter = 0;
 		if (rec.n >= AUTH_MAX_FAILS) {
@@ -161,9 +193,11 @@ function handleAuthPost(req, res) {
 // Forget stale failure records so the map can't grow forever.
 setInterval(function () {
 	var cutoff = Date.now() - 6 * 60 * 60 * 1000;
-	for (var ip in gAuthFails) {
-		if (gAuthFails[ip].until < cutoff) delete gAuthFails[ip];
-	}
+	[gAuthFails, gManageAuthFails].forEach(function (fails) {
+		for (var ip in fails) {
+			if (fails[ip].until < cutoff) delete fails[ip];
+		}
+	});
 }, 60 * 60 * 1000).unref();
 
 function leaveMsgFile(room) {
@@ -269,12 +303,402 @@ function cacheControlFor(urlPath) {
 	return "public, max-age=3600";
 }
 
+// Server-side data that must never be downloadable as a static file: chat logs,
+// leave-a-msg data and admin state are only reachable through /api/manage/*.
+// Dotfiles (.git, .env, ...) and server code are hidden too.
+function isPrivatePath(urlPath) {
+	var p = String(urlPath).replace(/\\/g, "/").toLowerCase();
+	if (/(^|\/)\./.test(p)) return true;
+	if (p.indexOf("/chat-logs/") === 0 || p.indexOf("/leave-msgs/") === 0 || p.indexOf("/__pycache__/") === 0) return true;
+	if (p === "/manage-state.json" || /\.py$/.test(p)) return true;
+	return false;
+}
+
+// ============================================================================
+// /manage admin API — everything the in-app #manage panel can do, for every
+// room at once, plus chat logs, leave-a-msg notes and all media files.
+// Requires the manage cookie (see MANAGE_PASSWORD), not the piano one.
+// ============================================================================
+var MEDIA_DIR = path.join(ROOT, "room-media");
+var LIBRARY_DIR = path.join(ROOT, "media-library");
+var LIBRARY_INDEX = path.join(LIBRARY_DIR, "index.json");
+var MAX_MEDIA_BYTES = 80 * 1024 * 1024;
+var MEDIA_EXT = {
+	".mp3": "audio", ".m4a": "audio", ".wav": "audio", ".ogg": "audio", ".aac": "audio",
+	".flac": "audio", ".opus": "audio", ".weba": "audio",
+	".mp4": "video", ".webm": "video", ".mov": "video", ".mkv": "video", ".m4v": "video", ".ogv": "video",
+	".png": "image", ".jpg": "image", ".jpeg": "image", ".gif": "image", ".webp": "image",
+	".bmp": "image", ".svg": "image"
+};
+var MANAGE_SENDER = { _id: "harmony-manage", name: "Manage" };
+
+function readJsonBody(req, limit, cb) {
+	var body = "";
+	var tooBig = false;
+	req.on("data", function (c) {
+		body += c;
+		if (body.length > limit) { tooBig = true; req.destroy(); }
+	});
+	req.on("end", function () {
+		if (tooBig) return cb(new Error("Body too large"));
+		try { cb(null, JSON.parse(body || "{}") || {}); } catch (e) { cb(new Error("Invalid JSON")); }
+	});
+}
+
+function parseLogName(name) {
+	var m = /^(.*)_(\d{4}-\d{2}-\d{2})(?:_(joins|prompts))?\.txt$/.exec(name);
+	if (!m) return { room: name.replace(/\.txt$/, ""), date: "", type: "chat" };
+	return { room: m[1], date: m[2], type: m[3] || "chat" };
+}
+function listChatLogs() {
+	var out = [];
+	var names = [];
+	try { names = fs.readdirSync(LOG_DIR); } catch (e) {}
+	names.forEach(function (name) {
+		if (!/\.txt$/.test(name)) return;
+		var st;
+		try { st = fs.statSync(path.join(LOG_DIR, name)); } catch (e) { return; }
+		if (!st.isFile()) return;
+		var info = parseLogName(name);
+		out.push({ file: name, room: info.room, date: info.date, type: info.type, size: st.size, mtime: st.mtimeMs });
+	});
+	out.sort(function (a, b) { return b.date.localeCompare(a.date) || a.room.localeCompare(b.room) || a.type.localeCompare(b.type); });
+	return out;
+}
+function chatLogPath(name) {
+	name = path.basename(String(name || ""));
+	if (!/\.txt$/.test(name) || name.charAt(0) === ".") return null;
+	var file = path.join(LOG_DIR, name);
+	return fs.existsSync(file) ? file : null;
+}
+
+function listLeaveMsgRooms() {
+	var out = [];
+	var names = [];
+	try { names = fs.readdirSync(LEAVE_MSG_DIR); } catch (e) {}
+	names.forEach(function (name) {
+		if (!/\.json$/.test(name)) return;
+		var room = name.slice(0, -5);
+		out.push({ room: room, count: readLeaveMsg(room).messages.length });
+	});
+	out.sort(function (a, b) { return a.room.localeCompare(b.room); });
+	return out;
+}
+
+function loadLibraryIndex() {
+	try {
+		var data = JSON.parse(fs.readFileSync(LIBRARY_INDEX, "utf8"));
+		if (data && Array.isArray(data.items)) return data.items;
+		if (Array.isArray(data)) return data;
+	} catch (e) {}
+	return [];
+}
+function saveLibraryIndex(items) {
+	fs.mkdirSync(LIBRARY_DIR, { recursive: true });
+	var tmp = LIBRARY_INDEX + ".tmp";
+	fs.writeFileSync(tmp, JSON.stringify({ items: items }, null, 2) + "\n", "utf8");
+	fs.renameSync(tmp, LIBRARY_INDEX);
+}
+function listMedia() {
+	var library = [];
+	var inIndex = Object.create(null);
+	loadLibraryIndex().forEach(function (item) {
+		if (!item || typeof item !== "object") return;
+		var file = path.basename(String(item.file || ""));
+		if (!file) return;
+		var st;
+		try { st = fs.statSync(path.join(LIBRARY_DIR, file)); } catch (e) { return; }
+		inIndex[file] = true;
+		library.push({
+			source: "library", file: file, url: "/media-library/" + file,
+			title: item.title || item.name || file, name: item.name || file,
+			kind: item.kind || MEDIA_EXT[path.extname(file).toLowerCase()] || "audio",
+			size: st.size, added: (item.added ? item.added * 1000 : st.mtimeMs)
+		});
+	});
+	// Files dropped into media-library/ without an index entry still show up.
+	listMediaDir(LIBRARY_DIR, "/media-library/", "library").forEach(function (m) {
+		if (!inIndex[m.file]) library.push(m);
+	});
+	var recent = listMediaDir(MEDIA_DIR, "/room-media/", "recent");
+	function byNewest(a, b) { return b.added - a.added; }
+	library.sort(byNewest);
+	recent.sort(byNewest);
+	return { library: library, recent: recent };
+}
+function listMediaDir(dir, prefix, source) {
+	var out = [];
+	var names = [];
+	try { names = fs.readdirSync(dir); } catch (e) {}
+	names.forEach(function (file) {
+		var kind = MEDIA_EXT[path.extname(file).toLowerCase()];
+		if (!kind || file.charAt(0) === ".") return;
+		var st;
+		try { st = fs.statSync(path.join(dir, file)); } catch (e) { return; }
+		if (!st.isFile()) return;
+		out.push({ source: source, file: file, url: prefix + file, title: file, name: file, kind: kind, size: st.size, added: st.mtimeMs });
+	});
+	return out;
+}
+function deleteMedia(source, file) {
+	file = path.basename(String(file || ""));
+	if (!file || file.charAt(0) === "." || !MEDIA_EXT[path.extname(file).toLowerCase()]) throw new Error("Invalid file");
+	var dir = source === "library" ? LIBRARY_DIR : MEDIA_DIR;
+	var full = path.join(dir, file);
+	var existed = fs.existsSync(full);
+	if (existed) fs.unlinkSync(full);
+	if (source === "library") {
+		var items = loadLibraryIndex();
+		var kept = items.filter(function (i) { return !(i && path.basename(String(i.file || "")) === file); });
+		if (kept.length !== items.length) { saveLibraryIndex(kept); existed = true; }
+	}
+	if (!existed) throw new Error("File not found");
+}
+function handleLibraryUpload(req, res) {
+	var original = String(req.headers["x-filename"] || "upload");
+	try { original = decodeURIComponent(original); } catch (e) {}
+	original = path.basename(original).replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_").slice(0, 120) || "upload";
+	var ext = path.extname(original).toLowerCase();
+	if (!MEDIA_EXT[ext]) { sendJson(res, 400, { ok: false, error: "Unsupported file type: " + (ext || "(none)") }); return; }
+	if (parseInt(req.headers["content-length"], 10) > MAX_MEDIA_BYTES) { sendJson(res, 413, { ok: false, error: "File too large (max 80 MB)" }); return; }
+	var id = crypto.randomBytes(6).toString("hex");
+	var file = id + ext;
+	var full = path.join(LIBRARY_DIR, file);
+	try { fs.mkdirSync(LIBRARY_DIR, { recursive: true }); } catch (e) {}
+	var out = fs.createWriteStream(full);
+	var size = 0;
+	var failed = false;
+	function fail(status, msg) {
+		if (failed) return;
+		failed = true;
+		try { out.destroy(); } catch (e) {}
+		try { fs.unlinkSync(full); } catch (e) {}
+		sendJson(res, status, { ok: false, error: msg });
+	}
+	req.on("data", function (c) {
+		size += c.length;
+		if (size > MAX_MEDIA_BYTES) { fail(413, "File too large (max 80 MB)"); req.destroy(); }
+	});
+	req.on("error", function () { fail(400, "Upload interrupted"); });
+	out.on("error", function (e) { fail(500, String(e && e.message || e)); });
+	out.on("finish", function () {
+		if (failed) return;
+		if (!size) { fail(400, "Empty file"); return; }
+		try {
+			var items = loadLibraryIndex();
+			items.push({
+				id: id, file: file, name: original,
+				title: (path.basename(original, ext).replace(/_+/g, " ").trim() || "Media").slice(0, 120),
+				kind: MEDIA_EXT[ext], size: size, added: Math.floor(Date.now() / 1000)
+			});
+			saveLibraryIndex(items);
+			sendJson(res, 200, { ok: true, file: file, url: "/media-library/" + file });
+		} catch (e) { fail(500, String(e && e.message || e)); }
+	});
+	req.pipe(out);
+}
+
+// Live picture of every room: relay-connected Harmony tabs + backup MPP rooms.
+function manageRoomsSnapshot() {
+	var byRoom = Object.create(null);
+	function room(id) {
+		return byRoom[id] || (byRoom[id] = { room: id, relayTabs: 0, users: Object.create(null), backup: null, chatHistory: 0 });
+	}
+	function addUser(r, p, where) {
+		if (!p || !p._id) return;
+		var u = r.users[p._id] || (r.users[p._id] = { _id: p._id, name: p.name || p._id, color: p.color || "", where: {} });
+		if (p.name) u.name = p.name;
+		if (p.color) u.color = p.color;
+		u.where[where] = true;
+	}
+	for (var ch in rooms) {
+		var r = room(ch);
+		rooms[ch].forEach(function (s) {
+			r.relayTabs++;
+			addUser(r, s._p, "harmony");
+		});
+	}
+	for (var id in mppRooms) {
+		var mr = mppRooms[id];
+		var br = room(id);
+		br.backup = { count: mppRoomParticipantCount(mr), settings: mr.settings };
+		mr.parts.forEach(function (p) { addUser(br, p, "backup"); });
+	}
+	mppChatHistory.forEach(function (list, chId) {
+		if (byRoom[chId]) byRoom[chId].chatHistory = list.length;
+	});
+	return Object.keys(byRoom).sort().map(function (k) {
+		var r = byRoom[k];
+		r.users = Object.keys(r.users).map(function (uid) {
+			var u = r.users[uid];
+			u.where = Object.keys(u.where);
+			return u;
+		}).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+		return r;
+	});
+}
+
+// Same wipe as the #manage "Clear all chat" button ("CC|" over the relay),
+// but sent by the server to one room — or every room with room "*". Also drops
+// the backup server's replay history so rejoiners don't get the old lines back.
+function manageClearChat(room) {
+	var payload = JSON.stringify({ m: "b", text: "CC|x|" + Date.now(), p: MANAGE_SENDER });
+	var targets = room === "*" ? Object.keys(rooms) : (rooms[room] ? [room] : []);
+	var tabs = 0;
+	targets.forEach(function (ch) {
+		rooms[ch].forEach(function (peer) {
+			if (peer.readyState === 1) { try { peer.send(payload); tabs++; } catch (e) {} }
+		});
+	});
+	if (room === "*") mppChatHistory.clear(); else mppChatHistory.delete(room);
+	return tabs;
+}
+
+function handleManageApi(req, res, route) {
+	var q = url.parse(req.url, true).query || {};
+	var sub = route.slice("/api/manage".length) || "/";
+
+	if (sub === "/auth") {
+		if (req.method === "GET") { sendJson(res, 200, { ok: true, authed: isManageAuthed(req) }); return; }
+		if (req.method === "POST") { handleManageAuthPost(req, res); return; }
+	}
+	if (sub === "/logout" && req.method === "POST") {
+		res.setHeader("Set-Cookie", authCookieHeader(req, "", MANAGE_COOKIE) + "; Max-Age=0");
+		sendJson(res, 200, { ok: true });
+		return;
+	}
+	if (!isManageAuthed(req)) { sendJson(res, 401, { ok: false, error: "Manage password required" }); return; }
+
+	function done(err, extra) {
+		if (err) { sendJson(res, 400, { ok: false, error: String(err && err.message || err) }); return; }
+		var out = { ok: true };
+		for (var k in extra) out[k] = extra[k];
+		sendJson(res, 200, out);
+	}
+	function withBody(fn) {
+		readJsonBody(req, 1e6, function (err, data) {
+			if (err) return done(err);
+			try { fn(data); } catch (e) { done(e); }
+		});
+	}
+
+	if (req.method === "GET" && sub === "/overview") {
+		var logs = listChatLogs();
+		var leave = listLeaveMsgRooms();
+		var media = listMedia();
+		var known = Object.create(null);
+		logs.forEach(function (l) { known[l.room] = true; });
+		leave.forEach(function (l) { known[l.room] = true; });
+		done(null, {
+			noobHidden: gLobbyNoobHidden,
+			anonHidden: gMybotAnonymousHidden,
+			rooms: manageRoomsSnapshot(),
+			knownRooms: Object.keys(known).sort(),
+			counts: {
+				chatLogs: logs.length, leaveRooms: leave.length,
+				leaveMsgs: leave.reduce(function (n, l) { return n + l.count; }, 0),
+				library: media.library.length, recent: media.recent.length,
+				relayTabs: countClients()
+			}
+		});
+		return;
+	}
+
+	if (sub === "/chat-logs" && req.method === "GET") { done(null, { logs: listChatLogs() }); return; }
+	if (sub === "/chat-log" && req.method === "GET") {
+		var logFile = chatLogPath(q.file);
+		if (!logFile) { sendJson(res, 404, { ok: false, error: "Log not found" }); return; }
+		var headers = { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" };
+		if (q.download) headers["Content-Disposition"] = 'attachment; filename="' + path.basename(logFile) + '"';
+		res.writeHead(200, headers);
+		fs.createReadStream(logFile).on("error", function () { try { res.end(); } catch (e) {} }).pipe(res);
+		return;
+	}
+	if (sub === "/chat-log" && req.method === "DELETE") {
+		withBody(function (data) {
+			var f = chatLogPath(data.file);
+			if (!f) throw new Error("Log not found");
+			fs.unlinkSync(f);
+			done(null, { file: path.basename(f) });
+		});
+		return;
+	}
+
+	if (sub === "/leave-msgs" && req.method === "GET") {
+		if (q.room) {
+			var lm = readLeaveMsg(q.room);
+			done(null, { room: sanitizeRoom(q.room), messages: lm.messages });
+		} else {
+			done(null, { rooms: listLeaveMsgRooms() });
+		}
+		return;
+	}
+	if (sub === "/leave-msgs/delete" && req.method === "POST") {
+		withBody(function (data) {
+			var roomDel = sanitizeRoom(data.room || "lobby");
+			var ids = data.all ? readLeaveMsg(roomDel).messages.map(function (m) { return m.id; })
+				: (Array.isArray(data.ids) ? data.ids.map(String) : []);
+			if (!ids.length) throw new Error("Nothing to delete");
+			// deletedIds (not just dropping them) so browsers holding a copy don't re-add them.
+			writeLeaveMsg(roomDel, { messages: [], deletedIds: ids }, function (err, merged) {
+				done(err, merged && { room: roomDel, messages: merged.messages });
+			});
+		});
+		return;
+	}
+
+	if (sub === "/media" && req.method === "GET") { done(null, listMedia()); return; }
+	if (sub === "/media" && req.method === "DELETE") {
+		withBody(function (data) {
+			var list = Array.isArray(data.items) ? data.items : [data];
+			var removed = 0;
+			var errors = [];
+			list.forEach(function (it) {
+				try { deleteMedia(it.source, it.file); removed++; } catch (e) { errors.push(String(it.file) + ": " + e.message); }
+			});
+			if (!removed && errors.length) throw new Error(errors.join("; "));
+			done(null, { removed: removed, errors: errors });
+		});
+		return;
+	}
+	if (sub === "/media/upload" && req.method === "POST") { handleLibraryUpload(req, res); return; }
+
+	if (sub === "/noob" && req.method === "POST") {
+		withBody(function (data) { setLobbyNoobHidden(data.hidden); done(null, { hidden: gLobbyNoobHidden }); });
+		return;
+	}
+	if (sub === "/anon" && req.method === "POST") {
+		withBody(function (data) { setMybotAnonymousHidden(data.hidden); done(null, { hidden: gMybotAnonymousHidden }); });
+		return;
+	}
+	if (sub === "/clear-chat" && req.method === "POST") {
+		withBody(function (data) {
+			var roomClear = String(data.room || "").slice(0, 256);
+			if (!roomClear) throw new Error("Missing room");
+			done(null, { tabs: manageClearChat(roomClear) });
+		});
+		return;
+	}
+	if (sub === "/close" && req.method === "POST") {
+		withBody(function (data) {
+			var closeId = String(data._id == null ? "" : data._id).slice(0, MAX_ID);
+			if (!closeId) throw new Error("Missing user id");
+			broadcastAll({ m: "manage-close", _id: closeId });
+			done(null, {});
+		});
+		return;
+	}
+
+	sendJson(res, 404, { ok: false, error: "Unknown manage endpoint" });
+}
+
 function serveStatic(req, res) {
 	var urlPath = decodeURIComponent((req.url.split("?")[0] || "/"));
 	if (urlPath === "/") urlPath = "/index.html";
 	// resolve safely inside ROOT (block path traversal)
 	var filePath = path.normalize(path.join(ROOT, urlPath));
 	if (filePath.indexOf(ROOT) !== 0) { res.writeHead(403); res.end("Forbidden"); return; }
+	if (isPrivatePath(urlPath)) { res.writeHead(404); res.end("Not found"); return; }
 	fs.stat(filePath, function (err, st) {
 		if (err || !st.isFile()) { res.writeHead(404); res.end("Not found"); return; }
 		var etag = '"' + st.size.toString(16) + "-" + Math.floor(Number(st.mtimeMs) || st.mtime.getTime()).toString(16) + '"';
@@ -301,6 +725,14 @@ var server = http.createServer(function (req, res) {
 	if (req.method === "GET" && (route === "/health" || route === "/relay/health" || route === "/api/media/health")) {
 		res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
 		res.end(JSON.stringify({ ok: true, service: "harmony-app", port: PORT, clients: countClients() }));
+		return;
+	}
+
+	// /manage has its own password, checked inside handleManageApi.
+	if (route === "/api/manage" || route.indexOf("/api/manage/") === 0) { handleManageApi(req, res, route); return; }
+	if (req.method === "GET" && route === "/manage") {
+		req.url = "/manage.html";
+		serveStatic(req, res);
 		return;
 	}
 
@@ -396,6 +828,12 @@ function sanitizeP(p) {
 	if (!p || typeof p !== "object") return { _id: "", name: "" };
 	return { _id: String(p._id == null ? "" : p._id).slice(0, MAX_ID), name: String(p.name == null ? "" : p.name).slice(0, MAX_ID) };
 }
+// Who is behind a relay socket (shown on /manage). The identity is empty until
+// the tab has joined MPP, so keep the latest non-empty one.
+function rememberRelayIdentity(s, p) {
+	var clean = sanitizeP(p);
+	if (clean._id) s._p = clean;
+}
 function broadcast(sender, frame) {
 	var set = rooms[sender._room];
 	if (!set) return;
@@ -460,6 +898,7 @@ wss.on("connection", function (socket) {
 		if (!m || typeof m !== "object") return;
 		switch (m.m) {
 			case "hi": case "join":
+				rememberRelayIdentity(socket, m.p);
 				joinRoom(socket, m.ch);
 				// Sync the joining client with the current global state right away.
 				try { socket.send(JSON.stringify({ m: "manage-noob", hidden: gLobbyNoobHidden })); } catch (e) {}
@@ -470,6 +909,7 @@ wss.on("connection", function (socket) {
 				if (typeof m.text !== "string" || m.text.length > MAX_TEXT) return;
 				if (typeof m.ch === "string" && m.ch !== socket._room) joinRoom(socket, m.ch);
 				if (!socket._room) joinRoom(socket, "lobby");
+				rememberRelayIdentity(socket, m.p);
 				broadcast(socket, { m: "b", text: m.text, p: sanitizeP(m.p) });
 				break;
 			case "manage-noob-set":
@@ -976,6 +1416,7 @@ server.listen(PORT, function () {
 	console.log("  chat logs -> " + LOG_DIR);
 	console.log("  leave-a-msg -> " + LEAVE_MSG_DIR);
 	console.log("  piano password: " + (process.env.HARMONY_PASSWORD ? "from HARMONY_PASSWORD" : "DEFAULT (set HARMONY_PASSWORD to change it)"));
+	console.log("  admin page: http://localhost:" + PORT + "/manage  (password " + (process.env.HARMONY_MANAGE_PASSWORD ? "from HARMONY_MANAGE_PASSWORD" : "DEFAULT — set HARMONY_MANAGE_PASSWORD to change it") + ")");
 	console.log("  Open http://localhost:" + PORT + "/  (media uploads still need media-server.py on :8551)");
 	startMppLobbyNoobBot();
 });

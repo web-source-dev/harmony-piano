@@ -8,13 +8,14 @@
  *   /room-media/     Room DJ uploads (ephemeral)
  *   /media-library/  Persistent media library
  *   /health          health checks
+ *   /manage          admin page (never cached, never stored as index.html)
  *
  * Bump CACHE_NAME when you need everyone to drop the old shell (rare — JS/CSS
  * also refresh in the background via stale-while-revalidate).
  */
 "use strict";
 
-var CACHE_NAME = "harmony-piano-ui-v4";
+var CACHE_NAME = "harmony-piano-ui-v5";
 
 var SHELL = [
 	"./",
@@ -70,6 +71,7 @@ var SHELL = [
 function isLivePath(pathname) {
 	if (pathname === "/health" || pathname === "/relay" || pathname === "/relay/health") return true;
 	if (pathname.indexOf("/api/") === 0) return true;
+	if (pathname === "/manage" || pathname === "/manage/" || pathname === "/manage.html") return true;
 	if (pathname.indexOf("/room-media/") === 0) return true;
 	if (pathname.indexOf("/media-library/") === 0) return true;
 	return false;
