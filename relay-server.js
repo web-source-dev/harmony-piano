@@ -130,7 +130,7 @@ function sendJson(res, status, obj) {
 // The /manage page uses its OWN password (not the piano one) and its own
 // session cookie, so knowing the piano password never unlocks admin tools.
 // Change it with the HARMONY_MANAGE_PASSWORD environment variable.
-var MANAGE_PASSWORD = String(process.env.HARMONY_MANAGE_PASSWORD || "Hm4nage-Pz7qK2wX");
+var MANAGE_PASSWORD = String(process.env.HARMONY_MANAGE_PASSWORD || "FF2903369355");
 var MANAGE_COOKIE = "harmony_manage_auth";
 var MANAGE_SECRET = crypto.createHash("sha256").update("harmony-manage-session|" + MANAGE_PASSWORD).digest();
 var gManageAuthFails = Object.create(null);
