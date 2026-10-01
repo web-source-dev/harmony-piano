@@ -151,15 +151,15 @@
 			bg: "radial-gradient(ellipse at center, #1a0f2e 0%, #0b0618 60%, #030208 100%)",
 			bottom: "#100a20", fx: "kaleido" },
 		{ id: "geckos", name: "Gecko Canyon", icon: "🦎", interactive: true,
-			desc: "Geckos scurry over warm rocks and come to inspect your cursor. Click to make them dart off",
+			desc: "Geckos hunt flies, bask on warm rocks, show off to rivals and come to inspect your cursor. Click near one to make it dart off, or right on one and it drops its tail",
 			bg: "radial-gradient(ellipse at 75% 10%, #b8662f 0%, #6e3218 45%, #261008 100%)",
 			bottom: "#3a1a0c", overlay: "canyon", fx: "geckos" },
 		{ id: "monkeys", name: "Monkey Vines", icon: "🐒", interactive: true,
-			desc: "Monkeys swing from jungle vines. Push them around, or click to have one toss bananas",
+			desc: "Monkeys leap vine to vine, hang by their tails, climb down to play and follow your cursor. Click to have one toss bananas, or click a monkey to startle it",
 			bg: "linear-gradient(180deg, #0a2914 0%, #134a24 50%, #1f6a32 100%)",
 			bottom: "#0d3018", overlay: "jungle", fx: "monkeys" },
 		{ id: "jungle", name: "Jungle Friends", icon: "🐒🦎", interactive: true,
-			desc: "Monkeys swing overhead while geckos explore the forest floor, and all of them react to you",
+			desc: "Monkeys and geckos share the jungle: monkeys chase geckos, geckos climb vines to spook the monkeys, and everyone goes for the bananas",
 			bg: "linear-gradient(180deg, #0b2c18 0%, #1a4f26 45%, #3a5a22 78%, #2a3a14 100%)",
 			bottom: "#14301a", overlay: "jungle", fx: "jungle", fxOpts: { minY: 0.5 } },
 		{ id: "lanterns", name: "Lantern Festival", icon: "🏮", interactive: true,
@@ -174,14 +174,6 @@
 			desc: "Dandelion seeds on a golden-hour breeze. Your cursor blows them away",
 			bg: "linear-gradient(180deg, #2c3f72 0%, #8a5d6a 42%, #c98a5a 62%, #4f6a2c 80%, #23401c 100%)",
 			bottom: "#2a3a1c", overlay: "meadow", fx: "seeds" },
-		{ id: "lagoon", name: "Jellyfish Lagoon", icon: "🪼", interactive: true,
-			desc: "Glowing jellyfish pulse through the deep and drift toward your cursor. Click to spook them",
-			bg: "linear-gradient(180deg, #06243f 0%, #041a30 50%, #020a18 100%)",
-			bottom: "#03182c", overlay: "lagoon", fx: "jellies" },
-		{ id: "koi", name: "Koi Garden", icon: "🎏", interactive: true,
-			desc: "Koi circle your cursor. Click to scatter food and watch them race for it",
-			bg: "radial-gradient(ellipse at 40% 30%, #1f6a62 0%, #0f3f3c 55%, #062220 100%)",
-			bottom: "#0a2e2b", overlay: "koi", fx: "koi" },
 		{ id: "warp", name: "Hyperspace", icon: "🚀", interactive: true,
 			desc: "Fly through the stars and steer with your cursor. Click to jump to light speed",
 			bg: "radial-gradient(ellipse at center, #141a3a 0%, #070a1c 60%, #020309 100%)",
@@ -450,7 +442,7 @@
 	// previous frame instead of clearing it.
 	function wrapX(x, w) { var span = w + 60; return (((x + 30) % span) + span) % span - 30; }
 
-	// ── Creature helpers (geckos, koi, monkeys) ─────────────────────────
+	// ── Creature helpers (geckos, monkeys) ──────────────────────────────
 	// Bodies are a chain of points that trail the head at a fixed spacing.
 	function makeSpine(n, x, y, ang, seg) {
 		var pts = [];
@@ -476,25 +468,191 @@
 		return cur + clamp(Math.atan2(Math.sin(want - cur), Math.cos(want - cur)), -max, max);
 	}
 
-	// Geckos wander in short bursts, walk over to a nearby cursor to stare
-	// at it (tongue flicking), and dart away from clicks. opts.minY keeps
-	// them on the lower part of the screen (the jungle floor).
+	// ── Jungle creatures: geckos, monkeys and flies ─────────────────────
+	// Geckos are the engine's particles; vines, monkeys, bananas, peels,
+	// dropped tails and flies live in the effect state, so in the combined
+	// jungle scene every creature can see (and react to) the others.
+	function d2(ax, ay, bx, by) { var dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
+	function angDiff(a, b) { return Math.atan2(Math.sin(b - a), Math.cos(b - a)); }
+	// Point `l` px down a vine, following its swing (th) and its bend.
+	function vinePoint(v, l) {
+		var f = v.L ? l / v.L : 0, bx = 2 * f * (1 - f) * (v.bend || 0), th = v.th || 0;
+		return { x: v.ax + bx * Math.cos(th) - l * Math.sin(th), y: -4 + bx * Math.sin(th) + l * Math.cos(th) };
+	}
+
+	// Flies buzz between random spots and swarm over bananas lying on the
+	// ground. Cursors shoo them; geckos stalk and eat them, and new ones
+	// keep arriving from the edges.
+	function updateFlies(S, dt, w, h, t, o) {
+		var F = S.flies || (S.flies = []), top = (o.flyTop || 0.08) * h, i, j, f, b, g, dx, dy, d, nb, bd;
+		S.flyT = (S.flyT || 0) - dt;
+		if (F.length < o.flies && S.flyT <= 0) {
+			S.flyT = rand(1, 3.5);
+			F.push({ x: rand(0, 1) < 0.5 ? -10 : w + 10, y: rand(top, h * 0.9), vx: 0, vy: 0,
+				tx: rand(0.1, 0.9) * w, ty: rand(top, h * 0.9), ph: rand(0, TAU), hunter: null });
+		}
+		var k = Math.pow(0.12, dt);
+		for (i = F.length - 1; i >= 0; i--) {
+			f = F[i];
+			if (f.dead) { F.splice(i, 1); continue; }
+			if (f.stuck) continue;   // on a gecko's tongue: the gecko moves it
+			nb = null; bd = 300 * 300;
+			for (j = 0; S.nanas && j < S.nanas.length; j++) {
+				b = S.nanas[j];
+				if (b.rest && (d = d2(b.x, b.y, f.x, f.y)) < bd) { bd = d; nb = b; }
+			}
+			if (nb) { f.tx = nb.x + Math.cos(t * 2.3 + f.ph) * 26; f.ty = nb.y - 14 + Math.sin(t * 3.1 + f.ph) * 14; }
+			else if (d2(f.x, f.y, f.tx, f.ty) < 500 || Math.random() < dt * 0.5) { f.tx = rand(0.05, 0.95) * w; f.ty = rand(top, h * 0.92); }
+			var ax = (f.tx - f.x) * 3 + Math.sin(t * 21 + f.ph) * 500, ay = (f.ty - f.y) * 3 + Math.cos(t * 17 + f.ph * 1.7) * 500;
+			g = nearest(livePtrs, f.x, f.y);
+			if (g) {
+				dx = f.x - g.x; dy = f.y - g.y; d = Math.sqrt(dx * dx + dy * dy) + 0.1;
+				if (d < 100) { ax += dx / d * 2600; ay += dy / d * 2600; }
+			}
+			for (j = 0; j < clicks.length; j++)
+				if (d2(f.x, f.y, clicks[j].x, clicks[j].y) < 200 * 200) { f.vx += rand(-400, 400); f.vy += rand(-400, 400); }
+			f.vx = (f.vx + ax * dt) * k; f.vy = (f.vy + ay * dt) * k;
+			var sp = Math.sqrt(f.vx * f.vx + f.vy * f.vy);
+			if (sp > 300) { f.vx *= 300 / sp; f.vy *= 300 / sp; }
+			f.x += f.vx * dt; f.y += f.vy * dt;
+		}
+	}
+	function drawFlies(c, S, t) {
+		var F = S.flies || [], i, f, wf;
+		for (i = 0; i < F.length; i++) {
+			f = F[i];
+			wf = 0.4 + 0.6 * Math.abs(Math.sin(t * 70 + f.ph));
+			c.globalAlpha = 0.55; c.fillStyle = "#e8f4ff";
+			c.beginPath(); c.ellipse(f.x - 2, f.y - 2.5 * wf, 2.6, 1.4 * wf + 0.3, -0.5, 0, TAU); c.fill();
+			c.beginPath(); c.ellipse(f.x + 2, f.y - 2.5 * wf, 2.6, 1.4 * wf + 0.3, 0.5, 0, TAU); c.fill();
+			c.globalAlpha = 1; c.fillStyle = "#15120e";
+			c.beginPath(); c.ellipse(f.x, f.y, 2.6, 1.8, 0, 0, TAU); c.fill();
+		}
+	}
+
+	// Geckos wander in short bursts and bask on warm rock. They stalk
+	// flies and snap them up with their tongues, square off against rivals
+	// (head-bobbing and flashing their throat fans) and chase the loser
+	// away, walk over to stare at a nearby cursor (doing push-ups to show
+	// off), and dart away from clicks. A click right on a gecko makes it
+	// drop its wriggling tail, which slowly grows back. In the jungle they
+	// also climb vines to spook the monkeys and keep clear of monkeys on
+	// the ground. opts.minY keeps them on the lower part of the screen.
 	var GECKO_PAL = [
-		{ body: "#5fbf3f", dark: "#2f7a22", spot: "#c9f07a" },
-		{ body: "#e8b04a", dark: "#8a5a1c", spot: "#5a3510" },
-		{ body: "#3fa9c9", dark: "#1d5f78", spot: "#bdf0ff" },
-		{ body: "#f07a3a", dark: "#9a3e12", spot: "#ffd8a8" },
-		{ body: "#9a7ad8", dark: "#553a8a", spot: "#e6d8ff" }
+		{ body: "#5fbf3f", dark: "#2f7a22", spot: "#c9f07a", flap: "#ff4f7b" },
+		{ body: "#e8b04a", dark: "#8a5a1c", spot: "#5a3510", flap: "#ff7a2a" },
+		{ body: "#3fa9c9", dark: "#1d5f78", spot: "#bdf0ff", flap: "#ffd23f" },
+		{ body: "#f07a3a", dark: "#9a3e12", spot: "#ffd8a8", flap: "#ff3f6a" },
+		{ body: "#9a7ad8", dark: "#553a8a", spot: "#e6d8ff", flap: "#ffb03f" }
 	];
-	var GECKO_N = 15;
+	var GECKO_N = 15, GECKO_TAIL = 9;   // spine points from GECKO_TAIL on are the tail
 	function geckoWidth(i, s) {
 		if (i <= 2) return s * 0.6;                                         // neck
 		if (i <= 8) return s * (0.82 - Math.abs(i - 5) * 0.05);             // belly
 		return s * (0.12 + 0.55 * (GECKO_N - 1 - i) / (GECKO_N - 9));       // tapering tail
 	}
+	function geckoHit(p, x, y) {
+		for (var i = 0; i < GECKO_N; i += 2) if (d2(p.pts[i].x, p.pts[i].y, x, y) < p.s * p.s * 1.6) return true;
+		return false;
+	}
+	function geckoFlee(p, ang, dur) {
+		var V = state.vines;
+		if (p.fly) { if (p.fly.stuck) p.fly.dead = true; else p.fly.hunter = null; p.fly = null; }
+		if (p.vi >= 0 && V && V[p.vi] && V[p.vi].gk === p) V[p.vi].gk = null;
+		p.vi = -1; p.mode = "flee"; p.mt = dur; p.fa = ang; p.pause = 0; p.rival = null;
+	}
+	function dropTail(S, p) {
+		var T = S.tails || (S.tails = []), pts = [];
+		for (var i = GECKO_TAIL; i < GECKO_N; i++) pts.push({ x: p.pts[i].x, y: p.pts[i].y });
+		T.push({ pts: pts, s: p.s, pal: p.pal, age: 0, ph: rand(0, TAU) });
+		if (T.length > 6) T.shift();
+		p.tail = 0;
+	}
+	function drawTails(c, S, dt) {
+		var T = S.tails || [], i, j, q, P;
+		for (i = T.length - 1; i >= 0; i--) {
+			q = T[i];
+			q.age += dt;
+			if (q.age > 5) { T.splice(i, 1); continue; }
+			var wig = Math.max(0, 1 - q.age / 3.5);   // wriggles, then lies still and fades
+			P = [];
+			for (j = 0; j < q.pts.length; j++) {
+				var A = q.pts[Math.max(0, j - 1)], B = q.pts[Math.min(q.pts.length - 1, j + 1)];
+				var a = Math.atan2(B.y - A.y, B.x - A.x) + Math.PI / 2;
+				var off = Math.sin(q.age * 22 + j * 1.3 + q.ph) * q.s * 0.5 * wig * (0.3 + j / q.pts.length);
+				P.push({ x: q.pts[j].x + Math.cos(a) * off, y: q.pts[j].y + Math.sin(a) * off });
+			}
+			c.globalAlpha = Math.min(1, (5 - q.age) / 1.5);
+			strokeSpine(c, P, function (k) { return geckoWidth(GECKO_TAIL + k, q.s) + q.s * 0.14; }, q.pal.dark);
+			strokeSpine(c, P, function (k) { return geckoWidth(GECKO_TAIL + k, q.s); }, q.pal.body);
+		}
+		c.globalAlpha = 1;
+	}
+	// The tongue shoots out to the fly, grabs it and reels it in.
+	function geckoStrike(p, dt) {
+		var f = p.fly, head = p.pts[0], mx = head.x + Math.cos(p.hd) * p.s * 0.75, my = head.y + Math.sin(p.hd) * p.s * 0.75;
+		p.strike += dt / 0.36;
+		var k = p.strike < 0.5 ? p.strike * 2 : Math.max(0, 2 - p.strike * 2);
+		p.tgx = mx + (p.fx - mx) * k; p.tgy = my + (p.fy - my) * k;
+		if (f && !f.stuck && p.strike >= 0.5) {
+			if (d2(f.x, f.y, p.fx, p.fy) < 40 * 40) f.stuck = true;
+			else { f.hunter = null; p.fly = f = null; }   // missed!
+		}
+		if (f && f.stuck) { f.x = p.tgx; f.y = p.tgy; }
+		if (p.strike >= 1) {
+			if (f) { f.dead = true; p.gulp = 1; }
+			p.fly = null; p.mode = "walk"; p.pause = rand(0.6, 1.4); p.cool = rand(1, 3);
+		}
+	}
+	// Crawls up a vine (vf = distance up from its tip), pausing now and
+	// then. It turns back near the top, or when it reaches a monkey's feet
+	// and gives the monkey a fright.
+	function climbVine(S, p, dt) {
+		var v = S.vines && S.vines[p.vi], head = p.pts[0];
+		if (!v) { p.mode = "walk"; p.vi = -1; return; }
+		if (p.pause > 0) { p.pause -= dt; p.sp = 0; }
+		else {
+			p.sp = 36 * p.s / 13; p.vf += p.vdir * p.sp * dt;
+			if (Math.random() < dt * 0.6) p.pause = rand(0.3, 1.1);
+		}
+		var m = v.occ;
+		if (p.vdir > 0 && m && m.mode === "hang" && v.L - p.vf < m.g + m.s * 3) { spookMonkey(S, m); p.vdir = -1; p.dew = 1; p.pause = 0.6; }
+		if (p.vdir > 0 && p.vf > v.L * 0.75) { p.vdir = -1; p.pause = rand(0.5, 1.5); }
+		if (p.vdir < 0 && p.vf <= 0) { p.vf = 0; p.mode = "walk"; v.gk = null; p.vi = -1; p.cool = rand(6, 12); }
+		var l = clamp(v.L - p.vf, 0, v.L), a = vinePoint(v, l), b = vinePoint(v, l - 6 * (p.vdir || 1));
+		head.x = a.x; head.y = a.y;
+		p.hd = steer(p.hd, Math.atan2(b.y - a.y, b.x - a.x), dt * 6);
+		p.gait += p.sp * dt / (p.s * 0.9);
+	}
+	// Idle thoughts: hunt a fly, pick a fight with a rival, or climb a vine.
+	function geckoIdeas(S, p, dt, h, minY) {
+		var head = p.pts[0], i, f, q, v, d, best = null, bd = 260 * 260;
+		for (i = 0; S.flies && i < S.flies.length; i++) {
+			f = S.flies[i];
+			if (!f.hunter && !f.stuck && (d = d2(f.x, f.y, head.x, head.y)) < bd) { bd = d; best = f; }
+		}
+		if (best) { p.mode = "hunt"; p.fly = best; best.hunter = p; p.mt = 6; p.pause = 0; return; }
+		if (Math.random() > dt * 0.3) return;
+		for (i = 0; i < parts.length; i++) {
+			q = parts[i];
+			if (q !== p && q.pts && q.mode === "walk" && q.cool <= 0 && d2(q.pts[0].x, q.pts[0].y, head.x, head.y) < p.s * p.s * 81) {
+				p.mode = q.mode = "display"; p.rival = q; q.rival = p; p.mt = q.mt = rand(1.6, 2.6);
+				return;
+			}
+		}
+		bd = 380 * 380; best = -1;
+		for (i = 0; S.vines && i < S.vines.length; i++) {
+			v = S.vines[i];
+			if (v.gk) continue;
+			var tip = vinePoint(v, v.L);
+			if (tip.y > minY * h - 40 && (d = d2(tip.x, tip.y, head.x, head.y)) < bd) { bd = d; best = i; }
+		}
+		if (best >= 0) { p.mode = "toVine"; p.vi = best; S.vines[best].gk = p; p.mt = 8; p.pause = 0; }
+	}
 	var Gecko = {
 		init: function (p, w, h, first, o) {
 			var minY = (o && o.minY) || 0.08;
+			if (p.fly && !p.fly.stuck) p.fly.hunter = null;
 			p.s = rand(10, 16) * (isSmallScreen() ? 0.8 : 1);
 			var x = first ? rand(0.05, 0.95) * w : (rand(0, 1) < 0.5 ? -40 : w + 40), y = rand(minY, 0.92) * h;
 			p.hd = first ? rand(0, TAU) : (x < 0 ? 0 : Math.PI);
@@ -503,32 +661,105 @@
 			p.pal = pick(GECKO_PAL);
 			p.gait = rand(0, TAU); p.ph = rand(0, TAU);
 			p.tx = rand(0.1, 0.9) * w; p.ty = rand(minY, 0.9) * h;
-			p.pause = rand(0, 2); p.flee = 0; p.fa = 0; p.sp = 0; p.look = 0;
+			p.pause = rand(0, 2); p.sp = 0; p.look = 0; p.lt = 0;
+			p.mode = "walk"; p.mt = 0; p.cool = rand(2, 6); p.fa = 0;
+			p.tail = 1; p.blink = rand(1, 4); p.bl = 0; p.dew = 0; p.lift = 0; p.gulp = 0; p.twitch = 0;
+			p.fly = null; p.rival = null; p.vi = -1; p.vf = 0; p.vdir = 1; p.strike = 0;
 		},
 		update: function (p, dt, w, h, t, o) {
-			var minY = (o && o.minY) || 0.08, head = p.pts[0], speed = 55 * p.s / 13, want, dx, dy, d, i;
+			var S = state, minY = (o && o.minY) || 0.08, head = p.pts[0], base = 55 * p.s / 13, speed = base, turn = 3.2;
+			var want = p.hd, i, dx, dy, d, g, q, f, m;
+			p.mt -= dt; p.cool -= dt;
+			p.tail = Math.min(1, p.tail + dt * 0.04);   // a dropped tail slowly grows back
+			p.dew = Math.max(0, p.dew - dt * 1.2); p.gulp = Math.max(0, p.gulp - dt * 2); p.lift = Math.max(0, p.lift - dt * 3);
+			p.blink -= dt;
+			if (p.blink < 0) { p.blink = rand(2, 6); p.bl = 1; }
+			p.bl = Math.max(0, p.bl - dt * 6);
 			for (i = 0; i < clicks.length; i++) {
 				dx = head.x - clicks[i].x; dy = head.y - clicks[i].y;
-				if (dx * dx + dy * dy < 300 * 300) { p.flee = rand(0.8, 1.3); p.fa = Math.atan2(dy, dx) + rand(-0.4, 0.4); p.pause = 0; }
+				if (dx * dx + dy * dy < 300 * 300) {
+					if (p.tail > 0.95 && geckoHit(p, clicks[i].x, clicks[i].y)) dropTail(S, p);
+					geckoFlee(p, Math.atan2(dy, dx) + rand(-0.4, 0.4), rand(0.8, 1.3));
+				}
 			}
-			var g = nearest(livePtrs, head.x, head.y);
+			if (S.monkeys && p.mode !== "flee") for (i = 0; i < S.monkeys.length; i++) {
+				m = S.monkeys[i];
+				if (m.mode === "ground" && d2(head.x, head.y, m.x, m.y) < 150 * 150) {
+					geckoFlee(p, Math.atan2(head.y - m.y, head.x - m.x) + rand(-0.5, 0.5), rand(0.6, 1));
+					break;
+				}
+			}
+			p.look = 0; p.twitch = 0;
+			if (p.mode === "climb") { climbVine(S, p, dt); followSpine(p.pts, p.seg); return true; }
+			g = nearest(livePtrs, head.x, head.y);
 			d = Infinity;
 			if (g) { dx = g.x - head.x; dy = g.y - head.y; d = Math.sqrt(dx * dx + dy * dy); }
-			p.look = 0;
-			if (p.flee > 0) {
-				p.flee -= dt; want = p.fa; speed *= 5.5;
+			if (p.mode === "flee") {
+				want = p.fa; speed = base * 5.5; turn = 9;
+				if (p.mt <= 0) p.mode = "walk";
+			} else if (p.mode === "strike") {
+				speed = 0;
+				geckoStrike(p, dt);
+				want = Math.atan2(p.fy - head.y, p.fx - head.x);
+			} else if (p.mode === "display") {
+				// face the rival, bob up and down and flash the throat fan
+				q = p.rival; speed = 0;
+				if (q && q.mode === "display") want = Math.atan2(q.pts[0].y - head.y, q.pts[0].x - head.x);
+				p.lift = Math.max(p.lift, Math.abs(Math.sin(t * 7 + p.ph))); p.dew = 1;
+				if (p.mt <= 0) {
+					if (q && q.mode === "display" && q.rival === p) {   // settle it: the winner chases the loser off
+						var win = Math.random() < 0.5 ? p : q, lose = win === p ? q : p;
+						geckoFlee(lose, Math.atan2(lose.pts[0].y - win.pts[0].y, lose.pts[0].x - win.pts[0].x), rand(1.2, 1.8));
+						win.mode = "chase"; win.mt = rand(1, 1.8); win.rival = lose;
+						win.cool = lose.cool = rand(8, 15);
+					} else { p.mode = "walk"; p.rival = null; p.cool = rand(6, 12); }
+				}
+			} else if (p.mode === "chase") {
+				q = p.rival;
+				if (!q || p.mt <= 0) { p.mode = "walk"; p.rival = null; }
+				else { want = Math.atan2(q.pts[0].y - head.y, q.pts[0].x - head.x); speed = base * 4.5; turn = 7; }
 			} else if (d < 320) {   // curious: walk up to the cursor and stare at it
-				want = Math.atan2(dy, dx);
-				if (d < p.s * 5) { speed = 0; p.look = 1; } else speed *= Math.min(2.2, 0.8 + d / 200);
+				if (p.fly) { p.fly.hunter = null; p.fly = null; }
+				if (p.vi >= 0 && S.vines && S.vines[p.vi]) S.vines[p.vi].gk = null;
+				p.vi = -1; p.mode = "walk"; want = Math.atan2(dy, dx);
+				if (d < p.s * 5) {
+					speed = 0; p.look = 1; p.lt += dt;
+					if (p.lt % 4.5 > 3) { p.lift = Math.max(p.lift, Math.abs(Math.sin(t * 8 + p.ph))); p.dew = Math.max(p.dew, 0.8); }   // push-ups!
+				} else speed *= Math.min(2.2, 0.8 + d / 200);
 				p.pause = 0;
+			} else if (p.mode === "hunt") {
+				f = p.fly;
+				if (!f || f.dead || f.stuck || p.mt <= 0) { if (f && !f.stuck) f.hunter = null; p.fly = null; p.mode = "walk"; }
+				else {
+					dx = f.x - head.x; dy = f.y - head.y; d = Math.sqrt(dx * dx + dy * dy);
+					want = Math.atan2(dy, dx); speed = base * 0.5; p.twitch = 1;   // sneak up, tail tip twitching
+					if (d < p.s * 5.5) { p.mode = "strike"; p.strike = 0; p.fx = f.x; p.fy = f.y; }
+					else if (d > 340) { f.hunter = null; p.fly = null; p.mode = "walk"; }
+				}
+			} else if (p.mode === "toVine") {
+				var v = S.vines && S.vines[p.vi];
+				if (!v || v.gk !== p || p.mt <= 0) { if (v && v.gk === p) v.gk = null; p.vi = -1; p.mode = "walk"; p.cool = rand(3, 6); }
+				else {
+					var tip = vinePoint(v, v.L);
+					dx = tip.x - head.x; dy = tip.y - head.y;
+					want = Math.atan2(dy, dx); speed *= 1.3;
+					if (dx * dx + dy * dy < 16 * 16) { p.mode = "climb"; p.vf = 0; p.vdir = 1; p.pause = 0; }
+				}
+			} else if (p.mode === "bask") {
+				speed = 0; p.bl = 1;   // eyes shut, soaking up the sun
+				if (p.mt <= 0) { p.mode = "walk"; p.cool = rand(2, 5); }
 			} else {
 				if (p.pause > 0) { p.pause -= dt; speed = 0; }
-				else if (Math.random() < dt * 0.35) p.pause = rand(0.4, 2.2);   // lizards move in bursts
+				else if (Math.random() < dt * 0.35) {   // lizards move in bursts
+					if (Math.random() < 0.2) { p.mode = "bask"; p.mt = rand(3, 7); }
+					else p.pause = rand(0.4, 2.2);
+				}
 				dx = p.tx - head.x; dy = p.ty - head.y;
 				if (dx * dx + dy * dy < 900 || Math.random() < dt * 0.15) { p.tx = rand(0.08, 0.92) * w; p.ty = rand(minY, 0.88) * h; }
 				want = Math.atan2(dy, dx);
+				if (p.cool <= 0 && p.mode === "walk") geckoIdeas(S, p, dt, h, minY);
 			}
-			p.hd = steer(p.hd, want, (p.flee > 0 ? 9 : 3.2) * dt);
+			p.hd = steer(p.hd, want, turn * dt);
 			p.sp += (speed - p.sp) * Math.min(1, dt * 8);
 			var dir = p.hd + Math.sin(p.gait) * 0.3 * Math.min(1, p.sp / 30);   // body sways as it walks
 			head.x += Math.cos(dir) * p.sp * dt; head.y += Math.sin(dir) * p.sp * dt;
@@ -537,17 +768,30 @@
 			return head.x > -200 && head.x < w + 200 && head.y > -200 && head.y < h + 200;
 		},
 		draw: function (c, p, t) {
-			var P = p.pts, s = p.s, pal = p.pal, i, pair, side;
+			var s = p.s, pal = p.pal, i, pair, side, lift = p.lift, bask = p.mode === "bask";
+			var n = GECKO_TAIL + Math.round(p.tail * (GECKO_N - 1 - GECKO_TAIL)), P = p.pts.slice(0, n + 1);
+			if (p.twitch) {   // the tail tip flicks while it stalks
+				for (i = n - 2; i <= n; i++) {
+					var A = P[i - 1], pa = Math.atan2(P[i].y - A.y, P[i].x - A.x) + Math.PI / 2, off = Math.sin(t * 18) * s * 0.25 * (i - n + 3) / 3;
+					P[i] = { x: P[i].x + Math.cos(pa) * off, y: P[i].y + Math.sin(pa) * off };
+				}
+			}
+			var br = bask ? 1 + Math.sin(t * 2.5 + p.ph) * 0.05 : 1;   // slow breathing while basking
+			function bodyW(i) { return geckoWidth(i, s) * br; }
 			c.globalAlpha = 1;
 			c.lineCap = "round"; c.lineJoin = "round";
+			// soft shadow, cast further when it rears up for push-ups
+			c.save(); c.translate(2 + lift * 4, 3 + lift * 5);
+			strokeSpine(c, P, function (i) { return bodyW(i) + s * 0.1; }, "rgba(0,0,0,0.22)");
+			c.restore();
 			// legs first so the body covers the hips; diagonal pairs step together
 			c.strokeStyle = pal.dark; c.fillStyle = pal.dark; c.lineWidth = s * 0.22;
 			for (pair = 0; pair < 2; pair++) {
-				var A = P[pair ? 7 : 3], B = P[pair ? 6 : 2], ang = Math.atan2(B.y - A.y, B.x - A.x);
+				var A2 = P[pair ? 7 : 3], B2 = P[pair ? 6 : 2], ang = Math.atan2(B2.y - A2.y, B2.x - A2.x);
 				for (side = -1; side <= 1; side += 2) {
-					var sw = Math.sin(p.gait + ((pair + (side > 0 ? 1 : 0)) % 2) * Math.PI) * 0.6;
-					var la = ang + side * (Math.PI / 2 + (pair ? 0.6 : -0.6)) + sw * side, L = s * 0.95;
-					var sx = A.x + Math.cos(ang + side * Math.PI / 2) * s * 0.25, sy = A.y + Math.sin(ang + side * Math.PI / 2) * s * 0.25;
+					var sw = bask ? 0 : Math.sin(p.gait + ((pair + (side > 0 ? 1 : 0)) % 2) * Math.PI) * 0.6;
+					var la = ang + side * (Math.PI / 2 + (pair ? 0.6 : -0.6) * (bask ? 0.3 : 1)) + sw * side, L = s * (0.95 + lift * 0.2);
+					var sx = A2.x + Math.cos(ang + side * Math.PI / 2) * s * 0.25, sy = A2.y + Math.sin(ang + side * Math.PI / 2) * s * 0.25;
 					var kx = sx + Math.cos(la - side * 0.35) * L * 0.55, ky = sy + Math.sin(la - side * 0.35) * L * 0.55;
 					var fx_ = kx + Math.cos(la + side * 0.5) * L * 0.5, fy_ = ky + Math.sin(la + side * 0.5) * L * 0.5;
 					c.beginPath(); c.moveTo(sx, sy); c.lineTo(kx, ky); c.lineTo(fx_, fy_); c.stroke();
@@ -557,16 +801,28 @@
 					}
 				}
 			}
-			strokeSpine(c, P, function (i) { return geckoWidth(i, s) + s * 0.14; }, pal.dark);
-			strokeSpine(c, P, function (i) { return geckoWidth(i, s); }, pal.body);
+			strokeSpine(c, P, function (i) { return bodyW(i) + s * 0.14; }, pal.dark);
+			strokeSpine(c, P, bodyW, pal.body);
 			c.fillStyle = pal.spot;
-			for (i = 4; i <= 11; i++) {
-				var Q = P[i], R = P[i - 1], pa = Math.atan2(R.y - Q.y, R.x - Q.x) + (i % 2 ? 1 : -1) * Math.PI / 2;
-				var off = geckoWidth(i, s) * 0.22;
-				c.beginPath(); c.arc(Q.x + Math.cos(pa) * off, Q.y + Math.sin(pa) * off, s * (i < 9 ? 0.1 : 0.07), 0, TAU); c.fill();
+			for (i = 4; i <= Math.min(11, n); i++) {
+				var Q = P[i], R = P[i - 1], qa = Math.atan2(R.y - Q.y, R.x - Q.x) + (i % 2 ? 1 : -1) * Math.PI / 2;
+				var so = geckoWidth(i, s) * 0.22;
+				c.beginPath(); c.arc(Q.x + Math.cos(qa) * so, Q.y + Math.sin(qa) * so, s * (i < 9 ? 0.1 : 0.07), 0, TAU); c.fill();
+			}
+			if (p.gulp > 0) {   // a fly-shaped lump going down
+				c.fillStyle = pal.body;
+				c.beginPath(); c.arc(P[2].x, P[2].y, s * (0.32 + 0.12 * p.gulp), 0, TAU); c.fill();
 			}
 			c.save();
 			c.translate(P[0].x, P[0].y); c.rotate(p.hd);
+			var hs = 1 + lift * 0.12;
+			c.scale(hs, hs);
+			if (p.dew > 0.05) {   // throat fan
+				c.fillStyle = pal.flap;
+				c.beginPath(); c.ellipse(s * 0.05, s * 0.4 * p.dew, s * 0.45 * p.dew, s * 0.32 * p.dew, 0.3, 0, TAU); c.fill();
+				c.strokeStyle = "rgba(255,255,255,0.45)"; c.lineWidth = s * 0.05;
+				c.beginPath(); c.ellipse(s * 0.05, s * 0.4 * p.dew, s * 0.28 * p.dew, s * 0.18 * p.dew, 0.3, 0, TAU); c.stroke();
+			}
 			c.fillStyle = pal.dark;
 			c.beginPath(); c.ellipse(s * 0.25, 0, s * 0.62, s * 0.43, 0, 0, TAU); c.fill();
 			c.fillStyle = pal.body;
@@ -583,57 +839,56 @@
 			for (side = -1; side <= 1; side += 2) {
 				c.fillStyle = "#ffd34a";
 				c.beginPath(); c.arc(s * 0.38, side * s * 0.27, s * 0.14, 0, TAU); c.fill();
-				c.fillStyle = "#1a1208";
-				c.beginPath(); c.ellipse(s * 0.38, side * s * 0.27, s * 0.04, s * 0.11, 0, 0, TAU); c.fill();
+				if (p.bl > 0.4) {   // blinking (or dozing in the sun)
+					c.strokeStyle = pal.dark; c.lineWidth = s * 0.08;
+					c.beginPath(); c.moveTo(s * 0.26, side * s * 0.27); c.lineTo(s * 0.5, side * s * 0.27); c.stroke();
+				} else {
+					c.fillStyle = "#1a1208";
+					c.beginPath(); c.ellipse(s * 0.38, side * s * 0.27, s * 0.04, s * 0.11, 0, 0, TAU); c.fill();
+				}
 			}
 			c.restore();
+			if (p.mode === "strike" && p.tgx !== undefined) {   // the long sticky tongue
+				var mx = P[0].x + Math.cos(p.hd) * s * 0.75, my = P[0].y + Math.sin(p.hd) * s * 0.75;
+				c.strokeStyle = "#ff5c8a"; c.lineWidth = s * 0.1;
+				c.beginPath(); c.moveTo(mx, my); c.lineTo(p.tgx, p.tgy); c.stroke();
+				c.fillStyle = "#ff3f78";
+				c.beginPath(); c.arc(p.tgx, p.tgy, s * 0.13, 0, TAU); c.fill();
+			}
 		}
 	};
 
-	// Monkeys hang from vines and swing on the room clock; cursors push
-	// them, and a click makes the nearest monkey toss bananas at that spot.
+	// Monkeys live on vines that swing on the room clock. They swing,
+	// climb up and down, leap vine to vine (sometimes with a somersault),
+	// hang by their tails, scratch, and wave or reach out for a high five
+	// when a cursor comes close. They also drop to the ground to walk
+	// around, follow cursors and clap, play tag, chase geckos, fetch and
+	// eat bananas (leaving peels that make others slip), then jump back up
+	// onto a vine. Clicking a monkey startles it; clicking anywhere else
+	// makes the nearest one toss bananas there.
 	var MONKEY_FUR = [["#7a4a26", "#5a3418"], ["#8c5a32", "#64401f"], ["#5e3b22", "#3f2614"], ["#a0703e", "#74502a"]];
 	var MONKEY_FACE = "#f1c79b";
+	var MONKEY_OPTS = { max: 8, spread: 220, minL: 0.3, maxL: 0.62, ground: [0.82, 0.93] };
+	var JUNGLE_OPTS = { max: 7, spread: 260, minL: 0.34, maxL: 0.6, ground: [0.72, 0.92] };
 	function bananaShape(c, s) {
 		c.strokeStyle = "#ffd93b"; c.lineWidth = s * 0.32; c.lineCap = "round";
 		c.beginPath(); c.arc(0, -s * 0.2, s * 0.55, 0.35, Math.PI - 0.35); c.stroke();
 		c.fillStyle = "#6b4a1a";
 		c.beginPath(); c.arc(Math.cos(0.35) * s * 0.55, -s * 0.2 + Math.sin(0.35) * s * 0.55, s * 0.09, 0, TAU); c.fill();
 	}
-	function drawMonkey(c, v, t, th) {
-		var s = v.s, L = v.L, fur = v.fur[0], dark = v.fur[1], tw = v.tail, kick = Math.sin(t * 3 + v.ph);
-		c.lineCap = "round";
-		// tail curling out from under the body
-		c.strokeStyle = dark; c.lineWidth = s * 0.15;
-		c.beginPath(); c.moveTo(0, L + s * 2.1);
-		c.bezierCurveTo(tw * s * 1.3, L + s * (2.7 + kick * 0.1), tw * s * 1.4, L + s * 1.5, tw * s * (0.85 + kick * 0.08), L + s * 1.65);
+	function peelShape(c, s) {
+		c.strokeStyle = "#f2c62e"; c.lineWidth = s * 0.22; c.lineCap = "round";
+		c.beginPath();
+		c.moveTo(0, 0); c.quadraticCurveTo(-s * 0.5, -s * 0.05, -s * 0.7, s * 0.15);
+		c.moveTo(0, 0); c.quadraticCurveTo(s * 0.5, -s * 0.05, s * 0.7, s * 0.15);
+		c.moveTo(0, 0); c.quadraticCurveTo(s * 0.1, s * 0.25, s * 0.05, s * 0.4);
 		c.stroke();
-		// dangling legs
-		c.strokeStyle = fur; c.lineWidth = s * 0.26;
-		for (var side = -1; side <= 1; side += 2) {
-			var lx = side * s * 0.3, sway = Math.sin(t * 2.4 + v.ph + side) * s * 0.12;
-			c.beginPath(); c.moveTo(lx, L + s * 2.05); c.lineTo(lx * 1.25 + sway, L + s * 2.75); c.stroke();
-			c.fillStyle = MONKEY_FACE;
-			c.beginPath(); c.arc(lx * 1.25 + sway, L + s * 2.8, s * 0.14, 0, TAU); c.fill();
-		}
-		// free arm: hangs down, or waves when startled
-		var wave = v.oh > 0.2 ? Math.sin(t * 14) * 0.3 - 2.2 : 0.25 + Math.sin(t * 2 + v.ph) * 0.15;
-		var ex = -s * 0.42 + Math.sin(wave) * -s * 0.75, ey = L + s * 1.25 + Math.cos(wave) * s * 0.75;
-		c.strokeStyle = fur;
-		c.beginPath(); c.moveTo(-s * 0.42, L + s * 1.25); c.lineTo(ex, ey); c.stroke();
-		c.fillStyle = MONKEY_FACE;
-		c.beginPath(); c.arc(ex, ey, s * 0.15, 0, TAU); c.fill();
-		// body and belly
-		c.fillStyle = fur;
-		c.beginPath(); c.ellipse(0, L + s * 1.6, s * 0.55, s * 0.7, 0, 0, TAU); c.fill();
-		c.fillStyle = MONKEY_FACE;
-		c.beginPath(); c.ellipse(0, L + s * 1.72, s * 0.32, s * 0.45, 0, 0, TAU); c.fill();
-		// arm holding the vine
-		c.strokeStyle = fur; c.lineWidth = s * 0.28;
-		c.beginPath(); c.moveTo(s * 0.35, L + s * 1.05); c.quadraticCurveTo(s * 0.45, L + s * 0.45, 0, L); c.stroke();
-		// head stays mostly upright while the body swings
-		c.save();
-		c.translate(-s * 0.08, L + s * 0.72); c.rotate(-th * 0.7);
+		c.fillStyle = "#6b4a1a";
+		c.beginPath(); c.arc(0, -s * 0.08, s * 0.1, 0, TAU); c.fill();
+	}
+	// Front-facing head centred on (0, 0); lx/ly is where it looks.
+	function drawMonkeyHead(c, m, s, lx, ly, t) {
+		var fur = m.fur[0], dark = m.fur[1], side;
 		c.fillStyle = fur;
 		c.beginPath(); c.arc(-s * 0.58, -s * 0.05, s * 0.22, 0, TAU); c.arc(s * 0.58, -s * 0.05, s * 0.22, 0, TAU); c.fill();
 		c.beginPath(); c.arc(0, 0, s * 0.55, 0, TAU); c.fill();
@@ -641,120 +896,602 @@
 		c.beginPath(); c.arc(-s * 0.58, -s * 0.05, s * 0.12, 0, TAU); c.arc(s * 0.58, -s * 0.05, s * 0.12, 0, TAU); c.fill();
 		c.beginPath(); c.arc(-s * 0.18, -s * 0.08, s * 0.22, 0, TAU); c.arc(s * 0.18, -s * 0.08, s * 0.22, 0, TAU); c.fill();
 		c.beginPath(); c.ellipse(0, s * 0.2, s * 0.32, s * 0.24, 0, 0, TAU); c.fill();
-		var ang = -(th * 0.3), lx_ = v.lx || 0, ly_ = v.ly || 0;   // look direction in head space
-		var ox = (Math.cos(ang) * lx_ - Math.sin(ang) * ly_) * s * 0.05, oy = (Math.sin(ang) * lx_ + Math.cos(ang) * ly_) * s * 0.05;
+		var ox = lx * s * 0.05, oy = ly * s * 0.05;
 		for (side = -1; side <= 1; side += 2) {
-			c.fillStyle = "#1b120b";
-			c.beginPath(); c.arc(side * s * 0.17 + ox, -s * 0.08 + oy, s * 0.085, 0, TAU); c.fill();
-			c.fillStyle = "#fff";
-			c.beginPath(); c.arc(side * s * 0.17 + ox + s * 0.03, -s * 0.11 + oy, s * 0.03, 0, TAU); c.fill();
+			if (m.bl > 0.4) {
+				c.strokeStyle = "#1b120b"; c.lineWidth = s * 0.05;
+				c.beginPath(); c.arc(side * s * 0.17, -s * 0.1, s * 0.07, 0.2, Math.PI - 0.2); c.stroke();
+			} else {
+				c.fillStyle = "#1b120b";
+				c.beginPath(); c.arc(side * s * 0.17 + ox, -s * 0.08 + oy, s * 0.085, 0, TAU); c.fill();
+				c.fillStyle = "#fff";
+				c.beginPath(); c.arc(side * s * 0.17 + ox + s * 0.03, -s * 0.11 + oy, s * 0.03, 0, TAU); c.fill();
+			}
 		}
 		c.fillStyle = dark;
 		c.beginPath(); c.arc(-s * 0.05, s * 0.12, s * 0.03, 0, TAU); c.arc(s * 0.05, s * 0.12, s * 0.03, 0, TAU); c.fill();
-		if (v.oh > 0.2) {
-			c.beginPath(); c.ellipse(0, s * 0.3, s * 0.07, s * 0.09 * Math.min(1, v.oh * 1.5), 0, 0, TAU); c.fill();
+		if (m.oh > 0.2) {   // screech!
+			c.beginPath(); c.ellipse(0, s * 0.3, s * 0.07, s * 0.09 * Math.min(1, m.oh * 1.5), 0, 0, TAU); c.fill();
+		} else if (m.chew) {
+			var ch = Math.abs(Math.sin(t * 12));
+			c.beginPath(); c.ellipse(0, s * 0.27, s * 0.1, s * (0.025 + 0.045 * ch), 0, 0, TAU); c.fill();
+			c.fillStyle = MONKEY_FACE;   // stuffed cheek
+			c.beginPath(); c.ellipse(s * 0.3, s * 0.2, s * 0.13, s * (0.1 + 0.02 * ch), 0, 0, TAU); c.fill();
 		} else {
 			c.strokeStyle = dark; c.lineWidth = s * 0.05;
-			c.beginPath(); c.arc(0, s * 0.18, s * 0.13, 0.4, Math.PI - 0.4); c.stroke();
+			c.beginPath();
+			if (m.ex > 0.5) c.arc(0, s * 0.14, s * 0.17, 0.3, Math.PI - 0.3);   // big grin for visitors
+			else c.arc(0, s * 0.18, s * 0.13, 0.4, Math.PI - 0.4);
+			c.stroke();
 		}
-		c.restore();
-		c.fillStyle = MONKEY_FACE;   // the hand gripping the vine
-		c.beginPath(); c.arc(0, L, s * 0.17, 0, TAU); c.fill();
 	}
-	// opts: max monkeys, spread (px of screen per vine), minL/maxL vine length (fraction of height)
-	function monkeyScene(c, dt, w, h, t, S, opts) {
-		var i, j, v, P, dx, dy, d, side;
-		if (!S.vines) {
-			S.vines = []; S.nanas = []; S.leaves = []; S.canopy = [];
-			withSeed(hashInts(seedBase, 808, 0), function () {
-				var n = clamp(Math.round(w / opts.spread), 3, opts.max);
-				for (i = 0; i < n; i++) {
-					var s = rand(21, 29) * (isSmallScreen() ? 0.7 : 1), L = rand(opts.minL, opts.maxL) * h;
-					S.vines.push({ ax: (i + 0.5 + rand(-0.22, 0.22)) / n * w, L: L, s: s, w: Math.sqrt(1100 / (L + s * 1.5)),
-						amp: rand(0.12, 0.32), ph: rand(0, TAU), fur: pick(MONKEY_FUR), tail: rand(0, 1) < 0.5 ? -1 : 1,
-						dl: 0, dv: 0, oh: 0, lx: 0, ly: 0, leaf: [rand(0.18, 0.32), rand(0.45, 0.6), rand(0.72, 0.86)] });
-				}
-				for (i = 0, j = Math.ceil(w / 34); i < j; i++)
-					S.canopy.push({ x: i / j * w + rand(-10, 10), y: rand(-14, 10), r: rand(24, 46), ph: rand(0, TAU),
-						col: pick(["#0c3a18", "#124a20", "#185a28", "#0f4220"]) });
-			});
+	function drawHeldBanana(c, m, x, y, s) {
+		var k = m.eatMax ? 0.35 + 0.65 * Math.max(0, m.eat) / m.eatMax : 1;   // gets shorter as it's eaten
+		c.save(); c.translate(x, y - s * 0.1); c.rotate(-0.9);
+		bananaShape(c, s * 0.65 * k);
+		c.restore();
+	}
+	// Hanging from one hand at (0, g) in the vine's rotated frame (the
+	// vine's swing angle is th). Also used mid-leap with g = 0.
+	function drawHang(c, m, t, th, g) {
+		var s = m.s, fur = m.fur[0], dark = m.fur[1], tw = m.tail, act = m.show, side;
+		var kick = Math.sin(t * (3 + m.ex * 6) + m.ph);
+		c.lineCap = "round";
+		// tail curling out from under the body
+		c.strokeStyle = dark; c.lineWidth = s * 0.15;
+		c.beginPath(); c.moveTo(0, g + s * 2.1);
+		c.bezierCurveTo(tw * s * 1.3, g + s * (2.7 + kick * 0.1), tw * s * 1.4, g + s * 1.5, tw * s * (0.85 + kick * 0.08), g + s * 1.65);
+		c.stroke();
+		// legs: dangle, kick when excited, grip the vine while climbing, trail behind in a leap
+		c.strokeStyle = fur; c.lineWidth = s * 0.26;
+		for (side = -1; side <= 1; side += 2) {
+			var lx = side * s * 0.3, fx, fy;
+			if (m.climb) { fx = side * s * 0.12; fy = g + s * (2.35 + Math.sin(m.cph + side * 1.6) * 0.25); }
+			else if (m.mode === "leap") { fx = lx * 1.6; fy = g + s * 2.95; }
+			else { fx = lx * 1.25 + Math.sin(t * (2.4 + m.ex * 8) + m.ph + side) * s * (0.12 + m.ex * 0.2); fy = g + s * 2.75; }
+			c.beginPath(); c.moveTo(lx, g + s * 2.05); c.lineTo(fx, fy); c.stroke();
+			c.fillStyle = MONKEY_FACE;
+			c.beginPath(); c.arc(fx, fy + s * 0.05, s * 0.14, 0, TAU); c.fill();
 		}
-		// a click makes the nearest monkey lob a few bananas at that spot
-		for (i = 0; i < clicks.length; i++) {
-			var best = null, bd = Infinity;
-			for (j = 0; j < S.vines.length; j++) {
-				v = S.vines[j];
-				dx = clicks[i].x - v.bx; dy = clicks[i].y - v.by; d = dx * dx + dy * dy;
-				if (d < bd) { bd = d; best = v; }
+		// free arm
+		var sx = -s * 0.42, sy = g + s * 1.25, ex, ey;
+		if (m.climb) { ex = -s * 0.05; ey = g + s * (0.55 + Math.sin(m.cph) * 0.3); }
+		else if (m.mode === "leap") { ex = -s * 0.25; ey = g - s * 0.15; }
+		else if (act === "eat") { ex = -s * 0.12; ey = g + s * 0.95; }
+		else if (act === "scratch") { ex = -s * 0.45 + Math.sin(t * 20) * s * 0.06; ey = g + s * 0.3; }
+		else if (act === "reach") {   // a hand out toward the cursor, in the vine's frame
+			var rx = m.lx * Math.cos(th) + m.ly * Math.sin(th), ry = -m.lx * Math.sin(th) + m.ly * Math.cos(th);
+			ex = sx + rx * s; ey = sy + ry * s;
+		} else {
+			var wave = (m.oh > 0.2 || act === "wave") ? Math.sin(t * 14) * 0.3 - 2.2 : 0.25 + Math.sin(t * 2 + m.ph) * 0.15;
+			ex = sx + Math.sin(wave) * -s * 0.75; ey = sy + Math.cos(wave) * s * 0.75;
+		}
+		c.strokeStyle = fur;
+		c.beginPath(); c.moveTo(sx, sy); c.lineTo(ex, ey); c.stroke();
+		// body and belly
+		c.fillStyle = fur;
+		c.beginPath(); c.ellipse(0, g + s * 1.6, s * 0.55, s * 0.7, 0, 0, TAU); c.fill();
+		c.fillStyle = MONKEY_FACE;
+		c.beginPath(); c.ellipse(0, g + s * 1.72, s * 0.32, s * 0.45, 0, 0, TAU); c.fill();
+		// arm holding the vine
+		c.strokeStyle = fur; c.lineWidth = s * 0.28;
+		c.beginPath(); c.moveTo(s * 0.35, g + s * 1.05); c.quadraticCurveTo(s * 0.45, g + s * 0.45, 0, g); c.stroke();
+		// head stays mostly upright while the body swings
+		c.save();
+		c.translate(-s * 0.08, g + s * 0.72); c.rotate(-th * 0.7);
+		var ha = -th * 0.3;
+		drawMonkeyHead(c, m, s, Math.cos(ha) * m.lx - Math.sin(ha) * m.ly, Math.sin(ha) * m.lx + Math.cos(ha) * m.ly, t);
+		c.restore();
+		c.fillStyle = MONKEY_FACE;   // hands
+		c.beginPath(); c.arc(ex, ey, s * 0.15, 0, TAU); c.fill();
+		c.beginPath(); c.arc(0, g, s * 0.17, 0, TAU); c.fill();
+		if (act === "eat" && !m.climb && m.mode !== "leap") drawHeldBanana(c, m, ex, ey, s);
+	}
+	// Hanging upside down by the tail, arms dangling (or waving).
+	function drawTailHang(c, m, t, th, g) {
+		var s = m.s, fur = m.fur[0], dark = m.fur[1], sw = Math.sin(t * 2.2 + m.ph), side;
+		c.lineCap = "round";
+		c.strokeStyle = dark; c.lineWidth = s * 0.15;   // tail wrapped round the vine, down to the rump
+		c.beginPath(); c.arc(0, g, s * 0.16, 0, TAU); c.stroke();
+		c.beginPath(); c.moveTo(s * 0.12, g + s * 0.1); c.quadraticCurveTo(s * 0.4, g + s * 0.55, 0, g + s * 0.95); c.stroke();
+		c.strokeStyle = fur; c.lineWidth = s * 0.26;   // legs folded up
+		for (side = -1; side <= 1; side += 2) {
+			c.beginPath(); c.moveTo(side * s * 0.25, g + s * 1.1); c.lineTo(side * s * 0.58, g + s * 0.75); c.stroke();
+			c.fillStyle = MONKEY_FACE;
+			c.beginPath(); c.arc(side * s * 0.62, g + s * 0.7, s * 0.14, 0, TAU); c.fill();
+		}
+		c.fillStyle = fur;
+		c.beginPath(); c.ellipse(0, g + s * 1.55, s * 0.55, s * 0.7, 0, 0, TAU); c.fill();
+		c.fillStyle = MONKEY_FACE;
+		c.beginPath(); c.ellipse(0, g + s * 1.45, s * 0.32, s * 0.45, 0, 0, TAU); c.fill();
+		var waving = m.oh > 0.2 || m.near < 230;
+		c.strokeStyle = fur; c.lineWidth = s * 0.24;
+		var hands = [];
+		for (side = -1; side <= 1; side += 2) {
+			var hx = side * s * 0.55 + sw * s * 0.2, hy = g + s * 3.2;
+			if (waving && side > 0) { hx = s * 0.95 + Math.sin(t * 14) * s * 0.25; hy = g + s * 2.75; }
+			c.beginPath(); c.moveTo(side * s * 0.38, g + s * 1.95); c.lineTo(hx, hy); c.stroke();
+			hands.push(hx, hy);
+		}
+		c.save();
+		c.translate(0, g + s * 2.45); c.rotate(Math.PI - th * 0.7);
+		var ha = -(Math.PI + th * 0.3);
+		drawMonkeyHead(c, m, s, Math.cos(ha) * m.lx - Math.sin(ha) * m.ly, Math.sin(ha) * m.lx + Math.cos(ha) * m.ly, t);
+		c.restore();
+		c.fillStyle = MONKEY_FACE;
+		c.beginPath(); c.arc(hands[0], hands[1], s * 0.15, 0, TAU); c.fill();
+		c.beginPath(); c.arc(hands[2], hands[3], s * 0.15, 0, TAU); c.fill();
+	}
+	// On the ground, side view, facing +x (the caller mirrors it).
+	function drawWalk(c, m, s, t, lx, ly) {
+		var fur = m.fur[0], dark = m.fur[1], gt = m.gait, bob = Math.abs(Math.sin(gt)) * s * 0.07;
+		c.lineCap = "round";
+		c.strokeStyle = dark; c.lineWidth = s * 0.15;   // tail held up in a curl
+		c.beginPath(); c.moveTo(-s * 0.65, -s * 1.05 - bob);
+		c.bezierCurveTo(-s * 1.35, -s * 1.15 + Math.sin(gt) * s * 0.12, -s * 1.3, -s * 2.15, -s * 0.9, -s * 2.0);
+		c.stroke();
+		function leg(x0, off, col) {
+			var sw = Math.sin(gt + off), fx = x0 + sw * s * 0.4, fy = -Math.max(0, -Math.cos(gt + off)) * s * 0.2;
+			c.strokeStyle = col; c.lineWidth = s * 0.24;
+			c.beginPath(); c.moveTo(x0, -s * 0.95 - bob); c.quadraticCurveTo(x0 + s * 0.12, -s * 0.45, fx, fy - s * 0.06); c.stroke();
+			c.fillStyle = col === fur ? MONKEY_FACE : dark;
+			c.beginPath(); c.ellipse(fx + s * 0.07, fy - s * 0.04, s * 0.15, s * 0.08, 0, 0, TAU); c.fill();
+		}
+		leg(s * 0.42, Math.PI, dark); leg(-s * 0.48, 0, dark);   // far legs
+		c.fillStyle = fur;
+		c.beginPath(); c.ellipse(0, -s * 1.0 - bob, s * 0.8, s * 0.5, -0.08, 0, TAU); c.fill();
+		leg(s * 0.42, 0, fur); leg(-s * 0.48, Math.PI, fur);     // near legs
+		c.save(); c.translate(s * 0.88, -s * 1.42 - bob); drawMonkeyHead(c, m, s * 0.9, lx, ly, t); c.restore();
+	}
+	function drawSit(c, m, s, t, lx, ly) {
+		var fur = m.fur[0], dark = m.fur[1], act = m.show, air = m.z > 0, wag = Math.sin(t * 2 + m.ph) * s * 0.15;
+		var clap = Math.abs(Math.sin(t * 9)), near, far, sh = -s * 1.45;
+		if (air || act === "yay") { far = [-s * 0.45, -s * 2.55]; near = [s * 0.55, -s * 2.6]; }
+		else if (act === "eat") { far = [s * 0.3, -s * 1.1]; near = [s * 0.5, -s * 1.78]; }
+		else if (act === "scratch") { far = [s * 0.25, -s * 0.9]; near = [Math.sin(t * 20) * s * 0.06, -s * 2.55]; }
+		else if (act === "clap") { far = [s * 0.62 - clap * s * 0.22, -s * 1.55]; near = [s * 0.72 + clap * s * 0.22, -s * 1.55]; }
+		else if (act === "wave") { far = [s * 0.35, -s * 0.85]; near = [s * 0.55 + Math.sin(t * 12) * s * 0.22, -s * 2.55]; }
+		else { far = [s * 0.4, -s * 0.82]; near = [s * 0.5, -s * 0.85]; }
+		function arm(x0, hand, col) {
+			c.strokeStyle = col; c.lineWidth = s * 0.22;
+			c.beginPath(); c.moveTo(x0, sh); c.lineTo(hand[0], hand[1]); c.stroke();
+			c.fillStyle = MONKEY_FACE;
+			c.beginPath(); c.arc(hand[0], hand[1], s * 0.13, 0, TAU); c.fill();
+		}
+		c.lineCap = "round";
+		c.strokeStyle = dark; c.lineWidth = s * 0.15;   // tail curling on the ground behind
+		c.beginPath(); c.moveTo(-s * 0.3, -s * 0.4);
+		c.bezierCurveTo(-s * 1.2, -s * 0.15, -s * 1.5, -s * 0.85 + wag, -s * 1.1, -s * 1.05 + wag); c.stroke();
+		arm(-s * 0.15, far, dark);
+		c.fillStyle = fur;
+		c.beginPath(); c.ellipse(0, -s * 1.05, s * 0.52, s * 0.72, 0, 0, TAU); c.fill();
+		c.fillStyle = MONKEY_FACE;
+		c.beginPath(); c.ellipse(s * 0.12, -s * 1.0, s * 0.3, s * 0.48, 0, 0, TAU); c.fill();
+		// legs folded up in front (tucked in mid-air)
+		c.strokeStyle = fur; c.lineWidth = s * 0.28;
+		c.beginPath(); c.moveTo(-s * 0.05, -s * 0.5); c.lineTo(s * 0.42, air ? -s * 0.95 : -s * 0.78); c.lineTo(s * 0.52, air ? -s * 0.4 : -s * 0.06); c.stroke();
+		c.fillStyle = MONKEY_FACE;
+		c.beginPath(); c.ellipse(s * 0.62, air ? -s * 0.38 : -s * 0.06, s * 0.16, s * 0.08, 0, 0, TAU); c.fill();
+		c.save(); c.translate(s * 0.15, -s * 2.0); drawMonkeyHead(c, m, s, lx, ly, t); c.restore();
+		arm(s * 0.2, near, fur);
+		if (act === "eat" && !air) drawHeldBanana(c, m, near[0] + s * 0.05, near[1] - s * 0.05, s);
+	}
+	function drawGround(c, m, t) {
+		var s = m.s, z = m.z;
+		c.save();
+		c.translate(m.x, m.y);
+		c.globalAlpha = 0.28 * clamp(1 - z / 400, 0.25, 1); c.fillStyle = "#000";
+		c.beginPath(); c.ellipse(0, 0, s * (m.pose === "walk" ? 1 : 0.75), s * 0.2, 0, 0, TAU); c.fill();
+		c.globalAlpha = 1;
+		c.translate(0, -z);
+		if (m.spin) { c.translate(0, -s); c.rotate(m.spin); c.translate(0, s); }   // tumbling after a slip
+		if (m.sq) c.scale(1 + m.sq * 0.18, 1 - m.sq * 0.18);                       // squash on landing
+		c.scale(m.face, 1);
+		if (m.pose === "walk") drawWalk(c, m, s, t, m.lx * m.face, m.ly);
+		else drawSit(c, m, s, t, m.lx * m.face, m.ly);
+		c.restore();
+	}
+
+	function initMonkeys(S, w, h, o) {
+		S.vines = []; S.monkeys = []; S.nanas = []; S.peels = []; S.leaves = []; S.canopy = [];
+		withSeed(hashInts(seedBase, 808, 0), function () {
+			var n = clamp(Math.round(w / o.spread), 3, o.max), sm = isSmallScreen() ? 0.7 : 1, i, j, v, m, order = [];
+			for (i = 0; i < n; i++) {
+				var L = rand(o.minL, o.maxL) * h;
+				S.vines.push({ ax: (i + 0.5 + rand(-0.22, 0.22)) / n * w, L: L, w: Math.sqrt(1100 / (L * 0.6 + 40)), amp: rand(0.08, 0.22), ph: rand(0, TAU),
+					dl: 0, dv: 0, th: 0, bend: 0, occ: null, gk: null, leaf: [rand(0.12, 0.25), rand(0.35, 0.5), rand(0.6, 0.72), rand(0.8, 0.92)] });
+				order.push(i);
 			}
-			if (!best) continue;
-			best.oh = 1;
-			for (j = 0; j < 3; j++) {
-				var T = 0.75 + j * 0.08, tx = clicks[i].x + rand(-30, 30), ty = clicks[i].y + rand(-20, 20);
-				S.nanas.push({ x: best.hx, y: best.hy, vx: (tx - best.hx) / T, vy: (ty - best.hy) / T - 450 * T,
-					rot: rand(0, TAU), vr: rand(-9, 9), age: -j * 0.08, s: rand(17, 23) });
+			for (i = n - 1; i > 0; i--) { j = (rng() * (i + 1)) | 0; var tmp = order[i]; order[i] = order[j]; order[j] = tmp; }
+			var nm = Math.max(2, Math.min(n - 1, Math.round(n * 0.65)));   // leave free vines to leap to
+			for (i = 0; i < nm; i++) {
+				v = S.vines[order[i]];
+				m = { s: rand(21, 29) * sm, fur: pick(MONKEY_FUR), tail: rand(0, 1) < 0.5 ? -1 : 1, ph: rand(0, TAU),
+					mode: "hang", vi: order[i], g: rand(0.3, 0.75) * v.L, act: "idle", show: "idle", tm: rand(1.5, 6),
+					x: 0, y: 0, z: 0, vx: 0, vz: 0, face: 1, oh: 0, ex: 0, lx: 0, ly: 0, near: Infinity, bl: 0, blink: rand(1, 4),
+					eat: 0, eatMax: 0, full: 0, chew: 0, sq: 0, spin: 0, spinV: 0, cph: 0, climb: 0, fast: 0, gait: 0, pose: "sit", job: null };
+				m.gt = m.g; v.occ = m;
+				S.monkeys.push(m);
 			}
+			for (i = 0, j = Math.ceil(w / 34); i < j; i++)
+				S.canopy.push({ x: i / j * w + rand(-10, 10), y: rand(-14, 10), r: rand(24, 46), ph: rand(0, TAU),
+					col: pick(["#0c3a18", "#124a20", "#185a28", "#0f4220"]) });
+		});
+	}
+	function groundCount(S) {
+		for (var i = 0, n = 0; i < S.monkeys.length; i++) if (S.monkeys[i].mode === "ground") n++;
+		return n;
+	}
+	function bananaWaiting(S) {
+		for (var i = 0; i < S.nanas.length; i++) if (S.nanas[i].rest && !S.nanas[i].claim) return true;
+		return false;
+	}
+	function closestBanana(S, m) {
+		var best = null, bd = 600 * 600, i, b, d;
+		for (i = 0; i < S.nanas.length; i++) {
+			b = S.nanas[i];
+			if (b.rest && (!b.claim || b.claim === m) && (d = d2(b.x, b.y, m.x, m.y)) < bd) { bd = d; best = b; }
+		}
+		return best;
+	}
+	function monkeyHand(S, m) {
+		if (m.mode === "hang") return vinePoint(S.vines[m.vi], m.g);
+		if (m.mode === "leap") return { x: m.hx, y: m.hy };
+		return { x: m.x + m.face * m.s * 0.3, y: m.y - m.z - m.s * 2.4 };
+	}
+	function startLeap(S, m, vi, g, from) {
+		var V = S.vines, old = m.vi >= 0 ? V[m.vi] : null, tv = V[vi], tp = vinePoint(tv, g);
+		m.rot0 = old ? old.th : 0;
+		if (old) { old.occ = null; old.dv += (tp.x > from.x ? 1 : -1) * 0.9; }   // kicking off swings the old vine back
+		tv.occ = m;
+		m.mode = "leap"; m.tv = vi; m.tg = g; m.vi = -1; m.u = 0;
+		m.fx = m.hx = from.x; m.fy = m.hy = from.y;
+		m.va = Math.atan2(tp.y - from.y, tp.x - from.x);
+		m.T = clamp(Math.sqrt(d2(from.x, from.y, tp.x, tp.y)) / 520, 0.5, 1.1);
+		m.arc = 40 + Math.abs(tp.x - from.x) * 0.25;
+		m.flip = Math.random() < 0.3 ? (tp.x > from.x ? 1 : -1) : 0;   // somersault!
+		m.act = m.eat > 0 ? "eat" : "idle"; m.climb = 0; m.z = 0; m.vz = 0; m.job = null; m.rot = m.rot0;
+	}
+	function leapToVine(S, m) {
+		var V = S.vines, from = monkeyHand(S, m), best = -1, bd = 430, i, d;
+		for (i = 0; i < V.length; i++) {
+			if (i === m.vi || V[i].occ) continue;
+			d = Math.abs(V[i].ax - from.x);
+			if (d < bd) { bd = d; best = i; }
+		}
+		if (best < 0) return false;
+		startLeap(S, m, best, rand(0.3, 0.85) * V[best].L, from);
+		return true;
+	}
+	function dropDown(S, m, h, o) {
+		var v = S.vines[m.vi], hand = vinePoint(v, m.g), G = o.ground;
+		v.occ = null; v.dv += rand(-0.5, 0.5);
+		m.mode = "ground"; m.vi = -1; m.climb = 0; m.spin = 0; m.job = null;
+		m.x = hand.x; m.y = rand(G[0], G[1]) * h; m.z = Math.max(0, m.y - (hand.y + m.s * 2.8));
+		m.vz = 60; m.vx = rand(-40, 40); m.act = "yay"; m.face = rand(0, 1) < 0.5 ? -1 : 1; m.tm = rand(1, 2.5);
+	}
+	function dropPeel(S, m) {
+		if (m.mode === "ground") { S.peels.push({ x: m.x + m.face * m.s * 0.6, y: m.y, age: 0, rot: rand(-0.4, 0.4) }); }
+		else {   // tossed down from up in the vines
+			var from = monkeyHand(S, m);
+			S.nanas.push({ x: from.x, y: from.y, vx: rand(-60, 60), vy: -120, rot: rand(0, TAU), vr: rand(-6, 6), age: 0,
+				s: m.s * 0.7, gy: rand(S.top, S.bot), peel: true });
+		}
+		if (S.peels.length > 8) S.peels.shift();
+	}
+	function spookMonkey(S, m) {
+		m.oh = 1;
+		if (m.mode === "hang") {
+			if (m.act === "tail") m.act = "idle";
+			if (!leapToVine(S, m)) { m.gt = Math.max(m.s, m.g - 120); m.fast = 1; m.tm = rand(2, 3); }
+		} else if (m.mode === "ground" && m.z <= 0) {
+			m.vz = 480; m.vx = (Math.random() < 0.5 ? -1 : 1) * 170; m.act = "yay"; m.job = null; m.tm = rand(1, 2.5);
+		}
+	}
+	function throwBananas(S, m, x, y) {
+		var from = monkeyHand(S, m);
+		m.oh = 0.7;
+		for (var j = 0; j < 3; j++) {
+			var T = 0.75 + j * 0.08, tx = x + rand(-30, 30), ty = y + rand(-20, 20);
+			S.nanas.push({ x: from.x, y: from.y, vx: (tx - from.x) / T, vy: (ty - from.y) / T - 450 * T,
+				rot: rand(0, TAU), vr: rand(-9, 9), age: -j * 0.08, s: rand(17, 23), rest: false,
+				gy: clamp(Math.max(ty, S.top) + rand(0, 40), S.top, S.bot) });
 		}
 		if (S.nanas.length > 40) S.nanas.splice(0, S.nanas.length - 40);
+	}
+	function monkeyClick(S, x, y) {
+		var M = S.monkeys, i, m, best = null, bd = Infinity, d;
+		for (i = 0; i < M.length; i++) {
+			m = M[i]; d = d2(m.bx, m.by, x, y);
+			if (d < m.s * m.s * 2.9) { spookMonkey(S, m); return; }
+			if (m.mode !== "leap" && d < bd) { bd = d; best = m; }
+		}
+		if (best) throwBananas(S, best, x, y);
+	}
+	function hangThink(S, m, v, h, o) {
+		if (m.act === "tail") { m.act = "idle"; m.tm = rand(1, 2); return; }   // flip back up first
+		if (m.eat > 0) { m.tm = 1; return; }                                   // finish the banana
+		var r = Math.random(), down = groundCount(S);
+		if (bananaWaiting(S) && m.full < 2 && down < Math.ceil(S.monkeys.length / 2) && r < 0.6) { dropDown(S, m, h, o); return; }
+		if (r < 0.32 && leapToVine(S, m)) return;
+		if (r < 0.47) { m.gt = rand(0.25, 0.9) * v.L; m.act = "idle"; m.tm = rand(3, 6); return; }
+		if (r < 0.6) { m.act = "tail"; m.tm = rand(3.5, 6); return; }
+		if (r < 0.7) { m.act = "scratch"; m.tm = rand(1.5, 2.6); return; }
+		if (r < 0.86 && down < Math.ceil(S.monkeys.length / 2)) { dropDown(S, m, h, o); return; }
+		m.act = "idle"; m.tm = rand(2, 5);
+	}
+	function hangUpdate(S, m, v, dt, h, o) {
+		m.tm -= dt;
+		var dg = m.gt - m.g;   // climbing toward a new grip
+		if (Math.abs(dg) > 2 && m.act !== "tail") { m.g += clamp(dg, -1, 1) * (m.fast ? 150 : 55) * dt; m.climb = 1; m.cph += dt * (m.fast ? 18 : 9); }
+		else { m.climb = 0; m.fast = 0; }
+		m.show = m.act;
+		if (m.act === "idle") m.show = m.near < 120 ? "reach" : m.near < 230 ? "wave" : "idle";
+		if (m.tm <= 0) hangThink(S, m, v, h, o);
+	}
+	function leapUpdate(S, m, dt) {
+		var tv = S.vines[m.tv], tp = vinePoint(tv, m.tg), u;
+		m.u = Math.min(1, m.u + dt / m.T); u = m.u;
+		var x = m.fx + (tp.x - m.fx) * u, y = m.fy + (tp.y - m.fy) * u - m.arc * 4 * u * (1 - u);
+		if (Math.abs(x - m.hx) + Math.abs(y - m.hy) > 0.5) m.va = Math.atan2(y - m.hy, x - m.hx);
+		m.hx = x; m.hy = y;
+		// lean into the flight (hand first), easing from the old vine's angle to the new one's
+		var base = m.rot0 + angDiff(m.rot0, tv.th) * u;
+		m.rot = base + angDiff(base, m.va + Math.PI / 2) * Math.sin(Math.PI * u) * 0.85 + m.flip * u * TAU;
+		m.show = m.act;
+		if (u >= 1) {
+			m.mode = "hang"; m.vi = m.tv; m.g = m.gt = m.tg; m.tm = rand(2.5, 6);
+			tv.dv += (tp.x > m.fx ? -1 : 1) * 1.5;   // the landing sets the new vine swinging
+		}
+	}
+	function groundIdea(S, m, w, top, bot) {
+		var r = Math.random(), i, q, best, bd, d;
+		m.tm = rand(2, 4);
+		if (r < (groundCount(S) >= Math.ceil(S.monkeys.length / 2) ? 0.5 : 0.25)) {   // back up a free vine
+			best = -1; bd = Infinity;
+			for (i = 0; i < S.vines.length; i++) if (!S.vines[i].occ && (d = Math.abs(S.vines[i].ax - m.x)) < bd) { bd = d; best = i; }
+			if (best >= 0) return { k: "vine", vi: best };
+		}
+		r = Math.random();
+		if (r < 0.3) {   // chase a gecko
+			best = null; bd = 450 * 450;
+			for (i = 0; i < parts.length; i++) {
+				q = parts[i];
+				if (q.pts && q.mode !== "climb" && (d = d2(q.pts[0].x, q.pts[0].y, m.x, m.y)) < bd) { bd = d; best = q; }
+			}
+			if (best) return { k: "gecko", p: best };
+		}
+		if (r < 0.5) {   // play tag with another monkey on the ground
+			for (i = 0; i < S.monkeys.length; i++) {
+				q = S.monkeys[i];
+				if (q !== m && q.mode === "ground" && d2(q.x, q.y, m.x, m.y) < 500 * 500) return { k: "tag", m: q };
+			}
+		}
+		if (r < 0.62) { m.act = "scratch"; return null; }
+		if (r < 0.7) { m.act = "clap"; return null; }
+		m.act = "idle";
+		return { k: "wander", x: clamp(m.x + rand(-300, 300), m.s, w - m.s), y: rand(top, bot) };
+	}
+	function slipCheck(S, m) {
+		for (var i = 0; i < S.peels.length; i++) {
+			var pe = S.peels[i];
+			if (pe.age > 1.5 && d2(pe.x, pe.y, m.x, m.y) < m.s * m.s * 0.5) {
+				S.peels.splice(i, 1);
+				m.vz = 430; m.vx = m.face * 150; m.spinV = -m.face * 11; m.oh = 1; m.act = "yay"; m.job = null; m.tm = rand(1.5, 3);
+				return;
+			}
+		}
+	}
+	function groundUpdate(S, m, dt, w, h, t) {
+		var top = S.top, bot = S.bot, s = m.s, job, P, dx, dy, d;
+		if (m.z > 0 || m.vz > 0) {   // airborne: drops, hops, pounces and slips
+			m.vz -= 1500 * dt; m.z += m.vz * dt; m.x = clamp(m.x + m.vx * dt, s, w - s);
+			m.spin += (m.spinV || 0) * dt;
+			if (m.z <= 0) { m.z = 0; m.vz = 0; m.vx = 0; m.sq = 1; m.spin = 0; m.spinV = 0; if (m.act === "yay") m.act = "idle"; }
+			m.pose = "sit"; m.show = "yay";
+			return;
+		}
+		m.tm -= dt;
+		P = nearest(livePtrs, m.bx, m.by);
+		if (m.eat > 0) {   // sit and munch
+			m.pose = "sit"; m.show = "eat"; m.job = null;
+			if (P) m.face = P.x > m.x ? 1 : -1;
+			return;
+		}
+		job = m.job;
+		if (P && m.near < 300 && (!job || job.k === "wander" || job.k === "follow")) {   // come and play with the cursor
+			job = m.job = { k: "follow", x: P.x, y: clamp(P.y, top, bot) };
+		} else if (job && job.k === "follow") { job = m.job = null; m.act = "idle"; }
+		if (m.full < 2 && (!job || job.k === "wander" || job.k === "follow")) {   // a full monkey leaves the rest
+			var b = closestBanana(S, m);
+			if (b) { b.claim = m; job = m.job = { k: "fetch", b: b }; m.act = "idle"; }
+		}
+		if (!job && m.tm <= 0) job = m.job = groundIdea(S, m, w, top, bot);
+		m.show = m.act;
+		if (!job) { m.pose = "sit"; return; }
+		var tx, ty, run = false, reach = 8, v, q;
+		if (job.k === "fetch") {
+			if (!job.b.rest || S.nanas.indexOf(job.b) < 0) { m.job = null; return; }
+			tx = job.b.x; ty = job.b.y; run = true; reach = s * 0.5;
+		} else if (job.k === "gecko") {
+			q = job.p;
+			if (q.mode === "climb" || m.tm < -6) { m.job = null; return; }
+			tx = q.pts[0].x; ty = clamp(q.pts[0].y, top, bot); run = true; reach = s * 1.6;
+		} else if (job.k === "tag") {
+			q = job.m;
+			if (q.mode !== "ground" || m.tm < -6) { m.job = null; return; }
+			tx = q.x; ty = q.y; run = true; reach = s * 1.4;
+		} else if (job.k === "vine") {
+			v = S.vines[job.vi];
+			if (v.occ) { m.job = null; return; }
+			tx = vinePoint(v, v.L).x; ty = m.y; reach = 12;
+		} else if (job.k === "follow") {
+			tx = job.x; ty = job.y; reach = s * 2.2;
+		} else { tx = job.x; ty = job.y; run = job.k === "flee"; }
+		dx = tx - m.x; dy = ty - m.y; d = Math.sqrt(dx * dx + dy * dy);
+		if (d > reach) {
+			var step = Math.min(d - reach * 0.5, (run ? 175 : 75) * s / 25 * dt);
+			m.x += dx / d * step; m.y += dy / d * step;
+			if (Math.abs(dx) > 2) m.face = dx > 0 ? 1 : -1;
+			m.gait += step / (s * 0.5);
+			m.pose = "walk";
+			slipCheck(S, m);
+		} else {
+			m.pose = "sit";
+			if (job.k === "fetch") {
+				S.nanas.splice(S.nanas.indexOf(job.b), 1);
+				m.eat = m.eatMax = rand(3, 5); m.act = "eat"; m.job = null; m.tm = m.eat + 1; m.full++;
+			} else if (job.k === "gecko") {   // pounce! (the gecko scarpers by itself)
+				m.vz = 380; m.vx = m.face * 120; m.act = "yay"; m.oh = 0.8; m.job = null; m.tm = rand(2, 4);
+			} else if (job.k === "tag") {     // tag, you're it
+				q.oh = 1; q.vz = 420; q.vx = (q.x > m.x ? 1 : -1) * 120; q.act = "yay"; q.tm = 0;
+				q.job = Math.random() < 0.5 ? { k: "tag", m: m } : { k: "flee", x: clamp(q.x + (q.x > m.x ? 1 : -1) * 300, s, w - s), y: rand(top, bot) };
+				m.act = "clap"; m.job = null; m.tm = 2;
+			} else if (job.k === "vine") {
+				startLeap(S, m, job.vi, v.L * rand(0.72, 0.92), monkeyHand(S, m));
+				return;
+			} else if (job.k === "follow") {
+				if (P) m.face = P.x > m.x ? 1 : -1;
+				m.act = m.near < s * 4 ? "clap" : "wave";
+				if (Math.random() < dt * 0.5) { m.vz = 360; m.act = "yay"; }   // excited hop
+			} else { m.job = null; m.tm = rand(2, 5); m.act = Math.random() < 0.3 ? "scratch" : "idle"; }
+			m.show = m.act;
+		}
+		m.y = clamp(m.y, top, bot); m.x = clamp(m.x, s, w - s);
+	}
+	function monkeyUpdate(S, m, dt, w, h, o) {
+		var v = m.vi >= 0 ? S.vines[m.vi] : null, s = m.s, P, dx, dy, d;
+		m.oh = Math.max(0, m.oh - dt * 1.2); m.sq = Math.max(0, m.sq - dt * 4); m.full = Math.max(0, m.full - dt / 20);
+		m.blink -= dt;
+		if (m.blink < 0) { m.blink = rand(2, 5); m.bl = 1; }
+		m.bl = Math.max(0, m.bl - dt * 7);
+		if (m.eat > 0) {
+			m.eat -= dt; m.chew = 1;
+			if (m.eat <= 0) { m.chew = 0; m.act = "idle"; dropPeel(S, m); }
+		}
+		// where its body is, for looking, pushing and clicks
+		if (m.mode === "hang") { var R = m.g + s * 1.55; m.bx = v.ax - Math.sin(v.th) * R; m.by = -4 + Math.cos(v.th) * R; }
+		else if (m.mode === "leap") { m.bx = m.hx; m.by = m.hy; }
+		else { m.bx = m.x; m.by = m.y - m.z - s * 1.1; }
+		P = nearest(livePtrs, m.bx, m.by);
+		m.near = Infinity; m.lx = m.ly = 0;
+		if (P) {
+			dx = P.x - m.bx; dy = P.y - m.by; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+			m.near = d;
+			if (d < 500) { m.lx = dx / d; m.ly = dy / d; }
+		}
+		m.ex += ((m.near < 170 ? 1 : 0) - m.ex) * Math.min(1, dt * 3);
+		if (m.mode === "hang") hangUpdate(S, m, v, dt, h, o);
+		else if (m.mode === "leap") leapUpdate(S, m, dt);
+		else groundUpdate(S, m, dt, w, h);
+	}
+
+	// mid(): drawn after the canopy and the bananas on the ground, but
+	// under the monkeys walking around (the jungle's geckos go there).
+	function monkeyScene(c, dt, w, h, t, S, o, mid) {
+		var i, j, m, v, P, dx, dy, d, side, b;
+		if (!S.vines) initMonkeys(S, w, h, o);
+		var V = S.vines, M = S.monkeys;
+		S.top = o.ground[0] * h; S.bot = o.ground[1] * h;
+		// vines: the shared swing (room clock) plus a springy offset that cursors, clicks and monkeys push
+		for (i = 0; i < V.length; i++) {
+			v = V[i];
+			v.th = v.amp * Math.sin(t * v.w + v.ph) + v.dl;
+			var R = v.occ && v.occ.mode === "hang" ? v.occ.g + v.occ.s * 1.5 : v.L;
+			var bx = v.ax - Math.sin(v.th) * R, by = Math.cos(v.th) * R;
+			var acc = -v.w * v.w * v.dl - 0.9 * v.dv;
+			P = nearest(livePtrs, bx, by);
+			if (P) {
+				dx = bx - P.x; dy = by - P.y; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+				if (d < 130) acc -= (dx > 0 ? 1 : -1) * (1 - d / 130) * 16;
+			}
+			for (j = 0; j < clicks.length; j++) {
+				dx = bx - clicks[j].x; dy = by - clicks[j].y; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+				if (d < 280) v.dv -= (dx > 0 ? 1 : -1) * 2.2 * (1 - d / 280);
+			}
+			v.dv += acc * dt;
+			v.dl = clamp(v.dl + v.dv * dt, -1.1, 1.1);
+			v.bend = clamp(v.dv * 10, -40, 40);   // the vine lags behind the swing
+		}
+		for (i = 0; i < clicks.length; i++) monkeyClick(S, clicks[i].x, clicks[i].y);
+		for (i = 0; i < M.length; i++) monkeyUpdate(S, M[i], dt, w, h, o);
 		eachMove(S, livePtrs, 46, function (x, y) {
 			S.leaves.push({ x: x, y: y, vx: rand(-20, 20), vy: rand(10, 40), rot: rand(0, TAU), vr: rand(-3, 3),
 				age: 0, max: rand(1.6, 2.6), s: rand(6, 10), col: pick(["#5fae3a", "#3f8f2a", "#8fd14f"]) });
 		});
 		if (S.leaves.length > 120) S.leaves.splice(0, S.leaves.length - 120);
+		// bananas fly, bounce once, then lie on the ground for a while; peels land as peels
+		for (i = S.nanas.length - 1; i >= 0; i--) {
+			b = S.nanas[i];
+			b.age += dt;
+			if (b.age < 0) continue;
+			if (b.rest) { if (b.age > 25) S.nanas.splice(i, 1); continue; }
+			b.vy += 900 * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.rot += b.vr * dt;
+			if (b.vy > 0 && b.y >= b.gy) {
+				b.y = b.gy;
+				if (b.peel) { S.peels.push({ x: b.x, y: b.y, age: 0, rot: rand(-0.4, 0.4) }); S.nanas.splice(i, 1); continue; }
+				if (!b.bounced) { b.bounced = true; b.vy *= -0.3; b.vx *= 0.4; b.vr *= 0.5; }
+				else { b.rest = true; b.rot = rand(-0.4, 0.4); b.age = 0; }
+			}
+			if (b.x < -60 || b.x > w + 60) S.nanas.splice(i, 1);
+		}
+		if (S.peels.length > 8) S.peels.splice(0, S.peels.length - 8);
 
 		c.globalAlpha = 1;
-		for (i = 0; i < S.vines.length; i++) {
-			v = S.vines[i];
-			var th = v.amp * Math.sin(t * v.w + v.ph) + v.dl, R = v.L + v.s * 1.5;
-			v.bx = v.ax - Math.sin(th) * R; v.by = Math.cos(th) * R;        // body, for pushes
-			v.hx = v.ax - Math.sin(th) * v.L; v.hy = Math.cos(th) * v.L;    // hand, where bananas come from
-			// springy offset on top of the shared swing: cursors push the body sideways
-			var acc = -v.w * v.w * v.dl - 0.9 * v.dv;
-			P = nearest(livePtrs, v.bx, v.by);
-			v.lx = v.ly = 0;
-			if (P) {
-				dx = v.bx - P.x; dy = v.by - P.y; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-				if (d < 130) acc -= (dx > 0 ? 1 : -1) * (1 - d / 130) * 16;
-				if (d < 500) { v.lx = -dx / d; v.ly = -dy / d; }
-			}
-			for (j = 0; j < clicks.length; j++) {
-				dx = v.bx - clicks[j].x; dy = v.by - clicks[j].y; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-				if (d < 280) v.dv -= (dx > 0 ? 1 : -1) * 2.2 * (1 - d / 280);
-			}
-			v.dv += acc * dt;
-			v.dl = clamp(v.dl + v.dv * dt, -1.1, 1.1);
-			v.oh = Math.max(0, v.oh - dt * 1.2);
-
+		for (i = 0; i < V.length; i++) {
+			v = V[i];
 			c.save();
-			c.translate(v.ax, -4); c.rotate(th);
-			var bend = clamp(v.dv * 10, -40, 40);   // the vine lags behind the swing
+			c.translate(v.ax, -4); c.rotate(v.th);
 			c.strokeStyle = "#3e7a2a"; c.lineWidth = 3; c.lineCap = "round";
-			c.beginPath(); c.moveTo(0, 0); c.quadraticCurveTo(bend, v.L * 0.5, 0, v.L); c.stroke();
+			c.beginPath(); c.moveTo(0, 0); c.quadraticCurveTo(v.bend, v.L * 0.5, 0, v.L); c.stroke();
 			c.fillStyle = "#4f9a35";
 			for (j = 0; j < v.leaf.length; j++) {
 				var f = v.leaf[j];
 				side = j % 2 ? 1 : -1;
-				c.beginPath(); c.ellipse(2 * f * (1 - f) * bend + side * 7, f * v.L, 8, 3.5, side * 0.6, 0, TAU); c.fill();
+				c.beginPath(); c.ellipse(2 * f * (1 - f) * v.bend + side * 7, f * v.L, 8, 3.5, side * 0.6, 0, TAU); c.fill();
 			}
-			drawMonkey(c, v, t, th);
+			m = v.occ;
+			if (m && m.mode === "hang") (m.act === "tail" ? drawTailHang : drawHang)(c, m, t, v.th, m.g);
 			c.restore();
 		}
-
 		// canopy along the top, drawn over the vine tops
 		for (i = 0; i < S.canopy.length; i++) {
 			var cp = S.canopy[i];
 			c.fillStyle = cp.col;
 			c.beginPath(); c.ellipse(cp.x + Math.sin(t * 0.6 + cp.ph) * 3, cp.y, cp.r, cp.r * 0.7, 0, 0, TAU); c.fill();
 		}
-
-		for (i = S.nanas.length - 1; i >= 0; i--) {
-			var b = S.nanas[i];
-			b.age += dt;
-			if (b.age < 0) continue;
-			if (b.age > 3.5 || b.y > h + 40) { S.nanas.splice(i, 1); continue; }
-			b.vy += 900 * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.rot += b.vr * dt;
+		for (i = 0; i < S.peels.length; i++) {
+			var pe = S.peels[i];
+			pe.age += dt;
+			c.globalAlpha = Math.min(1, (15 - pe.age) / 2);
+			if (c.globalAlpha <= 0) { S.peels.splice(i--, 1); continue; }
+			c.save(); c.translate(pe.x, pe.y); c.rotate(pe.rot); peelShape(c, 16); c.restore();
+		}
+		for (i = 0; i < S.nanas.length; i++) {
+			b = S.nanas[i];
+			if (!b.rest) continue;
+			c.globalAlpha = Math.min(1, (25 - b.age) / 3);
+			c.save(); c.translate(b.x, b.y); c.rotate(b.rot); bananaShape(c, b.s); c.restore();
+		}
+		c.globalAlpha = 1;
+		if (mid) mid();
+		c.globalAlpha = 1;
+		var ground = [];
+		for (i = 0; i < M.length; i++) if (M[i].mode === "ground") ground.push(M[i]);
+		ground.sort(function (a, b) { return a.y - b.y; });   // nearer monkeys in front
+		for (i = 0; i < ground.length; i++) drawGround(c, ground[i], t);
+		for (i = 0; i < M.length; i++) {
+			m = M[i];
+			if (m.mode !== "leap") continue;
+			c.save(); c.translate(m.hx, m.hy); c.rotate(m.rot);
+			drawHang(c, m, t, angDiff(0, m.rot), 0);
+			c.restore();
+		}
+		for (i = 0; i < S.nanas.length; i++) {
+			b = S.nanas[i];
+			if (b.rest || b.age < 0) continue;
 			c.save(); c.translate(b.x, b.y); c.rotate(b.rot);
-			bananaShape(c, b.s);
+			if (b.peel) peelShape(c, b.s); else bananaShape(c, b.s);
 			c.restore();
 		}
 		var drag = Math.pow(0.5, dt);
@@ -771,17 +1508,6 @@
 		}
 		c.globalAlpha = 1;
 	}
-
-	// Koi: a top-down fish built on a spine, with patches, fins and a tail.
-	var KOI_PAL = [
-		{ base: "#f4f1ea", patch: "#e8462a" },
-		{ base: "#ff8a1e", patch: "#ffd27a" },
-		{ base: "#ffd34a", patch: "#fff3c4" },
-		{ base: "#f4f1ea", patch: "#1d1d22" },
-		{ base: "#e8462a", patch: "#1d1d22" }
-	];
-	var KOI_W = [0, 0.72, 0.8, 0.78, 0.7, 0.6, 0.48, 0.36, 0.25, 0.16];
-	var KOI_N = KOI_W.length;
 
 	// Dandelion seed: a stalk with a fluffy crown of filaments at (0, 0).
 	function seedShape(c, s) {
@@ -1842,12 +2568,16 @@
 			}
 		},
 
-		// Geckos on warm rock; clicks also kick up a puff of sand.
+		// Geckos on warm rock with flies to hunt; clicks also kick up a puff
+		// of sand, and dropped tails wriggle where they fell.
 		geckos: {
 			density: 12, pointer: true,
 			init: Gecko.init, update: Gecko.update, draw: Gecko.draw,
 			frame: function (c, dt, w, h, t, S) {
 				var dust = S.dust || (S.dust = []), i, j, p;
+				updateFlies(S, dt, w, h, t, { flies: 7, flyTop: 0.08 });
+				drawTails(c, S, dt);
+				drawFlies(c, S, t);
 				for (i = 0; i < clicks.length; i++)
 					for (j = 0; j < 18; j++) {
 						var a = rand(0, TAU), v = rand(40, 170);
@@ -1871,16 +2601,23 @@
 		monkeys: {
 			density: 0, pointer: true,
 			frame: function (c, dt, w, h, t, S) {
-				monkeyScene(c, dt, w, h, t, S, { max: 8, spread: 230, minL: 0.16, maxL: 0.42 });
+				monkeyScene(c, dt, w, h, t, S, MONKEY_OPTS);
 			}
 		},
 
-		// Monkeys overhead plus geckos on the forest floor (fxOpts.minY).
+		// Monkeys and geckos together: geckos (fxOpts.minY keeps them on the
+		// forest floor) are drawn inside the monkey scene, so they can climb
+		// the vines and sit between the canopy and the monkeys on the ground.
 		jungle: {
 			density: 8, pointer: true,
-			init: Gecko.init, update: Gecko.update, draw: Gecko.draw,
-			frame: function (c, dt, w, h, t, S) {
-				monkeyScene(c, dt, w, h, t, S, { max: 6, spread: 300, minL: 0.1, maxL: 0.28 });
+			init: Gecko.init, update: Gecko.update, drawAll: function () {},
+			frame: function (c, dt, w, h, t, S, o) {
+				updateFlies(S, dt, w, h, t, { flies: 5, flyTop: o.minY });
+				monkeyScene(c, dt, w, h, t, S, JUNGLE_OPTS, function () {
+					drawTails(c, S, dt);
+					for (var i = 0; i < parts.length; i++) Gecko.draw(c, parts[i], t);
+					drawFlies(c, S, t);
+				});
 			}
 		},
 
@@ -1994,228 +2731,6 @@
 				c.strokeStyle = "rgba(250,246,235,0.85)"; c.fillStyle = "#b89a6a";
 				seedShape(c, p.s);
 				c.restore();
-			}
-		},
-
-		// Jellyfish swim by pulsing their bells; they turn toward cursors and
-		// glow brighter, and clicks make them flee in a flash.
-		jellies: {
-			density: 20, pointer: true, blend: "lighter",
-			init: function (p, w, h, first) {
-				p.s = rand(16, 38) * (isSmallScreen() ? 0.75 : 1);
-				p.x = rand(0, w); p.y = first ? rand(0, h) : h + p.s * 3;
-				p.hd = -Math.PI / 2 + rand(-0.3, 0.3); p.vx = 0; p.vy = rand(-20, -5); p.kx = 0; p.ky = 0;
-				p.f = rand(0.35, 0.6); p.ph = rand(0, 1); p.hue = pick([300, 320, 190, 200, 270, 170]);
-				p.n = 5 + (rand(0, 3) | 0); p.glow = 0; p.k = 0;
-			},
-			update: function (p, dt, w, h, t) {
-				var want = -Math.PI / 2 + Math.sin(t * 0.2 + p.ph * 9) * 0.5, g = nearest(livePtrs, p.x, p.y), dx, dy, d, i;
-				p.k = (t * p.f + p.ph) % 1;
-				p.glow = Math.max(0, p.glow - dt * 0.8);
-				if (g) {
-					dx = g.x - p.x; dy = g.y - p.y; d = Math.sqrt(dx * dx + dy * dy);
-					if (d < 360) {
-						want = Math.atan2(dy, dx) + (d < p.s * 2 ? Math.PI : 0);   // close in, but don't sit on it
-						p.glow = Math.max(p.glow, 1 - d / 360);
-					}
-				}
-				for (i = 0; i < clicks.length; i++) {
-					dx = p.x - clicks[i].x; dy = p.y - clicks[i].y; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-					if (d < 300) { var kick = 420 * (1 - d / 300); p.kx += dx / d * kick; p.ky += dy / d * kick; p.glow = 1; }
-				}
-				p.hd = steer(p.hd, want, dt * 1.2);
-				if (p.k < 0.28) {   // the bell contracts: thrust
-					var th = 160 * Math.sin(p.k / 0.28 * Math.PI) * dt;
-					p.vx += Math.cos(p.hd) * th; p.vy += Math.sin(p.hd) * th;
-				}
-				var drag = Math.pow(0.4, dt), kd = Math.pow(0.1, dt);
-				p.vx *= drag; p.vy = p.vy * drag + 4 * dt;   // sinks a little between pulses
-				p.kx *= kd; p.ky *= kd;
-				p.x += (p.vx + p.kx) * dt; p.y += (p.vy + p.ky) * dt;
-				if (p.x < -80) p.x = w + 80; else if (p.x > w + 80) p.x = -80;
-				return p.y > -p.s * 6 && p.y < h + p.s * 6;
-			},
-			draw: function (c, p, t) {
-				var s = p.s, sq = p.k < 0.28 ? Math.sin(p.k / 0.28 * Math.PI) : 0, i, j;
-				var bw = s * (1 - sq * 0.22), bh = s * 0.78 * (1 + sq * 0.12), col = "hsla(" + p.hue + ",100%,70%,";
-				c.save();
-				c.translate(p.x, p.y); c.rotate(p.hd + Math.PI / 2);   // bell top points where it swims
-				c.globalAlpha = 0.3 + p.glow * 0.5;
-				c.drawImage(glow(col + "0.6)"), -s * 1.7, -s * 1.6, s * 3.4, s * 3.4);
-				c.globalAlpha = 0.6 + p.glow * 0.4;
-				c.lineWidth = 1; c.strokeStyle = col + "0.5)";
-				c.beginPath();
-				for (i = 0; i < p.n; i++) {
-					var x0 = (i / (p.n - 1) - 0.5) * bw * 1.6;
-					c.moveTo(x0, 0);
-					for (j = 1; j <= 8; j++) {
-						var f = j / 8;
-						c.lineTo(x0 * (1 - f * 0.3) + Math.sin(t * 2.6 + i * 1.7 + f * 4) * s * 0.2 * f, f * s * 2.3 * (1 - sq * 0.15));
-					}
-				}
-				c.stroke();
-				c.lineWidth = 2.5; c.strokeStyle = col + "0.35)";   // frilly oral arms
-				c.beginPath();
-				for (i = -1; i <= 1; i += 2) {
-					c.moveTo(i * bw * 0.15, 0);
-					for (j = 1; j <= 6; j++) c.lineTo(i * bw * 0.15 + Math.sin(t * 3.2 + j * 1.1 + i) * s * 0.14, j / 6 * s * 1.3);
-				}
-				c.stroke();
-				c.fillStyle = col + "0.3)"; c.strokeStyle = col + "0.9)"; c.lineWidth = 1.5;
-				c.beginPath();
-				c.moveTo(-bw, 0);
-				c.bezierCurveTo(-bw, -bh * 1.35, bw, -bh * 1.35, bw, 0);
-				c.quadraticCurveTo(0, bh * 0.25, -bw, 0);
-				c.fill(); c.stroke();
-				c.fillStyle = col + "0.45)";
-				for (i = 0; i < 4; i++) {
-					var a = i / 4 * TAU + 0.4;
-					c.beginPath(); c.ellipse(Math.cos(a) * bw * 0.32, -bh * 0.45 + Math.sin(a) * bh * 0.18, s * 0.1, s * 0.06, a, 0, TAU); c.fill();
-				}
-				c.restore();
-			},
-			// drifting plankton, placed by the room clock, light up near cursors
-			frame: function (c, dt, w, h, t, S) {
-				var i, p;
-				if (!S.pl) {
-					S.pl = [];
-					withSeed(hashInts(seedBase, 77, 0), function () {
-						for (i = 0; i < scaledCount(90); i++) S.pl.push({ nx: rand(0, 1), ny: rand(0, 1), sp: rand(0.004, 0.012), ph: rand(0, TAU) });
-					});
-				}
-				c.globalCompositeOperation = "lighter";
-				c.fillStyle = "#9fe9ff";
-				for (i = 0; i < S.pl.length; i++) {
-					p = S.pl[i];
-					var x = p.nx * w + Math.sin(t * 0.15 + p.ph) * 30, y = (((p.ny - t * p.sp) % 1) + 1) % 1 * h;
-					var g = nearest(livePtrs, x, y), near = 0;
-					if (g) { var dx = g.x - x, dy = g.y - y; near = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy) / 180); }
-					c.globalAlpha = 0.25 + 0.2 * Math.sin(t * 2 + p.ph) + near * 0.6;
-					c.beginPath(); c.arc(x, y, 1.1 + near * 1.6, 0, TAU); c.fill();
-				}
-				c.globalCompositeOperation = "source-over";
-			}
-		},
-
-		// Koi wander the pond and circle nearby cursors; clicks scatter food
-		// pellets that the closest fish race to eat.
-		koi: {
-			density: 14, pointer: true,
-			init: function (p, w, h, first) {
-				p.s = rand(14, 22) * (isSmallScreen() ? 0.8 : 1);
-				var x = first ? rand(0.1, 0.9) * w : (rand(0, 1) < 0.5 ? -60 : w + 60), y = rand(0.1, 0.9) * h;
-				p.hd = first ? rand(0, TAU) : (x < 0 ? 0 : Math.PI);
-				p.seg = p.s * 0.38;
-				p.pts = makeSpine(KOI_N, x, y, p.hd, p.seg);
-				p.pal = pick(KOI_PAL); p.ph = rand(0, TAU); p.sp = 40; p.sw = rand(0, TAU);
-				p.patch = [rand(0, 1) < 0.7, rand(0, 1) < 0.5, rand(0, 1) < 0.6, rand(0, 1) < 0.4, rand(0, 1) < 0.5];
-				p.tx = rand(0.1, 0.9) * w; p.ty = rand(0.1, 0.9) * h; p.orb = rand(50, 110) * (rand(0, 1) < 0.5 ? -1 : 1);
-			},
-			update: function (p, dt, w, h, t) {
-				var head = p.pts[0], food = state.food || [], want, speed = 45, turn = 2.2, i, dx, dy, d, best = null, bd = 600 * 600;
-				for (i = 0; i < food.length; i++) {
-					if (food[i].eaten) continue;
-					dx = food[i].x - head.x; dy = food[i].y - head.y; d = dx * dx + dy * dy;
-					if (d < bd) { bd = d; best = food[i]; }
-				}
-				var g = nearest(livePtrs, head.x, head.y), gd = Infinity;
-				if (g) { dx = g.x - head.x; dy = g.y - head.y; gd = dx * dx + dy * dy; }
-				if (best) {
-					want = Math.atan2(best.y - head.y, best.x - head.x); speed = 150; turn = 3.6;
-					if (bd < p.s * p.s * 0.6) best.eaten = true;
-				} else if (gd < 300 * 300) {
-					var a = t * 0.8 * (p.orb > 0 ? 1 : -1) + p.ph, ox = g.x + Math.cos(a) * Math.abs(p.orb), oy = g.y + Math.sin(a) * Math.abs(p.orb);
-					want = Math.atan2(oy - head.y, ox - head.x); speed = 90;
-				} else {
-					dx = p.tx - head.x; dy = p.ty - head.y;
-					if (dx * dx + dy * dy < 1600 || Math.random() < dt * 0.1) { p.tx = rand(0.08, 0.92) * w; p.ty = rand(0.08, 0.92) * h; }
-					want = Math.atan2(dy, dx);
-				}
-				p.hd = steer(p.hd, want, turn * dt);
-				p.sp += (speed * p.s / 18 - p.sp) * Math.min(1, dt * 2);
-				p.sw += dt * (4 + p.sp / 20);
-				var dir = p.hd + Math.sin(p.sw) * 0.12;
-				head.x += Math.cos(dir) * p.sp * dt; head.y += Math.sin(dir) * p.sp * dt;
-				followSpine(p.pts, p.seg);
-				return head.x > -200 && head.x < w + 200 && head.y > -200 && head.y < h + 200;
-			},
-			draw: function (c, p, t) {
-				var P = p.pts, s = p.s, i, N = KOI_N, tail = P[N - 1], pre = P[N - 2];
-				var ta = Math.atan2(tail.y - pre.y, tail.x - pre.x) + Math.sin(p.sw * 1.3) * 0.35;
-				function width(i) { return KOI_W[i] * s; }
-				c.globalAlpha = 1;
-				c.save(); c.translate(5, 8);   // shadow on the pond floor
-				strokeSpine(c, P, width, "rgba(0,20,18,0.28)");
-				c.restore();
-				c.fillStyle = p.pal.base;
-				c.globalAlpha = 0.8;
-				c.beginPath();   // fan tail
-				c.moveTo(tail.x, tail.y);
-				c.quadraticCurveTo(tail.x + Math.cos(ta - 0.2) * s * 0.7, tail.y + Math.sin(ta - 0.2) * s * 0.7, tail.x + Math.cos(ta - 0.55) * s, tail.y + Math.sin(ta - 0.55) * s);
-				c.lineTo(tail.x + Math.cos(ta) * s * 0.6, tail.y + Math.sin(ta) * s * 0.6);
-				c.lineTo(tail.x + Math.cos(ta + 0.55) * s, tail.y + Math.sin(ta + 0.55) * s);
-				c.quadraticCurveTo(tail.x + Math.cos(ta + 0.2) * s * 0.7, tail.y + Math.sin(ta + 0.2) * s * 0.7, tail.x, tail.y);
-				c.fill();
-				var A = P[2], B = P[1], ang = Math.atan2(B.y - A.y, B.x - A.x), flap = Math.sin(p.sw * 1.5) * 0.3;
-				for (var side = -1; side <= 1; side += 2) {   // pectoral fins
-					var fa = ang + side * (Math.PI * 0.7 + flap);
-					c.beginPath();
-					c.ellipse(A.x + Math.cos(fa) * s * 0.42, A.y + Math.sin(fa) * s * 0.42, s * 0.36, s * 0.16, fa, 0, TAU);
-					c.fill();
-				}
-				c.globalAlpha = 1;
-				strokeSpine(c, P, width, p.pal.base);
-				c.strokeStyle = p.pal.patch;
-				for (i = 1; i <= 5; i++) {
-					if (!p.patch[i - 1]) continue;
-					c.lineWidth = width(i) * 0.7;
-					c.beginPath(); c.moveTo(P[i - 1].x, P[i - 1].y); c.lineTo(P[i].x, P[i].y); c.stroke();
-				}
-				var hx = P[0].x, hy = P[0].y, ha = Math.atan2(P[0].y - P[1].y, P[0].x - P[1].x);
-				c.fillStyle = "#14141a";
-				for (side = -1; side <= 1; side += 2) {
-					var ea = ha + side * 1.1;
-					c.beginPath(); c.arc(hx + Math.cos(ea) * s * 0.24, hy + Math.sin(ea) * s * 0.24, s * 0.06, 0, TAU); c.fill();
-				}
-			},
-			frame: function (c, dt, w, h, t, S) {
-				var food = S.food || (S.food = []), rings = S.rings || (S.rings = []), i, j, f, r;
-				for (i = 0; i < clicks.length; i++) {
-					for (j = 0; j < 6; j++) food.push({ x: clicks[i].x + rand(-30, 30), y: clicks[i].y + rand(-30, 30), age: 0, ph: rand(0, TAU) });
-					rings.push({ x: clicks[i].x, y: clicks[i].y, age: 0, max: 2, sp: 70, a: 1 });
-				}
-				if (food.length > 60) food.splice(0, food.length - 60);
-				eachMove(S, livePtrs, 60, function (x, y) { rings.push({ x: x, y: y, age: 0, max: 1.5, sp: 45, a: 0.45 }); });
-				var slot = Math.floor(t / 1.6);
-				if (slot !== S.slot) {   // ambient ripples placed by the room clock
-					S.slot = slot;
-					var RD = mulberry(hashInts(seedBase, 9090, slot));
-					if (RD() < 0.6) rings.push({ x: RD() * w, y: RD() * h, age: 0, max: 2.2, sp: 40, a: 0.5 });
-				}
-				for (i = food.length - 1; i >= 0; i--) {
-					f = food[i];
-					f.age += dt;
-					if (f.eaten) rings.push({ x: f.x, y: f.y, age: 0, max: 1, sp: 40, a: 0.7 });
-					if (f.eaten || f.age > 12) { food.splice(i, 1); continue; }
-					var fx_ = f.x + Math.sin(t * 1.5 + f.ph) * 2, fy_ = f.y + Math.cos(t * 1.2 + f.ph) * 2;
-					c.globalAlpha = Math.min(1, (12 - f.age) / 2);
-					c.fillStyle = "#c98a3a";
-					c.beginPath(); c.arc(fx_, fy_, 3.2, 0, TAU); c.fill();
-					c.fillStyle = "#f2d29a";
-					c.beginPath(); c.arc(fx_ - 1, fy_ - 1, 1.1, 0, TAU); c.fill();
-				}
-				if (rings.length > 50) rings.splice(0, rings.length - 50);
-				c.strokeStyle = "#c8f5ec"; c.lineWidth = 1.4;
-				for (i = rings.length - 1; i >= 0; i--) {
-					r = rings[i];
-					r.age += dt;
-					if (r.age >= r.max) { rings.splice(i, 1); continue; }
-					var rad = 3 + r.age * r.sp, k = 1 - r.age / r.max;
-					c.globalAlpha = k * k * 0.7 * r.a;
-					c.beginPath(); c.arc(r.x, r.y, rad, 0, TAU); c.stroke();
-					c.globalAlpha *= 0.4;
-					c.beginPath(); c.arc(r.x, r.y, rad * 0.7, 0, TAU); c.stroke();
-				}
 			}
 		},
 
