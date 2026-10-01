@@ -1287,6 +1287,7 @@ Rect.prototype.contains = function(x, y) {
 		var self = this;
 		setTimeout(function() {
 			self.renderer.visualize(key, resolveNameColor(participant));
+			if(window.RoomThemes && RoomThemes.onNote) RoomThemes.onNote(note, vol, resolveNameColor(participant));
 			if(lyric) {
 
 			}

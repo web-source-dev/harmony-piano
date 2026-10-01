@@ -181,7 +181,47 @@
 		{ id: "lava", name: "Lava Lamp", icon: "🌋", interactive: true,
 			desc: "Molten wax blobs rise, merge and sink",
 			bg: "linear-gradient(180deg, #1c0526 0%, #3a0a3a 50%, #5a1030 100%)",
-			bottom: "#2a0830", overlay: "lava", fx: "lava" }
+			bottom: "#2a0830", overlay: "lava", fx: "lava" },
+		{ id: "blackhole", name: "Event Horizon", icon: "🕳️", interactive: true,
+			desc: "A black hole with a blazing accretion disk drifts after you, bending starlight. Click to feed it gas and fire its jets",
+			bg: "radial-gradient(ellipse at center, #120a14 0%, #06040a 60%, #010102 100%)",
+			bottom: "#0a060c", fx: "blackhole" },
+		{ id: "ink", name: "Ink Bloom", icon: "🫗", interactive: true,
+			desc: "Neon ink curls through dark water as you move. Click to drop a blooming cloud of it",
+			bg: "radial-gradient(ellipse at center, #0c1420 0%, #060a12 60%, #020305 100%)",
+			bottom: "#080d16", fx: "ink" },
+		{ id: "neurons", name: "Neural Spark", icon: "🧠", interactive: true,
+			desc: "Neurons fire pulses down their dendrites in chain reactions. Your cursor charges them up, and a click sets off a cascade",
+			bg: "radial-gradient(ellipse at center, #0e1430 0%, #070a1c 60%, #02030a 100%)",
+			bottom: "#0a0e22", fx: "neurons" },
+		{ id: "zen", name: "Zen Garden", icon: "🪨", interactive: true,
+			desc: "Rake the sand with your cursor and watch it settle. Click to place a stone, click a stone to lift it",
+			bg: "radial-gradient(ellipse at 30% 20%, #8a7658 0%, #6a5a42 50%, #463a2b 100%)",
+			bottom: "#3e3426", fx: "zen" },
+		{ id: "orbits", name: "Orbit Lab", icon: "🪐", interactive: true,
+			desc: "Every cursor is a star with its own gravity. Click to launch planets into orbit and watch them collide and merge",
+			bg: "radial-gradient(ellipse at center, #10162e 0%, #070a18 60%, #020308 100%)",
+			bottom: "#0a0e20", fx: "orbits" },
+		{ id: "magnet", name: "Magnet Field", icon: "🧲", interactive: true,
+			desc: "Iron filings snap into line around your cursor's magnetic pole. Click to pulse a south pole and make them whip round",
+			bg: "radial-gradient(ellipse at center, #1c2028 0%, #101318 60%, #06070a 100%)",
+			bottom: "#121519", fx: "magnet" },
+		{ id: "blossom", name: "Blossom Grove", icon: "🌳", interactive: true,
+			desc: "Click to plant a cherry tree and watch it grow and bloom. Brush through the blossoms to shake petals loose",
+			bg: "linear-gradient(180deg, #1c2246 0%, #4a3a6a 45%, #a86a7a 80%, #d9967a 100%)",
+			bottom: "#2a2440", fx: "blossom" },
+		{ id: "lasers", name: "Prism Lasers", icon: "🔦", interactive: true,
+			desc: "Laser beams fan out from your cursor and ricochet around. Click to drop a crystal that splits them into rainbows, click it again to shatter it",
+			bg: "radial-gradient(ellipse at center, #0e1022 0%, #07081a 60%, #020208 100%)",
+			bottom: "#0a0b1e", fx: "lasers" },
+		{ id: "terrain", name: "Holo Terrain", icon: "🏔️", interactive: true,
+			desc: "Fly over a neon wireframe landscape. Hills rise under your cursor and clicks send shockwaves across it",
+			bg: "linear-gradient(180deg, #05020f 0%, #1a0630 34%, #12052a 40%, #06020e 100%)",
+			bottom: "#0c0420", fx: "terrain" },
+		{ id: "piano", name: "Piano Aurora", icon: "🎹", interactive: true,
+			desc: "Plays along with the piano: every note in the room shoots up an orb in the player's color and lights the aurora and spectrum bars",
+			bg: "linear-gradient(180deg, #040818 0%, #0a1430 50%, #0e0a26 100%)",
+			bottom: "#0a0c22", fx: "piano" }
 	];
 	var BY_ID = {};
 	THEMES.forEach(function (t) { BY_ID[t.id] = t; });
@@ -2809,6 +2849,1026 @@
 				c.globalAlpha = 0.8;
 				c.drawImage(blob(p.col), p.x - rx, p.y - ry, rx * 2, ry * 2);
 			}
+		},
+		// ── Scenes (each a small world of its own) ──
+
+		// A black hole drifts after the cursors. Its accretion disk spins
+		// faster further in, starlight bends around it, the far side of the
+		// disk is lensed up over the top, and clicks throw in streams of hot
+		// gas that flare the jets when they fall in.
+		blackhole: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				var i, j, p, n, rh = Math.min(w, h) * (isSmallScreen() ? 0.06 : 0.07), TILT = 0.27;
+				if (!S.disk) {
+					S.disk = []; S.stars = []; S.feed = []; S.cx = w / 2; S.cy = h / 2; S.jet = 0;
+					withSeed(seedBase, function () {
+						for (i = 0, n = scaledCount(1700); i < n; i++) S.disk.push(bhParticle({}, rh, true));
+						for (i = 0, n = scaledCount(260); i < n; i++) S.stars.push({ x: rand(0, w), y: rand(0, h), r: rand(0.4, 1.4), tw: rand(0, TAU) });
+					});
+				}
+				var tx = w / 2 + Math.sin(t * 0.09) * w * 0.18, ty = h * 0.45 + Math.sin(t * 0.13) * h * 0.12;
+				if (livePtrs.length) {
+					tx = ty = 0;
+					for (i = 0; i < livePtrs.length; i++) { tx += livePtrs[i].x; ty += livePtrs[i].y; }
+					tx /= livePtrs.length; ty /= livePtrs.length;
+				}
+				var e = Math.min(1, dt * 0.35);   // lags well behind, so cursors can stir the disk
+				S.cx += (tx - S.cx) * e; S.cy += (ty - S.cy) * e;
+				var cx = S.cx, cy = S.cy, rE = rh * 2.3;
+
+				// background stars, bent outward around the hole (a point-mass lens)
+				c.fillStyle = "#e8eeff";
+				for (i = 0; i < S.stars.length; i++) {
+					p = S.stars[i];
+					var dx = p.x - cx, dy = p.y - cy, d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+					var nd = (d + Math.sqrt(d * d + 4 * rE * rE)) / 2;   // lensed image radius
+					if (nd < rh * 1.25) continue;
+					var mag = Math.min(4, nd / d);
+					c.globalAlpha = Math.min(1, (0.35 + 0.35 * Math.sin(t * 1.7 + p.tw)) * (0.6 + mag * 0.4));
+					c.beginPath(); c.arc(cx + dx / d * nd, cy + dy / d * nd, p.r * Math.min(2, Math.sqrt(mag)), 0, TAU); c.fill();
+				}
+
+				// update the disk: Keplerian spin, a slow inward spiral, cursors carve through it
+				var D = S.disk;
+				for (i = 0; i < D.length; i++) {
+					p = D[i];
+					p.pa = p.a;
+					p.w = 1.7 * Math.pow(rh * 1.5 / p.r, 1.5);
+					p.a += p.w * dt;
+					p.r -= rh * 0.015 * p.drift * (rh * 3 / p.r) * dt;
+					p.x = cx + Math.cos(p.a) * p.r; p.y = cy + Math.sin(p.a) * p.r * TILT;
+					p.lit = 0;
+					for (j = 0; j < livePtrs.length; j++) {
+						var qx = livePtrs[j].x - p.x, qy = livePtrs[j].y - p.y, q2 = qx * qx + qy * qy;
+						if (q2 < 90 * 90) { var k = 1 - Math.sqrt(q2) / 90; p.r += k * 70 * dt; p.lit = Math.max(p.lit, k); }
+					}
+					if (p.r < rh * 1.12 || p.r > rh * 7.5) bhParticle(p, rh, false);
+				}
+				for (i = 0; i < clicks.length; i++) {   // a stream of hot gas, flung sideways so it spirals in
+					var gx = clicks[i].x - cx, gy = clicks[i].y - cy, gd = Math.sqrt(gx * gx + gy * gy) + 1;
+					var vs = Math.sqrt(rh * rh * 900 / gd) * 0.85;
+					for (j = 0; j < 70; j++)
+						S.feed.push({ x: clicks[i].x + rand(-12, 12), y: clicks[i].y + rand(-12, 12), vx: -gy / gd * vs * rand(0.8, 1.1), vy: gx / gd * vs * rand(0.8, 1.1),
+							px: clicks[i].x, py: clicks[i].y, age: -j * 0.012, hue: rand(190, 230) });
+				}
+				if (S.feed.length > 700) S.feed.splice(0, S.feed.length - 700);
+
+				c.globalCompositeOperation = "lighter";
+				c.globalAlpha = 0.55 + S.jet * 0.3;
+				var hs = rh * 11;
+				c.drawImage(glow("rgba(255,120,40,0.22)"), cx - hs / 2, cy - hs * TILT * 1.2, hs, hs * TILT * 2.4);
+				// back half of the disk, then its lensed image arching over the top
+				bhDisk(c, D, -1, 0, cx, cy, rh, TILT);
+				bhDisk(c, D, -1, 1, cx, cy, rh, TILT);
+				bhDisk(c, D, 1, 2, cx, cy, rh, TILT);
+				c.globalCompositeOperation = "source-over";
+				// the shadow and its razor-thin photon ring
+				c.globalAlpha = 1;
+				var sg = c.createRadialGradient(cx, cy, rh * 0.8, cx, cy, rh * 1.08);
+				sg.addColorStop(0, "#000"); sg.addColorStop(1, "rgba(0,0,0,0)");
+				c.fillStyle = sg;
+				c.beginPath(); c.arc(cx, cy, rh * 1.08, 0, TAU); c.fill();
+				c.globalCompositeOperation = "lighter";
+				c.strokeStyle = "rgba(255,225,180,0.85)"; c.lineWidth = 1.4;
+				c.beginPath(); c.arc(cx, cy, rh * 1.06, 0, TAU); c.stroke();
+				c.strokeStyle = "rgba(255,170,90,0.25)"; c.lineWidth = 5;
+				c.beginPath(); c.arc(cx, cy, rh * 1.1, 0, TAU); c.stroke();
+				// near half of the disk crosses in front of the hole
+				bhDisk(c, D, 1, 0, cx, cy, rh, TILT);
+
+				// infalling gas: gravity plus a little drag, so it spirals down
+				var G = rh * rh * 900, drag = Math.pow(0.82, dt);
+				c.lineCap = "round"; c.lineWidth = 2;
+				for (i = S.feed.length - 1; i >= 0; i--) {
+					p = S.feed[i];
+					p.age += dt;
+					if (p.age < 0) continue;
+					p.px = p.x; p.py = p.y;
+					for (var sub = 0; sub < 2; sub++) {
+						var fx = cx - p.x, fy = cy - p.y, f2 = fx * fx + fy * fy + 200, fd = Math.sqrt(f2);
+						p.vx = (p.vx + fx / fd * G / f2 * dt / 2) * Math.sqrt(drag); p.vy = (p.vy + fy / fd * G / f2 * dt / 2) * Math.sqrt(drag);
+						p.x += p.vx * dt / 2; p.y += p.vy * dt / 2;
+						if (fd < rh) break;
+					}
+					var rr = d2xy(p.x - cx, p.y - cy);
+					if (rr < rh * rh || p.age > 9) { if (rr < rh * rh) S.jet = Math.min(1.6, S.jet + 0.03); S.feed.splice(i, 1); continue; }
+					c.globalAlpha = Math.min(1, p.age * 4) * 0.8;
+					c.strokeStyle = "hsl(" + p.hue + ",100%,78%)";
+					c.beginPath(); c.moveTo(p.px, p.py); c.lineTo(p.x + 0.1, p.y); c.stroke();
+				}
+				// relativistic jets when it's feeding
+				S.jet = Math.max(0, S.jet - dt * 0.35);
+				if (S.jet > 0.02) {
+					var jl = rh * 7 * Math.min(1, S.jet), ja = Math.min(1, S.jet) * 0.6;
+					c.globalAlpha = 1;
+					for (var side = -1; side <= 1; side += 2) {
+						var jg = c.createLinearGradient(cx, cy, cx, cy + side * jl);
+						jg.addColorStop(0, "rgba(190,215,255," + (0.5 * ja).toFixed(3) + ")"); jg.addColorStop(1, "rgba(120,160,255,0)");
+						c.strokeStyle = jg;
+						for (var pass = 0; pass < 3; pass++) {   // wide haze, beam, hot core
+							c.lineWidth = [rh * 0.4, rh * 0.14, rh * 0.04][pass];
+							c.beginPath(); c.moveTo(cx, cy + side * rh * 1.08);
+							c.lineTo(cx + Math.sin(t * 3 + side) * rh * 0.15, cy + side * jl); c.stroke();
+						}
+					}
+				}
+				c.globalCompositeOperation = "source-over";
+				c.globalAlpha = 1;
+			}
+		},
+
+		// Neon ink poured into water: moving drips ink that curls into
+		// tendrils on a slow current; clicks drop a blooming cloud of it.
+		ink: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				var P = S.ink || (S.ink = []), i, j, p, hue = (t * 14) % 360;
+				function drop(x, y, vx, vy, hh, sz, life) {
+					P.push({ x: x, y: y, hist: [x, y], vx: vx, vy: vy, hue: ((hh % 360) + 360) % 360, s: sz, age: 0, max: life, spin: rand(-2.6, 2.6) });
+				}
+				eachMove(S, livePtrs, 5, function (x, y, ux, uy) {
+					for (var k = 0; k < 4; k++)
+						drop(x + rand(-4, 4), y + rand(-4, 4), ux * rand(50, 150) + rand(-30, 30), uy * rand(50, 150) + rand(-30, 30), hue + rand(-25, 25), rand(1.5, 3.5), rand(2.5, 5));
+				});
+				for (i = 0; i < clicks.length; i++) {
+					var pal = [hue, hue + 50, hue + 180];
+					for (j = 0; j < 280; j++) {
+						var a = rand(0, TAU), sp = Math.pow(rand(0, 1), 0.6) * 280;
+						drop(clicks[i].x, clicks[i].y, Math.cos(a) * sp, Math.sin(a) * sp, pal[j % 3] + rand(-15, 15), rand(1.5, 4.5), rand(3, 6.5));
+					}
+				}
+				var slot = Math.floor(t / 2.6);   // ambient drops, placed by the room clock
+				if (slot !== S.slot) {
+					S.slot = slot;
+					var R = mulberry(hashInts(seedBase, 4242, slot));
+					if (R() < 0.7) {
+						var ax = (0.1 + R() * 0.8) * w, ay = (0.1 + R() * 0.8) * h, ah = R() * 360;
+						for (j = 0; j < 110; j++) { var b = R() * TAU, bs = R() * 120; drop(ax, ay, Math.cos(b) * bs, Math.sin(b) * bs, ah + (R() - 0.5) * 60, 1 + R() * 3, 3 + R() * 3); }
+					}
+				}
+				if (P.length > 1900) P.splice(0, P.length - 1900);
+				var drag = Math.pow(0.35, dt), buckets = {};
+				for (i = P.length - 1; i >= 0; i--) {
+					p = P[i];
+					p.age += dt;
+					if (p.age >= p.max) { P.splice(i, 1); continue; }
+					var fa = (Math.sin(p.x * 0.004 + t * 0.2) + Math.cos(p.y * 0.005 - t * 0.15) + Math.sin((p.x + p.y) * 0.002 + t * 0.1)) * Math.PI;
+					var cs = Math.cos(p.spin * dt), sn = Math.sin(p.spin * dt), vx = p.vx * cs - p.vy * sn;   // curl
+					p.vy = (p.vx * sn + p.vy * cs) * drag; p.vx = vx * drag;
+					p.x += (p.vx + Math.cos(fa) * 16) * dt; p.y += (p.vy + Math.sin(fa) * 16) * dt;
+					p.hist.push(p.x, p.y);
+					if (p.hist.length > 64) p.hist.splice(0, 2);
+					var life = 1 - p.age / p.max, key = (((p.hue / 30) | 0) * 3 + Math.min(2, (p.s * life) | 0)) * 3 + Math.min(2, (life * 3) | 0);
+					(buckets[key] || (buckets[key] = [])).push(p);
+				}
+				c.globalCompositeOperation = "lighter";
+				c.lineCap = "round";
+				for (var k2 in buckets) {
+					var L = buckets[k2], ak = k2 % 3, wk = ((k2 / 3) | 0) % 3, hk = ((k2 / 9) | 0) * 30 + 15;
+					c.strokeStyle = "hsl(" + hk + ",95%,62%)";
+					c.globalAlpha = 0.16 + ak * 0.17;
+					c.lineWidth = 1.3 + wk * 1.6;
+					c.lineJoin = "round";
+					c.beginPath();
+					for (j = 0; j < L.length; j++) {
+						var hh = L[j].hist;
+						c.moveTo(hh[0], hh[1]);
+						for (var q = 2; q < hh.length; q += 2) c.lineTo(hh[q], hh[q + 1]);
+						if (hh.length < 4) c.lineTo(hh[0] + 0.1, hh[1]);
+					}
+					c.stroke();
+				}
+				c.globalCompositeOperation = "source-over";
+			}
+		},
+
+		// A living neural net: pulses race along curved dendrites, and a
+		// neuron that gets enough of them fires in turn, setting off chain
+		// reactions. Cursors charge the neurons around them; clicks fire a
+		// whole patch at once.
+		neurons: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				var i, j, nd, e, p, dx, dy, d;
+				if (!S.nodes) {
+					S.nodes = []; S.edges = []; S.pulses = [];
+					withSeed(seedBase, function () {
+						var n = scaledCount(75), cols = Math.max(3, Math.round(Math.sqrt(n * w / h))), rows = Math.ceil(n / cols);
+						for (i = 0; i < n; i++) {
+							var gx = (i % cols + 0.5 + rand(-0.38, 0.38)) / cols * w, gy = (((i / cols) | 0) + 0.5 + rand(-0.38, 0.38)) / rows * h;
+							S.nodes.push({ bx: gx, by: gy, x: gx, y: gy, ph: rand(0, TAU), v: rand(0, 0.5), ref: 0, flash: 0, edges: [], hue: pick([190, 200, 290, 320]) });
+						}
+						for (i = 0; i < n; i++) {
+							var A = S.nodes[i], near = [];
+							for (j = 0; j < n; j++) if (j !== i) near.push([d2xy(S.nodes[j].bx - A.bx, S.nodes[j].by - A.by), j]);
+							near.sort(function (a, b) { return a[0] - b[0]; });
+							for (var k = 0; k < 3; k++) {
+								var B = S.nodes[near[k][1]], dup = false;
+								for (var m = 0; m < A.edges.length; m++) if (A.edges[m].a === B || A.edges[m].b === B) dup = true;
+								if (dup) continue;
+								var ed = { a: A, b: B, bow: rand(-0.3, 0.3), len: Math.sqrt(near[k][0]) };
+								S.edges.push(ed); A.edges.push(ed); B.edges.push(ed);
+							}
+						}
+					});
+				}
+				var N = S.nodes, E = S.edges, U = S.pulses;
+				function fire(n) {
+					if (n.ref > 0) return;
+					n.ref = 1.2; n.flash = 1; n.v = 0;
+					for (var q = 0; q < n.edges.length && U.length < 700; q++) {
+						var ed = n.edges[q];
+						U.push({ e: ed, from: n, to: ed.a === n ? ed.b : ed.a, u: 0, sp: 280 / ed.len });
+					}
+				}
+				var slot = Math.floor(t / 0.9);   // spontaneous firing, the same for the whole room
+				if (slot !== S.slot) { S.slot = slot; fire(N[hashInts(seedBase, 51, slot) % N.length]); }
+				for (i = 0; i < N.length; i++) {
+					nd = N[i];
+					nd.x = nd.bx + Math.sin(t * 0.3 + nd.ph) * 7; nd.y = nd.by + Math.cos(t * 0.27 + nd.ph * 1.3) * 7;
+					nd.ref -= dt; nd.flash = Math.max(0, nd.flash - dt * 2.2); nd.v = Math.max(0, nd.v - dt * 0.2);
+					if (nd.at != null && (nd.at -= dt) <= 0) { nd.at = null; fire(nd); }
+					for (j = 0; j < livePtrs.length; j++) {
+						d = Math.sqrt(d2xy(livePtrs[j].x - nd.x, livePtrs[j].y - nd.y));
+						if (d < 150) { nd.v += dt * 1.8 * (1 - d / 150); if (nd.v >= 1) fire(nd); }
+					}
+					for (j = 0; j < clicks.length; j++) {
+						d = Math.sqrt(d2xy(clicks[j].x - nd.x, clicks[j].y - nd.y));
+						if (d < 240) nd.at = d / 700;   // a wave spreading out from the click
+					}
+				}
+				for (i = U.length - 1; i >= 0; i--) {
+					p = U[i];
+					p.u += p.sp * dt;
+					if (p.u >= 1) { p.to.v += 0.55; if (p.to.v >= 1) fire(p.to); U.splice(i, 1); }
+				}
+				function ctrl(ed) {   // the dendrite's bend
+					var mx = (ed.a.x + ed.b.x) / 2, my = (ed.a.y + ed.b.y) / 2;
+					return { x: mx - (ed.b.y - ed.a.y) * ed.bow, y: my + (ed.b.x - ed.a.x) * ed.bow };
+				}
+				c.lineCap = "round";
+				c.strokeStyle = "rgba(110,160,255,0.16)"; c.lineWidth = 1.2;
+				c.beginPath();
+				for (i = 0; i < E.length; i++) {
+					e = E[i]; var C = ctrl(e);
+					c.moveTo(e.a.x, e.a.y); c.quadraticCurveTo(C.x, C.y, e.b.x, e.b.y);
+				}
+				c.stroke();
+				c.globalCompositeOperation = "lighter";
+				for (i = 0; i < U.length; i++) {   // pulses, with a short bright tail
+					p = U[i]; e = p.e; var C2 = ctrl(e), A = p.from, B = p.to;
+					c.strokeStyle = "hsla(" + A.hue + ",100%,70%,0.8)"; c.lineWidth = 2;
+					c.beginPath();
+					for (j = 0; j <= 4; j++) {
+						var u = Math.max(0, p.u - 0.12 + j * 0.03), iu = 1 - u;
+						var X = iu * iu * A.x + 2 * iu * u * C2.x + u * u * B.x, Y = iu * iu * A.y + 2 * iu * u * C2.y + u * u * B.y;
+						if (j) c.lineTo(X, Y); else c.moveTo(X, Y);
+					}
+					c.stroke();
+					c.globalAlpha = 0.9;
+					c.drawImage(glow("hsla(" + A.hue + ",100%,70%,0.8)"), X - 9, Y - 9, 18, 18);
+					c.globalAlpha = 1;
+				}
+				for (i = 0; i < N.length; i++) {
+					nd = N[i];
+					var gl = nd.flash + nd.v * 0.35, gs = 14 + gl * 46;
+					c.globalAlpha = 0.25 + gl * 0.75;
+					c.drawImage(glow("hsla(" + nd.hue + ",100%,65%,0.7)"), nd.x - gs / 2, nd.y - gs / 2, gs, gs);
+					c.globalAlpha = 0.9;
+					c.fillStyle = nd.flash > 0.3 ? "#ffffff" : "hsl(" + nd.hue + ",90%," + (55 + nd.v * 30 | 0) + "%)";
+					c.beginPath(); c.arc(nd.x, nd.y, 2.6 + nd.flash * 2.5, 0, TAU); c.fill();
+				}
+				c.globalCompositeOperation = "source-over";
+				c.strokeStyle = "#bfe0ff"; c.lineWidth = 1;   // cursors reach out like a synapse
+				for (j = 0; j < livePtrs.length; j++) {
+					var P0 = livePtrs[j];
+					for (i = 0; i < N.length; i++) {
+						nd = N[i]; d = Math.sqrt(d2xy(P0.x - nd.x, P0.y - nd.y));
+						if (d > 150) continue;
+						c.globalAlpha = (1 - d / 150) * (0.35 + 0.35 * Math.sin(t * 20 + i));
+						c.beginPath(); c.moveTo(P0.x, P0.y); c.lineTo(nd.x, nd.y); c.stroke();
+					}
+				}
+				c.globalAlpha = 1;
+			}
+		},
+
+		// Raked sand. Your cursor is the rake: the lines part around it and
+		// slowly settle back. Click to set down a stone and the sand flows
+		// around it in rings; click a stone to lift it away again.
+		zen: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				var i, j, r, p, k, st;
+				if (!S.rows) {
+					S.rows = []; S.stones = [];
+					var gap = isSmallScreen() ? 13 : 16, step = 11;
+					for (r = 0; r * gap < h + gap; r++) {
+						var row = [];
+						for (i = 0; i * step < w + step * 2; i++) row.push({ x: i * step - step, y: r * gap + gap / 2, ox: 0, oy: 0 });
+						S.rows.push(row);
+					}
+					withSeed(seedBase, function () {
+						for (i = 0; i < 3; i++) S.stones.push(zenStone(rand(0.15, 0.85) * w, rand(0.2, 0.8) * h, rand(26, 40)));
+					});
+				}
+				var stones = S.stones;
+				for (i = 0; i < clicks.length; i++) {
+					var hit = -1;
+					for (j = 0; j < stones.length; j++) if (d2xy(clicks[i].x - stones[j].x, clicks[i].y - stones[j].y) < stones[j].r * stones[j].r) hit = j;
+					if (hit >= 0) stones.splice(hit, 1);
+					else { stones.push(zenStone(clicks[i].x, clicks[i].y, rand(18, 36))); if (stones.length > 7) stones.shift(); }
+				}
+				var obs = [];
+				for (j = 0; j < stones.length; j++) obs.push({ x: stones[j].x, y: stones[j].y, r: stones[j].r * 1.05, R: stones[j].r * 2.6 + 40 });
+				for (j = 0; j < livePtrs.length; j++) obs.push({ x: livePtrs[j].x, y: livePtrs[j].y, r: 14, R: 85 });
+				var fast = Math.min(1, dt * 10), slow = Math.min(1, dt * 0.22);
+				for (r = 0; r < S.rows.length; r++) {
+					var R0 = S.rows[r];
+					for (i = 0; i < R0.length; i++) {
+						p = R0[i];
+						var tx = 0, ty = 0;
+						for (k = 0; k < obs.length; k++) {
+							var o = obs[k], dx = p.x - o.x, dy = p.y - o.y;
+							if (dx > o.R || dx < -o.R || dy > o.R || dy < -o.R) continue;
+							var d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+							if (d >= o.R) continue;
+							var nr = o.r + 5 + d * (o.R - o.r - 5) / o.R;   // squeeze the lines into rings round it
+							tx += dx / d * (nr - d); ty += dy / d * (nr - d);
+						}
+						// pushed fast, but the grooves only settle back slowly
+						var e = tx * tx + ty * ty > p.ox * p.ox + p.oy * p.oy ? fast : slow;
+						p.ox += (tx - p.ox) * e; p.oy += (ty - p.oy) * e;
+					}
+				}
+				c.lineJoin = "round"; c.lineCap = "round";
+				for (var pass = 0; pass < 2; pass++) {   // groove shadow, then the sunlit ridge
+					c.strokeStyle = pass ? "rgba(255,238,205,0.28)" : "rgba(20,12,4,0.42)";
+					c.lineWidth = pass ? 1.2 : 2.4;
+					var off = pass ? -1 : 1.3;
+					c.beginPath();
+					for (r = 0; r < S.rows.length; r++) {
+						var R1 = S.rows[r];
+						c.moveTo(R1[0].x + R1[0].ox, R1[0].y + R1[0].oy + off);
+						for (i = 1; i < R1.length; i++) c.lineTo(R1[i].x + R1[i].ox, R1[i].y + R1[i].oy + off);
+					}
+					c.stroke();
+				}
+				for (j = 0; j < stones.length; j++) {
+					st = stones[j];
+					st.age += dt;
+					var sc = Math.min(1, st.age * 5);   // drops in with a little bounce
+					sc = sc < 1 ? sc * (1.15 - 0.15 * sc) : 1;
+					c.save(); c.translate(st.x, st.y); c.scale(sc, sc);
+					c.fillStyle = "rgba(15,8,2,0.45)";
+					zenStonePath(c, st, 5, 7); c.fill();
+					var g = c.createRadialGradient(-st.r * 0.35, -st.r * 0.4, st.r * 0.1, 0, 0, st.r * 1.1);
+					g.addColorStop(0, st.light); g.addColorStop(1, st.dark);
+					c.fillStyle = g;
+					zenStonePath(c, st, 0, 0); c.fill();
+					c.fillStyle = "rgba(110,150,70,0.55)";   // a patch of moss
+					c.beginPath(); c.ellipse(st.r * 0.15, -st.r * 0.45, st.r * 0.38, st.r * 0.16, -0.3, 0, TAU); c.fill();
+					c.restore();
+				}
+			}
+		},
+
+		// A gravity sandbox. A sun sits in the middle and every cursor is a
+		// star; planets orbit them all, leave trails, merge when they
+		// collide and fall into the stars. Click to launch a new planet
+		// into orbit around the nearest star.
+		orbits: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				var i, j, p, q, wl, sc = Math.min(w, h) / 900, G = 9e5 * sc * sc * sc;
+				var wells = [{ x: w / 2, y: h / 2, m: 1.3, sun: true }];
+				for (i = 0; i < livePtrs.length; i++) wells.push({ x: livePtrs[i].x, y: livePtrs[i].y, m: 0.9 });
+				if (!S.bodies) {
+					S.bodies = []; S.bursts = [];
+					withSeed(seedBase, function () {
+						for (i = 0; i < 9; i++) {
+							var r = rand(0.12, 0.44) * Math.min(w, h), a = rand(0, TAU), v = Math.sqrt(G * 1.3 / r);
+							S.bodies.push(newPlanet(w / 2 + Math.cos(a) * r, h / 2 + Math.sin(a) * r, -Math.sin(a) * v, Math.cos(a) * v, rand(4, 9) * sc + 2));
+						}
+					});
+				}
+				var B = S.bodies, X = S.bursts;
+				function launch(x, y) {
+					var n = null, bd = Infinity;
+					for (var k = 0; k < wells.length; k++) { var dd = d2xy(wells[k].x - x, wells[k].y - y); if (dd < bd) { bd = dd; n = wells[k]; } }
+					var dx = x - n.x, dy = y - n.y, d = Math.sqrt(dx * dx + dy * dy) + 1, v = Math.sqrt(G * n.m / d) * rand(0.85, 1.1);
+					if (d < 30) { dx = 1; dy = 0; d = 1; v = 0; }
+					B.push(newPlanet(x, y, -dy / d * v, dx / d * v, rand(4, 10) * sc + 2));
+				}
+				for (i = 0; i < clicks.length; i++) launch(clicks[i].x, clicks[i].y);
+				S.spawn = (S.spawn || 0) - dt;
+				if (B.length < 6 && S.spawn <= 0) { S.spawn = 2.5; launch(rand(0.1, 0.9) * w, rand(0, 1) < 0.5 ? h * 0.08 : h * 0.92); }
+				if (B.length > 40) B.splice(0, B.length - 40);
+				function burst(x, y, col, n) {
+					for (var k = 0; k < n; k++) { var a = rand(0, TAU), v = rand(30, 220); X.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, age: 0, max: rand(0.5, 1.2), col: col }); }
+				}
+				for (var sub = 0; sub < 3; sub++) {
+					var h3 = dt / 3;
+					for (i = B.length - 1; i >= 0; i--) {
+						p = B[i];
+						var ax = 0, ay = 0, dead = false;
+						for (j = 0; j < wells.length; j++) {
+							wl = wells[j];
+							var dx = wl.x - p.x, dy = wl.y - p.y, r2 = dx * dx + dy * dy + 400 * sc, r = Math.sqrt(r2);
+							if (r < (wl.sun ? 22 : 12) * Math.max(1, sc)) dead = true;
+							ax += G * wl.m * dx / (r2 * r); ay += G * wl.m * dy / (r2 * r);
+						}
+						if (dead || p.x < -w || p.x > w * 2 || p.y < -h || p.y > h * 2) {
+							if (dead) burst(p.x, p.y, p.col, 30);
+							B.splice(i, 1); continue;
+						}
+						p.vx += ax * h3; p.vy += ay * h3; p.x += p.vx * h3; p.y += p.vy * h3;
+					}
+				}
+				for (i = 0; i < B.length; i++) for (j = B.length - 1; j > i; j--) {   // collisions merge
+					p = B[i]; q = B[j];
+					var rr = p.r + q.r;
+					if (d2xy(p.x - q.x, p.y - q.y) > rr * rr) continue;
+					var m = p.m + q.m;
+					p.vx = (p.vx * p.m + q.vx * q.m) / m; p.vy = (p.vy * p.m + q.vy * q.m) / m;
+					p.x = (p.x * p.m + q.x * q.m) / m; p.y = (p.y * p.m + q.y * q.m) / m;
+					p.r = Math.cbrt(p.r * p.r * p.r + q.r * q.r * q.r); p.m = m;
+					p.ring = p.ring || q.ring || p.r > 14 * sc + 4;
+					burst(p.x, p.y, q.col, 24);
+					B.splice(j, 1);
+				}
+				c.lineCap = "round";
+				for (i = 0; i < B.length; i++) {   // trails
+					p = B[i];
+					p.tt = (p.tt || 0) + dt;
+					if (p.tt > 0.04) { p.tt = 0; p.trail.push(p.x, p.y); if (p.trail.length > 90) p.trail.splice(0, 2); }
+					var T = p.trail;
+					c.strokeStyle = p.col; c.lineWidth = Math.max(1, p.r * 0.35);
+					for (j = 2; j < T.length; j += 2) {
+						c.globalAlpha = j / T.length * 0.45;
+						c.beginPath(); c.moveTo(T[j - 2], T[j - 1]); c.lineTo(T[j], T[j + 1]); c.stroke();
+					}
+				}
+				c.globalCompositeOperation = "lighter";
+				for (j = 0; j < wells.length; j++) {
+					wl = wells[j];
+					var gs = wl.sun ? 220 : 130;
+					c.globalAlpha = wl.sun ? 0.9 : 0.7 + 0.2 * Math.sin(t * 4 + j);
+					c.drawImage(glow(wl.sun ? "rgba(255,190,90,0.7)" : "rgba(150,190,255,0.6)"), wl.x - gs / 2, wl.y - gs / 2, gs, gs);
+					c.globalAlpha = 1; c.fillStyle = wl.sun ? "#fff3d0" : "#e8f0ff";
+					c.beginPath(); c.arc(wl.x, wl.y, wl.sun ? 9 : 4, 0, TAU); c.fill();
+				}
+				for (i = X.length - 1; i >= 0; i--) {
+					p = X[i];
+					p.age += dt;
+					if (p.age >= p.max) { X.splice(i, 1); continue; }
+					p.vx *= 0.96; p.vy *= 0.96; p.x += p.vx * dt; p.y += p.vy * dt;
+					c.globalAlpha = 1 - p.age / p.max;
+					c.fillStyle = p.col;
+					c.beginPath(); c.arc(p.x, p.y, 1.6, 0, TAU); c.fill();
+				}
+				c.globalCompositeOperation = "source-over";
+				c.globalAlpha = 1;
+				for (i = 0; i < B.length; i++) {   // planets, lit from the nearest star
+					p = B[i];
+					var n = null, bd = Infinity;
+					for (j = 0; j < wells.length; j++) { var dd = d2xy(wells[j].x - p.x, wells[j].y - p.y); if (dd < bd) { bd = dd; n = wells[j]; } }
+					var ld = Math.sqrt(bd) + 0.01, lx = (n.x - p.x) / ld, ly = (n.y - p.y) / ld;
+					if (p.ring) {
+						c.strokeStyle = "rgba(230,215,180,0.55)"; c.lineWidth = Math.max(1, p.r * 0.25);
+						c.beginPath(); c.ellipse(p.x, p.y, p.r * 2, p.r * 0.6, p.tilt, Math.PI, TAU); c.stroke();
+					}
+					var g = c.createRadialGradient(p.x + lx * p.r * 0.45, p.y + ly * p.r * 0.45, p.r * 0.1, p.x, p.y, p.r * 1.05);
+					g.addColorStop(0, p.lite); g.addColorStop(0.55, p.col); g.addColorStop(1, p.dark);
+					c.fillStyle = g;
+					c.beginPath(); c.arc(p.x, p.y, p.r, 0, TAU); c.fill();
+					if (p.ring) {
+						c.beginPath(); c.ellipse(p.x, p.y, p.r * 2, p.r * 0.6, p.tilt, 0, Math.PI); c.stroke();
+					}
+				}
+			}
+		},
+
+		// Iron filings on a magnetic table. A bar magnet turns slowly beneath
+		// them, every cursor is a magnet pole (yours is north), and clicks
+		// pulse a strong south pole that makes the filings whip round.
+		magnet: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				var i, j, f, gap = isSmallScreen() ? 20 : 24;
+				if (!S.fil) {
+					S.fil = []; S.pulses = [];
+					withSeed(seedBase, function () {
+						for (var y = gap / 2; y < h; y += gap)
+							for (var x = gap / 2; x < w; x += gap)
+								S.fil.push({ x: x + rand(-5, 5), y: y + rand(-5, 5), a: rand(0, Math.PI), va: 0, L: rand(0.75, 1.15) });
+					});
+				}
+				var mx = w / 2 + Math.sin(t * 0.07) * w * 0.2, my = h / 2 + Math.cos(t * 0.09) * h * 0.15, th = t * 0.15, ml = Math.min(w, h) * 0.13;
+				var poles = [{ x: mx + Math.cos(th) * ml, y: my + Math.sin(th) * ml, q: 1, bar: 1 }, { x: mx - Math.cos(th) * ml, y: my - Math.sin(th) * ml, q: -1, bar: 1 }];
+				for (i = 0; i < livePtrs.length; i++) poles.push({ x: livePtrs[i].x, y: livePtrs[i].y, q: i % 2 ? -1.6 : 1.6 });
+				for (i = 0; i < clicks.length; i++) S.pulses.push({ x: clicks[i].x, y: clicks[i].y, age: 0 });
+				for (i = S.pulses.length - 1; i >= 0; i--) {
+					var pu = S.pulses[i];
+					pu.age += dt;
+					if (pu.age > 2) { S.pulses.splice(i, 1); continue; }
+					poles.push({ x: pu.x, y: pu.y, q: -3.5 * (1 - pu.age / 2), pulse: pu });
+				}
+				function field(x, y) {
+					var bx = 0, by = 0;
+					for (var k = 0; k < poles.length; k++) {
+						var P = poles[k], dx = x - P.x, dy = y - P.y, d2 = dx * dx + dy * dy + 300;
+						bx += P.q * dx / d2; by += P.q * dy / d2;
+					}
+					return [bx, by];
+				}
+				// faint field lines traced out of each north pole
+				c.globalCompositeOperation = "lighter";
+				c.strokeStyle = "rgba(110,190,255,0.13)"; c.lineWidth = 1.5;
+				c.beginPath();
+				for (i = 0; i < poles.length; i++) {
+					if (poles[i].q <= 0) continue;
+					for (j = 0; j < 14; j++) {
+						var a = j / 14 * TAU + t * 0.05, x = poles[i].x + Math.cos(a) * 10, y = poles[i].y + Math.sin(a) * 10;
+						c.moveTo(x, y);
+						for (var s = 0; s < 110; s++) {
+							var B = field(x, y), bl = Math.sqrt(B[0] * B[0] + B[1] * B[1]) + 1e-9;
+							x += B[0] / bl * 9; y += B[1] / bl * 9;
+							c.lineTo(x, y);
+							if (x < -20 || y < -20 || x > w + 20 || y > h + 20) break;
+							var stop = false;
+							for (var k = 0; k < poles.length; k++) if (poles[k].q < 0 && d2xy(x - poles[k].x, y - poles[k].y) < 144) stop = true;
+							if (stop) break;
+						}
+					}
+				}
+				c.stroke();
+				c.globalCompositeOperation = "source-over";
+				// filings swing (with a little overshoot) to line up with the field
+				var bk = [[], [], [], []], damp = Math.pow(0.02, dt);
+				for (i = 0; i < S.fil.length; i++) {
+					f = S.fil[i];
+					var Bf = field(f.x, f.y), m = Math.sqrt(Bf[0] * Bf[0] + Bf[1] * Bf[1]);
+					var want = Math.atan2(Bf[1], Bf[0]), dd = Math.atan2(Math.sin(2 * (want - f.a)), Math.cos(2 * (want - f.a))) / 2;
+					f.va = (f.va + dd * 70 * dt * Math.min(1, m * 60)) * damp;
+					f.a += f.va * dt;
+					f.m = Math.min(1, m * 35);
+					bk[Math.min(3, (f.m * 4) | 0)].push(f);
+				}
+				c.lineCap = "round";
+				var cols = ["rgba(120,135,160,0.45)", "rgba(150,180,215,0.65)", "rgba(185,215,245,0.85)", "rgba(235,245,255,0.95)"];
+				for (j = 0; j < 4; j++) {
+					c.strokeStyle = cols[j]; c.lineWidth = 1.3 + j * 0.25;
+					c.beginPath();
+					for (i = 0; i < bk[j].length; i++) {
+						f = bk[j][i];
+						var L = (4 + f.m * 7) * f.L, cx = Math.cos(f.a) * L, cy = Math.sin(f.a) * L;
+						c.moveTo(f.x - cx, f.y - cy); c.lineTo(f.x + cx, f.y + cy);
+					}
+					c.stroke();
+				}
+				c.globalCompositeOperation = "lighter";
+				for (i = 0; i < poles.length; i++) {
+					var P = poles[i], north = P.q > 0, gs = P.pulse ? 60 + P.pulse.age * 200 : P.bar ? 70 : 90;
+					c.globalAlpha = P.pulse ? 1 - P.pulse.age / 2 : 0.8;
+					c.drawImage(glow(north ? "rgba(255,90,90,0.6)" : "rgba(90,150,255,0.6)"), P.x - gs / 2, P.y - gs / 2, gs, gs);
+					if (P.pulse) {
+						c.strokeStyle = "rgba(140,190,255,0.7)"; c.lineWidth = 2;
+						c.beginPath(); c.arc(P.x, P.y, P.pulse.age * 260, 0, TAU); c.stroke();
+					}
+				}
+				c.globalCompositeOperation = "source-over";
+				c.globalAlpha = 1;
+			}
+		},
+
+		// Cherry trees. Click to plant a seed and it grows into a tree
+		// (taller the higher you click), branch by branch, then bursts into
+		// blossom. Trees sway in the breeze and lean away from cursors, and
+		// brushing through the blossoms knocks petals loose.
+		blossom: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				var i, j, tr, b, ground = h * 0.97;
+				S.clock = (S.clock || 0) + dt;
+				if (!S.trees) {
+					S.trees = []; S.petals = [];
+					withSeed(seedBase, function () {
+						for (i = 0; i < 3; i++) S.trees.push(makeTree((0.18 + i * 0.32 + rand(-0.06, 0.06)) * w, ground, rand(0.42, 0.62) * h, rng, -60));
+					});
+				}
+				for (i = 0; i < clicks.length; i++) {
+					S.trees.push(makeTree(clicks[i].x, ground, clamp(ground - clicks[i].y, 120, h * 0.78), Math.random, S.clock));
+					var alive = 0;
+					for (j = 0; j < S.trees.length; j++) if (!S.trees[j].die) alive++;
+					for (j = 0; j < S.trees.length && alive > 7; j++) if (!S.trees[j].die) { S.trees[j].die = S.clock; alive--; }
+				}
+				// ground: a soft grassy hill line
+				c.fillStyle = "rgba(20,40,25,0.75)";
+				c.beginPath(); c.moveTo(0, h);
+				for (i = 0; i <= 24; i++) c.lineTo(i / 24 * w, ground - 6 + Math.sin(i * 1.7) * 4);
+				c.lineTo(w, h); c.fill();
+				c.lineCap = "round";
+				for (i = S.trees.length - 1; i >= 0; i--) {
+					tr = S.trees[i];
+					var age = S.clock - tr.born, fade = tr.die ? 1 - (S.clock - tr.die) / 3 : 1;
+					if (fade <= 0) { S.trees.splice(i, 1); continue; }
+					// lean away from nearby cursors
+					var lean = 0;
+					for (j = 0; j < livePtrs.length; j++) {
+						var dx = tr.x - livePtrs[j].x, dy = (tr.y - tr.H * 0.6) - livePtrs[j].y, d = Math.sqrt(dx * dx + dy * dy);
+						if (d < 320) lean += (dx > 0 ? 1 : -1) * (1 - d / 320) * 0.12;
+					}
+					tr.lean += (lean - tr.lean) * Math.min(1, dt * 3);
+					c.globalAlpha = fade;
+					var Bs = tr.br, wbuck = {};
+					for (j = 0; j < Bs.length; j++) {
+						b = Bs[j];
+						var par = b.p >= 0 ? Bs[b.p] : null;
+						b.x0 = par ? par.x1 : tr.x; b.y0 = par ? par.y1 : tr.y;
+						var sway = (Math.sin(t * 1.2 + tr.ph + b.d * 0.7) * 0.025 + tr.lean) * b.d * 0.35;
+						b.aa = (par ? par.aa : 0) + b.rel + sway;
+						var g = clamp((age - b.st) / b.dur, 0, 1);
+						b.g = g;
+						b.x1 = b.x0 + Math.cos(b.aa) * b.len * g; b.y1 = b.y0 + Math.sin(b.aa) * b.len * g;
+						if (g <= 0) continue;
+						var wk = Math.max(1, Math.round(b.wd));   // batch the strokes by thickness
+						(wbuck[wk] || (wbuck[wk] = [])).push(b);
+					}
+					for (var wk2 in wbuck) {
+						var WB = wbuck[wk2];
+						c.strokeStyle = wk2 > 4 ? "#3a2418" : "#4a2e1e"; c.lineWidth = +wk2;
+						c.beginPath();
+						for (j = 0; j < WB.length; j++) { c.moveTo(WB[j].x0, WB[j].y0); c.lineTo(WB[j].x1, WB[j].y1); }
+						c.stroke();
+					}
+					var fl = [[], [], []];
+					for (j = 0; j < Bs.length; j++) {   // blossoms at the twig tips
+						b = Bs[j];
+						if (!b.tip || b.g < 1) continue;
+						var bl = clamp((age - b.st - b.dur) / 0.7, 0, 1);
+						bl = bl < 1 ? bl * (1.25 - 0.25 * bl) : 1;
+						for (var k = 0; k < 3; k++) {
+							var fx = b.x1 + b.fo[k * 2], fy = b.y1 + b.fo[k * 2 + 1], fs = tr.fs * bl;
+							if (fs < 0.5) continue;
+							fl[k].push(fx, fy, fs, b.rot);
+							// cursors brushing through knock petals off; the breeze takes a few too
+							var shed = Math.random() < dt * 0.012;
+							for (var pi = 0; pi < livePtrs.length && !shed; pi++)
+								if (d2xy(livePtrs[pi].x - fx, livePtrs[pi].y - fy) < 32 * 32 && Math.random() < dt * 8) shed = true;
+							if (shed && bl >= 1 && S.petals.length < 260)
+								S.petals.push({ x: fx, y: fy, vx: rand(-30, 30), vy: rand(-10, 20), rot: rand(0, TAU), vr: rand(-4, 4), s: fs * 0.55, col: tr.pal[k % tr.pal.length], age: 0, land: 0 });
+						}
+					}
+					for (k = 0; k < 3; k++) {   // five-petal flowers, stamped from cached sprites
+						var FL = fl[k];
+						for (j = 0; j < FL.length; j += 4) {
+							var spr = flowerSprite(tr.pal[k % tr.pal.length], FL[j + 3] > Math.PI ? 1 : 0), fz = FL[j + 2] * 1.1;
+							c.drawImage(spr, FL[j] - fz, FL[j + 1] - fz, fz * 2, fz * 2);
+						}
+					}
+				}
+				c.globalAlpha = 1;
+				for (i = S.petals.length - 1; i >= 0; i--) {
+					var p = S.petals[i];
+					p.age += dt;
+					if (p.land) { p.land += dt; if (p.land > 4) { S.petals.splice(i, 1); continue; } }
+					else {
+						p.vy = Math.min(55, p.vy + 40 * dt);
+						p.x += (p.vx + Math.sin(p.age * 2.5 + p.rot) * 25) * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+						p.vx *= Math.pow(0.6, dt);
+						if (p.y > ground - 2 + Math.sin(p.x * 0.07) * 3) p.land = 0.01;
+					}
+					c.globalAlpha = p.land ? 1 - p.land / 4 : 1;
+					c.fillStyle = p.col;
+					c.save(); c.translate(p.x, p.y); c.rotate(p.rot);
+					c.beginPath(); c.ellipse(0, 0, p.s, p.s * (p.land ? 0.5 : 0.35 + 0.3 * Math.abs(Math.sin(p.age * 4))), 0, 0, TAU); c.fill();
+					c.restore();
+				}
+				c.globalAlpha = 1;
+			}
+		},
+
+		// Laser beams fan out from every cursor and ricochet off the edges
+		// of the screen. Glass crystals split white beams into rainbows.
+		// Click to drop a crystal; click one to shatter it.
+		lasers: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				var i, j, cr;
+				if (!S.cr) {
+					S.cr = []; S.sh = [];
+					withSeed(seedBase, function () {
+						for (i = 0; i < 3; i++) S.cr.push({ x: rand(0.2, 0.8) * w, y: rand(0.2, 0.8) * h, r: rand(26, 38), rot: rand(0, TAU), vr: rand(-0.3, 0.3), age: 9 });
+					});
+				}
+				for (i = 0; i < clicks.length; i++) {
+					var hit = -1;
+					for (j = 0; j < S.cr.length; j++) if (d2xy(clicks[i].x - S.cr[j].x, clicks[i].y - S.cr[j].y) < S.cr[j].r * S.cr[j].r) hit = j;
+					if (hit >= 0) {
+						cr = S.cr.splice(hit, 1)[0];
+						for (j = 0; j < 40; j++) { var a = rand(0, TAU), v = rand(60, 320); S.sh.push({ x: cr.x, y: cr.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, rot: rand(0, TAU), age: 0, s: rand(3, 8), hue: rand(0, 360) }); }
+					} else {
+						S.cr.push({ x: clicks[i].x, y: clicks[i].y, r: rand(24, 36), rot: rand(0, TAU), vr: rand(-0.4, 0.4), age: 0 });
+						if (S.cr.length > 6) S.cr.shift();
+					}
+				}
+				var em = livePtrs.length ? livePtrs.slice(0, 4) : [ghostPointer(t, w, h)];
+				var segs = [], hits = [];
+				var RAIN = ["#ff3b5c", "#ff9a2e", "#ffe83a", "#4dff7a", "#3ab8ff", "#a95cff"];
+				function trace(x, y, dx, dy, col, bounces, skip, split, gen) {
+					gen = gen || 0;
+					while (bounces-- > 0 && segs.length < 500) {
+						var tw = Infinity, nx = 0, ny = 0;
+						if (dx > 0) { tw = (w - x) / dx; nx = -1; } else if (dx < 0) { tw = -x / dx; nx = 1; }
+						var ty = dy > 0 ? (h - y) / dy : dy < 0 ? -y / dy : Infinity;
+						if (ty < tw) { tw = ty; nx = 0; ny = dy > 0 ? -1 : 1; }
+						var best = null, bt = tw;
+						for (var k = 0; k < S.cr.length; k++) {
+							var C = S.cr[k];
+							if (C === skip) continue;
+							var fx = x - C.x, fy = y - C.y, b = fx * dx + fy * dy, q = fx * fx + fy * fy - C.r * C.r, disc = b * b - q;
+							if (disc < 0) continue;
+							var tt = -b - Math.sqrt(disc);
+							if (tt > 0.5 && tt < bt) { bt = tt; best = C; }
+						}
+						var ex = x + dx * bt, ey = y + dy * bt;
+						segs.push({ x0: x, y0: y, x1: ex, y1: ey, col: col, g: Math.min(3, gen++) });
+						if (best) {
+							var mx = ex - best.x, my = ey - best.y, ml = Math.sqrt(mx * mx + my * my) || 1;
+							mx /= ml; my /= ml;
+							if (col === "#ffffff" && split) {   // through the prism: out comes a rainbow fan
+								var fx2 = ex - best.x, fy2 = ey - best.y, b2 = fx2 * dx + fy2 * dy, out = -2 * b2;   // chord through the circle
+								var ox = ex + dx * out, oy = ey + dy * out;
+								segs.push({ x0: ex, y0: ey, x1: ox, y1: oy, col: "#ffffff", g: 0 });
+								for (var r = 0; r < RAIN.length; r++) {
+									var ang = (r - 2.5) * 0.09, cs = Math.cos(ang), sn = Math.sin(ang);
+									trace(ox, oy, dx * cs - dy * sn, dx * sn + dy * cs, RAIN[r], 3, best, false, 0);
+								}
+								hits.push(ex, ey);
+								return;
+							}
+							var dot = dx * mx + dy * my;   // colored light glances off the crystal
+							dx -= 2 * dot * mx; dy -= 2 * dot * my;
+							skip = best;
+						} else {
+							var dot2 = dx * nx + dy * ny;
+							dx -= 2 * dot2 * nx; dy -= 2 * dot2 * ny;
+							skip = null;
+						}
+						hits.push(ex, ey);
+						x = ex; y = ey;
+					}
+				}
+				for (i = 0; i < em.length; i++)
+					for (j = 0; j < 3; j++) {
+						var a2 = t * 0.45 + j * TAU / 3 + i * 0.9;
+						trace(em[i].x, em[i].y, Math.cos(a2), Math.sin(a2), "#ffffff", 4, null, true, 0);
+					}
+				c.globalCompositeOperation = "lighter";
+				c.lineCap = "round";
+				var by = {};
+				for (i = 0; i < segs.length; i++) { var bkey = segs[i].col + "|" + segs[i].g; (by[bkey] || (by[bkey] = [])).push(segs[i]); }
+				for (var bk2 in by) {
+					var L = by[bk2], col = bk2.split("|")[0], fade = [1, 0.6, 0.35, 0.2][+bk2.split("|")[1]];
+					for (var pass = 0; pass < 2; pass++) {
+						c.strokeStyle = pass ? col : (col === "#ffffff" ? "#7fb8ff" : col);
+						c.globalAlpha = (pass ? 0.9 : 0.16) * fade;
+						c.lineWidth = pass ? 1.4 : 7;
+						c.beginPath();
+						for (j = 0; j < L.length; j++) { c.moveTo(L[j].x0, L[j].y0); c.lineTo(L[j].x1, L[j].y1); }
+						c.stroke();
+					}
+				}
+				c.globalAlpha = 0.8;
+				for (i = 0; i < hits.length; i += 2) c.drawImage(glow("rgba(200,225,255,0.7)"), hits[i] - 11, hits[i + 1] - 11, 22, 22);
+				for (i = 0; i < em.length; i++) { c.globalAlpha = 0.9; c.drawImage(glow("rgba(170,210,255,0.8)"), em[i].x - 30, em[i].y - 30, 60, 60); }
+				c.globalCompositeOperation = "source-over";
+				for (i = 0; i < S.cr.length; i++) {   // the crystals: slowly turning glass hexagons
+					cr = S.cr[i];
+					cr.age += dt; cr.rot += cr.vr * dt;
+					var sc = Math.min(1, cr.age * 4);
+					c.save(); c.translate(cr.x, cr.y); c.rotate(cr.rot); c.scale(sc, sc);
+					c.globalAlpha = 1;
+					c.fillStyle = "rgba(170,210,255,0.1)"; c.strokeStyle = "rgba(210,235,255,0.75)"; c.lineWidth = 1.5;
+					c.beginPath();
+					for (j = 0; j < 6; j++) { var ha = j / 6 * TAU; c[j ? "lineTo" : "moveTo"](Math.cos(ha) * cr.r, Math.sin(ha) * cr.r); }
+					c.closePath(); c.fill(); c.stroke();
+					c.strokeStyle = "rgba(210,235,255,0.3)"; c.lineWidth = 1;
+					c.beginPath();
+					for (j = 0; j < 6; j += 2) { var hb = j / 6 * TAU; c.moveTo(Math.cos(hb) * cr.r, Math.sin(hb) * cr.r); c.lineTo(Math.cos(hb + Math.PI) * cr.r, Math.sin(hb + Math.PI) * cr.r); }
+					c.stroke();
+					c.restore();
+				}
+				for (i = S.sh.length - 1; i >= 0; i--) {   // shattered shards
+					var s2 = S.sh[i];
+					s2.age += dt;
+					if (s2.age > 1.4) { S.sh.splice(i, 1); continue; }
+					s2.vy += 300 * dt; s2.x += s2.vx * dt; s2.y += s2.vy * dt; s2.rot += 6 * dt;
+					c.globalAlpha = 1 - s2.age / 1.4;
+					c.fillStyle = "hsla(" + s2.hue + ",90%,80%,0.8)";
+					c.save(); c.translate(s2.x, s2.y); c.rotate(s2.rot);
+					c.beginPath(); c.moveTo(0, -s2.s); c.lineTo(s2.s * 0.6, s2.s * 0.5); c.lineTo(-s2.s * 0.6, s2.s * 0.5); c.fill();
+					c.restore();
+				}
+				c.globalAlpha = 1;
+			}
+		},
+
+		// Flying low over a neon wireframe landscape. Cursors raise hills
+		// under them and clicks send shockwaves rolling across the terrain.
+		terrain: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				var COLS = isSmallScreen() ? 30 : 46, ROWS = 32, Z = 15, hor = h * 0.36, F = h * 0.68, i, j, k;
+				S.rip = S.rip || [];
+				for (i = 0; i < clicks.length; i++) S.rip.push({ x: clicks[i].x, y: clicks[i].y, age: 0 });
+				for (i = S.rip.length - 1; i >= 0; i--) if ((S.rip[i].age += dt) > 4) S.rip.splice(i, 1);
+				var travel = t * 1.1, V = S.V || (S.V = []);
+				for (j = 0; j < ROWS; j++) {
+					var z = 1 + j * (Z - 1) / (ROWS - 1), row = V[j] || (V[j] = []);
+					for (i = 0; i < COLS; i++) {
+						var X = (i / (COLS - 1) - 0.5) * 2.6 * w / F, wz = z + travel;
+						var hgt = 0.16 * Math.sin(X * 1.6 + wz * 0.55) + 0.12 * Math.sin(X * 0.7 - wz * 1.1 + 1) + 0.07 * Math.sin((X * 2.3 + wz * 1.7));
+						hgt += Math.max(0, Math.sin(wz * 0.21 + X * 0.4)) * 0.25;   // the odd ridge
+						var sx = w / 2 + X * F / z, sy0 = hor + F / z * 0.92, lift = hgt * F / z * 0.6;
+						for (k = 0; k < livePtrs.length; k++) {
+							var dx = sx - livePtrs[k].x, dy = sy0 - livePtrs[k].y;
+							lift += 130 * Math.exp(-(dx * dx + dy * dy) / (2 * 95 * 95));
+						}
+						for (k = 0; k < S.rip.length; k++) {
+							var R = S.rip[k], rd = Math.sqrt(d2xy(sx - R.x, sy0 - R.y)), front = R.age * 520;
+							if (rd < front) lift += 55 * Math.sin(rd * 0.045 - R.age * 9) * Math.exp(-R.age * 0.9) * Math.exp(-(front - rd) * 0.004);
+						}
+						var v = row[i] || (row[i] = {});
+						v.x = sx; v.y = sy0 - lift; v.l = lift / (F / z * 0.36 + 40); v.z = z;
+					}
+				}
+				// horizon glow
+				var hg = c.createLinearGradient(0, hor - h * 0.12, 0, hor + h * 0.05);
+				hg.addColorStop(0, "rgba(255,60,200,0)"); hg.addColorStop(0.7, "rgba(255,60,200,0.22)"); hg.addColorStop(1, "rgba(255,60,200,0)");
+				c.fillStyle = hg; c.fillRect(0, hor - h * 0.12, w, h * 0.17);
+				c.globalCompositeOperation = "lighter";
+				c.lineWidth = 1.3;
+				var paths = {};
+				function seg(a, b) {
+					var hb = clamp(((a.l + b.l) * 0.5 + 0.2) * 3, 0, 5) | 0, ab = clamp((1 - (a.z + b.z) / 2 / Z) * 4, 0, 3) | 0, key = hb * 4 + ab;
+					(paths[key] || (paths[key] = [])).push(a, b);
+				}
+				for (j = 0; j < ROWS; j++) for (i = 0; i < COLS; i++) {
+					if (i + 1 < COLS) seg(V[j][i], V[j][i + 1]);
+					if (j + 1 < ROWS) seg(V[j][i], V[j + 1][i]);
+				}
+				for (var key in paths) {
+					var L = paths[key], hb2 = (key / 4) | 0, ab2 = key % 4;
+					c.strokeStyle = "hsl(" + (185 + hb2 * 28) + ",100%," + (55 + hb2 * 4) + "%)";
+					c.globalAlpha = 0.18 + ab2 * 0.24;
+					c.beginPath();
+					for (k = 0; k < L.length; k += 2) { c.moveTo(L[k].x, L[k].y); c.lineTo(L[k + 1].x, L[k + 1].y); }
+					c.stroke();
+				}
+				for (j = 0; j < ROWS; j += 2) for (i = 0; i < COLS; i++) {   // sparks on the peaks
+					var pv = V[j][i];
+					if (pv.l < 0.55) continue;
+					c.globalAlpha = Math.min(1, (pv.l - 0.55) * 2) * (1 - pv.z / Z);
+					c.drawImage(glow("rgba(255,120,240,0.8)"), pv.x - 7, pv.y - 7, 14, 14);
+				}
+				for (k = 0; k < S.rip.length; k++) {
+					c.globalAlpha = Math.max(0, 1 - S.rip[k].age / 1.2);
+					var gs = 40 + S.rip[k].age * 300;
+					c.drawImage(glow("rgba(120,220,255,0.35)"), S.rip[k].x - gs / 2, S.rip[k].y - gs / 2, gs, gs);
+				}
+				c.globalCompositeOperation = "source-over";
+				c.globalAlpha = 1;
+			}
+		},
+
+		// Plays along with the piano. Every note anyone in the room plays
+		// shoots up a glowing orb in that player's color from where the key
+		// sits, flares the spectrum bars along the bottom and lights the
+		// aurora above; notes of a chord link up like a constellation.
+		// Cursors swirl the orbs, clicks ripple them away. When nobody is
+		// playing, a soft pentatonic tune keeps it going.
+		piano: {
+			density: 0, pointer: true, notes: true,
+			frame: function (c, dt, w, h, t, S) {
+				var i, j, p, NB = 64;
+				if (!S.bars) { S.bars = new Array(88).fill(0); S.cap = new Array(88).fill(0); S.bcol = new Array(88).fill("#9fd8ff"); S.orbs = []; S.aur = new Array(NB).fill(0); S.ahue = new Array(NB).fill(200); S.spark = []; S.lastNote = -99; }
+				var Q = noteQueue.splice(0), clock = S.clock = (S.clock || 0) + dt;
+				if (Q.length) S.lastNote = clock;
+				else if (clock - S.lastNote > 7) {   // nobody playing: a quiet tune on the room clock
+					var slot = Math.floor(t / 0.42);
+					if (slot !== S.slot) {
+						S.slot = slot;
+						var R = mulberry(hashInts(seedBase, 777, slot));
+						if (R() < 0.75) {
+							var PENTA = [0, 2, 4, 7, 9], deg = (R() * 10) | 0, key = 27 + Math.floor(deg / 5) * 12 + PENTA[deg % 5] + (R() < 0.3 ? 12 : 0);
+							Q.push({ i: key, v: 0.25 + R() * 0.25, col: "hsl(" + ((t * 8 + deg * 25) % 360 | 0) + ",90%,70%)", amb: true });
+						}
+					}
+				}
+				var group = S.group || 0;
+				if (Q.length && clock - (S.gt || 0) > 0.09) group = S.group = group + 1;
+				if (Q.length) S.gt = clock;
+				for (i = 0; i < Q.length; i++) {
+					var n = Q[i], x = (n.i + 0.5) / 88 * w;
+					S.bars[n.i] = Math.max(S.bars[n.i], 0.35 + n.v * 0.65); S.bcol[n.i] = n.col;
+					S.orbs.push({ x: x, y: h * 0.86, vx: rand(-20, 20), vy: -(220 + n.v * 320), r: 3 + n.v * 7, col: n.col, age: 0, g: group, amb: n.amb, tr: [] });
+					var b = Math.min(NB - 1, (n.i / 88 * NB) | 0);
+					for (j = -3; j <= 3; j++) if (b + j >= 0 && b + j < NB) { S.aur[b + j] += n.v * (n.amb ? 0.3 : 0.8) * Math.exp(-j * j / 4); S.ahue[b + j] = n.col; }
+				}
+				if (S.orbs.length > 220) S.orbs.splice(0, S.orbs.length - 220);
+				for (i = 0; i < clicks.length; i++) {
+					S.spark.push({ x: clicks[i].x, y: clicks[i].y, age: 0, ring: true });
+					var bi = clamp((clicks[i].x / w * 88) | 0, 0, 87);
+					for (j = -4; j <= 4; j++) if (bi + j >= 0 && bi + j < 88) { S.bars[bi + j] = Math.max(S.bars[bi + j], 0.6 - Math.abs(j) * 0.1); S.bcol[bi + j] = "#ffffff"; }
+				}
+				// aurora curtain across the top
+				c.globalCompositeOperation = "lighter";
+				var bw = w / NB;
+				for (i = 0; i < NB; i++) {
+					S.aur[i] *= Math.pow(0.55, dt);
+					var en = Math.min(1.4, S.aur[i] + 0.06 + 0.04 * Math.sin(t * 0.7 + i * 0.3)), x0 = i * bw;
+					var y0 = h * 0.16 + Math.sin(i * 0.25 + t * 0.6) * h * 0.035, ht = h * (0.12 + en * 0.22);
+					var col = typeof S.ahue[i] === "number" ? "hsla(" + ((S.ahue[i] + t * 10) % 360 | 0) + ",90%,62%," : toRgba(S.ahue[i]);
+					c.globalAlpha = Math.min(1, 0.25 + en * 0.6);
+					c.drawImage(glow(col + "0.45)"), x0 - bw * 1.6, y0 - ht * 0.3, bw * 4.2, ht * 1.5);
+					c.globalAlpha = Math.min(1, en * 0.5);   // fine rays shimmering in the curtain
+					c.drawImage(glow(col + "0.6)"), x0 + bw * (0.3 + 0.3 * Math.sin(t * 2.3 + i * 1.7)), y0 - ht * 0.1, bw * 0.5, ht * 1.1);
+				}
+				// orbs rise, swirl round cursors, link up into chords, then pop
+				var drag = Math.pow(0.55, dt);
+				for (i = S.orbs.length - 1; i >= 0; i--) {
+					p = S.orbs[i];
+					p.age += dt;
+					if (p.age > 2.6) {
+						for (j = 0; j < 7; j++) { var a = rand(0, TAU), v = rand(30, 110); S.spark.push({ x: p.x, y: p.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, age: 0, col: p.col }); }
+						S.orbs.splice(i, 1); continue;
+					}
+					for (j = 0; j < livePtrs.length; j++) {
+						var dx = p.x - livePtrs[j].x, dy = p.y - livePtrs[j].y, d = Math.sqrt(dx * dx + dy * dy) + 0.1;
+						if (d < 160) { var k = (1 - d / 160) * 600 * dt; p.vx += (-dy / d - dx / d * 0.3) * k; p.vy += (dx / d - dy / d * 0.3) * k; }
+					}
+					for (j = 0; j < clicks.length; j++) {
+						var cx = p.x - clicks[j].x, cy = p.y - clicks[j].y, cd = Math.sqrt(cx * cx + cy * cy) + 0.1;
+						if (cd < 260) { p.vx += cx / cd * 500 * (1 - cd / 260); p.vy += cy / cd * 500 * (1 - cd / 260); }
+					}
+					p.vx *= drag; p.vy = p.vy * drag - 12 * dt;
+					p.x += (p.vx + Math.sin(p.age * 3 + p.r) * 12) * dt; p.y += p.vy * dt;
+					p.tr.push(p.x, p.y); if (p.tr.length > 24) p.tr.splice(0, 2);
+				}
+				c.lineCap = "round";
+				for (i = 0; i < S.orbs.length; i++) {
+					p = S.orbs[i];
+					var fa = Math.min(1, (2.6 - p.age) * 1.5) * (p.amb ? 0.6 : 1), pc = toRgba(p.col);
+					c.strokeStyle = pc + (0.35 * fa).toFixed(3) + ")"; c.lineWidth = p.r * 0.8;
+					c.beginPath(); c.moveTo(p.tr[0], p.tr[1]);
+					for (j = 2; j < p.tr.length; j += 2) c.lineTo(p.tr[j], p.tr[j + 1]);
+					c.stroke();
+					for (j = i + 1; j < S.orbs.length; j++) {   // chord lines
+						var o = S.orbs[j];
+						if (o.g !== p.g) continue;
+						c.strokeStyle = pc + (0.3 * fa).toFixed(3) + ")"; c.lineWidth = 1;
+						c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(o.x, o.y); c.stroke();
+					}
+					c.globalAlpha = fa;
+					var gs = p.r * 7;
+					c.drawImage(glow(pc + "0.7)"), p.x - gs / 2, p.y - gs / 2, gs, gs);
+					c.fillStyle = "#ffffff";
+					c.beginPath(); c.arc(p.x, p.y, p.r * 0.45, 0, TAU); c.fill();
+					c.globalAlpha = 1;
+				}
+				for (i = S.spark.length - 1; i >= 0; i--) {
+					p = S.spark[i];
+					p.age += dt;
+					if (p.ring) {
+						if (p.age > 0.9) { S.spark.splice(i, 1); continue; }
+						c.globalAlpha = 1 - p.age / 0.9; c.strokeStyle = "rgba(200,230,255,0.8)"; c.lineWidth = 2;
+						c.beginPath(); c.arc(p.x, p.y, p.age * 300, 0, TAU); c.stroke();
+						continue;
+					}
+					if (p.age > 0.8) { S.spark.splice(i, 1); continue; }
+					p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 60 * dt;
+					c.globalAlpha = 1 - p.age / 0.8; c.fillStyle = p.col;
+					c.beginPath(); c.arc(p.x, p.y, 1.5, 0, TAU); c.fill();
+				}
+				// spectrum bars along the bottom, one per key
+				var kw = w / 88, base = h * 0.97;
+				for (i = 0; i < 88; i++) {
+					S.bars[i] *= Math.pow(0.18, dt);
+					S.cap[i] = Math.max(S.bars[i], S.cap[i] - dt * 0.25);
+					var bh = (0.02 + S.bars[i]) * h * 0.2, bc = toRgba(S.bcol[i]);
+					var bg = c.createLinearGradient(0, base - bh, 0, base);
+					bg.addColorStop(0, bc + (0.25 + S.bars[i] * 0.75).toFixed(3) + ")"); bg.addColorStop(1, bc + "0.05)");
+					c.globalAlpha = 1; c.fillStyle = bg;
+					c.fillRect(i * kw + 1, base - bh, kw - 2, bh);
+					c.fillStyle = bc + "0.8)";
+					c.fillRect(i * kw + 1, base - (0.02 + S.cap[i]) * h * 0.2 - 3, kw - 2, 2);
+				}
+				c.globalCompositeOperation = "source-over";
+				c.globalAlpha = 1;
+			}
 		}
 	};
 
@@ -2817,6 +3877,147 @@
 
 	// Jagged lightning path by midpoint displacement; R is the random source
 	// (seeded for ambient strikes so everyone sees the same bolt).
+	// ── Helpers for the scene effects ───────────────────────────────────
+	function d2xy(dx, dy) { return dx * dx + dy * dy; }
+
+	// "rgba(r,g,b," or "hsla(h,s%,l%," prefix for a CSS color, so callers can append an alpha.
+	var rgbaCache = {};
+	function toRgba(col) {
+		if (rgbaCache[col]) return rgbaCache[col];
+		var out = "rgba(160,215,255,", m;
+		if ((m = /^#([0-9a-f]{3})$/i.exec(col))) {
+			out = "rgba(" + parseInt(m[1][0] + m[1][0], 16) + "," + parseInt(m[1][1] + m[1][1], 16) + "," + parseInt(m[1][2] + m[1][2], 16) + ",";
+		} else if ((m = /^#([0-9a-f]{6})/i.exec(col))) {
+			out = "rgba(" + parseInt(m[1].slice(0, 2), 16) + "," + parseInt(m[1].slice(2, 4), 16) + "," + parseInt(m[1].slice(4, 6), 16) + ",";
+		} else if ((m = /^hsla?\(([^,]+),([^,]+),([^,)]+)/i.exec(col))) {
+			out = "hsla(" + m[1] + "," + m[2] + "," + m[3] + ",";
+		} else if ((m = /^rgba?\(([^,]+),([^,]+),([^,)]+)/i.exec(col))) {
+			out = "rgba(" + m[1] + "," + m[2] + "," + m[3] + ",";
+		}
+		return (rgbaCache[col] = out);
+	}
+
+	// Black hole disk: colors from the white-hot inner edge out to dull red.
+	var BH_COLS = ["255,250,235", "255,225,160", "255,180,90", "255,130,50", "230,80,30", "170,40,25"];
+	function bhParticle(p, rh, first) {
+		p.r = first ? rh * (1.6 + Math.pow(rand(0, 1), 1.7) * 5) : rh * rand(5.5, 6.8);
+		p.a = rand(0, TAU); p.w = 0; p.drift = rand(0.5, 1.5);
+		p.x = p.y = 0;
+		return p;
+	}
+	// half: -1 far side, 1 near side. mode 0: the disk itself, 1: the far
+	// side's image lensed up over the hole, 2: the near side's faint image under it.
+	function bhDisk(c, D, half, mode, cx, cy, rh, TILT) {
+		var paths = [], i, p, k;
+		for (i = 0; i < D.length; i++) {
+			p = D[i];
+			var s = Math.sin(p.a);
+			if (half < 0 ? s >= 0 : s < 0) continue;
+			k = clamp(((p.r - rh * 1.2) / (rh * 5.5) * 6) | 0, 0, 5) * 2 + (Math.cos(p.a) > 0 ? 1 : 0);   // Doppler: one side brighter
+			(paths[k] || (paths[k] = [])).push(p);
+		}
+		c.lineCap = "round";
+		for (k = 0; k < paths.length; k++) {
+			var L = paths[k];
+			if (!L) continue;
+			var ci = k >> 1, al = ((k & 1) ? 0.75 : 0.32) * (1 - ci * 0.1);
+			c.strokeStyle = "rgb(" + BH_COLS[ci] + ")";
+			c.globalAlpha = mode === 1 ? al * 0.7 : mode === 2 ? al * 0.25 : al;
+			c.lineWidth = mode ? 1.3 : 2.1 - ci * 0.18;
+			c.beginPath();
+			for (i = 0; i < L.length; i++) {
+				p = L[i];
+				var a0 = p.a - p.w * 0.16;
+				if (mode === 0) { c.moveTo(cx + Math.cos(a0) * p.r, cy + Math.sin(a0) * p.r * TILT); c.lineTo(p.x + 0.1, p.y); }
+				else {
+					var rr = mode === 1 ? rh * 1.18 + (p.r - rh * 1.5) * 0.2 : rh * 1.1 + (p.r - rh * 1.5) * 0.08;
+					c.moveTo(cx + Math.cos(a0) * rr, cy + Math.sin(a0) * rr); c.lineTo(cx + Math.cos(p.a) * rr + 0.1, cy + Math.sin(p.a) * rr);
+				}
+			}
+			c.stroke();
+		}
+	}
+
+	// Zen garden stones: a lumpy rounded outline, in one of a few greys.
+	var STONE_TONES = [["#9a958c", "#3f3b35"], ["#8b8f93", "#33373b"], ["#a3927a", "#45392c"], ["#7d7a76", "#2c2a27"]];
+	function zenStone(x, y, r) {
+		var sh = [], tone = pick(STONE_TONES);
+		for (var i = 0; i < 9; i++) sh.push(rand(0.82, 1.08));
+		return { x: x, y: y, r: r, sh: sh, light: tone[0], dark: tone[1], age: 0 };
+	}
+	function zenStonePath(c, st, ox, oy) {
+		var n = st.sh.length, pts = [], i;
+		for (i = 0; i < n; i++) {
+			var a = i / n * TAU;
+			pts.push({ x: ox + Math.cos(a) * st.r * st.sh[i], y: oy + Math.sin(a) * st.r * st.sh[i] * 0.82 });
+		}
+		c.beginPath();
+		c.moveTo((pts[0].x + pts[n - 1].x) / 2, (pts[0].y + pts[n - 1].y) / 2);
+		for (i = 0; i < n; i++) {
+			var q = pts[(i + 1) % n];
+			c.quadraticCurveTo(pts[i].x, pts[i].y, (pts[i].x + q.x) / 2, (pts[i].y + q.y) / 2);
+		}
+		c.closePath();
+	}
+
+	function newPlanet(x, y, vx, vy, r) {
+		var hue = rand(0, 360) | 0;
+		return { x: x, y: y, vx: vx, vy: vy, r: r, m: r * r * r, col: "hsl(" + hue + ",55%,55%)", lite: "hsl(" + hue + ",75%,82%)",
+			dark: "hsl(" + hue + ",50%,14%)", ring: rand(0, 1) < 0.25, tilt: rand(-0.4, 0.4), trail: [] };
+	}
+
+	// A cherry tree as a flat list of branches (parents before children),
+	// each growing for `dur` seconds once its parent has finished.
+	var flowerCache = {};
+	function flowerSprite(col, turn) {
+		var key = col + turn;
+		if (flowerCache[key]) return flowerCache[key];
+		var s = 32, cv = document.createElement("canvas"), g, i;
+		cv.width = cv.height = s;
+		g = cv.getContext("2d");
+		g.fillStyle = col;
+		for (i = 0; i < 5; i++) {
+			var a = i / 5 * TAU + turn * 0.63;
+			g.beginPath(); g.arc(s / 2 + Math.cos(a) * s * 0.25, s / 2 + Math.sin(a) * s * 0.25, s * 0.22, 0, TAU); g.fill();
+		}
+		g.fillStyle = "#ffe08a";
+		g.beginPath(); g.arc(s / 2, s / 2, s * 0.1, 0, TAU); g.fill();
+		return (flowerCache[key] = cv);
+	}
+	var BLOSSOM_PALS = [["#ffb7c9", "#ffd1dc", "#ff8fb1"], ["#fff0f5", "#ffd6e6", "#ffc2d6"], ["#e9a8ff", "#f5d0ff", "#d68cff"]];
+	function makeTree(x, y, H, R, born) {
+		var br = [], depthMax = isSmallScreen() ? 5 : 6;
+		function grow(p, rel, len, wd, d, st) {
+			var dur = 0.3 + d * 0.06, b = { p: p, rel: rel, len: len, wd: wd, d: d, st: st, dur: dur, tip: d === depthMax, rot: R() * TAU, fo: [], g: 0 };
+			for (var k = 0; k < 6; k++) b.fo.push((R() - 0.5) * Math.max(10, len * 0.9));
+			var idx = br.push(b) - 1;
+			if (d === depthMax) return;
+			var n = R() < 0.25 ? 3 : 2;
+			for (var j = 0; j < n; j++) {
+				var spread = n === 3 ? (j - 1) * 0.5 : (j ? 1 : -1) * (0.28 + R() * 0.3);
+				grow(idx, spread + (R() - 0.5) * 0.2, len * (0.7 + R() * 0.12), Math.max(1, wd * 0.68), d + 1, st + dur);
+			}
+		}
+		grow(-1, -Math.PI / 2 + (R() - 0.5) * 0.15, H * 0.3, Math.max(4, H * 0.045), 0, 0);
+		return { x: x, y: y, H: H, br: br, born: born, pal: BLOSSOM_PALS[(R() * 3) | 0], fs: 3 + H / 160, ph: R() * TAU, lean: 0, die: 0 };
+	}
+
+	// Notes played in the room, for the piano-reactive scene (fx.notes).
+	var noteQueue = [], KEY_INDEX = {};
+	(function () {
+		var names = ["a-1", "as-1", "b-1"], bare = "c cs d ds e f fs g gs a as b".split(" ");
+		for (var o = 0; o < 7; o++) for (var i = 0; i < 12; i++) names.push(bare[i] + o);
+		names.push("c7");
+		names.forEach(function (n, i) { KEY_INDEX[n] = i; });
+	})();
+	function onNote(name, vel, color) {
+		if (!fx || !fx.notes || document.hidden) return;
+		var i = KEY_INDEX[name];
+		if (i == null) return;
+		noteQueue.push({ i: i, v: clamp(isFinite(+vel) ? +vel : 0.5, 0, 1), col: typeof color === "string" && color ? color : "#9fd8ff" });
+		if (noteQueue.length > 64) noteQueue.shift();
+	}
+
 	function boltPath(R, x0, y0, x1, y1, rough) {
 		var pts = [{ x: x0, y: y0 }, { x: x1, y: y1 }], off = rough;
 		for (var it = 0; it < 6; it++) {
@@ -3310,6 +4511,7 @@
 		get: function (id) { return BY_ID[id] || null; },
 		apply: apply,
 		current: function () { return current; },
+		onNote: onNote,
 		isSyncText: isSyncText,
 		handleSync: handleSync,
 		buildPicker: buildPicker
