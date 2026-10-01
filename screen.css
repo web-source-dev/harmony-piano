@@ -6637,7 +6637,9 @@ body.love-got-kiss .love-layer { animation: loveBlush 1s ease-out; }
 #room-theme-layer { overflow: hidden; display: none; }
 #room-theme-layer[class^="rt-"] { display: block; }
 #room-theme-layer::before,
-#room-theme-layer::after { content: ""; position: absolute; pointer-events: none; }
+#room-theme-layer::after { content: ""; position: absolute; pointer-events: none;
+	/* set by roomThemes.js from the room clock so overlays sway in sync for everyone */
+	animation-delay: var(--rt-delay, 0s); }
 
 /* Winter: frosty glow on the ground */
 .rt-winter::before { inset: 0;

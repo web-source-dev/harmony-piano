@@ -14,8 +14,48 @@
 	"use strict";
 
 	var TAU = Math.PI * 2;
-	function rand(a, b) { return a + Math.random() * (b - a); }
-	function pick(arr) { return arr[(Math.random() * arr.length) | 0]; }
+	// rand/pick normally use Math.random; withSeed() swaps in a seeded
+	// generator so every user builds the exact same particle layout.
+	var rng = Math.random;
+	function rand(a, b) { return a + rng() * (b - a); }
+	function pick(arr) { return arr[(rng() * arr.length) | 0]; }
+
+	// ── Room sync helpers ───────────────────────────────────────────────
+	// Ambient effects are pure functions of a clock shared by the whole room
+	// (server time) and a seeded generator, so everyone sees the same flake
+	// in the same spot at the same moment (scaled to their own screen).
+	function mulberry(seed) {
+		var s = seed >>> 0;
+		return function () {
+			s = (s + 0x6D2B79F5) | 0;
+			var t = Math.imul(s ^ (s >>> 15), 1 | s);
+			t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+			return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+		};
+	}
+	function hashInts(a, b, c) {
+		var h = Math.imul(a | 0, 0x27d4eb2d) ^ Math.imul(b | 0, 0x165667b1) ^ Math.imul(c | 0, 0x9e3779b1);
+		h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+		h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+		return (h ^ (h >>> 16)) >>> 0;
+	}
+	function hashStr(s) {
+		var h = 2166136261;
+		for (var i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+		return h >>> 0;
+	}
+	function withSeed(seed, fn) {
+		var prev = rng;
+		rng = mulberry(seed);
+		try { return fn(); } finally { rng = prev; }
+	}
+	// Seconds on the room's shared clock (MPP server time), kept small so
+	// sin(t * k) stays precise.
+	var EPOCH_MS = 1767225600000;   // 2026-01-01
+	function roomSec() {
+		var cl = global.gClient, off = cl && isFinite(cl.serverTimeOffset) ? cl.serverTimeOffset : 0;
+		return (Date.now() + off - EPOCH_MS) / 1000;
+	}
 
 	// ── Theme definitions ───────────────────────────────────────────────
 	// bg: body background, bottom: toolbar color, overlay: CSS class for the
@@ -121,33 +161,130 @@
 	}
 
 	// ── Pointers for interactive effects ────────────────────────────────
-	// The local mouse/finger plus other users' cursors (from "m" messages),
-	// so everyone's movement shows up in the room's background.
+	// The local mouse/finger plus every other user's pointer, so everyone's
+	// movement and clicks show up in the whole room's background.
+	//
+	// Pointers travel over the Harmony relay (no rate limit) as
+	//   RT|m|<pid>|<x>|<y>   move (throttled) + a heartbeat while idle
+	//   RT|c|<pid>|<x>|<y>   click / tap
+	//   RT|l|<pid>           pointer left the window / finger lifted
+	// with x, y as fractions of the sender's window. Users the relay can't
+	// reach (vanilla MPP) still show up through their MPP cursor ("m").
+	var SYNC_PREFIX = "RT|";
+	var SEND_MS = 40, BEAT_MS = 2000;
+	var RELAY_STALE_MS = 6500, MPP_STALE_MS = 30000, RELAY_PEER_MS = 60000;
 	var ptr = { id: "me", x: 0, y: 0, t: 0, inside: false };
-	var remotes = {};          // participant id -> { id, x, y, t }
-	var clickQueue = [];       // pointerdowns not yet seen by the effect
+	var remotes = {};          // participant id -> { id, x, y (smoothed px), nx, ny, t, relay }
+	var relayPeers = {};       // participant id -> last relay message (their MPP "m" is then ignored)
+	var clickQueue = [];       // clicks (local + remote) not yet seen by the effect
 	var livePtrs = [], clicks = [];   // snapshot for the current frame
+	var sendTimer = 0, lastSent = 0, announced = false;
 
 	function now() { return global.performance ? performance.now() : Date.now(); }
+	function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+	function frac(v) { return clamp(v, -0.05, 1.05).toFixed(4); }
+
+	function myId() {
+		var cl = global.gClient;
+		return cl && cl.participantId ? String(cl.participantId) : "";
+	}
+	function canSync() {
+		return !!(fx && fx.pointer && myId() && global.gClient && typeof global.gClient.broadcastRoom === "function");
+	}
+	function sendPtr(kind, x, y) {
+		if (!canSync()) return false;
+		var text = SYNC_PREFIX + kind + "|" + myId();
+		if (kind !== "l") text += "|" + frac(x / global.innerWidth) + "|" + frac(y / global.innerHeight);
+		try { return !!global.gClient.broadcastRoom(text); } catch (e) { return false; }
+	}
+	function flushMove() {
+		clearTimeout(sendTimer); sendTimer = 0;
+		if (!ptr.inside) return;
+		lastSent = Date.now();
+		if (sendPtr("m", ptr.x, ptr.y)) announced = true;
+	}
+	function queueMove() {
+		if (!canSync()) return;
+		var wait = SEND_MS - (Date.now() - lastSent);
+		if (wait <= 0) flushMove();
+		else if (!sendTimer) sendTimer = setTimeout(flushMove, wait);
+	}
+	function pointerGone() {
+		ptr.inside = false;
+		clearTimeout(sendTimer); sendTimer = 0;
+		if (announced) { announced = false; sendPtr("l"); }
+	}
+
+	function pushClick(x, y) {
+		clickQueue.push({ x: x, y: y });
+		if (clickQueue.length > 16) clickQueue.shift();
+	}
 
 	function trackPointer() {
 		function move(e) {
 			ptr.x = e.clientX; ptr.y = e.clientY; ptr.t = now(); ptr.inside = true;
 		}
-		global.addEventListener("pointermove", move, { passive: true });
+		global.addEventListener("pointermove", function (e) { move(e); queueMove(); }, { passive: true });
 		global.addEventListener("pointerdown", function (e) {
 			move(e);
 			if (fx && fx.pointer) {
-				clickQueue.push({ x: e.clientX, y: e.clientY });
-				if (clickQueue.length > 8) clickQueue.shift();
+				pushClick(e.clientX, e.clientY);
+				lastSent = Date.now();
+				if (sendPtr("c", e.clientX, e.clientY)) announced = true;
 			}
 		}, { passive: true });
 		global.addEventListener("pointerup", function (e) {
-			if (e.pointerType === "touch") ptr.inside = false;   // finger lifted
+			if (e.pointerType === "touch") pointerGone();      // finger lifted
+		}, { passive: true });
+		global.addEventListener("pointercancel", function (e) {
+			if (e.pointerType === "touch") pointerGone();
 		}, { passive: true });
 		document.addEventListener("mouseout", function (e) {
-			if (!e.relatedTarget) ptr.inside = false;          // left the window
+			if (!e.relatedTarget) pointerGone();               // left the window
 		});
+		global.addEventListener("blur", pointerGone);
+		global.addEventListener("pagehide", pointerGone);
+		document.addEventListener("visibilitychange", function () { if (document.hidden) pointerGone(); });
+		// Heartbeat: a resting cursor keeps showing for everyone, and people
+		// who join later pick it up within a couple of seconds.
+		setInterval(function () {
+			if (ptr.inside && canSync() && Date.now() - lastSent > BEAT_MS * 0.8) flushMove();
+		}, BEAT_MS);
+	}
+
+	function touchRemote(id, nx, ny, relay) {
+		var r = remotes[id], t = now();
+		if (!r) r = remotes[id] = { id: id, x: nx * W, y: ny * H };   // first sighting: no glide in
+		r.nx = nx; r.ny = ny; r.t = t;
+		if (relay) { r.relay = true; relayPeers[id] = t; }
+		return r;
+	}
+
+	function isSyncText(text) {
+		return typeof text === "string" && text.indexOf(SYNC_PREFIX) === 0;
+	}
+
+	// Relay message from script.js's routeRoomSync: { message, p }.
+	function handleSync(msg) {
+		var text = msg && (msg.message != null ? msg.message : msg.a);
+		if (!isSyncText(text)) return false;
+		var a = text.slice(SYNC_PREFIX.length).split("|"), kind = a[0], id = a[1];
+		if (!id || id === myId()) return true;
+		if (kind === "l") {
+			delete remotes[id];
+			relayPeers[id] = now();
+			return true;
+		}
+		if (kind !== "m" && kind !== "c") return true;
+		var nx = parseFloat(a[2]), ny = parseFloat(a[3]);
+		if (!isFinite(nx) || !isFinite(ny)) return true;
+		nx = clamp(nx, -0.05, 1.05); ny = clamp(ny, -0.05, 1.05);
+		var r = touchRemote(id, nx, ny, true);
+		if (kind === "c") {
+			r.x = nx * W; r.y = ny * H;   // the burst and the cursor line up exactly
+			if (fx && fx.pointer) pushClick(r.x, r.y);
+		}
+		return true;
 	}
 
 	var hookedClient = null;
@@ -156,22 +293,27 @@
 		if (!cl || !cl.on || hookedClient === cl) return;
 		hookedClient = cl;
 		cl.on("m", function (msg) {
-			if (!fx || !fx.pointer || !msg || msg.id === cl.participantId) return;
+			if (!msg || msg.id == null || String(msg.id) === myId()) return;
+			var id = String(msg.id);
+			if (relayPeers[id] && now() - relayPeers[id] < RELAY_PEER_MS) return;   // relay is faster & exact
 			var x = parseFloat(msg.x), y = parseFloat(msg.y);
 			if (!isFinite(x) || !isFinite(y)) return;
-			var r = remotes[msg.id] || (remotes[msg.id] = { id: msg.id });
-			r.x = x * W / 100; r.y = y * H / 100; r.t = now();
+			touchRemote(id, clamp(x / 100, -0.05, 1.05), clamp(y / 100, -0.05, 1.05), false);
 		});
-		cl.on("participant removed", function (p) { if (p) delete remotes[p.id]; });
+		cl.on("participant removed", function (p) {
+			if (p) { delete remotes[p.id]; delete relayPeers[p.id]; }
+		});
 	}
 
-	function collectPointers() {
-		var out = [], tnow = now();
+	function collectPointers(dt) {
+		var out = [], tnow = now(), ease = Math.min(1, dt * 22);
 		if (ptr.inside && ptr.t) out.push(ptr);
 		for (var id in remotes) {
 			var r = remotes[id];
-			if (tnow - r.t < 30000) out.push(r);
-			else delete remotes[id];
+			if (tnow - r.t > (r.relay ? RELAY_STALE_MS : MPP_STALE_MS)) { delete remotes[id]; continue; }
+			// glide toward the latest position so remote trails are smooth
+			r.x += (r.nx * W - r.x) * ease; r.y += (r.ny * H - r.y) * ease;
+			out.push(r);
 		}
 		return out;
 	}
@@ -216,28 +358,38 @@
 	}
 
 	// ── Canvas effects ──────────────────────────────────────────────────
-	// density = particle count at 1920×1080. init(p, w, h, first) sets up a
-	// particle (first = spread over the screen on start); update returns
-	// false when the particle should respawn. frame() draws non-particle
-	// extras; trail fades the previous frame instead of clearing it.
+	// density = particle count at 1920×1080.
+	//
+	// Room-synced ("cycle") effects are pure functions of the shared room
+	// clock t, so every user sees the same picture: setup(p) picks a
+	// particle's fixed traits and its cycle length p.per (seconds; omit for
+	// particles that never respawn), spawn(p) re-rolls it for each new cycle,
+	// at(p, age, t, w, h) places it `age` seconds into the cycle. Both run
+	// under a seeded generator, so rand()/pick() give everyone the same values.
+	// Positions are fractions of the screen, so different window sizes show
+	// the same scene scaled.
+	//
+	// Stateful effects instead use init(p, w, h, first) / update (returns
+	// false to respawn). frame() draws non-particle extras; trail fades the
+	// previous frame instead of clearing it.
+	function wrapX(x, w) { var span = w + 60; return (((x + 30) % span) + span) % span - 30; }
+
 	var FX = {
 		snow: {
-			density: 160,
-			init: function (p, w, h, first) {
-				p.r = Math.pow(Math.random(), 2.2) * 3.4 + 0.7;
-				p.x0 = rand(0, w); p.x = p.x0;
-				p.y = first ? rand(0, h) : rand(-30, -5);
-				p.vy = 16 + p.r * 13;
-				p.sw = rand(0.3, 1.2); p.ph = rand(0, TAU); p.amp = rand(6, 26);
-				p.a = rand(0.45, 0.95); p.rot = rand(0, TAU);
+			density: 160, cycle: true,
+			setup: function (p) {
+				p.r = Math.pow(rand(0, 1), 2.2) * 3.4 + 0.7;
+				p.per = 1120 / (16 + p.r * 13);
 			},
-			update: function (p, dt, w, h, t) {
-				p.y += p.vy * dt;
-				p.x0 += 10 * dt;
-				if (p.x0 > w + 30) p.x0 -= w + 60;
-				p.x = p.x0 + Math.sin(t * p.sw + p.ph) * p.amp;
-				p.rot += dt * 0.4;
-				return p.y < h + 10;
+			spawn: function (p) {
+				p.nx = rand(0, 1);
+				p.sw = rand(0.3, 1.2); p.ph = rand(0, TAU); p.amp = rand(6, 26);
+				p.a = rand(0.45, 0.95); p.rot0 = rand(0, TAU);
+			},
+			at: function (p, age, t, w, h) {
+				p.y = -30 + (h + 40) * age / p.per;
+				p.x = wrapX(p.nx * w + age * 10 * w / 1920, w) + Math.sin(t * p.sw + p.ph) * p.amp;
+				p.rot = p.rot0 + age * 0.4;
 			},
 			draw: function (c, p) {
 				c.globalAlpha = p.a;
@@ -259,16 +411,17 @@
 		},
 
 		stars: {
-			density: 220,
-			init: function (p, w, h, first, o) {
-				p.x = first ? rand(0, w) : w + 4; p.y = rand(0, h);
-				p.r = Math.pow(Math.random(), 3) * 1.5 + 0.35;
+			density: 220, cycle: true,
+			setup: function (p) {
+				p.nx = rand(0, 1); p.ny = rand(0, 1);
+				p.r = Math.pow(rand(0, 1), 3) * 1.5 + 0.35;
 				p.base = rand(0.35, 1); p.sp = rand(0.6, 2.6); p.ph = rand(0, TAU);
 				p.col = pick(["#ffffff", "#ffffff", "#cfe3ff", "#ffeacc", "#e6d4ff"]);
 			},
-			update: function (p, dt, w, h, t, o) {
-				if (o.drift) { p.x -= o.drift * (0.3 + p.r) * dt; if (p.x < -4) return false; }
-				return true;
+			at: function (p, age, t, w, h, o) {
+				var nx = p.nx;
+				if (o.drift) nx = ((nx - t * o.drift * (0.3 + p.r) / 1920) % 1 + 1) % 1;
+				p.x = nx * (w + 8) - 4; p.y = p.ny * h;
 			},
 			draw: function (c, p, t) {
 				var a = p.base * (0.55 + 0.45 * Math.sin(t * p.sp + p.ph));
@@ -281,45 +434,43 @@
 					c.fillRect(p.x - 0.5, p.y - p.r * 3, 1, p.r * 6);
 				}
 			},
+			// Shooting stars: each 5.5 s slot of the room clock may hold one,
+			// with its start, path and length derived from the slot number.
 			frame: function (c, dt, w, h, t, S, o) {
 				if (!o.shooting) return;
-				if (!S.shoot) {
-					S.next = (S.next || rand(2, 5)) - dt;
-					if (S.next <= 0) {
-						var ang = rand(0.35, 0.6);
-						S.shoot = { x: rand(w * 0.1, w * 0.8), y: rand(0, h * 0.35), vx: Math.cos(ang) * 900, vy: Math.sin(ang) * 900, life: 0, max: rand(0.6, 1.1) };
-						S.next = rand(3, 8);
-					}
-					return;
+				var SLOT = 5.5, k = Math.floor(t / SLOT);
+				for (var j = k - 1; j <= k; j++) {   // a streak can run past its slot
+					var R = mulberry(hashInts(seedBase, 7777, j));
+					if (R() > 0.7) continue;
+					var start = j * SLOT + R() * (SLOT - 1.2), max = 0.6 + R() * 0.5, life = t - start;
+					if (life < 0 || life > max) continue;
+					var ang = 0.35 + R() * 0.25, vx = Math.cos(ang) * 900, vy = Math.sin(ang) * 900;
+					var x = (0.1 + R() * 0.7) * w + vx * life, y = R() * 0.35 * h + vy * life;
+					var fade = 1 - life / max, tail = 0.14, tx = x - vx * tail, ty = y - vy * tail;
+					var g = c.createLinearGradient(x, y, tx, ty);
+					g.addColorStop(0, "rgba(255,255,255," + fade.toFixed(3) + ")");
+					g.addColorStop(1, "rgba(255,255,255,0)");
+					c.globalAlpha = 1;
+					c.strokeStyle = g; c.lineWidth = 2; c.lineCap = "round";
+					c.beginPath(); c.moveTo(x, y); c.lineTo(tx, ty); c.stroke();
 				}
-				var s = S.shoot;
-				s.life += dt; s.x += s.vx * dt; s.y += s.vy * dt;
-				var fade = 1 - s.life / s.max;
-				if (fade <= 0) { S.shoot = null; return; }
-				var tail = 0.14, tx = s.x - s.vx * tail, ty = s.y - s.vy * tail;
-				var g = c.createLinearGradient(s.x, s.y, tx, ty);
-				g.addColorStop(0, "rgba(255,255,255," + fade + ")");
-				g.addColorStop(1, "rgba(255,255,255,0)");
-				c.globalAlpha = 1;
-				c.strokeStyle = g; c.lineWidth = 2; c.lineCap = "round";
-				c.beginPath(); c.moveTo(s.x, s.y); c.lineTo(tx, ty); c.stroke();
 			}
 		},
 
 		petals: {
-			density: 70,
-			init: function (p, w, h, first) {
-				p.x = first ? rand(0, w) : rand(-w * 0.3, w * 0.9);
-				p.y = first ? rand(0, h) : rand(-40, -10);
-				p.s = rand(5, 10); p.vy = rand(28, 55); p.vx = rand(18, 45);
-				p.rot = rand(0, TAU); p.vr = rand(-1.6, 1.6);
+			density: 70, cycle: true,
+			setup: function (p) { p.vy = rand(28, 55); p.per = 1140 / p.vy; },
+			spawn: function (p) {
+				p.nx = rand(0, 1);
+				p.s = rand(5, 10); p.vx = rand(18, 45);
+				p.rot0 = rand(0, TAU); p.vr = rand(-1.6, 1.6);
 				p.fs = rand(1.5, 3.5); p.ph = rand(0, TAU); p.a = rand(0.7, 0.95);
 				p.col = pick(["#ffd1dc", "#ffb7c9", "#ffc8d6", "#ffe4ea", "#f9a8c0"]);
 			},
-			update: function (p, dt, w, h, t) {
-				p.x += (p.vx + Math.sin(t * 0.8 + p.ph) * 20) * dt;
-				p.y += p.vy * dt; p.rot += p.vr * dt;
-				return p.y < h + 20 && p.x < w + 30;
+			at: function (p, age, t, w, h) {
+				p.y = -40 + (h + 60) * age / p.per;
+				p.x = wrapX(p.nx * w + p.vx * age * w / 1920 + Math.sin(t * 0.8 + p.ph) * 25, w);
+				p.rot = p.rot0 + p.vr * age;
 			},
 			draw: function (c, p, t) {
 				var s = p.s;
@@ -337,20 +488,18 @@
 		},
 
 		leaves: {
-			density: 45,
-			init: function (p, w, h, first) {
-				p.x = rand(0, w); p.y = first ? rand(0, h) : rand(-50, -15);
-				p.s = rand(9, 16); p.vy = rand(35, 70);
+			density: 45, cycle: true,
+			setup: function (p) { p.vy = rand(35, 70); p.per = 1130 / p.vy; },
+			spawn: function (p) {
+				p.nx = rand(0, 1); p.s = rand(9, 16);
 				p.sw = rand(0.6, 1.4); p.ph = rand(0, TAU); p.amp = rand(30, 70);
-				p.rot = rand(0, TAU); p.vr = rand(-2.2, 2.2); p.fs = rand(1, 2.5);
+				p.rot0 = rand(0, TAU); p.vr = rand(-2.2, 2.2); p.fs = rand(1, 2.5);
 				p.col = pick(["#d9541e", "#e8892b", "#c0392b", "#f2b134", "#a0522d", "#e67e22"]);
-				p.x0 = p.x;
 			},
-			update: function (p, dt, w, h, t) {
-				p.y += p.vy * dt; p.x0 += 14 * dt;
-				p.x = p.x0 + Math.sin(t * p.sw + p.ph) * p.amp;
-				p.rot += p.vr * dt;
-				return p.y < h + 30;
+			at: function (p, age, t, w, h) {
+				p.y = -50 + (h + 80) * age / p.per;
+				p.x = wrapX(p.nx * w + age * 14 * w / 1920, w) + Math.sin(t * p.sw + p.ph) * p.amp;
+				p.rot = p.rot0 + p.vr * age;
 			},
 			draw: function (c, p, t) {
 				var s = p.s;
@@ -370,17 +519,15 @@
 		},
 
 		bubbles: {
-			density: 60,
-			init: function (p, w, h, first) {
-				p.r = Math.pow(Math.random(), 1.8) * 9 + 2;
-				p.x0 = rand(0, w); p.x = p.x0;
-				p.y = first ? rand(0, h) : h + rand(10, 60);
-				p.vy = 22 + p.r * 5; p.ph = rand(0, TAU); p.sw = rand(1, 2.5);
+			density: 60, cycle: true,
+			setup: function (p) {
+				p.r = Math.pow(rand(0, 1), 1.8) * 9 + 2;
+				p.per = 1140 / (22 + p.r * 5);
 			},
-			update: function (p, dt, w, h, t) {
-				p.y -= p.vy * dt;
-				p.x = p.x0 + Math.sin(t * p.sw + p.ph) * p.r * 0.9;
-				return p.y > -20;
+			spawn: function (p) { p.nx = rand(0, 1); p.ph = rand(0, TAU); p.sw = rand(1, 2.5); },
+			at: function (p, age, t, w, h) {
+				p.y = h + 60 - (h + 80) * age / p.per;
+				p.x = p.nx * w + Math.sin(t * p.sw + p.ph) * p.r * 0.9;
 			},
 			draw: function (c, p, t, h) {
 				var fade = Math.min(1, p.y / (h * 0.25));
@@ -393,19 +540,19 @@
 			}
 		},
 
+		// Fireflies wander on smooth looping paths (instead of a random walk)
+		// so their flight is the same for everyone.
 		fireflies: {
-			density: 45, blend: "lighter",
-			init: function (p, w, h) {
-				p.x = rand(0, w); p.y = rand(h * 0.15, h);
-				p.ang = rand(0, TAU); p.v = rand(8, 26);
+			density: 45, blend: "lighter", cycle: true,
+			setup: function (p) {
+				p.nx = rand(0.05, 0.95); p.ny = rand(0.2, 0.95);
+				p.f1 = rand(0.04, 0.12); p.f2 = rand(0.05, 0.14); p.p1 = rand(0, TAU); p.p2 = rand(0, TAU);
+				p.ax = rand(50, 150); p.ay = rand(30, 90);
 				p.ps = rand(0.8, 2); p.ph = rand(0, TAU); p.s = rand(22, 40);
 			},
-			update: function (p, dt, w, h) {
-				p.ang += (Math.random() - 0.5) * dt * 4;
-				p.x += Math.cos(p.ang) * p.v * dt; p.y += Math.sin(p.ang) * p.v * dt;
-				if (p.x < -20) p.x = w + 20; else if (p.x > w + 20) p.x = -20;
-				if (p.y < -20) p.y = h + 20; else if (p.y > h + 20) p.y = -20;
-				return true;
+			at: function (p, age, t, w, h) {
+				p.x = p.nx * w + Math.sin(t * p.f1 + p.p1) * p.ax + Math.sin(t * p.f2 * 2.3 + p.p2) * p.ax * 0.35;
+				p.y = p.ny * h + Math.cos(t * p.f2 + p.p2) * p.ay + Math.sin(t * 1.3 + p.ph) * 4;
 			},
 			draw: function (c, p, t) {
 				var a = Math.max(0, Math.sin(t * p.ps + p.ph));
@@ -418,14 +565,13 @@
 		},
 
 		rain: {
-			density: 240,
-			init: function (p, w, h, first) {
-				p.x = rand(-100, w); p.y = first ? rand(0, h) : rand(-h * 0.3, -10);
-				p.len = rand(10, 24); p.v = rand(550, 850); p.a = rand(0.15, 0.4);
-			},
-			update: function (p, dt, w, h) {
-				p.y += p.v * dt; p.x += p.v * 0.15 * dt;
-				return p.y < h + 30;
+			density: 240, cycle: true,
+			setup: function (p) { p.v = rand(550, 850); p.per = (1.3 * 1080 + 40) / p.v; },
+			spawn: function (p) { p.nx = rand(0, 1); p.len = rand(10, 24); },
+			at: function (p, age, t, w, h) {
+				var fall = (1.3 * h + 40) * age / p.per;
+				p.y = -0.3 * h + fall;
+				p.x = p.nx * (w + 100) - 100 + fall * 0.15;
 			},
 			drawAll: function (c, ps) {
 				c.strokeStyle = "rgba(190,215,240,1)"; c.lineWidth = 1;
@@ -442,19 +588,17 @@
 		},
 
 		embers: {
-			density: 110, blend: "lighter",
-			init: function (p, w, h, first) {
-				p.x = rand(0, w); p.y = first ? rand(h * 0.2, h) : h + rand(0, 20);
-				p.vy = rand(30, 95); p.vx = rand(-12, 12);
-				p.life = rand(3, 7); p.age = first ? rand(0, p.life) : 0;
+			density: 110, blend: "lighter", cycle: true,
+			setup: function (p) { p.per = p.life = rand(3, 7); p.vy = rand(30, 95); },
+			spawn: function (p) {
+				p.nx = rand(0, 1); p.vx = rand(-12, 12);
 				p.s = rand(12, 26); p.ph = rand(0, TAU);
 				p.col = pick(["rgba(255,170,60,0.95)", "rgba(255,120,30,0.95)", "rgba(255,210,110,0.95)"]);
 			},
-			update: function (p, dt, w, h, t) {
-				p.age += dt;
-				p.y -= p.vy * dt;
-				p.x += (p.vx + Math.sin(t * 2 + p.ph) * 18) * dt;
-				return p.age < p.life && p.y > -20;
+			at: function (p, age, t, w, h) {
+				p.age = age;
+				p.y = h + 10 - p.vy * age * h / 1080;
+				p.x = p.nx * w + p.vx * age + Math.sin(t * 2 + p.ph) * 9;
 			},
 			draw: function (c, p, t) {
 				var f = 1 - p.age / p.life;
@@ -467,19 +611,17 @@
 		},
 
 		hearts: {
-			density: 40,
-			init: function (p, w, h, first) {
-				p.x0 = rand(0, w); p.x = p.x0;
-				p.y = first ? rand(0, h) : h + rand(10, 50);
-				p.s = rand(8, 20); p.vy = rand(25, 55);
+			density: 40, cycle: true,
+			setup: function (p) { p.vy = rand(25, 55); p.per = 1130 / p.vy; },
+			spawn: function (p) {
+				p.nx = rand(0, 1); p.s = rand(8, 20);
 				p.ph = rand(0, TAU); p.sw = rand(0.6, 1.4); p.amp = rand(10, 30);
 				p.rot = rand(-0.3, 0.3); p.a = rand(0.5, 0.9);
 				p.col = pick(["#ff4d6d", "#ff758f", "#ff8fab", "#ffb3c6", "#e5383b", "#ffffff"]);
 			},
-			update: function (p, dt, w, h, t) {
-				p.y -= p.vy * dt;
-				p.x = p.x0 + Math.sin(t * p.sw + p.ph) * p.amp;
-				return p.y > -30;
+			at: function (p, age, t, w, h) {
+				p.y = h + 50 - (h + 80) * age / p.per;
+				p.x = p.nx * w + Math.sin(t * p.sw + p.ph) * p.amp;
 			},
 			draw: function (c, p, t, h) {
 				c.save();
@@ -492,19 +634,17 @@
 		},
 
 		confetti: {
-			density: 110,
-			init: function (p, w, h, first) {
-				p.x = rand(0, w); p.y = first ? rand(0, h) : rand(-40, -10);
-				p.w = rand(5, 10); p.h = rand(3, 6);
-				p.vy = rand(60, 130); p.vx = rand(-20, 20);
-				p.rot = rand(0, TAU); p.vr = rand(-5, 5); p.fs = rand(3, 8); p.ph = rand(0, TAU);
+			density: 110, cycle: true,
+			setup: function (p) { p.vy = rand(60, 130); p.per = 1140 / p.vy; },
+			spawn: function (p) {
+				p.nx = rand(0, 1); p.w = rand(5, 10); p.h = rand(3, 6); p.vx = rand(-20, 20);
+				p.rot0 = rand(0, TAU); p.vr = rand(-5, 5); p.fs = rand(3, 8); p.ph = rand(0, TAU);
 				p.col = pick(["#ff595e", "#ffca3a", "#8ac926", "#1982c4", "#6a4c93", "#ff9f1c", "#2ec4b6", "#ffffff"]);
 			},
-			update: function (p, dt, w, h, t) {
-				p.y += p.vy * dt;
-				p.x += (p.vx + Math.sin(t * 2 + p.ph) * 25) * dt;
-				p.rot += p.vr * dt;
-				return p.y < h + 20;
+			at: function (p, age, t, w, h) {
+				p.y = -40 + (h + 60) * age / p.per;
+				p.x = wrapX(p.nx * w + p.vx * age, w) + Math.sin(t * 2 + p.ph) * 12;
+				p.rot = p.rot0 + p.vr * age;
 			},
 			draw: function (c, p, t) {
 				c.save();
@@ -517,17 +657,16 @@
 		},
 
 		sparkles: {
-			density: 70, blend: "lighter",
-			init: function (p, w, h, first) {
-				p.x = rand(0, w); p.y = first ? rand(0, h) : h + rand(0, 30);
-				p.vy = rand(10, 30); p.s = rand(3, 8);
+			density: 70, blend: "lighter", cycle: true,
+			setup: function (p) { p.vy = rand(10, 30); p.per = 1130 / p.vy; },
+			spawn: function (p) {
+				p.nx = rand(0, 1); p.s = rand(3, 8);
 				p.ps = rand(1.5, 4); p.ph = rand(0, TAU);
 				p.col = pick(["#fff4c2", "#ffd6ff", "#d9c2ff", "#c2f0ff", "#ffffff"]);
 			},
-			update: function (p, dt, w, h, t) {
-				p.y -= p.vy * dt;
-				p.x += Math.sin(t * 0.7 + p.ph) * 10 * dt;
-				return p.y > -20;
+			at: function (p, age, t, w, h) {
+				p.y = h + 30 - (h + 50) * age / p.per;
+				p.x = p.nx * w + Math.sin(t * 0.7 + p.ph) * 14;
 			},
 			draw: function (c, p, t) {
 				var k = Math.max(0, Math.sin(t * p.ps + p.ph)), s = p.s * (0.3 + 0.7 * k);
@@ -544,49 +683,48 @@
 			}
 		},
 
+		// Each column's drop runs on the room clock: its speed, pause and
+		// glyphs come from hashes of the column and cycle number.
 		matrix: {
 			density: 0, trail: 0.06, opacity: 0.6,
 			frame: function (c, dt, w, h, t, S) {
-				var fs = 16, cols = Math.ceil(w / fs);
-				if (!S.drops || S.cols !== cols) {
-					S.cols = cols; S.drops = [];
-					for (var i = 0; i < cols; i++)
-						S.drops.push({ y: rand(-10, h / fs), v: rand(8, 18), on: Math.random() < 0.55, acc: 0 });
-				}
+				var fs = 16, cols = Math.ceil(w / fs), rows = Math.ceil(h / fs) + 1;
+				if (!S.last || S.cols !== cols) { S.cols = cols; S.last = []; }
 				var glyphs = "アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789ハヒフヘホマミムメモ";
 				c.font = fs + "px monospace";
 				c.textBaseline = "top";
+				c.globalAlpha = 1;
 				for (var j = 0; j < cols; j++) {
-					var d = S.drops[j];
-					if (!d.on) { if (Math.random() < dt * 0.05) d.on = true; continue; }
-					d.acc += d.v * dt;
-					while (d.acc >= 1) {
-						d.acc -= 1; d.y += 1;
-						var ch = glyphs.charAt((Math.random() * glyphs.length) | 0);
-						c.globalAlpha = 1;
-						c.fillStyle = Math.random() < 0.1 ? "#e8ffe8" : "#3dff7a";
-						c.fillText(ch, j * fs, d.y * fs);
+					var R = mulberry(hashInts(seedBase, j, 0));
+					var v = 8 + R() * 10, span = rows + 20 + R() * 30, per = span / v;
+					var u = t + R() * per, gen = Math.floor(u / per), head = Math.floor((u - gen * per) * v) - 10;
+					var L = S.last[j];
+					if (!L) L = S.last[j] = { gen: gen, row: head };
+					else if (L.gen !== gen) { L.gen = gen; L.row = -11; }
+					if (hashInts(seedBase, j, gen + 1) % 100 >= 62) { L.row = head; continue; }   // resting column
+					for (var r = Math.max(L.row + 1, head - 40); r <= head; r++) {
+						if (r < 0 || r > rows) continue;
+						var hsh = hashInts(j, r, gen);
+						c.fillStyle = hsh % 10 === 0 ? "#e8ffe8" : "#3dff7a";
+						c.fillText(glyphs.charAt((hsh >>> 4) % glyphs.length), j * fs, r * fs);
 					}
-					if (d.y * fs > h + fs) {
-						d.y = rand(-20, 0); d.v = rand(6, 16);
-						if (Math.random() < 0.4) d.on = false;
-					}
+					L.row = head;
 				}
 			}
 		},
 
 		grid: {
 			density: 0,
-			frame: function (c, dt, w, h, t, S) {
+			frame: function (c, dt, w, h, t) {
 				var hz = h * 0.62, depth = h - hz, cx = w / 2;
-				S.off = ((S.off || 0) + dt * 0.35) % 1;
+				var off = ((t * 0.35) % 1 + 1) % 1;
 				c.globalAlpha = 1;
 				c.lineWidth = 1.5;
 				c.shadowColor = "#ff4fd8"; c.shadowBlur = 8;
 				// horizontal lines, spaced by perspective, scrolling toward the viewer
 				var n = 14;
 				for (var i = 0; i < n; i++) {
-					var k = (i + S.off) / n, y = hz + depth * k * k;
+					var k = (i + off) / n, y = hz + depth * k * k;
 					c.strokeStyle = "rgba(255,79,216," + (0.15 + 0.75 * k).toFixed(3) + ")";
 					c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke();
 				}
@@ -615,11 +753,13 @@
 				var i, j, p, q, dx, dy, d;
 				if (!S.dots) {
 					S.dots = []; S.trail = [];
-					for (i = 0, j = scaledCount(80); i < j; i++)
-						S.dots.push({ x: rand(0, w), y: rand(0, h), bx: rand(-14, 14), by: rand(-14, 14), vx: 0, vy: 0, r: rand(1.2, 2.4), col: "#8cc8ff" });
+					withSeed(seedBase, function () {   // same starting field for everyone
+						for (i = 0, j = scaledCount(80); i < j; i++)
+							S.dots.push({ x: rand(0, w), y: rand(0, h), bx: rand(-14, 14), by: rand(-14, 14), vx: 0, vy: 0, r: rand(1.2, 2.4), col: "#8cc8ff" });
+					});
 				}
 				var dots = S.dots, trail = S.trail, R = 190, RING = 70;
-				S.hue = ((S.hue || 200) + dt * 40) % 360;
+				S.hue = (200 + t * 40) % 360;   // room clock: trail colors match for everyone
 				eachMove(S, livePtrs, 14, function (x, y, ux, uy) {
 					var hue = (S.hue + rand(-30, 30)) | 0;
 					trail.push({ x: x, y: y, vx: -ux * rand(10, 40) + rand(-25, 25), vy: -uy * rand(10, 40) + rand(-25, 25),
@@ -706,7 +846,7 @@
 			frame: function (c, dt, w, h, t, S) {
 				var strokes = S.strokes || (S.strokes = {}), sparks = S.sparks || (S.sparks = []);
 				var i, j, a, b, f, MAX = 1.6;
-				S.hue = ((S.hue || 0) + dt * 120) % 360;
+				S.hue = (t * 120) % 360;
 				var list = livePtrs.slice();
 				if (t - (S.lastLive || -99) > 2.5) list.push(ghostPointer(t, w, h));
 				eachMove(S, list, 5, function (x, y, ux, uy, p) {
@@ -801,7 +941,7 @@
 				if (!S.g) {
 					var cols = Math.ceil(w / sp) + 1, rows = Math.ceil(h / sp) + 1;
 					var x0 = (w - (cols - 1) * sp) / 2, y0 = (h - (rows - 1) * sp) / 2;
-					S.g = []; S.rip = []; S.next = 1.5;
+					S.g = []; S.rip = []; S.slot = Math.floor(t / 3.5);
 					for (j = 0; j < rows; j++)
 						for (i = 0; i < cols; i++)
 							S.g.push({ hx: x0 + i * sp, hy: y0 + j * sp, ox: 0, oy: 0, vx: 0, vy: 0 });
@@ -809,10 +949,11 @@
 				var rip = S.rip, RSPEED = 380, RLIFE = 1.8, R = 120, R2 = R * R;
 				for (i = 0; i < clicks.length; i++) rip.push({ x: clicks[i].x, y: clicks[i].y, age: 0, s: 2600 });
 				eachMove(S, livePtrs, 220, function (x, y) { rip.push({ x: x, y: y, age: 0, s: 700 }); });
-				S.next -= dt;
-				if (S.next <= 0) {   // ambient drops when nobody is around
-					if (!livePtrs.length) rip.push({ x: rand(w * 0.15, w * 0.85), y: rand(h * 0.15, h * 0.85), age: 0, s: 1800 });
-					S.next = rand(2.5, 4.5);
+				var slot = Math.floor(t / 3.5);
+				if (slot !== S.slot) {   // ambient drops when nobody is around, placed by the room clock
+					S.slot = slot;
+					var RD = mulberry(hashInts(seedBase, 4242, slot));
+					if (!livePtrs.length) rip.push({ x: (0.15 + RD() * 0.7) * w, y: (0.15 + RD() * 0.7) * h, age: 0, s: 1800 });
 				}
 				for (i = rip.length - 1; i >= 0; i--) { rip[i].age += dt; if (rip[i].age > RLIFE) rip.splice(i, 1); }
 				if (rip.length > 12) rip.splice(0, rip.length - 12);
@@ -900,7 +1041,8 @@
 	// ── Engine ──────────────────────────────────────────────────────────
 	var layer = null, canvas = null, ctx = null;
 	var current = null, fx = null, fxOpts = {}, parts = [], state = {};
-	var raf = 0, lastT = 0, clock = 0, W = 0, H = 0;
+	var raf = 0, lastT = 0, W = 0, H = 0;
+	var seedBase = 0;   // per-theme seed, identical for everyone in the room
 	var reduceMotion = !!(global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
 	function ensureDom() {
@@ -936,22 +1078,54 @@
 	function seed() {
 		parts = []; state = {};
 		ctx.clearRect(0, 0, W, H);
+		var i, p, area = Math.min(1.6, (W * H) / (1920 * 1080));
+		if (fx.cycle) {
+			// Everyone builds the same particle list; smaller screens draw a
+			// subset of it (the same subset for the same size), so particles
+			// shared by two screens are always in the same place on both.
+			var total = Math.round(fx.density * (fxOpts.density || 1) * 1.6);
+			var keep = area / 1.6 * (isSmallScreen() ? 0.6 : 1);
+			keep = Math.max(keep, Math.min(1, 8 / total));
+			for (i = 0; i < total; i++) {
+				if (hashInts(seedBase, i, 99) / 4294967296 >= keep) continue;
+				p = { i: i, gen: null };
+				setupPart(p);
+				parts.push(p);
+			}
+			return;
+		}
 		if (!fx.init) return;
-		var n = Math.round(fx.density * (fxOpts.density || 1) * Math.min(1.6, (W * H) / (1920 * 1080)));
+		var n = Math.round(fx.density * (fxOpts.density || 1) * area);
 		if (isSmallScreen()) n = Math.round(n * 0.6);
 		n = Math.max(8, n);
-		for (var i = 0; i < n; i++) {
-			var p = {};
-			fx.init(p, W, H, true, fxOpts);
-			parts.push(p);
-		}
+		withSeed(seedBase, function () {   // same starting layout for everyone
+			for (i = 0; i < n; i++) {
+				p = {};
+				fx.init(p, W, H, true, fxOpts);
+				parts.push(p);
+			}
+		});
+	}
+
+	function setupPart(p) {
+		var prev = rng;
+		rng = mulberry(hashInts(seedBase, p.i, 0));
+		try {
+			fx.setup(p, fxOpts);
+			p.off = p.per ? rand(0, p.per) : 0;   // stagger cycles so they don't all restart together
+		} finally { rng = prev; }
+	}
+
+	function spawnPart(p) {
+		var prev = rng;
+		rng = mulberry(hashInts(seedBase, p.i, p.gen + 1));
+		try { fx.spawn(p, W, H, fxOpts); } finally { rng = prev; }
 	}
 
 	function renderFrame(dt) {
-		clock += dt;
-		var t = clock;
+		var t = roomSec();   // shared by the whole room
 		if (fx.pointer) {
-			livePtrs = collectPointers();
+			livePtrs = collectPointers(dt);
 			if (fx.ghost && !livePtrs.length) livePtrs.push(ghostPointer(t, W, H));
 			clicks = clickQueue.splice(0);
 		}
@@ -967,7 +1141,18 @@
 			ctx.clearRect(0, 0, W, H);
 		}
 		if (fx.blend) ctx.globalCompositeOperation = fx.blend;
-		if (fx.update) {
+		if (fx.cycle) {
+			for (var k = 0; k < parts.length; k++) {
+				var q = parts[k], gen = 0, age = t;
+				if (q.per) {
+					var u = t + q.off;
+					gen = Math.floor(u / q.per);
+					age = u - gen * q.per;
+				}
+				if (q.gen !== gen) { q.gen = gen; if (fx.spawn) spawnPart(q); }
+				fx.at(q, age, t, W, H, fxOpts);
+			}
+		} else if (fx.update) {
 			for (var i = 0; i < parts.length; i++) {
 				var p = parts[i];
 				if (!fx.update(p, dt, W, H, t, fxOpts)) fx.init(p, W, H, false, fxOpts);
@@ -1013,12 +1198,20 @@
 		if (newId === current) return;
 		ensureDom();
 		hookClient();
+		var nextFx = theme && theme.fx ? FX[theme.fx] : null;
+		if (fx && fx.pointer && !(nextFx && nextFx.pointer) && announced) {
+			sendPtr("l");   // our pointer no longer drives the room's background
+			announced = false;
+		}
 		current = newId;
 		clickQueue.length = 0;
 		stopLoop();
 		document.body.classList.toggle("room-themed", !!theme);
 		if (theme) document.body.setAttribute("data-room-theme", theme.id);
 		else document.body.removeAttribute("data-room-theme");
+		// Start the CSS overlay animations at the room clock's phase, so the
+		// aurora / light rays / spotlights sway in step for everyone.
+		layer.style.setProperty("--rt-delay", (-(roomSec() % 100000)).toFixed(2) + "s");
 		layer.className = theme && theme.overlay ? "rt-" + theme.overlay : "";
 
 		if (!theme) {
@@ -1033,12 +1226,14 @@
 
 		fx = theme.fx ? FX[theme.fx] : null;
 		fxOpts = theme.fxOpts || {};
+		seedBase = hashStr(theme.id);
 		canvas.style.display = fx ? "block" : "none";
 		canvas.style.opacity = fx && fx.opacity ? fx.opacity : "";
 		if (fx) {
 			resize();
 			seed();
 			startLoop();
+			if (fx.pointer && ptr.inside) flushMove();   // show our cursor to the room right away
 		}
 	}
 
@@ -1091,6 +1286,8 @@
 		get: function (id) { return BY_ID[id] || null; },
 		apply: apply,
 		current: function () { return current; },
+		isSyncText: isSyncText,
+		handleSync: handleSync,
 		buildPicker: buildPicker
 	};
 })(window);

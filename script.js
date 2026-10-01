@@ -4078,6 +4078,10 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gKissBlast !== "undefined" && gKissBlast) gKissBlast.tryHandleChat(msg);
 			return true;
 		}
+		if(window.RoomThemes && RoomThemes.isSyncText(chatLine)) {
+			RoomThemes.handleSync(msg);
+			return true;
+		}
 		if(typeof LoveBits !== "undefined" && LoveBits.isSyncText(chatLine)) {
 			if(typeof gLoveBits !== "undefined" && gLoveBits) gLoveBits.tryHandleChat(msg);
 			return true;
