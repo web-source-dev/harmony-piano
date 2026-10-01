@@ -6738,6 +6738,72 @@ body.love-got-kiss .love-layer { animation: loveBlush 1s ease-out; }
 		radial-gradient(circle at 85% 85%, rgba(255, 230, 160, 0.14), transparent 40%);
 	animation: rt-breathe 7s ease-in-out infinite alternate; }
 
+/* Gecko canyon: low desert sun, sandstone strata and a dusty vignette */
+.rt-canyon::before { inset: 0;
+	background: radial-gradient(circle at 78% 12%, rgba(255, 214, 140, 0.45), transparent 30%),
+		radial-gradient(ellipse at 20% 100%, rgba(255, 170, 90, 0.18), transparent 55%),
+		repeating-linear-gradient(172deg, transparent 0 46px, rgba(60, 20, 5, 0.12) 46px 50px, transparent 50px 110px); }
+.rt-canyon::after { inset: 0;
+	background: radial-gradient(ellipse at center, transparent 55%, rgba(20, 6, 0, 0.45) 100%); }
+
+/* Jungle: dappled sunlight through the canopy, shade on the floor */
+.rt-jungle::before { left: -10%; top: 0; width: 120%; height: 100%;
+	background: radial-gradient(circle at 20% 10%, rgba(220, 255, 160, 0.18), transparent 22%),
+		radial-gradient(circle at 55% 0%, rgba(240, 255, 190, 0.22), transparent 26%),
+		radial-gradient(circle at 85% 15%, rgba(200, 255, 150, 0.16), transparent 20%);
+	animation: rt-sway 12s ease-in-out infinite alternate; }
+.rt-jungle::after { inset: 0;
+	background: radial-gradient(ellipse at 50% 120%, rgba(0, 20, 5, 0.55), transparent 60%); }
+@keyframes rt-sway {
+	from { transform: translateX(-3%); opacity: 0.75; }
+	to { transform: translateX(3%); opacity: 1; }
+}
+
+/* Lanterns: warm glow on the horizon */
+.rt-lanterns::before { inset: 0;
+	background: radial-gradient(ellipse at 50% 105%, rgba(255, 150, 60, 0.4), transparent 55%),
+		radial-gradient(circle at 15% 10%, rgba(180, 160, 255, 0.12), transparent 35%);
+	animation: rt-breathe 8s ease-in-out infinite alternate; }
+
+/* Melody: soft stage light */
+.rt-melody::before { inset: 0;
+	background: radial-gradient(ellipse at 50% -10%, rgba(200, 170, 255, 0.3), transparent 60%),
+		radial-gradient(circle at 10% 90%, rgba(120, 200, 255, 0.15), transparent 40%);
+	animation: rt-breathe 6s ease-in-out infinite alternate; }
+
+/* Meadow: golden-hour sun low in the sky, grass darkening below */
+.rt-meadow::before { inset: 0;
+	background: radial-gradient(circle at 25% 58%, rgba(255, 225, 160, 0.55), transparent 26%);
+	animation: rt-breathe 9s ease-in-out infinite alternate; }
+.rt-meadow::after { left: 0; right: 0; bottom: 0; height: 32%;
+	background: linear-gradient(180deg, transparent, rgba(15, 35, 10, 0.6)); }
+
+/* Lagoon: faint light from the surface far above */
+.rt-lagoon::before { inset: 0;
+	background: radial-gradient(ellipse at 50% -20%, rgba(120, 200, 255, 0.28), transparent 60%),
+		radial-gradient(ellipse at 80% 110%, rgba(200, 90, 255, 0.12), transparent 50%);
+	animation: rt-breathe 10s ease-in-out infinite alternate; }
+
+/* Koi: slowly turning sunlight caustics on the water */
+.rt-koi::before { left: -20%; top: -20%; width: 140%; height: 140%;
+	background: radial-gradient(circle at 20% 30%, rgba(200, 255, 240, 0.1), transparent 16%),
+		radial-gradient(circle at 62% 22%, rgba(200, 255, 240, 0.08), transparent 14%),
+		radial-gradient(circle at 75% 70%, rgba(200, 255, 240, 0.1), transparent 18%),
+		radial-gradient(circle at 35% 75%, rgba(200, 255, 240, 0.07), transparent 15%);
+	animation: rt-spin 120s linear infinite; }
+.rt-koi::after { inset: 0;
+	background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 15, 12, 0.5) 100%); }
+
+/* Hyperspace: a faint glow at the heart of the jump */
+.rt-warp::before { inset: 0;
+	background: radial-gradient(circle at center, rgba(140, 170, 255, 0.16), transparent 45%); }
+
+/* Lava lamp: heat rising from the base */
+.rt-lava::before { inset: 0;
+	background: radial-gradient(ellipse at 50% 110%, rgba(255, 110, 60, 0.35), transparent 55%),
+		radial-gradient(ellipse at 50% -10%, rgba(255, 80, 160, 0.18), transparent 50%);
+	animation: rt-breathe 5s ease-in-out infinite alternate; }
+
 @keyframes rt-breathe { from { opacity: 0.7; } to { opacity: 1; } }
 @keyframes rt-spin { to { transform: rotate(360deg); } }
 

@@ -149,7 +149,47 @@
 		{ id: "kaleido", name: "Kaleidoscope", icon: "🔮", interactive: true,
 			desc: "Draw mirrored rainbow patterns — click for a mandala bloom",
 			bg: "radial-gradient(ellipse at center, #1a0f2e 0%, #0b0618 60%, #030208 100%)",
-			bottom: "#100a20", fx: "kaleido" }
+			bottom: "#100a20", fx: "kaleido" },
+		{ id: "geckos", name: "Gecko Canyon", icon: "🦎", interactive: true,
+			desc: "Geckos scurry over warm rocks and come to inspect your cursor. Click to make them dart off",
+			bg: "radial-gradient(ellipse at 75% 10%, #b8662f 0%, #6e3218 45%, #261008 100%)",
+			bottom: "#3a1a0c", overlay: "canyon", fx: "geckos" },
+		{ id: "monkeys", name: "Monkey Vines", icon: "🐒", interactive: true,
+			desc: "Monkeys swing from jungle vines. Push them around, or click to have one toss bananas",
+			bg: "linear-gradient(180deg, #0a2914 0%, #134a24 50%, #1f6a32 100%)",
+			bottom: "#0d3018", overlay: "jungle", fx: "monkeys" },
+		{ id: "jungle", name: "Jungle Friends", icon: "🐒🦎", interactive: true,
+			desc: "Monkeys swing overhead while geckos explore the forest floor, and all of them react to you",
+			bg: "linear-gradient(180deg, #0b2c18 0%, #1a4f26 45%, #3a5a22 78%, #2a3a14 100%)",
+			bottom: "#14301a", overlay: "jungle", fx: "jungle", fxOpts: { minY: 0.5 } },
+		{ id: "lanterns", name: "Lantern Festival", icon: "🏮", interactive: true,
+			desc: "Glowing sky lanterns rising into the twilight",
+			bg: "linear-gradient(180deg, #0b0a2a 0%, #2a1a4a 45%, #7a3550 75%, #c8643a 100%)",
+			bottom: "#2a1530", overlay: "lanterns", fx: "lanterns" },
+		{ id: "melody", name: "Melody Drift", icon: "🎵", interactive: true,
+			desc: "Music notes float up from a waving staff that bends around your cursor",
+			bg: "linear-gradient(160deg, #140d33 0%, #2e1a5e 50%, #4b2a7a 100%)",
+			bottom: "#1d1240", overlay: "melody", fx: "notes" },
+		{ id: "meadow", name: "Dandelion Meadow", icon: "🌼", interactive: true,
+			desc: "Dandelion seeds on a golden-hour breeze. Your cursor blows them away",
+			bg: "linear-gradient(180deg, #2c3f72 0%, #8a5d6a 42%, #c98a5a 62%, #4f6a2c 80%, #23401c 100%)",
+			bottom: "#2a3a1c", overlay: "meadow", fx: "seeds" },
+		{ id: "lagoon", name: "Jellyfish Lagoon", icon: "🪼", interactive: true,
+			desc: "Glowing jellyfish pulse through the deep and drift toward your cursor. Click to spook them",
+			bg: "linear-gradient(180deg, #06243f 0%, #041a30 50%, #020a18 100%)",
+			bottom: "#03182c", overlay: "lagoon", fx: "jellies" },
+		{ id: "koi", name: "Koi Garden", icon: "🎏", interactive: true,
+			desc: "Koi circle your cursor. Click to scatter food and watch them race for it",
+			bg: "radial-gradient(ellipse at 40% 30%, #1f6a62 0%, #0f3f3c 55%, #062220 100%)",
+			bottom: "#0a2e2b", overlay: "koi", fx: "koi" },
+		{ id: "warp", name: "Hyperspace", icon: "🚀", interactive: true,
+			desc: "Fly through the stars and steer with your cursor. Click to jump to light speed",
+			bg: "radial-gradient(ellipse at center, #141a3a 0%, #070a1c 60%, #020309 100%)",
+			bottom: "#0a0d22", overlay: "warp", fx: "warp" },
+		{ id: "lava", name: "Lava Lamp", icon: "🌋", interactive: true,
+			desc: "Molten wax blobs rise, merge and sink",
+			bg: "linear-gradient(180deg, #1c0526 0%, #3a0a3a 50%, #5a1030 100%)",
+			bottom: "#2a0830", overlay: "lava", fx: "lava" }
 	];
 	var BY_ID = {};
 	THEMES.forEach(function (t) { BY_ID[t.id] = t; });
@@ -167,6 +207,22 @@
 		g.fillStyle = grd;
 		g.fillRect(0, 0, s, s);
 		return (glowCache[color] = cv);
+	}
+
+	// Solid-centered soft disc, for lava wax (glow() is mostly falloff).
+	var blobCache = {};
+	function blob(color) {
+		if (blobCache[color]) return blobCache[color];
+		var s = 128, cv = document.createElement("canvas");
+		cv.width = cv.height = s;
+		var g = cv.getContext("2d"), grd = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+		grd.addColorStop(0, color);
+		grd.addColorStop(0.5, color);
+		grd.addColorStop(0.72, color.replace(/[\d.]+\)$/, "0.35)"));
+		grd.addColorStop(1, "rgba(0,0,0,0)");
+		g.fillStyle = grd;
+		g.fillRect(0, 0, s, s);
+		return (blobCache[color] = cv);
 	}
 
 	function heartPath(c, s) {
@@ -393,6 +449,354 @@
 	// false to respawn). frame() draws non-particle extras; trail fades the
 	// previous frame instead of clearing it.
 	function wrapX(x, w) { var span = w + 60; return (((x + 30) % span) + span) % span - 30; }
+
+	// ── Creature helpers (geckos, koi, monkeys) ─────────────────────────
+	// Bodies are a chain of points that trail the head at a fixed spacing.
+	function makeSpine(n, x, y, ang, seg) {
+		var pts = [];
+		for (var i = 0; i < n; i++) pts.push({ x: x - Math.cos(ang) * seg * i, y: y - Math.sin(ang) * seg * i });
+		return pts;
+	}
+	function followSpine(pts, seg) {
+		for (var i = 1; i < pts.length; i++) {
+			var a = pts[i - 1], b = pts[i], dx = b.x - a.x, dy = b.y - a.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
+			b.x = a.x + dx / d * seg; b.y = a.y + dy / d * seg;
+		}
+	}
+	// Strokes a tapering body along the spine; widthAt(i) is the width of segment i-1 → i.
+	function strokeSpine(c, pts, widthAt, col) {
+		c.strokeStyle = col; c.lineCap = "round";
+		for (var i = 1; i < pts.length; i++) {
+			c.lineWidth = widthAt(i);
+			c.beginPath(); c.moveTo(pts[i - 1].x, pts[i - 1].y); c.lineTo(pts[i].x, pts[i].y); c.stroke();
+		}
+	}
+	// Turns heading `cur` toward `want` by at most `max` radians.
+	function steer(cur, want, max) {
+		return cur + clamp(Math.atan2(Math.sin(want - cur), Math.cos(want - cur)), -max, max);
+	}
+
+	// Geckos wander in short bursts, walk over to a nearby cursor to stare
+	// at it (tongue flicking), and dart away from clicks. opts.minY keeps
+	// them on the lower part of the screen (the jungle floor).
+	var GECKO_PAL = [
+		{ body: "#5fbf3f", dark: "#2f7a22", spot: "#c9f07a" },
+		{ body: "#e8b04a", dark: "#8a5a1c", spot: "#5a3510" },
+		{ body: "#3fa9c9", dark: "#1d5f78", spot: "#bdf0ff" },
+		{ body: "#f07a3a", dark: "#9a3e12", spot: "#ffd8a8" },
+		{ body: "#9a7ad8", dark: "#553a8a", spot: "#e6d8ff" }
+	];
+	var GECKO_N = 15;
+	function geckoWidth(i, s) {
+		if (i <= 2) return s * 0.6;                                         // neck
+		if (i <= 8) return s * (0.82 - Math.abs(i - 5) * 0.05);             // belly
+		return s * (0.12 + 0.55 * (GECKO_N - 1 - i) / (GECKO_N - 9));       // tapering tail
+	}
+	var Gecko = {
+		init: function (p, w, h, first, o) {
+			var minY = (o && o.minY) || 0.08;
+			p.s = rand(10, 16) * (isSmallScreen() ? 0.8 : 1);
+			var x = first ? rand(0.05, 0.95) * w : (rand(0, 1) < 0.5 ? -40 : w + 40), y = rand(minY, 0.92) * h;
+			p.hd = first ? rand(0, TAU) : (x < 0 ? 0 : Math.PI);
+			p.seg = p.s * 0.42;
+			p.pts = makeSpine(GECKO_N, x, y, p.hd, p.seg);
+			p.pal = pick(GECKO_PAL);
+			p.gait = rand(0, TAU); p.ph = rand(0, TAU);
+			p.tx = rand(0.1, 0.9) * w; p.ty = rand(minY, 0.9) * h;
+			p.pause = rand(0, 2); p.flee = 0; p.fa = 0; p.sp = 0; p.look = 0;
+		},
+		update: function (p, dt, w, h, t, o) {
+			var minY = (o && o.minY) || 0.08, head = p.pts[0], speed = 55 * p.s / 13, want, dx, dy, d, i;
+			for (i = 0; i < clicks.length; i++) {
+				dx = head.x - clicks[i].x; dy = head.y - clicks[i].y;
+				if (dx * dx + dy * dy < 300 * 300) { p.flee = rand(0.8, 1.3); p.fa = Math.atan2(dy, dx) + rand(-0.4, 0.4); p.pause = 0; }
+			}
+			var g = nearest(livePtrs, head.x, head.y);
+			d = Infinity;
+			if (g) { dx = g.x - head.x; dy = g.y - head.y; d = Math.sqrt(dx * dx + dy * dy); }
+			p.look = 0;
+			if (p.flee > 0) {
+				p.flee -= dt; want = p.fa; speed *= 5.5;
+			} else if (d < 320) {   // curious: walk up to the cursor and stare at it
+				want = Math.atan2(dy, dx);
+				if (d < p.s * 5) { speed = 0; p.look = 1; } else speed *= Math.min(2.2, 0.8 + d / 200);
+				p.pause = 0;
+			} else {
+				if (p.pause > 0) { p.pause -= dt; speed = 0; }
+				else if (Math.random() < dt * 0.35) p.pause = rand(0.4, 2.2);   // lizards move in bursts
+				dx = p.tx - head.x; dy = p.ty - head.y;
+				if (dx * dx + dy * dy < 900 || Math.random() < dt * 0.15) { p.tx = rand(0.08, 0.92) * w; p.ty = rand(minY, 0.88) * h; }
+				want = Math.atan2(dy, dx);
+			}
+			p.hd = steer(p.hd, want, (p.flee > 0 ? 9 : 3.2) * dt);
+			p.sp += (speed - p.sp) * Math.min(1, dt * 8);
+			var dir = p.hd + Math.sin(p.gait) * 0.3 * Math.min(1, p.sp / 30);   // body sways as it walks
+			head.x += Math.cos(dir) * p.sp * dt; head.y += Math.sin(dir) * p.sp * dt;
+			p.gait += p.sp * dt / (p.s * 0.9);
+			followSpine(p.pts, p.seg);
+			return head.x > -200 && head.x < w + 200 && head.y > -200 && head.y < h + 200;
+		},
+		draw: function (c, p, t) {
+			var P = p.pts, s = p.s, pal = p.pal, i, pair, side;
+			c.globalAlpha = 1;
+			c.lineCap = "round"; c.lineJoin = "round";
+			// legs first so the body covers the hips; diagonal pairs step together
+			c.strokeStyle = pal.dark; c.fillStyle = pal.dark; c.lineWidth = s * 0.22;
+			for (pair = 0; pair < 2; pair++) {
+				var A = P[pair ? 7 : 3], B = P[pair ? 6 : 2], ang = Math.atan2(B.y - A.y, B.x - A.x);
+				for (side = -1; side <= 1; side += 2) {
+					var sw = Math.sin(p.gait + ((pair + (side > 0 ? 1 : 0)) % 2) * Math.PI) * 0.6;
+					var la = ang + side * (Math.PI / 2 + (pair ? 0.6 : -0.6)) + sw * side, L = s * 0.95;
+					var sx = A.x + Math.cos(ang + side * Math.PI / 2) * s * 0.25, sy = A.y + Math.sin(ang + side * Math.PI / 2) * s * 0.25;
+					var kx = sx + Math.cos(la - side * 0.35) * L * 0.55, ky = sy + Math.sin(la - side * 0.35) * L * 0.55;
+					var fx_ = kx + Math.cos(la + side * 0.5) * L * 0.5, fy_ = ky + Math.sin(la + side * 0.5) * L * 0.5;
+					c.beginPath(); c.moveTo(sx, sy); c.lineTo(kx, ky); c.lineTo(fx_, fy_); c.stroke();
+					for (i = -1; i <= 1; i++) {   // sticky toe pads
+						var ta = la + side * 0.5 + i * 0.6;
+						c.beginPath(); c.arc(fx_ + Math.cos(ta) * s * 0.16, fy_ + Math.sin(ta) * s * 0.16, s * 0.08, 0, TAU); c.fill();
+					}
+				}
+			}
+			strokeSpine(c, P, function (i) { return geckoWidth(i, s) + s * 0.14; }, pal.dark);
+			strokeSpine(c, P, function (i) { return geckoWidth(i, s); }, pal.body);
+			c.fillStyle = pal.spot;
+			for (i = 4; i <= 11; i++) {
+				var Q = P[i], R = P[i - 1], pa = Math.atan2(R.y - Q.y, R.x - Q.x) + (i % 2 ? 1 : -1) * Math.PI / 2;
+				var off = geckoWidth(i, s) * 0.22;
+				c.beginPath(); c.arc(Q.x + Math.cos(pa) * off, Q.y + Math.sin(pa) * off, s * (i < 9 ? 0.1 : 0.07), 0, TAU); c.fill();
+			}
+			c.save();
+			c.translate(P[0].x, P[0].y); c.rotate(p.hd);
+			c.fillStyle = pal.dark;
+			c.beginPath(); c.ellipse(s * 0.25, 0, s * 0.62, s * 0.43, 0, 0, TAU); c.fill();
+			c.fillStyle = pal.body;
+			c.beginPath(); c.ellipse(s * 0.25, 0, s * 0.55, s * 0.36, 0, 0, TAU); c.fill();
+			if (p.look) {   // tongue flicks at whatever it's staring at
+				var tl = Math.max(0, Math.sin(t * 7 + p.ph));
+				if (tl > 0.3) {
+					var tx = s * 0.8 + tl * s * 0.9;
+					c.strokeStyle = "#ff5c8a"; c.lineWidth = s * 0.08;
+					c.beginPath(); c.moveTo(s * 0.75, 0); c.lineTo(tx, 0);
+					c.lineTo(tx + s * 0.18, -s * 0.1); c.moveTo(tx, 0); c.lineTo(tx + s * 0.18, s * 0.1); c.stroke();
+				}
+			}
+			for (side = -1; side <= 1; side += 2) {
+				c.fillStyle = "#ffd34a";
+				c.beginPath(); c.arc(s * 0.38, side * s * 0.27, s * 0.14, 0, TAU); c.fill();
+				c.fillStyle = "#1a1208";
+				c.beginPath(); c.ellipse(s * 0.38, side * s * 0.27, s * 0.04, s * 0.11, 0, 0, TAU); c.fill();
+			}
+			c.restore();
+		}
+	};
+
+	// Monkeys hang from vines and swing on the room clock; cursors push
+	// them, and a click makes the nearest monkey toss bananas at that spot.
+	var MONKEY_FUR = [["#7a4a26", "#5a3418"], ["#8c5a32", "#64401f"], ["#5e3b22", "#3f2614"], ["#a0703e", "#74502a"]];
+	var MONKEY_FACE = "#f1c79b";
+	function bananaShape(c, s) {
+		c.strokeStyle = "#ffd93b"; c.lineWidth = s * 0.32; c.lineCap = "round";
+		c.beginPath(); c.arc(0, -s * 0.2, s * 0.55, 0.35, Math.PI - 0.35); c.stroke();
+		c.fillStyle = "#6b4a1a";
+		c.beginPath(); c.arc(Math.cos(0.35) * s * 0.55, -s * 0.2 + Math.sin(0.35) * s * 0.55, s * 0.09, 0, TAU); c.fill();
+	}
+	function drawMonkey(c, v, t, th) {
+		var s = v.s, L = v.L, fur = v.fur[0], dark = v.fur[1], tw = v.tail, kick = Math.sin(t * 3 + v.ph);
+		c.lineCap = "round";
+		// tail curling out from under the body
+		c.strokeStyle = dark; c.lineWidth = s * 0.15;
+		c.beginPath(); c.moveTo(0, L + s * 2.1);
+		c.bezierCurveTo(tw * s * 1.3, L + s * (2.7 + kick * 0.1), tw * s * 1.4, L + s * 1.5, tw * s * (0.85 + kick * 0.08), L + s * 1.65);
+		c.stroke();
+		// dangling legs
+		c.strokeStyle = fur; c.lineWidth = s * 0.26;
+		for (var side = -1; side <= 1; side += 2) {
+			var lx = side * s * 0.3, sway = Math.sin(t * 2.4 + v.ph + side) * s * 0.12;
+			c.beginPath(); c.moveTo(lx, L + s * 2.05); c.lineTo(lx * 1.25 + sway, L + s * 2.75); c.stroke();
+			c.fillStyle = MONKEY_FACE;
+			c.beginPath(); c.arc(lx * 1.25 + sway, L + s * 2.8, s * 0.14, 0, TAU); c.fill();
+		}
+		// free arm: hangs down, or waves when startled
+		var wave = v.oh > 0.2 ? Math.sin(t * 14) * 0.3 - 2.2 : 0.25 + Math.sin(t * 2 + v.ph) * 0.15;
+		var ex = -s * 0.42 + Math.sin(wave) * -s * 0.75, ey = L + s * 1.25 + Math.cos(wave) * s * 0.75;
+		c.strokeStyle = fur;
+		c.beginPath(); c.moveTo(-s * 0.42, L + s * 1.25); c.lineTo(ex, ey); c.stroke();
+		c.fillStyle = MONKEY_FACE;
+		c.beginPath(); c.arc(ex, ey, s * 0.15, 0, TAU); c.fill();
+		// body and belly
+		c.fillStyle = fur;
+		c.beginPath(); c.ellipse(0, L + s * 1.6, s * 0.55, s * 0.7, 0, 0, TAU); c.fill();
+		c.fillStyle = MONKEY_FACE;
+		c.beginPath(); c.ellipse(0, L + s * 1.72, s * 0.32, s * 0.45, 0, 0, TAU); c.fill();
+		// arm holding the vine
+		c.strokeStyle = fur; c.lineWidth = s * 0.28;
+		c.beginPath(); c.moveTo(s * 0.35, L + s * 1.05); c.quadraticCurveTo(s * 0.45, L + s * 0.45, 0, L); c.stroke();
+		// head stays mostly upright while the body swings
+		c.save();
+		c.translate(-s * 0.08, L + s * 0.72); c.rotate(-th * 0.7);
+		c.fillStyle = fur;
+		c.beginPath(); c.arc(-s * 0.58, -s * 0.05, s * 0.22, 0, TAU); c.arc(s * 0.58, -s * 0.05, s * 0.22, 0, TAU); c.fill();
+		c.beginPath(); c.arc(0, 0, s * 0.55, 0, TAU); c.fill();
+		c.fillStyle = MONKEY_FACE;
+		c.beginPath(); c.arc(-s * 0.58, -s * 0.05, s * 0.12, 0, TAU); c.arc(s * 0.58, -s * 0.05, s * 0.12, 0, TAU); c.fill();
+		c.beginPath(); c.arc(-s * 0.18, -s * 0.08, s * 0.22, 0, TAU); c.arc(s * 0.18, -s * 0.08, s * 0.22, 0, TAU); c.fill();
+		c.beginPath(); c.ellipse(0, s * 0.2, s * 0.32, s * 0.24, 0, 0, TAU); c.fill();
+		var ang = -(th * 0.3), lx_ = v.lx || 0, ly_ = v.ly || 0;   // look direction in head space
+		var ox = (Math.cos(ang) * lx_ - Math.sin(ang) * ly_) * s * 0.05, oy = (Math.sin(ang) * lx_ + Math.cos(ang) * ly_) * s * 0.05;
+		for (side = -1; side <= 1; side += 2) {
+			c.fillStyle = "#1b120b";
+			c.beginPath(); c.arc(side * s * 0.17 + ox, -s * 0.08 + oy, s * 0.085, 0, TAU); c.fill();
+			c.fillStyle = "#fff";
+			c.beginPath(); c.arc(side * s * 0.17 + ox + s * 0.03, -s * 0.11 + oy, s * 0.03, 0, TAU); c.fill();
+		}
+		c.fillStyle = dark;
+		c.beginPath(); c.arc(-s * 0.05, s * 0.12, s * 0.03, 0, TAU); c.arc(s * 0.05, s * 0.12, s * 0.03, 0, TAU); c.fill();
+		if (v.oh > 0.2) {
+			c.beginPath(); c.ellipse(0, s * 0.3, s * 0.07, s * 0.09 * Math.min(1, v.oh * 1.5), 0, 0, TAU); c.fill();
+		} else {
+			c.strokeStyle = dark; c.lineWidth = s * 0.05;
+			c.beginPath(); c.arc(0, s * 0.18, s * 0.13, 0.4, Math.PI - 0.4); c.stroke();
+		}
+		c.restore();
+		c.fillStyle = MONKEY_FACE;   // the hand gripping the vine
+		c.beginPath(); c.arc(0, L, s * 0.17, 0, TAU); c.fill();
+	}
+	// opts: max monkeys, spread (px of screen per vine), minL/maxL vine length (fraction of height)
+	function monkeyScene(c, dt, w, h, t, S, opts) {
+		var i, j, v, P, dx, dy, d, side;
+		if (!S.vines) {
+			S.vines = []; S.nanas = []; S.leaves = []; S.canopy = [];
+			withSeed(hashInts(seedBase, 808, 0), function () {
+				var n = clamp(Math.round(w / opts.spread), 3, opts.max);
+				for (i = 0; i < n; i++) {
+					var s = rand(21, 29) * (isSmallScreen() ? 0.7 : 1), L = rand(opts.minL, opts.maxL) * h;
+					S.vines.push({ ax: (i + 0.5 + rand(-0.22, 0.22)) / n * w, L: L, s: s, w: Math.sqrt(1100 / (L + s * 1.5)),
+						amp: rand(0.12, 0.32), ph: rand(0, TAU), fur: pick(MONKEY_FUR), tail: rand(0, 1) < 0.5 ? -1 : 1,
+						dl: 0, dv: 0, oh: 0, lx: 0, ly: 0, leaf: [rand(0.18, 0.32), rand(0.45, 0.6), rand(0.72, 0.86)] });
+				}
+				for (i = 0, j = Math.ceil(w / 34); i < j; i++)
+					S.canopy.push({ x: i / j * w + rand(-10, 10), y: rand(-14, 10), r: rand(24, 46), ph: rand(0, TAU),
+						col: pick(["#0c3a18", "#124a20", "#185a28", "#0f4220"]) });
+			});
+		}
+		// a click makes the nearest monkey lob a few bananas at that spot
+		for (i = 0; i < clicks.length; i++) {
+			var best = null, bd = Infinity;
+			for (j = 0; j < S.vines.length; j++) {
+				v = S.vines[j];
+				dx = clicks[i].x - v.bx; dy = clicks[i].y - v.by; d = dx * dx + dy * dy;
+				if (d < bd) { bd = d; best = v; }
+			}
+			if (!best) continue;
+			best.oh = 1;
+			for (j = 0; j < 3; j++) {
+				var T = 0.75 + j * 0.08, tx = clicks[i].x + rand(-30, 30), ty = clicks[i].y + rand(-20, 20);
+				S.nanas.push({ x: best.hx, y: best.hy, vx: (tx - best.hx) / T, vy: (ty - best.hy) / T - 450 * T,
+					rot: rand(0, TAU), vr: rand(-9, 9), age: -j * 0.08, s: rand(17, 23) });
+			}
+		}
+		if (S.nanas.length > 40) S.nanas.splice(0, S.nanas.length - 40);
+		eachMove(S, livePtrs, 46, function (x, y) {
+			S.leaves.push({ x: x, y: y, vx: rand(-20, 20), vy: rand(10, 40), rot: rand(0, TAU), vr: rand(-3, 3),
+				age: 0, max: rand(1.6, 2.6), s: rand(6, 10), col: pick(["#5fae3a", "#3f8f2a", "#8fd14f"]) });
+		});
+		if (S.leaves.length > 120) S.leaves.splice(0, S.leaves.length - 120);
+
+		c.globalAlpha = 1;
+		for (i = 0; i < S.vines.length; i++) {
+			v = S.vines[i];
+			var th = v.amp * Math.sin(t * v.w + v.ph) + v.dl, R = v.L + v.s * 1.5;
+			v.bx = v.ax - Math.sin(th) * R; v.by = Math.cos(th) * R;        // body, for pushes
+			v.hx = v.ax - Math.sin(th) * v.L; v.hy = Math.cos(th) * v.L;    // hand, where bananas come from
+			// springy offset on top of the shared swing: cursors push the body sideways
+			var acc = -v.w * v.w * v.dl - 0.9 * v.dv;
+			P = nearest(livePtrs, v.bx, v.by);
+			v.lx = v.ly = 0;
+			if (P) {
+				dx = v.bx - P.x; dy = v.by - P.y; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+				if (d < 130) acc -= (dx > 0 ? 1 : -1) * (1 - d / 130) * 16;
+				if (d < 500) { v.lx = -dx / d; v.ly = -dy / d; }
+			}
+			for (j = 0; j < clicks.length; j++) {
+				dx = v.bx - clicks[j].x; dy = v.by - clicks[j].y; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+				if (d < 280) v.dv -= (dx > 0 ? 1 : -1) * 2.2 * (1 - d / 280);
+			}
+			v.dv += acc * dt;
+			v.dl = clamp(v.dl + v.dv * dt, -1.1, 1.1);
+			v.oh = Math.max(0, v.oh - dt * 1.2);
+
+			c.save();
+			c.translate(v.ax, -4); c.rotate(th);
+			var bend = clamp(v.dv * 10, -40, 40);   // the vine lags behind the swing
+			c.strokeStyle = "#3e7a2a"; c.lineWidth = 3; c.lineCap = "round";
+			c.beginPath(); c.moveTo(0, 0); c.quadraticCurveTo(bend, v.L * 0.5, 0, v.L); c.stroke();
+			c.fillStyle = "#4f9a35";
+			for (j = 0; j < v.leaf.length; j++) {
+				var f = v.leaf[j];
+				side = j % 2 ? 1 : -1;
+				c.beginPath(); c.ellipse(2 * f * (1 - f) * bend + side * 7, f * v.L, 8, 3.5, side * 0.6, 0, TAU); c.fill();
+			}
+			drawMonkey(c, v, t, th);
+			c.restore();
+		}
+
+		// canopy along the top, drawn over the vine tops
+		for (i = 0; i < S.canopy.length; i++) {
+			var cp = S.canopy[i];
+			c.fillStyle = cp.col;
+			c.beginPath(); c.ellipse(cp.x + Math.sin(t * 0.6 + cp.ph) * 3, cp.y, cp.r, cp.r * 0.7, 0, 0, TAU); c.fill();
+		}
+
+		for (i = S.nanas.length - 1; i >= 0; i--) {
+			var b = S.nanas[i];
+			b.age += dt;
+			if (b.age < 0) continue;
+			if (b.age > 3.5 || b.y > h + 40) { S.nanas.splice(i, 1); continue; }
+			b.vy += 900 * dt; b.x += b.vx * dt; b.y += b.vy * dt; b.rot += b.vr * dt;
+			c.save(); c.translate(b.x, b.y); c.rotate(b.rot);
+			bananaShape(c, b.s);
+			c.restore();
+		}
+		var drag = Math.pow(0.5, dt);
+		for (i = S.leaves.length - 1; i >= 0; i--) {
+			var l = S.leaves[i];
+			l.age += dt;
+			if (l.age >= l.max) { S.leaves.splice(i, 1); continue; }
+			l.vx *= drag; l.vy = l.vy * drag + 40 * dt;
+			l.x += (l.vx + Math.sin(l.age * 3 + l.rot) * 20) * dt; l.y += l.vy * dt; l.rot += l.vr * dt;
+			c.save(); c.translate(l.x, l.y); c.rotate(l.rot);
+			c.globalAlpha = 1 - l.age / l.max; c.fillStyle = l.col;
+			c.beginPath(); c.moveTo(-l.s, 0); c.quadraticCurveTo(0, -l.s * 0.7, l.s, 0); c.quadraticCurveTo(0, l.s * 0.7, -l.s, 0); c.fill();
+			c.restore();
+		}
+		c.globalAlpha = 1;
+	}
+
+	// Koi: a top-down fish built on a spine, with patches, fins and a tail.
+	var KOI_PAL = [
+		{ base: "#f4f1ea", patch: "#e8462a" },
+		{ base: "#ff8a1e", patch: "#ffd27a" },
+		{ base: "#ffd34a", patch: "#fff3c4" },
+		{ base: "#f4f1ea", patch: "#1d1d22" },
+		{ base: "#e8462a", patch: "#1d1d22" }
+	];
+	var KOI_W = [0, 0.72, 0.8, 0.78, 0.7, 0.6, 0.48, 0.36, 0.25, 0.16];
+	var KOI_N = KOI_W.length;
+
+	// Dandelion seed: a stalk with a fluffy crown of filaments at (0, 0).
+	function seedShape(c, s) {
+		c.lineWidth = 1;
+		c.beginPath();
+		c.moveTo(0, 0); c.lineTo(0, s * 1.4);
+		for (var i = 0; i < 9; i++) {
+			var a = -Math.PI * 1.1 + i / 8 * Math.PI * 1.2;
+			c.moveTo(0, 0); c.lineTo(Math.cos(a) * s, Math.sin(a) * s);
+		}
+		c.stroke();
+		c.beginPath(); c.ellipse(0, s * 1.5, s * 0.1, s * 0.22, 0, 0, TAU); c.fill();
+	}
+	var NOTE_GLYPHS = ["♪", "♫", "♩", "♬"];
+	var NOTE_FONT = "px 'Segoe UI Symbol', 'Noto Music', 'DejaVu Sans', serif";
 
 	var FX = {
 		snow: {
@@ -1436,6 +1840,460 @@
 				}
 				c.globalCompositeOperation = "source-over";
 			}
+		},
+
+		// Geckos on warm rock; clicks also kick up a puff of sand.
+		geckos: {
+			density: 12, pointer: true,
+			init: Gecko.init, update: Gecko.update, draw: Gecko.draw,
+			frame: function (c, dt, w, h, t, S) {
+				var dust = S.dust || (S.dust = []), i, j, p;
+				for (i = 0; i < clicks.length; i++)
+					for (j = 0; j < 18; j++) {
+						var a = rand(0, TAU), v = rand(40, 170);
+						dust.push({ x: clicks[i].x, y: clicks[i].y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, age: 0, max: rand(0.6, 1.2), r: rand(1.5, 3.5) });
+					}
+				if (dust.length > 200) dust.splice(0, dust.length - 200);
+				var drag = Math.pow(0.08, dt);
+				c.fillStyle = "#f2c894";
+				for (i = dust.length - 1; i >= 0; i--) {
+					p = dust[i];
+					p.age += dt;
+					if (p.age >= p.max) { dust.splice(i, 1); continue; }
+					p.vx *= drag; p.vy *= drag;
+					p.x += p.vx * dt; p.y += p.vy * dt;
+					c.globalAlpha = 0.6 * (1 - p.age / p.max);
+					c.beginPath(); c.arc(p.x, p.y, p.r, 0, TAU); c.fill();
+				}
+			}
+		},
+
+		monkeys: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				monkeyScene(c, dt, w, h, t, S, { max: 8, spread: 230, minL: 0.16, maxL: 0.42 });
+			}
+		},
+
+		// Monkeys overhead plus geckos on the forest floor (fxOpts.minY).
+		jungle: {
+			density: 8, pointer: true,
+			init: Gecko.init, update: Gecko.update, draw: Gecko.draw,
+			frame: function (c, dt, w, h, t, S) {
+				monkeyScene(c, dt, w, h, t, S, { max: 6, spread: 300, minL: 0.1, maxL: 0.28 });
+			}
+		},
+
+		lanterns: {
+			density: 48, cycle: true,
+			setup: function (p) { p.vy = rand(18, 40); p.per = 1150 / p.vy; p.s = rand(9, 19); },
+			spawn: function (p) {
+				p.nx = rand(0, 1); p.ph = rand(0, TAU); p.sw = rand(0.3, 0.8); p.amp = rand(10, 30);
+				p.fl = rand(5, 9); p.hue = rand(16, 40) | 0;
+			},
+			at: function (p, age, t, w, h) {
+				p.y = h + 40 - (h + 90) * age / p.per;
+				p.x = p.nx * w + Math.sin(t * p.sw + p.ph) * p.amp + age * 6;
+				p.rot = Math.sin(t * p.sw * 1.3 + p.ph) * 0.08;
+			},
+			draw: function (c, p, t, h) {
+				var s = p.s, n = p.near || 0, fl = 0.85 + 0.15 * Math.sin(t * p.fl + p.ph);
+				var fade = Math.max(0, Math.min(1, p.y / (h * 0.25)));   // fade out high in the sky
+				if (fade <= 0) return;
+				c.save();
+				c.translate(p.x, p.y); c.rotate(p.rot);
+				c.globalCompositeOperation = "lighter";
+				c.globalAlpha = fade * (0.45 + 0.4 * n) * fl;
+				c.drawImage(glow("rgba(255,150,50,0.55)"), -s * 2.6, -s * 2.6, s * 5.2, s * 5.2);
+				c.globalCompositeOperation = "source-over";
+				c.globalAlpha = fade;
+				c.fillStyle = "hsl(" + p.hue + ",95%," + (52 + fl * 10 + n * 8 | 0) + "%)";
+				c.beginPath();
+				c.moveTo(-s * 0.55, -s * 0.7); c.lineTo(s * 0.55, -s * 0.7);
+				c.quadraticCurveTo(s * 0.78, 0, s * 0.42, s * 0.75); c.lineTo(-s * 0.42, s * 0.75);
+				c.quadraticCurveTo(-s * 0.78, 0, -s * 0.55, -s * 0.7);
+				c.fill();
+				c.fillStyle = "rgba(255,240,180," + (0.55 * fl).toFixed(3) + ")";
+				c.beginPath(); c.ellipse(0, s * 0.3, s * 0.3, s * 0.38, 0, 0, TAU); c.fill();
+				c.fillStyle = "rgba(90,30,10,0.6)";
+				c.fillRect(-s * 0.55, -s * 0.8, s * 1.1, s * 0.13);
+				c.fillRect(-s * 0.42, s * 0.7, s * 0.84, s * 0.1);
+				c.strokeStyle = "rgba(120,40,10,0.35)"; c.lineWidth = 1;
+				c.beginPath(); c.moveTo(-s * 0.2, -s * 0.68); c.lineTo(-s * 0.16, s * 0.72);
+				c.moveTo(s * 0.2, -s * 0.68); c.lineTo(s * 0.16, s * 0.72); c.stroke();
+				c.restore();
+			}
+		},
+
+		// Notes rise past a five-line staff that waves on the room clock and
+		// bulges away from cursors.
+		notes: {
+			density: 55, cycle: true,
+			setup: function (p) { p.vy = rand(30, 60); p.per = 1140 / p.vy; },
+			spawn: function (p) {
+				p.nx = rand(0, 1); p.s = rand(16, 30) | 0; p.ch = pick(NOTE_GLYPHS);
+				p.col = pick(["#ffd6ff", "#c9b8ff", "#9fe6ff", "#fff1a8", "#ffb3d9", "#ffffff"]);
+				p.ph = rand(0, TAU); p.sw = rand(0.6, 1.4); p.amp = rand(15, 40);
+			},
+			at: function (p, age, t, w, h) {
+				p.y = h + 40 - (h + 80) * age / p.per;
+				p.x = p.nx * w + Math.sin(t * p.sw + p.ph) * p.amp;
+			},
+			drawAll: function (c, ps, t, h) {
+				var w = W, i, j, x, y, k;
+				c.strokeStyle = "#e6dcff"; c.lineWidth = 1.2; c.globalAlpha = 0.22;
+				c.beginPath();
+				for (i = 0; i < 5; i++) {
+					var base = h * 0.38 + (i - 2) * 16;
+					for (x = -10; x <= w + 20; x += 20) {
+						y = base + Math.sin(x * 0.006 + t * 0.9) * 22 + Math.sin(x * 0.015 - t * 1.3) * 6;
+						for (j = 0; j < livePtrs.length; j++) {
+							var dx = x - livePtrs[j].x, dy = y - livePtrs[j].y;
+							if (dx > 160 || dx < -160 || dy > 160 || dy < -160) continue;
+							k = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy) / 160);
+							y += (dy > 0 ? 1 : -1) * k * k * 40;
+						}
+						if (x === -10) c.moveTo(x, y); else c.lineTo(x, y);
+					}
+				}
+				c.stroke();
+				c.textAlign = "center"; c.textBaseline = "middle";
+				for (i = 0; i < ps.length; i++) {
+					var p = ps[i], n = p.near || 0, s = p.s * (1 + n * 0.5) | 0;
+					c.save();
+					c.translate(p.x, p.y); c.rotate(Math.sin(t * p.sw + p.ph) * 0.3);
+					c.globalAlpha = Math.max(0, Math.min(1, p.y / (h * 0.3))) * (0.65 + 0.35 * n);
+					c.fillStyle = p.col;
+					c.font = s + NOTE_FONT;
+					c.fillText(p.ch, 0, 0);
+					c.restore();
+				}
+				c.textAlign = "start"; c.textBaseline = "alphabetic";
+			}
+		},
+
+		seeds: {
+			density: 85, cycle: true,
+			setup: function (p) { p.vx = rand(25, 60); p.per = 2100 / p.vx; },
+			spawn: function (p) {
+				p.ny = rand(0.05, 0.85); p.s = rand(9, 16); p.ph = rand(0, TAU); p.sw = rand(0.4, 1.1);
+				p.amp = rand(20, 60); p.rise = rand(-25, 5); p.tilt = rand(-0.3, 0.3); p.a = rand(0.6, 0.95);
+			},
+			at: function (p, age, t, w, h) {
+				p.x = -40 + (w + 80) * age / p.per;
+				p.y = p.ny * h + Math.sin(t * p.sw + p.ph) * p.amp + p.rise * age;
+				p.rot = p.tilt + Math.sin(t * p.sw * 1.7 + p.ph) * 0.35;
+			},
+			draw: function (c, p) {
+				var n = p.near || 0;
+				c.save();
+				c.translate(p.x, p.y); c.rotate(p.rot);
+				c.globalAlpha = p.a * (0.35 + 0.4 * n);
+				c.drawImage(glow("rgba(255,245,220,0.35)"), -p.s * 1.6, -p.s * 1.6, p.s * 3.2, p.s * 3.2);
+				c.globalAlpha = Math.min(1, p.a + n * 0.3);
+				c.strokeStyle = "rgba(250,246,235,0.85)"; c.fillStyle = "#b89a6a";
+				seedShape(c, p.s);
+				c.restore();
+			}
+		},
+
+		// Jellyfish swim by pulsing their bells; they turn toward cursors and
+		// glow brighter, and clicks make them flee in a flash.
+		jellies: {
+			density: 20, pointer: true, blend: "lighter",
+			init: function (p, w, h, first) {
+				p.s = rand(16, 38) * (isSmallScreen() ? 0.75 : 1);
+				p.x = rand(0, w); p.y = first ? rand(0, h) : h + p.s * 3;
+				p.hd = -Math.PI / 2 + rand(-0.3, 0.3); p.vx = 0; p.vy = rand(-20, -5); p.kx = 0; p.ky = 0;
+				p.f = rand(0.35, 0.6); p.ph = rand(0, 1); p.hue = pick([300, 320, 190, 200, 270, 170]);
+				p.n = 5 + (rand(0, 3) | 0); p.glow = 0; p.k = 0;
+			},
+			update: function (p, dt, w, h, t) {
+				var want = -Math.PI / 2 + Math.sin(t * 0.2 + p.ph * 9) * 0.5, g = nearest(livePtrs, p.x, p.y), dx, dy, d, i;
+				p.k = (t * p.f + p.ph) % 1;
+				p.glow = Math.max(0, p.glow - dt * 0.8);
+				if (g) {
+					dx = g.x - p.x; dy = g.y - p.y; d = Math.sqrt(dx * dx + dy * dy);
+					if (d < 360) {
+						want = Math.atan2(dy, dx) + (d < p.s * 2 ? Math.PI : 0);   // close in, but don't sit on it
+						p.glow = Math.max(p.glow, 1 - d / 360);
+					}
+				}
+				for (i = 0; i < clicks.length; i++) {
+					dx = p.x - clicks[i].x; dy = p.y - clicks[i].y; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+					if (d < 300) { var kick = 420 * (1 - d / 300); p.kx += dx / d * kick; p.ky += dy / d * kick; p.glow = 1; }
+				}
+				p.hd = steer(p.hd, want, dt * 1.2);
+				if (p.k < 0.28) {   // the bell contracts: thrust
+					var th = 160 * Math.sin(p.k / 0.28 * Math.PI) * dt;
+					p.vx += Math.cos(p.hd) * th; p.vy += Math.sin(p.hd) * th;
+				}
+				var drag = Math.pow(0.4, dt), kd = Math.pow(0.1, dt);
+				p.vx *= drag; p.vy = p.vy * drag + 4 * dt;   // sinks a little between pulses
+				p.kx *= kd; p.ky *= kd;
+				p.x += (p.vx + p.kx) * dt; p.y += (p.vy + p.ky) * dt;
+				if (p.x < -80) p.x = w + 80; else if (p.x > w + 80) p.x = -80;
+				return p.y > -p.s * 6 && p.y < h + p.s * 6;
+			},
+			draw: function (c, p, t) {
+				var s = p.s, sq = p.k < 0.28 ? Math.sin(p.k / 0.28 * Math.PI) : 0, i, j;
+				var bw = s * (1 - sq * 0.22), bh = s * 0.78 * (1 + sq * 0.12), col = "hsla(" + p.hue + ",100%,70%,";
+				c.save();
+				c.translate(p.x, p.y); c.rotate(p.hd + Math.PI / 2);   // bell top points where it swims
+				c.globalAlpha = 0.3 + p.glow * 0.5;
+				c.drawImage(glow(col + "0.6)"), -s * 1.7, -s * 1.6, s * 3.4, s * 3.4);
+				c.globalAlpha = 0.6 + p.glow * 0.4;
+				c.lineWidth = 1; c.strokeStyle = col + "0.5)";
+				c.beginPath();
+				for (i = 0; i < p.n; i++) {
+					var x0 = (i / (p.n - 1) - 0.5) * bw * 1.6;
+					c.moveTo(x0, 0);
+					for (j = 1; j <= 8; j++) {
+						var f = j / 8;
+						c.lineTo(x0 * (1 - f * 0.3) + Math.sin(t * 2.6 + i * 1.7 + f * 4) * s * 0.2 * f, f * s * 2.3 * (1 - sq * 0.15));
+					}
+				}
+				c.stroke();
+				c.lineWidth = 2.5; c.strokeStyle = col + "0.35)";   // frilly oral arms
+				c.beginPath();
+				for (i = -1; i <= 1; i += 2) {
+					c.moveTo(i * bw * 0.15, 0);
+					for (j = 1; j <= 6; j++) c.lineTo(i * bw * 0.15 + Math.sin(t * 3.2 + j * 1.1 + i) * s * 0.14, j / 6 * s * 1.3);
+				}
+				c.stroke();
+				c.fillStyle = col + "0.3)"; c.strokeStyle = col + "0.9)"; c.lineWidth = 1.5;
+				c.beginPath();
+				c.moveTo(-bw, 0);
+				c.bezierCurveTo(-bw, -bh * 1.35, bw, -bh * 1.35, bw, 0);
+				c.quadraticCurveTo(0, bh * 0.25, -bw, 0);
+				c.fill(); c.stroke();
+				c.fillStyle = col + "0.45)";
+				for (i = 0; i < 4; i++) {
+					var a = i / 4 * TAU + 0.4;
+					c.beginPath(); c.ellipse(Math.cos(a) * bw * 0.32, -bh * 0.45 + Math.sin(a) * bh * 0.18, s * 0.1, s * 0.06, a, 0, TAU); c.fill();
+				}
+				c.restore();
+			},
+			// drifting plankton, placed by the room clock, light up near cursors
+			frame: function (c, dt, w, h, t, S) {
+				var i, p;
+				if (!S.pl) {
+					S.pl = [];
+					withSeed(hashInts(seedBase, 77, 0), function () {
+						for (i = 0; i < scaledCount(90); i++) S.pl.push({ nx: rand(0, 1), ny: rand(0, 1), sp: rand(0.004, 0.012), ph: rand(0, TAU) });
+					});
+				}
+				c.globalCompositeOperation = "lighter";
+				c.fillStyle = "#9fe9ff";
+				for (i = 0; i < S.pl.length; i++) {
+					p = S.pl[i];
+					var x = p.nx * w + Math.sin(t * 0.15 + p.ph) * 30, y = (((p.ny - t * p.sp) % 1) + 1) % 1 * h;
+					var g = nearest(livePtrs, x, y), near = 0;
+					if (g) { var dx = g.x - x, dy = g.y - y; near = Math.max(0, 1 - Math.sqrt(dx * dx + dy * dy) / 180); }
+					c.globalAlpha = 0.25 + 0.2 * Math.sin(t * 2 + p.ph) + near * 0.6;
+					c.beginPath(); c.arc(x, y, 1.1 + near * 1.6, 0, TAU); c.fill();
+				}
+				c.globalCompositeOperation = "source-over";
+			}
+		},
+
+		// Koi wander the pond and circle nearby cursors; clicks scatter food
+		// pellets that the closest fish race to eat.
+		koi: {
+			density: 14, pointer: true,
+			init: function (p, w, h, first) {
+				p.s = rand(14, 22) * (isSmallScreen() ? 0.8 : 1);
+				var x = first ? rand(0.1, 0.9) * w : (rand(0, 1) < 0.5 ? -60 : w + 60), y = rand(0.1, 0.9) * h;
+				p.hd = first ? rand(0, TAU) : (x < 0 ? 0 : Math.PI);
+				p.seg = p.s * 0.38;
+				p.pts = makeSpine(KOI_N, x, y, p.hd, p.seg);
+				p.pal = pick(KOI_PAL); p.ph = rand(0, TAU); p.sp = 40; p.sw = rand(0, TAU);
+				p.patch = [rand(0, 1) < 0.7, rand(0, 1) < 0.5, rand(0, 1) < 0.6, rand(0, 1) < 0.4, rand(0, 1) < 0.5];
+				p.tx = rand(0.1, 0.9) * w; p.ty = rand(0.1, 0.9) * h; p.orb = rand(50, 110) * (rand(0, 1) < 0.5 ? -1 : 1);
+			},
+			update: function (p, dt, w, h, t) {
+				var head = p.pts[0], food = state.food || [], want, speed = 45, turn = 2.2, i, dx, dy, d, best = null, bd = 600 * 600;
+				for (i = 0; i < food.length; i++) {
+					if (food[i].eaten) continue;
+					dx = food[i].x - head.x; dy = food[i].y - head.y; d = dx * dx + dy * dy;
+					if (d < bd) { bd = d; best = food[i]; }
+				}
+				var g = nearest(livePtrs, head.x, head.y), gd = Infinity;
+				if (g) { dx = g.x - head.x; dy = g.y - head.y; gd = dx * dx + dy * dy; }
+				if (best) {
+					want = Math.atan2(best.y - head.y, best.x - head.x); speed = 150; turn = 3.6;
+					if (bd < p.s * p.s * 0.6) best.eaten = true;
+				} else if (gd < 300 * 300) {
+					var a = t * 0.8 * (p.orb > 0 ? 1 : -1) + p.ph, ox = g.x + Math.cos(a) * Math.abs(p.orb), oy = g.y + Math.sin(a) * Math.abs(p.orb);
+					want = Math.atan2(oy - head.y, ox - head.x); speed = 90;
+				} else {
+					dx = p.tx - head.x; dy = p.ty - head.y;
+					if (dx * dx + dy * dy < 1600 || Math.random() < dt * 0.1) { p.tx = rand(0.08, 0.92) * w; p.ty = rand(0.08, 0.92) * h; }
+					want = Math.atan2(dy, dx);
+				}
+				p.hd = steer(p.hd, want, turn * dt);
+				p.sp += (speed * p.s / 18 - p.sp) * Math.min(1, dt * 2);
+				p.sw += dt * (4 + p.sp / 20);
+				var dir = p.hd + Math.sin(p.sw) * 0.12;
+				head.x += Math.cos(dir) * p.sp * dt; head.y += Math.sin(dir) * p.sp * dt;
+				followSpine(p.pts, p.seg);
+				return head.x > -200 && head.x < w + 200 && head.y > -200 && head.y < h + 200;
+			},
+			draw: function (c, p, t) {
+				var P = p.pts, s = p.s, i, N = KOI_N, tail = P[N - 1], pre = P[N - 2];
+				var ta = Math.atan2(tail.y - pre.y, tail.x - pre.x) + Math.sin(p.sw * 1.3) * 0.35;
+				function width(i) { return KOI_W[i] * s; }
+				c.globalAlpha = 1;
+				c.save(); c.translate(5, 8);   // shadow on the pond floor
+				strokeSpine(c, P, width, "rgba(0,20,18,0.28)");
+				c.restore();
+				c.fillStyle = p.pal.base;
+				c.globalAlpha = 0.8;
+				c.beginPath();   // fan tail
+				c.moveTo(tail.x, tail.y);
+				c.quadraticCurveTo(tail.x + Math.cos(ta - 0.2) * s * 0.7, tail.y + Math.sin(ta - 0.2) * s * 0.7, tail.x + Math.cos(ta - 0.55) * s, tail.y + Math.sin(ta - 0.55) * s);
+				c.lineTo(tail.x + Math.cos(ta) * s * 0.6, tail.y + Math.sin(ta) * s * 0.6);
+				c.lineTo(tail.x + Math.cos(ta + 0.55) * s, tail.y + Math.sin(ta + 0.55) * s);
+				c.quadraticCurveTo(tail.x + Math.cos(ta + 0.2) * s * 0.7, tail.y + Math.sin(ta + 0.2) * s * 0.7, tail.x, tail.y);
+				c.fill();
+				var A = P[2], B = P[1], ang = Math.atan2(B.y - A.y, B.x - A.x), flap = Math.sin(p.sw * 1.5) * 0.3;
+				for (var side = -1; side <= 1; side += 2) {   // pectoral fins
+					var fa = ang + side * (Math.PI * 0.7 + flap);
+					c.beginPath();
+					c.ellipse(A.x + Math.cos(fa) * s * 0.42, A.y + Math.sin(fa) * s * 0.42, s * 0.36, s * 0.16, fa, 0, TAU);
+					c.fill();
+				}
+				c.globalAlpha = 1;
+				strokeSpine(c, P, width, p.pal.base);
+				c.strokeStyle = p.pal.patch;
+				for (i = 1; i <= 5; i++) {
+					if (!p.patch[i - 1]) continue;
+					c.lineWidth = width(i) * 0.7;
+					c.beginPath(); c.moveTo(P[i - 1].x, P[i - 1].y); c.lineTo(P[i].x, P[i].y); c.stroke();
+				}
+				var hx = P[0].x, hy = P[0].y, ha = Math.atan2(P[0].y - P[1].y, P[0].x - P[1].x);
+				c.fillStyle = "#14141a";
+				for (side = -1; side <= 1; side += 2) {
+					var ea = ha + side * 1.1;
+					c.beginPath(); c.arc(hx + Math.cos(ea) * s * 0.24, hy + Math.sin(ea) * s * 0.24, s * 0.06, 0, TAU); c.fill();
+				}
+			},
+			frame: function (c, dt, w, h, t, S) {
+				var food = S.food || (S.food = []), rings = S.rings || (S.rings = []), i, j, f, r;
+				for (i = 0; i < clicks.length; i++) {
+					for (j = 0; j < 6; j++) food.push({ x: clicks[i].x + rand(-30, 30), y: clicks[i].y + rand(-30, 30), age: 0, ph: rand(0, TAU) });
+					rings.push({ x: clicks[i].x, y: clicks[i].y, age: 0, max: 2, sp: 70, a: 1 });
+				}
+				if (food.length > 60) food.splice(0, food.length - 60);
+				eachMove(S, livePtrs, 60, function (x, y) { rings.push({ x: x, y: y, age: 0, max: 1.5, sp: 45, a: 0.45 }); });
+				var slot = Math.floor(t / 1.6);
+				if (slot !== S.slot) {   // ambient ripples placed by the room clock
+					S.slot = slot;
+					var RD = mulberry(hashInts(seedBase, 9090, slot));
+					if (RD() < 0.6) rings.push({ x: RD() * w, y: RD() * h, age: 0, max: 2.2, sp: 40, a: 0.5 });
+				}
+				for (i = food.length - 1; i >= 0; i--) {
+					f = food[i];
+					f.age += dt;
+					if (f.eaten) rings.push({ x: f.x, y: f.y, age: 0, max: 1, sp: 40, a: 0.7 });
+					if (f.eaten || f.age > 12) { food.splice(i, 1); continue; }
+					var fx_ = f.x + Math.sin(t * 1.5 + f.ph) * 2, fy_ = f.y + Math.cos(t * 1.2 + f.ph) * 2;
+					c.globalAlpha = Math.min(1, (12 - f.age) / 2);
+					c.fillStyle = "#c98a3a";
+					c.beginPath(); c.arc(fx_, fy_, 3.2, 0, TAU); c.fill();
+					c.fillStyle = "#f2d29a";
+					c.beginPath(); c.arc(fx_ - 1, fy_ - 1, 1.1, 0, TAU); c.fill();
+				}
+				if (rings.length > 50) rings.splice(0, rings.length - 50);
+				c.strokeStyle = "#c8f5ec"; c.lineWidth = 1.4;
+				for (i = rings.length - 1; i >= 0; i--) {
+					r = rings[i];
+					r.age += dt;
+					if (r.age >= r.max) { rings.splice(i, 1); continue; }
+					var rad = 3 + r.age * r.sp, k = 1 - r.age / r.max;
+					c.globalAlpha = k * k * 0.7 * r.a;
+					c.beginPath(); c.arc(r.x, r.y, rad, 0, TAU); c.stroke();
+					c.globalAlpha *= 0.4;
+					c.beginPath(); c.arc(r.x, r.y, rad * 0.7, 0, TAU); c.stroke();
+				}
+			}
+		},
+
+		// Stars stream past from a vanishing point that follows the cursors.
+		// Depth runs on the room clock; clicks add a light-speed boost.
+		warp: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				var i, n, st;
+				if (!S.st) {
+					S.st = []; S.cx = w / 2; S.cy = h / 2; S.boost = 0; S.extra = 0; S.flash = 0;
+					withSeed(seedBase, function () {
+						for (i = 0, n = scaledCount(420); i < n; i++)
+							S.st.push({ a: rand(0, TAU), r: Math.sqrt(rand(0.002, 1)), z0: rand(0, 1),
+								col: rand(0, 1) < 0.75 ? "#dfe9ff" : "hsl(" + pick([200, 280, 320, 45]) + ",90%,75%)" });
+					});
+				}
+				var tx = w / 2 + Math.sin(t * 0.13) * w * 0.12, ty = h / 2 + Math.cos(t * 0.17) * h * 0.1;
+				if (livePtrs.length) {
+					tx = ty = 0;
+					for (i = 0; i < livePtrs.length; i++) { tx += livePtrs[i].x; ty += livePtrs[i].y; }
+					tx /= livePtrs.length; ty /= livePtrs.length;
+				}
+				var e = Math.min(1, dt * 1.5);
+				S.cx += (tx - S.cx) * e; S.cy += (ty - S.cy) * e;
+				if (clicks.length) { S.boost = 1; S.flash = 0.5; }
+				S.boost = Math.max(0, S.boost - dt * 0.45);
+				S.extra += S.boost * 0.9 * dt;
+				var speed = 0.12 + S.boost * 0.9, travel = t * 0.12 + S.extra, F = Math.max(w, h) * 0.6, K = 0.12;
+				var tailZ = 0.015 + speed * 0.06;
+				c.globalCompositeOperation = "lighter";
+				c.lineCap = "round";
+				for (i = 0; i < S.st.length; i++) {
+					st = S.st[i];
+					var z = Math.max(0.03, 1 - ((st.z0 + travel) % 1)), z2 = Math.min(1, z + tailZ);
+					var X = Math.cos(st.a) * st.r * F * K, Y = Math.sin(st.a) * st.r * F * K;
+					var x1 = S.cx + X / z, y1 = S.cy + Y / z;
+					if (x1 < -50 || x1 > w + 50 || y1 < -50 || y1 > h + 50) continue;
+					var near = 1 - z;
+					c.globalAlpha = Math.min(1, near * 1.3);
+					c.strokeStyle = st.col;
+					c.lineWidth = 0.4 + near * 2.4;
+					c.beginPath(); c.moveTo(S.cx + X / z2, S.cy + Y / z2); c.lineTo(x1 + 0.1, y1); c.stroke();
+				}
+				c.globalAlpha = 0.5 + S.boost * 0.5;
+				var gs = 120 + S.boost * 200;
+				c.drawImage(glow("rgba(150,180,255,0.35)"), S.cx - gs / 2, S.cy - gs / 2, gs, gs);
+				c.globalCompositeOperation = "source-over";
+				S.flash = Math.max(0, S.flash - dt * 2);
+				if (S.flash > 0) {
+					c.globalAlpha = S.flash * 0.25;
+					c.fillStyle = "#dfe6ff";
+					c.fillRect(0, 0, w, h);
+				}
+			}
+		},
+
+		// Wax blobs bob between the bottom and the top on the room clock;
+		// additive glow makes overlapping blobs merge.
+		lava: {
+			density: 20, cycle: true, blend: "lighter",
+			setup: function (p) {
+				p.nx = rand(0.08, 0.92); p.ax = rand(0.03, 0.1); p.fx = rand(0.02, 0.06);
+				p.fy = rand(0.018, 0.04); p.ph = rand(0, TAU); p.px = rand(0, TAU); p.r = rand(60, 140);
+				p.col = pick(["rgba(255,80,120,0.9)", "rgba(255,140,60,0.9)", "rgba(255,60,200,0.85)", "rgba(255,190,80,0.85)"]);
+			},
+			at: function (p, age, t, w, h) {
+				var u = t * p.fy * TAU + p.ph, k = 0.5 - 0.5 * Math.cos(u);   // 0 = bottom, 1 = top
+				p.y = h * (1.05 - k * 1.1);
+				p.x = (p.nx + Math.sin(t * p.fx * TAU + p.px) * p.ax) * w;
+				p.st = Math.abs(Math.sin(u));   // stretches while it moves
+			},
+			draw: function (c, p) {
+				var r = p.r * (isSmallScreen() ? 0.7 : 1) * (1 + (p.near || 0) * 0.15);
+				var rx = r * (1 - p.st * 0.15), ry = r * (1 + p.st * 0.25);
+				c.globalAlpha = 0.8;
+				c.drawImage(blob(p.col), p.x - rx, p.y - ry, rx * 2, ry * 2);
+			}
 		}
 	};
 
@@ -1501,7 +2359,15 @@
 		matrix: { r: 140, aura: "rgba(60,255,120,0.3)",
 			burst: { colors: ["#3dff7a", "#b8ffcc"], shape: "glyph", g: 160, size: 16 } },
 		grid: { r: 140, aura: "rgba(255,79,216,0.3)",
-			burst: { colors: ["#ff4fd8", "#56e0ff", "#ffd56b"], shape: "star", g: 0, size: 7, glow: true } }
+			burst: { colors: ["#ff4fd8", "#56e0ff", "#ffd56b"], shape: "star", g: 0, size: 7, glow: true } },
+		lanterns: { push: 1000, r: 160, aura: "rgba(255,160,70,0.3)",
+			burst: { colors: ["#ffd27a", "#ffb347", "#ff8c42", "#fff1c1"], shape: "dot", g: -40, size: 5, glow: true } },
+		notes: { push: 1300, r: 160, aura: "rgba(200,170,255,0.3)",
+			burst: { colors: ["#ffd6ff", "#c9b8ff", "#9fe6ff", "#fff1a8"], shape: "note", glyphs: NOTE_GLYPHS, g: -60, size: 18 } },
+		seeds: { push: 1800, r: 190, aura: "rgba(255,240,200,0.22)",
+			burst: { colors: ["rgba(250,246,235,0.9)"], shape: "seed", g: -10, size: 9 } },
+		lava: { push: 900, r: 200, aura: "rgba(255,120,80,0.25)",
+			burst: { colors: ["rgba(255,120,90,0.9)", "rgba(255,80,180,0.9)", "rgba(255,200,90,0.9)"], shape: "dot", g: -60, size: 9, glow: true } }
 	};
 	for (var rk in REACT) { FX[rk].pointer = true; FX[rk].react = REACT[rk]; }
 
@@ -1575,7 +2441,7 @@
 			bursts.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, age: 0,
 				max: small ? rand(0.5, 0.9) : rand(0.9, 1.6), s: B.size * rand(0.6, 1.2) * (small ? 0.6 : 1),
 				col: pick(B.colors), rot: rand(0, TAU), vr: rand(-5, 5),
-				ch: BURST_GLYPHS.charAt((Math.random() * BURST_GLYPHS.length) | 0) });
+				ch: B.glyphs ? pick(B.glyphs) : BURST_GLYPHS.charAt((Math.random() * BURST_GLYPHS.length) | 0) });
 		}
 		if (bursts.length > 400) bursts.splice(0, bursts.length - 400);
 	}
@@ -1636,6 +2502,13 @@
 			c.font = Math.round(s) + "px monospace";
 			c.textBaseline = "middle";
 			c.fillText(p.ch, -s / 3, 0);
+		} else if (shape === "note") {
+			c.rotate(-p.rot * 0.8);
+			c.font = Math.round(s) + NOTE_FONT;
+			c.textAlign = "center"; c.textBaseline = "middle";
+			c.fillText(p.ch, 0, 0);
+		} else if (shape === "seed") {
+			seedShape(c, s);
 		}
 		c.restore();
 	}
