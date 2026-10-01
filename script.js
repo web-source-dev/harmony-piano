@@ -2097,6 +2097,12 @@ Rect.prototype.contains = function(x, y) {
 					$("#room-settings .checkbox[name=chat]").prop("checked", settings.chat);
 					$("#room-settings .checkbox[name=crownsolo]").prop("checked", settings.crownsolo);
 					$("#room-settings input[name=color]").val(settings.color);
+					if(window.RoomThemes) {
+						RoomThemes.buildPicker($("#room-settings .room-theme-grid"), settings.theme, function(id) {
+							// Takes effect right away; the server re-broadcasts it to everyone in the room.
+							gClient.setChannelSettings({theme: id});
+						});
+					}
 				}, 100);
 			}
 		});
@@ -2107,6 +2113,10 @@ Rect.prototype.contains = function(x, y) {
 				crownsolo: $("#room-settings .checkbox[name=crownsolo]").is(":checked"),
 				color: $("#room-settings input[name=color]").val()
 			};
+			// Choosing a new background color switches the room back to Classic.
+			var cur = gClient.channel && gClient.channel.settings;
+			if(cur && cur.theme && cur.theme !== "classic" && settings.color !== cur.color)
+				settings.theme = "classic";
 			gClient.setChannelSettings(settings);
 			closeModal();
 		});
@@ -2173,6 +2183,7 @@ Rect.prototype.contains = function(x, y) {
 	(function() {
 		var old_color1 = new Color("#000000");
 		var old_color2 = new Color("#000000");
+		var colorIv = null;
 		function setColor(hex, hex2) {
 			var color1 = new Color(hex);
 			var color2 = new Color(hex2 || hex);
@@ -2195,8 +2206,9 @@ Rect.prototype.contains = function(x, y) {
 			difference.g -= old_color2.g;
 			difference.b -= old_color2.b;
 			var inc2 = new Color(difference.r / steps, difference.g / steps, difference.b / steps);
+			clearInterval(colorIv);
 			var iv;
-			iv = setInterval(function() {
+			iv = colorIv = setInterval(function() {
 				old_color1.add(inc1.r, inc1.g, inc1.b);
 				old_color2.add(inc2.r, inc2.g, inc2.b);
 				document.body.style.background = "radial-gradient(ellipse at center, "+old_color1.toHexa()+" 0%,"+old_color2.toHexa()+" 100%)";
@@ -2219,6 +2231,18 @@ Rect.prototype.contains = function(x, y) {
 
 		gClient.on("ch", function(ch) {
 			if(ch.ch.settings) {
+				// A prebuilt room theme (roomThemes.js) replaces the plain color.
+				if(window.RoomThemes && RoomThemes.has(ch.ch.settings.theme)) {
+					clearInterval(colorIv);
+					RoomThemes.apply(ch.ch.settings.theme);
+					return;
+				}
+				var wasThemed = window.RoomThemes && RoomThemes.current();
+				if(window.RoomThemes) RoomThemes.apply(null);
+				if(wasThemed) {
+					old_color1 = new Color("#000000");
+					old_color2 = new Color("#000000");
+				}
 				if(ch.ch.settings.color) {
 					setColor(ch.ch.settings.color, ch.ch.settings.color2);
 				} else {
