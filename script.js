@@ -3985,6 +3985,48 @@ Rect.prototype.contains = function(x, y) {
 			chat.receive(msg);
 		});
 
+		// Edit/delete chat lines (backup server only). #manage in the URL shows the buttons.
+		function chatLineById(id) {
+			return $("#chat ul li").filter(function() { return this.getAttribute("data-chat-id") === String(id); });
+		}
+		function syncChatManageHash() {
+			var hash = window.location.hash || "";
+			document.body.classList.toggle("chat-manage", /(^|#)manage(#|$)/i.test(hash));
+		}
+		syncChatManageHash();
+		window.addEventListener("hashchange", syncChatManageHash);
+		gClient.on("a-edit", function(msg) {
+			if(!msg || msg.id == null || typeof msg.a !== "string") return;
+			chatLineById(msg.id).find(".message").text(msg.a);
+		});
+		gClient.on("a-del", function(msg) {
+			if(!msg || msg.id == null) return;
+			chatLineById(msg.id).remove();
+		});
+		$("#chat").on("mousedown touchstart pointerdown", ".chat-manage-actions button", function(e) {
+			e.stopPropagation();
+		});
+		$("#chat").on("click", ".chat-manage-edit", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			var $li = $(this).closest("li");
+			var id = $li.attr("data-chat-id");
+			if(!id) return;
+			var next = prompt("Edit message:", $li.find(".message").text());
+			if(next == null) return;
+			next = next.trim().slice(0, 512);
+			if(!next || next === $li.find(".message").text()) return;
+			gClient.sendArray([{m: "a-edit", id: id, message: next}]);
+		});
+		$("#chat").on("click", ".chat-manage-delete", function(e) {
+			e.preventDefault();
+			e.stopPropagation();
+			var id = $(this).closest("li").attr("data-chat-id");
+			if(!id) return;
+			if(!confirm("Delete this message for everyone?")) return;
+			gClient.sendArray([{m: "a-del", id: id}]);
+		});
+
 		$("#chat-input-bar input").on("focus", function(evt) {
 			releaseKeyboard();
 			$("#chat").addClass("chatting");
@@ -4147,6 +4189,16 @@ Rect.prototype.contains = function(x, y) {
 				var chatColor = (typeof gNameColor !== "undefined" && gNameColor)
 					? gNameColor.colorFor(msg.p) : (msg.p.color || "white");
 				li.css("color", chatColor || "white");
+
+				// Only the Harmony backup server gives chat lines ids it can edit/delete;
+				// the buttons are hidden by CSS unless #manage is in the URL.
+				if(msg.id != null && gClient.isOnBackupServer && gClient.isOnBackupServer()) {
+					li.attr("data-chat-id", String(msg.id));
+					li.append('<span class="chat-manage-actions">' +
+						'<button type="button" class="chat-manage-edit" title="Edit this message for everyone">Edit</button>' +
+						'<button type="button" class="chat-manage-delete" title="Delete this message for everyone">Delete</button>' +
+					'</span>');
+				}
 
 				$("#chat ul").append(li);
 

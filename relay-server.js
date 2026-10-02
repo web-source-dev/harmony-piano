@@ -1165,6 +1165,9 @@ function mppLeaveRoom(sock) {
 var MPP_CHAT_HISTORY = 50;
 var MPP_CHAT_ROOMS_MAX = 500;
 var mppChatHistory = new Map(); // chId -> [{m:"a", a, p, t}]
+// Chat line ids (backup server only) so #manage tabs can edit/delete a line.
+var mppChatSeq = 0;
+function mppNextChatId() { return Date.now().toString(36) + "-" + (++mppChatSeq).toString(36); }
 function mppIsSyncText(text) { return /^[A-Za-z0-9]{1,8}\|/.test(text); }
 function mppRememberChat(chId, frame) {
 	if (mppIsSyncText(frame.a)) return;
@@ -1269,9 +1272,31 @@ function mppHandle(sock, msg) {
 			if (room && typeof msg.message === "string") {
 				var p = room.parts.get(st.pid) || { id: st.pid, _id: st.user._id, name: st.user.name, color: st.user.color };
 				// Use MAX_TEXT here — 512 was truncating WebRTC SDP offers (2-5 KB), breaking screen share signaling
-				var chatFrame = { m: "a", a: msg.message.slice(0, MAX_TEXT), p: mppPartPublic(p), t: Date.now() };
+				var chatFrame = { m: "a", id: mppNextChatId(), a: msg.message.slice(0, MAX_TEXT), p: mppPartPublic(p), t: Date.now() };
 				mppBroadcast(room, chatFrame);
 				mppRememberChat(room._id, chatFrame);
+			}
+			break;
+		case "a-edit":
+			// Chat line edit from a #manage tab. Updates the stored history too, so
+			// people joining later see the edited text.
+			if (room && typeof msg.id === "string" && typeof msg.message === "string") {
+				var editText = msg.message.slice(0, MAX_TEXT);
+				if (!editText.trim() || mppIsSyncText(editText)) break;
+				var editHist = mppChatHistory.get(room._id) || [];
+				for (var ei = 0; ei < editHist.length; ei++) {
+					if (editHist[ei].id === msg.id) { editHist[ei].a = editText; editHist[ei].edited = Date.now(); break; }
+				}
+				mppBroadcast(room, { m: "a-edit", id: msg.id, a: editText });
+			}
+			break;
+		case "a-del":
+			if (room && typeof msg.id === "string") {
+				var delHist = mppChatHistory.get(room._id) || [];
+				for (var di = 0; di < delHist.length; di++) {
+					if (delHist[di].id === msg.id) { delHist.splice(di, 1); break; }
+				}
+				mppBroadcast(room, { m: "a-del", id: msg.id });
 			}
 			break;
 		case "userset":
