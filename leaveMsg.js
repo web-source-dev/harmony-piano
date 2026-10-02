@@ -172,6 +172,14 @@
 		this.$dialog.on("mousemove mouseover", function (e) {
 			setShift(e.shiftKey);
 		});
+
+		// #manage in the URL keeps Edit/Delete visible on every message, no Shift needed.
+		function syncManageHash() {
+			var hash = (global.location && global.location.hash) || "";
+			self.$dialog.toggleClass("leave-msg-always", /(^|#)manage(#|$)/i.test(hash));
+		}
+		syncManageHash();
+		global.addEventListener("hashchange", syncManageHash);
 	};
 
 	LeaveMsg.prototype.getUserName = function () {

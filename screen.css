@@ -5405,7 +5405,9 @@ body.media-library-viewer-open {
 }
 /* Edit/Delete only show while Shift is held and the pointer is over that message. */
 .leave-msg-dialog.leave-msg-shift .leave-msg-item:hover .leave-msg-delete:not([hidden]),
-.leave-msg-dialog.leave-msg-shift .leave-msg-item:hover .leave-msg-edit:not([hidden]) {
+.leave-msg-dialog.leave-msg-shift .leave-msg-item:hover .leave-msg-edit:not([hidden]),
+.leave-msg-dialog.leave-msg-always .leave-msg-delete:not([hidden]),
+.leave-msg-dialog.leave-msg-always .leave-msg-edit:not([hidden]) {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
