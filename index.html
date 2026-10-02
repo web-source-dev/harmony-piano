@@ -7,7 +7,7 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20261002za"/>
+    <link rel="stylesheet" href="./screen.css?v=20261002zb"/>
     <!-- Phone with "Desktop site" on: still use the phone layout (after the CSS it adjusts). -->
     <script src="./forceMobile.js?v=20260929a"></script>
     <link rel="canonical" href="https://multiplayerpiano.com/">
@@ -1086,6 +1086,19 @@
                 </div>
             </div>
         </div>
+        <div id="chat-manage" class="dialog chat-manage-dialog" role="dialog" aria-labelledby="chat-manage-title" aria-modal="true">
+            <form class="chat-manage-form">
+                <h2 id="chat-manage-title" class="chat-manage-title">Edit message</h2>
+                <p class="chat-manage-sub"></p>
+                <textarea class="chat-manage-input" rows="3" maxlength="512" autocomplete="off" aria-label="Message text"></textarea>
+                <blockquote class="chat-manage-preview"></blockquote>
+                <p class="chat-manage-error" hidden></p>
+                <div class="chat-manage-actions-row">
+                    <button type="button" class="chat-manage-close">Cancel</button>
+                    <button type="submit" class="chat-manage-confirm">Save</button>
+                </div>
+            </form>
+        </div>
         <div id="leave-msg" class="dialog leave-msg-dialog" role="dialog" aria-labelledby="leave-msg-title" aria-modal="true">
             <div class="leave-msg-inner">
                 <header class="leave-msg-head">
@@ -1379,7 +1392,7 @@
         "./wakeBell.js?v=20261002a",
         "./loveBits.js?v=20260925b",
         "./roomThemes.js?v=20261002v",
-        "./script.js?v=20261002y"
+        "./script.js?v=20261002z"
     ];
 </script>
 <!--<script src="https://mppclone.com/script.js"></script>-->

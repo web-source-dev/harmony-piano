@@ -3995,6 +3995,7 @@ Rect.prototype.contains = function(x, y) {
 		}
 		syncChatManageHash();
 		window.addEventListener("hashchange", syncChatManageHash);
+		// The server broadcasts edits/deletes to everyone in the room, sender included.
 		gClient.on("a-edit", function(msg) {
 			if(!msg || msg.id == null || typeof msg.a !== "string") return;
 			chatLineById(msg.id).find(".message").text(msg.a);
@@ -4002,29 +4003,85 @@ Rect.prototype.contains = function(x, y) {
 		gClient.on("a-del", function(msg) {
 			if(!msg || msg.id == null) return;
 			chatLineById(msg.id).remove();
+			// Someone else deleted the line we're editing: nothing left to edit.
+			if(gModal === "#chat-manage" && chatManageTarget && chatManageTarget.id === String(msg.id)) closeModal();
 		});
+
+		// Custom popup for edit / delete (one dialog, two modes).
+		var $chatManage = $("#chat-manage");
+		var chatManageTarget = null; // { id, mode: "edit" | "delete" }
+		function showChatManageError(text) {
+			$chatManage.find(".chat-manage-error").text(text).removeAttr("hidden");
+		}
+		function openChatManage($li, mode) {
+			var id = $li.attr("data-chat-id");
+			if(!id || !$chatManage.length) return;
+			var name = $li.find(".name").text().replace(/:$/, "");
+			var text = $li.find(".message").text();
+			var isEdit = mode === "edit";
+			chatManageTarget = { id: id, mode: mode };
+			$chatManage.toggleClass("is-delete", !isEdit);
+			$chatManage.find(".chat-manage-title").text(isEdit ? "Edit message" : "Delete message?");
+			$chatManage.find(".chat-manage-sub").text(isEdit
+				? "From " + name + " — the change shows for everyone in the room."
+				: "From " + name + " — this removes it for everyone in the room.");
+			$chatManage.find(".chat-manage-input").val(text).toggle(isEdit);
+			$chatManage.find(".chat-manage-preview").text(text).toggle(!isEdit);
+			$chatManage.find(".chat-manage-error").attr("hidden", "hidden").text("");
+			$chatManage.find(".chat-manage-confirm").text(isEdit ? "Save" : "Delete");
+			openModal("#chat-manage", isEdit ? ".chat-manage-input" : ".chat-manage-confirm");
+		}
+		function submitChatManage() {
+			if(!chatManageTarget) return closeModal();
+			if(!gClient.isConnected || !gClient.isConnected()) {
+				showChatManageError("Not connected — try again in a moment.");
+				return;
+			}
+			if(chatManageTarget.mode === "edit") {
+				var next = String($chatManage.find(".chat-manage-input").val() || "").trim().slice(0, 512);
+				if(!next) { showChatManageError("Message can't be empty."); return; }
+				if(next !== chatLineById(chatManageTarget.id).find(".message").text()) {
+					gClient.sendArray([{m: "a-edit", id: chatManageTarget.id, message: next}]);
+				}
+			} else {
+				gClient.sendArray([{m: "a-del", id: chatManageTarget.id}]);
+			}
+			chatManageTarget = null;
+			closeModal();
+		}
+		$chatManage.find(".chat-manage-form").on("submit", function(e) {
+			e.preventDefault();
+			submitChatManage();
+		});
+		$chatManage.find(".chat-manage-close").on("click", function(e) {
+			e.preventDefault();
+			chatManageTarget = null;
+			closeModal();
+		});
+		$chatManage.find(".chat-manage-input").on("keydown", function(e) {
+			e.stopPropagation();
+			if(e.keyCode === 13 && !e.shiftKey) {
+				e.preventDefault();
+				submitChatManage();
+			} else if(e.keyCode === 27) {
+				e.preventDefault();
+				chatManageTarget = null;
+				closeModal();
+			}
+		});
+
 		$("#chat").on("mousedown touchstart pointerdown", ".chat-manage-actions button", function(e) {
 			e.stopPropagation();
 		});
 		$("#chat").on("click", ".chat-manage-edit", function(e) {
 			e.preventDefault();
 			e.stopPropagation();
-			var $li = $(this).closest("li");
-			var id = $li.attr("data-chat-id");
-			if(!id) return;
-			var next = prompt("Edit message:", $li.find(".message").text());
-			if(next == null) return;
-			next = next.trim().slice(0, 512);
-			if(!next || next === $li.find(".message").text()) return;
-			gClient.sendArray([{m: "a-edit", id: id, message: next}]);
+			openChatManage($(this).closest("li"), "edit");
 		});
 		$("#chat").on("click", ".chat-manage-delete", function(e) {
 			e.preventDefault();
 			e.stopPropagation();
-			var id = $(this).closest("li").attr("data-chat-id");
-			if(!id) return;
-			if(!confirm("Delete this message for everyone?")) return;
-			gClient.sendArray([{m: "a-del", id: id}]);
+			openChatManage($(this).closest("li"), "delete");
 		});
 
 		$("#chat-input-bar input").on("focus", function(evt) {
@@ -4192,8 +4249,8 @@ Rect.prototype.contains = function(x, y) {
 
 				// Only the Harmony backup server gives chat lines ids it can edit/delete;
 				// the buttons are hidden by CSS unless #manage is in the URL.
+				if(msg.id != null) li.attr("data-chat-id", String(msg.id));
 				if(msg.id != null && gClient.isOnBackupServer && gClient.isOnBackupServer()) {
-					li.attr("data-chat-id", String(msg.id));
 					li.append('<span class="chat-manage-actions">' +
 						'<button type="button" class="chat-manage-edit" title="Edit this message for everyone">Edit</button>' +
 						'<button type="button" class="chat-manage-delete" title="Delete this message for everyone">Delete</button>' +
