@@ -225,12 +225,14 @@ function sanitizeLeaveEntry(m) {
 	var text = String(m.text == null ? "" : m.text).replace(/\s+/g, " ").trim().slice(0, 180);
 	var name = String(m.name == null ? "" : m.name).replace(/\s+/g, " ").trim().slice(0, 40);
 	if (!id || !text) return null;
-	return {
+	var entry = {
 		id: id,
 		ts: Number(m.ts) || Date.now(),
 		name: name || "Guest",
 		text: text
 	};
+	if (Number(m.edited)) entry.edited = Number(m.edited);
+	return entry;
 }
 
 function mergeLeaveMsg(existing, incoming) {
@@ -245,7 +247,8 @@ function mergeLeaveMsg(existing, incoming) {
 			var m = sanitizeLeaveEntry(list[i]);
 			if (!m || deleted[m.id]) continue;
 			var prev = byId[m.id];
-			if (!prev || m.ts >= prev.ts) byId[m.id] = m;
+			// Newest edit wins; unedited copies count as edited at 0.
+			if (!prev || (m.edited || 0) >= (prev.edited || 0)) byId[m.id] = m;
 		}
 	}
 	addList(existing.messages);

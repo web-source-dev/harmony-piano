@@ -66,6 +66,8 @@
 		this.$feedback = null;
 		this.$submit = null;
 		this.feedbackTimer = null;
+		this.editingId = null;
+		this.editDraft = "";
 
 		this._bindUi();
 	}
@@ -118,6 +120,50 @@
 			var id = $(this).attr("data-id");
 			if (!id) return;
 			self.deleteMessage(id, true);
+		});
+
+		this.$list.on("click", ".leave-msg-edit", function (e) {
+			e.preventDefault();
+			e.stopPropagation();
+			if (!self.isManageMode()) return;
+			var id = $(this).attr("data-id");
+			if (!id) return;
+			self.startEdit(id);
+		});
+
+		this.$list.on("click", ".leave-msg-edit-save", function (e) {
+			e.preventDefault();
+			e.stopPropagation();
+			self.saveEdit();
+		});
+
+		this.$list.on("click", ".leave-msg-edit-cancel", function (e) {
+			e.preventDefault();
+			e.stopPropagation();
+			self.cancelEdit();
+		});
+
+		this.$list.on("input", ".leave-msg-edit-input", function () {
+			self.editDraft = $(this).val();
+		});
+
+		this.$list.on("keydown", ".leave-msg-edit-input", function (e) {
+			e.stopPropagation();
+			if (e.keyCode === 13 && !e.shiftKey) {
+				e.preventDefault();
+				self.saveEdit();
+			} else if (e.keyCode === 27) {
+				e.preventDefault();
+				self.cancelEdit();
+			}
+		});
+
+		// Edit/Delete only appear while Shift is held and the message is hovered (see screen.css).
+		$(document).on("keydown.leaveMsgShift keyup.leaveMsgShift", function (e) {
+			if (e.key === "Shift" || e.keyCode === 16) self.$dialog.toggleClass("leave-msg-shift", e.type === "keydown");
+		});
+		$(global).on("blur.leaveMsgShift", function () {
+			self.$dialog.removeClass("leave-msg-shift");
 		});
 	};
 
@@ -297,14 +343,25 @@
 		var id = String(entry.id).slice(0, 24);
 		if (this.deletedIds && this.deletedIds[id]) return false;
 		for (var i = 0; i < this.messages.length; i++) {
-			if (this.messages[i].id === id) return false;
+			if (this.messages[i].id === id) {
+				// Same message: take the incoming copy only if it was edited more recently.
+				var cur = this.messages[i];
+				var edited = Number(entry.edited) || 0;
+				if (edited <= (Number(cur.edited) || 0)) return false;
+				cur.text = clampText(entry.text, MAX_TEXT);
+				cur.edited = edited;
+				if (persist !== false) this.saveLocal();
+				return true;
+			}
 		}
-		this.messages.push({
+		var item = {
 			id: id,
 			ts: Number(entry.ts) || Date.now(),
 			name: clampText(entry.name || "Guest", MAX_NAME),
 			text: clampText(entry.text, MAX_TEXT)
-		});
+		};
+		if (Number(entry.edited)) item.edited = Number(entry.edited);
+		this.messages.push(item);
 		this.messages.sort(function (a, b) { return a.ts - b.ts; });
 		if (this.messages.length > MAX_MESSAGES) {
 			this.messages = this.messages.slice(this.messages.length - MAX_MESSAGES);
@@ -337,12 +394,56 @@
 		if (!id) return false;
 		var removed = this._removeById(id, true);
 		if (!removed) return false;
+		if (this.editingId === id) this.editingId = null;
 		if (broadcast) {
 			this.sendSync("d|" + encodePart(id));
 			this.showFeedback("Message deleted.", false);
 		}
 		this.render();
 		return true;
+	};
+
+	LeaveMsg.prototype.startEdit = function (id) {
+		if (!this.isManageMode()) return;
+		var msg = this._findById(id);
+		if (!msg) return;
+		this.editingId = msg.id;
+		this.editDraft = msg.text;
+		this.render();
+	};
+
+	LeaveMsg.prototype.cancelEdit = function () {
+		this.editingId = null;
+		this.editDraft = "";
+		this.render();
+	};
+
+	LeaveMsg.prototype.saveEdit = function () {
+		if (!this.isManageMode() || !this.editingId) return;
+		var msg = this._findById(this.editingId);
+		if (!msg) return this.cancelEdit();
+		var text = clampText(this.editDraft, MAX_TEXT);
+		if (!text) {
+			this.showFeedback("Message can't be empty.", true);
+			return;
+		}
+		this.editingId = null;
+		this.editDraft = "";
+		if (text === msg.text) return this.render();
+		msg.text = text;
+		msg.edited = Math.max(Date.now(), (Number(msg.edited) || 0) + 1);
+		this.saveLocal();
+		this.sendSync("e|" + encodePart(msg.id) + "|" + msg.edited + "|" + encodePart(msg.text));
+		this.showFeedback("Message edited.", false);
+		this.render();
+	};
+
+	LeaveMsg.prototype._findById = function (id) {
+		id = String(id == null ? "" : id);
+		for (var i = 0; i < this.messages.length; i++) {
+			if (this.messages[i].id === id) return this.messages[i];
+		}
+		return null;
 	};
 
 	LeaveMsg.prototype.sendSync = function (payload) {
@@ -398,7 +499,8 @@
 				if (i >= self.messages.length) return;
 				var m = self.messages[i++];
 				self.sendSync(
-					"m|" + encodePart(m.id) + "|" + m.ts + "|" + encodePart(m.name) + "|" + encodePart(m.text)
+					"m|" + encodePart(m.id) + "|" + m.ts + "|" + encodePart(m.name) + "|" + encodePart(m.text) +
+					(m.edited ? "|" + m.edited : "")
 				);
 				if (i < self.messages.length) {
 					self.syncReplyTimer = setTimeout(sendNext, 40);
@@ -431,10 +533,23 @@
 				id: decodePart(parts[1]),
 				ts: parseInt(parts[2], 10) || Date.now(),
 				name: decodePart(parts[3]),
-				text: decodePart(parts[4])
+				text: decodePart(parts[4]),
+				edited: parseInt(parts[5], 10) || 0
 			}, true);
 			if (kind === "m") this._gotSyncUntil = Date.now() + 2500;
 			if (added) this.render();
+			return true;
+		}
+
+		if (kind === "e" && parts.length >= 4) {
+			var target = this._findById(decodePart(parts[1]));
+			if (target && this._upsert({
+				id: target.id,
+				ts: target.ts,
+				name: target.name,
+				text: decodePart(parts[3]),
+				edited: parseInt(parts[2], 10) || 0
+			}, true)) this.render();
 			return true;
 		}
 
@@ -484,6 +599,7 @@
 	LeaveMsg.prototype.render = function () {
 		if (!this.$list || !this.$list.length) return;
 		var canDelete = this.isManageMode();
+		if (!canDelete) this.editingId = null;
 		if (this.$dialog && this.$dialog.length) {
 			this.$dialog.toggleClass("leave-msg-manage", canDelete);
 		}
@@ -495,10 +611,19 @@
 						'<span class="leave-msg-item-name"></span>' +
 						'<span class="leave-msg-item-aside">' +
 							'<span class="leave-msg-item-time"></span>' +
-							'<button type="button" class="leave-msg-delete" hidden>Delete</button>' +
+							'<span class="leave-msg-actions">' +
+								'<button type="button" class="leave-msg-edit" hidden>Edit</button>' +
+								'<button type="button" class="leave-msg-delete" hidden>Delete</button>' +
+							"</span>" +
 						"</span>" +
 					"</header>" +
-					'<p class="leave-msg-item-text"></p>' +
+					(this.messages[i].id === this.editingId
+						? '<div class="leave-msg-edit-row">' +
+							'<input type="text" class="leave-msg-edit-input" maxlength="' + MAX_TEXT + '">' +
+							'<button type="button" class="leave-msg-edit-save">Save</button>' +
+							'<button type="button" class="leave-msg-edit-cancel">Cancel</button>' +
+						"</div>"
+						: '<p class="leave-msg-item-text"></p>') +
 				"</article>";
 		}
 		this.$list.html(html);
@@ -509,11 +634,27 @@
 			el.find(".leave-msg-item-name").text(msg.name);
 			el.find(".leave-msg-item-time").text(formatTime(msg.ts));
 			el.find(".leave-msg-item-text").text(msg.text);
+			el.find(".leave-msg-edit-input").val(this.editDraft);
 			var $del = el.find(".leave-msg-delete");
 			$del.attr("data-id", msg.id);
 			$del.attr("title", "Delete this message for everyone");
-			if (canDelete) $del.removeAttr("hidden");
-			else $del.attr("hidden", "hidden");
+			var $edit = el.find(".leave-msg-edit");
+			$edit.attr("data-id", msg.id);
+			$edit.attr("title", "Edit this message for everyone");
+			if (canDelete && msg.id !== this.editingId) {
+				$del.removeAttr("hidden");
+				$edit.removeAttr("hidden");
+			} else {
+				$del.attr("hidden", "hidden");
+				$edit.attr("hidden", "hidden");
+			}
+		}
+
+		var $editInput = this.$list.find(".leave-msg-edit-input");
+		if ($editInput.length) {
+			var input = $editInput[0];
+			input.focus();
+			input.setSelectionRange(input.value.length, input.value.length);
 		}
 
 		var n = this.messages.length;
