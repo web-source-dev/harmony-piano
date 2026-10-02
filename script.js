@@ -11,8 +11,6 @@ $(function() {
 
 	var gMidiVolumeTest = (window.location.hash && window.location.hash.match(/^(?:#.+)*#midivolumetest(?:#.+)*$/i));
 
-	var gManageMode = !!(window.location.hash && window.location.hash.match(/^(?:#.+)*#manage(?:#.+)*$/i));
-
 	var gMidiOutTest;
 
 	if (!Array.prototype.indexOf) {
@@ -1488,7 +1486,7 @@ Rect.prototype.contains = function(x, y) {
 		}
 	})();
 
-	// Remote-close a Harmony piano tab (sent from the #manage panel). Browsers
+	// Remote-close a Harmony piano tab (sent from the /manage page). Browsers
 	// block window.close() on tabs the user opened themselves, so we disconnect
 	// first, try every close trick, then fall back to about:blank so the piano
 	// is gone even if the tab itself stays.
@@ -3031,287 +3029,6 @@ Rect.prototype.contains = function(x, y) {
 				if(!gModal && !$("#chat").hasClass("chatting")) captureKeyboard();
 			}, 0);
 		});
-	}
-
-	// #manage in the URL hash reveals a small admin panel: lobby Noob x_x
-	// show/hide (global via relay) + Anonymous in mybot on backup + force-clear
-	// chat for everyone in the room + close any user's Harmony piano tab.
-	// Media delete controls appear inside Media Library when gManageMode is on.
-	if(gManageMode) {
-		document.body.classList.add("manage-mode");
-		var $managePanel = $("#manage-panel");
-		if($managePanel.length) {
-			var $noobToggle = $("#manage-noob-toggle");
-			var $noobState = $("#manage-noob-state");
-			var $anonToggle = $("#manage-anon-toggle");
-			var $anonState = $("#manage-anon-state");
-			var $clearChatBtn = $("#manage-clear-chat-btn");
-			var $clearChatState = $("#manage-clear-chat-state");
-			var $closeList = $("#manage-close-list");
-			var $closeState = $("#manage-close-state");
-			var manageNoobUiBusy = false;
-			var manageNoobPending = false;
-			var manageAnonUiBusy = false;
-			var manageAnonPending = false;
-			var manageCloseBusyId = "";
-			var manageCloseStatusTimer = null;
-
-			function syncManageNoobUi(hidden) {
-				manageNoobUiBusy = true;
-				manageNoobPending = false;
-				$noobToggle.prop("checked", !hidden);
-				$noobState.text(hidden ? "Hidden in lobby" : "Shown in lobby");
-				manageNoobUiBusy = false;
-			}
-
-			function isOnBackupServerNow() {
-				return !!(gClient && typeof gClient.isOnBackupServer === "function" && gClient.isOnBackupServer());
-			}
-
-			function syncManageAnonUi(hidden) {
-				manageAnonUiBusy = true;
-				manageAnonPending = false;
-				$anonToggle.prop("checked", !hidden);
-				if(!isOnBackupServerNow()) {
-					$anonState.text(hidden
-						? "Off — backup mybot only"
-						: "On — visible on backup mybot");
-				} else {
-					$anonState.text(hidden ? "Hidden in mybot" : "Shown in mybot");
-				}
-				manageAnonUiBusy = false;
-			}
-
-			function isManageRelayReady() {
-				return !!(gRoomSync && gRoomSync.isConnected && gRoomSync.isConnected());
-			}
-
-			function refreshManageNoobReady() {
-				var ready = !!(isManageRelayReady()
-					&& typeof Client !== "undefined" && Client.isLobbyNoobSynced && Client.isLobbyNoobSynced());
-				$noobToggle.prop("disabled", !ready);
-				if(!ready) {
-					manageNoobPending = false;
-					$noobState.text("Waiting for relay…");
-					return;
-				}
-				if(!manageNoobPending && typeof Client !== "undefined" && Client.isLobbyNoobHidden) {
-					syncManageNoobUi(Client.isLobbyNoobHidden());
-				}
-			}
-
-			function refreshManageAnonReady() {
-				if(!$anonToggle.length) return;
-				var onBackup = isOnBackupServerNow();
-				var synced = !!(typeof Client !== "undefined" && Client.isMybotAnonymousSynced
-					&& Client.isMybotAnonymousSynced());
-				var ready = !!(isManageRelayReady() && synced && onBackup);
-				$anonToggle.prop("disabled", !ready);
-				if(!isManageRelayReady() || !synced) {
-					manageAnonPending = false;
-					$anonState.text("Waiting for relay…");
-					return;
-				}
-				if(!onBackup) {
-					manageAnonPending = false;
-					if(typeof Client !== "undefined" && Client.isMybotAnonymousHidden) {
-						syncManageAnonUi(Client.isMybotAnonymousHidden());
-					} else {
-						$anonState.text("Switch to backup server");
-					}
-					return;
-				}
-				if(!manageAnonPending && typeof Client !== "undefined" && Client.isMybotAnonymousHidden) {
-					syncManageAnonUi(Client.isMybotAnonymousHidden());
-				}
-			}
-
-			function getManageCloseTargets() {
-				var seen = {};
-				var list = [];
-				if(!gClient || !gClient.ppl) return list;
-				var mine = myPersistentId();
-				for(var id in gClient.ppl) {
-					if(!gClient.ppl.hasOwnProperty(id)) continue;
-					var part = gClient.ppl[id];
-					if(!part || !part._id) continue;
-					if(typeof Client !== "undefined" && Client.isLobbyNoobParticipant
-						&& Client.isLobbyNoobParticipant(part)) continue;
-					if(typeof Client !== "undefined" && Client.isMybotAnonymousParticipant
-						&& Client.isMybotAnonymousParticipant(part)) continue;
-					if(mine && part._id === mine) continue;
-					if(seen[part._id]) continue;
-					seen[part._id] = true;
-					list.push({
-						_id: String(part._id),
-						name: String(part.name || part._id),
-						color: part.color || "#888"
-					});
-				}
-				list.sort(function(a, b) {
-					return String(a.name).localeCompare(String(b.name));
-				});
-				return list;
-			}
-
-			function renderManageCloseList() {
-				if(!$closeList.length) return;
-				var ready = isManageRelayReady();
-				var targets = getManageCloseTargets();
-				$closeList.empty();
-				if(!targets.length) {
-					$closeList.append($('<div class="manage-user-empty"></div>')
-						.text("No other users in this room"));
-					if(!manageCloseBusyId && $closeState.length) {
-						$closeState.text(ready ? "Shut a user's tab" : "Waiting for relay…");
-					}
-					return;
-				}
-				if(!manageCloseBusyId && $closeState.length) {
-					$closeState.text(ready ? "Shut a user's tab" : "Waiting for relay…");
-				}
-				targets.forEach(function(user) {
-					var $row = $('<div class="manage-user-row" role="listitem"></div>');
-					var $name = $('<span class="manage-user-name"></span>');
-					$name.append($('<span class="manage-user-dot" aria-hidden="true"></span>')
-						.css("background", user.color));
-					$name.append(document.createTextNode(user.name));
-					$name.attr("title", user.name);
-					var $btn = $('<button type="button" class="manage-action-btn manage-close-btn">Close</button>');
-					$btn.attr("data-id", user._id);
-					$btn.attr("data-name", user.name);
-					$btn.attr("title", "Close " + user.name + "'s piano tab");
-					$btn.prop("disabled", !ready || manageCloseBusyId === user._id);
-					$row.append($name).append($btn);
-					$closeList.append($row);
-				});
-			}
-
-			function setManageCloseStatus(text, resetMs) {
-				if(manageCloseStatusTimer) {
-					clearTimeout(manageCloseStatusTimer);
-					manageCloseStatusTimer = null;
-				}
-				if($closeState.length) $closeState.text(text);
-				if(resetMs) {
-					manageCloseStatusTimer = setTimeout(function() {
-						manageCloseBusyId = "";
-						renderManageCloseList();
-					}, resetMs);
-				}
-			}
-
-			$noobToggle.on("change", function(e) {
-				e.stopPropagation();
-				if(manageNoobUiBusy) return;
-				var hide = !$noobToggle.prop("checked");
-				var ok = !!(gRoomSync && typeof gRoomSync.setLobbyNoobHidden === "function"
-					&& gRoomSync.setLobbyNoobHidden(hide));
-				if(!ok) {
-					manageNoobPending = false;
-					$noobState.text("Relay offline — try again");
-					refreshManageNoobReady();
-					return;
-				}
-				manageNoobPending = true;
-				$noobState.text(hide ? "Hiding…" : "Showing…");
-			});
-
-			$anonToggle.on("change", function(e) {
-				e.stopPropagation();
-				if(manageAnonUiBusy) return;
-				if(!isOnBackupServerNow()) {
-					manageAnonPending = false;
-					refreshManageAnonReady();
-					return;
-				}
-				var hide = !$anonToggle.prop("checked");
-				var ok = !!(gRoomSync && typeof gRoomSync.setMybotAnonymousHidden === "function"
-					&& gRoomSync.setMybotAnonymousHidden(hide));
-				if(!ok) {
-					manageAnonPending = false;
-					$anonState.text("Relay offline — try again");
-					refreshManageAnonReady();
-					return;
-				}
-				manageAnonPending = true;
-				$anonState.text(hide ? "Hiding…" : "Showing…");
-			});
-
-			if(typeof Client !== "undefined" && Client.onLobbyNoobHiddenChange) {
-				Client.onLobbyNoobHiddenChange(function(hidden) {
-					syncManageNoobUi(hidden);
-				});
-			}
-			if(typeof Client !== "undefined" && Client.onMybotAnonymousHiddenChange) {
-				Client.onMybotAnonymousHiddenChange(function(hidden) {
-					syncManageAnonUi(hidden);
-					if(gClient && gClient.ensureMybotAnonymous) gClient.ensureMybotAnonymous();
-				});
-			}
-			refreshManageNoobReady();
-			refreshManageAnonReady();
-			var manageNoobReadyTimer = setInterval(function() {
-				refreshManageNoobReady();
-				refreshManageAnonReady();
-				renderManageCloseList();
-			}, 1000);
-			$(window).on("beforeunload", function() { clearInterval(manageNoobReadyTimer); });
-
-			gClient.on("server", function() {
-				refreshManageAnonReady();
-				if(gClient && gClient.ensureMybotAnonymous) gClient.ensureMybotAnonymous();
-			});
-			gClient.on("ch", function() {
-				if(gClient && gClient.ensureMybotAnonymous) gClient.ensureMybotAnonymous();
-			});
-
-			$clearChatBtn.on("click", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				if(typeof stopChatSpam === "function") stopChatSpam();
-				forceClearAllChat(true);
-				$clearChatState.text("Cleared for everyone");
-				setTimeout(function() {
-					$clearChatState.text("Wipe for everyone");
-				}, 2000);
-			});
-
-			$closeList.on("click", ".manage-close-btn", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				var $btn = $(this);
-				var targetId = String($btn.attr("data-id") || "");
-				var targetName = String($btn.attr("data-name") || "this user");
-				if(!targetId || manageCloseBusyId) return;
-				if(!confirm("Close piano for " + targetName + "? This will close their browser tab.")) return;
-				if(!isManageRelayReady() || !gRoomSync || typeof gRoomSync.closePianoFor !== "function") {
-					setManageCloseStatus("Relay offline — try again", 2000);
-					renderManageCloseList();
-					return;
-				}
-				var ok = gRoomSync.closePianoFor(targetId);
-				if(!ok) {
-					setManageCloseStatus("Relay offline — try again", 2000);
-					renderManageCloseList();
-					return;
-				}
-				manageCloseBusyId = targetId;
-				setManageCloseStatus("Closing " + targetName + "…", 2500);
-				renderManageCloseList();
-			});
-
-			gClient.on("participant added", renderManageCloseList);
-			gClient.on("participant removed", renderManageCloseList);
-			gClient.on("participant update", renderManageCloseList);
-			gClient.on("ch", renderManageCloseList);
-			renderManageCloseList();
-
-			$managePanel.on("mousedown touchstart pointerdown", function(e) {
-				e.stopPropagation();
-			});
-			$managePanel.removeAttr("hidden");
-		}
 	}
 
 
@@ -6460,14 +6177,6 @@ Rect.prototype.contains = function(x, y) {
 					$play.attr("title", "Load and share in Room DJ");
 					$actions.append($play);
 				}
-				if(gManageMode) {
-					var $del = $('<button type="button" class="ml-btn ml-btn-danger media-library-delete">Delete</button>');
-					$del.attr("data-id", item.id || "");
-					$del.attr("data-url", url);
-					$del.attr("data-title", title);
-					$del.attr("title", "Delete this file (manage mode)");
-					$actions.append($del);
-				}
 				$body.append($actions);
 				$card.append($thumb).append($body);
 				$list.append($card);
@@ -6492,34 +6201,6 @@ Rect.prototype.contains = function(x, y) {
 			});
 		}
 		window.refreshMediaLibraryDialog = refreshMediaLibraryDialog;
-
-		var mediaLibraryDeleteBusy = false;
-
-		function deleteMediaLibraryItem(itemId, itemUrl, itemTitle) {
-			if(!gManageMode) {
-				return Promise.reject(new Error("Delete requires #manage in the URL"));
-			}
-			if(mediaLibraryDeleteBusy) {
-				return Promise.reject(new Error("Delete already in progress"));
-			}
-			if(typeof RoomMedia === "undefined" || !RoomMedia.deleteLibraryItem) {
-				return Promise.reject(new Error("Delete unavailable"));
-			}
-			var key = itemId || itemUrl;
-			if(!key) return Promise.reject(new Error("Missing media item"));
-			mediaLibraryDeleteBusy = true;
-			$mediaLibraryDialog.find(".media-library-delete").prop("disabled", true);
-			setMediaLibraryStatus("Deleting " + (itemTitle || "media") + "…");
-			return RoomMedia.deleteLibraryItem(itemId || itemUrl).then(function() {
-				mediaLibraryDeleteBusy = false;
-				setMediaLibraryStatus("Deleted " + (itemTitle || "media"));
-				return refreshMediaLibraryDialog();
-			}).catch(function(err) {
-				mediaLibraryDeleteBusy = false;
-				$mediaLibraryDialog.find(".media-library-delete").prop("disabled", false);
-				throw err;
-			});
-		}
 
 		function collectLibraryImages() {
 			return (gMediaLibraryItems || []).filter(function(item) {
@@ -6696,20 +6377,6 @@ Rect.prototype.contains = function(x, y) {
 				$btn.attr("data-title"),
 				$btn.attr("data-kind")
 			).catch(function(err) {
-				setMediaLibraryStatus(err.message || String(err));
-				alert(err.message || String(err));
-			});
-		});
-		$mediaLibraryDialog.on("click", ".media-library-delete", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			if(!gManageMode) return;
-			var $btn = $(this);
-			var itemId = String($btn.attr("data-id") || "");
-			var itemUrl = String($btn.attr("data-url") || "");
-			var itemTitle = String($btn.attr("data-title") || "media");
-			if(!confirm("Delete \"" + itemTitle + "\"?\nThis cannot be undone.")) return;
-			deleteMediaLibraryItem(itemId, itemUrl, itemTitle).catch(function(err) {
 				setMediaLibraryStatus(err.message || String(err));
 				alert(err.message || String(err));
 			});

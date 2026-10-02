@@ -116,7 +116,6 @@
 		this.$list.on("click", ".leave-msg-delete", function (e) {
 			e.preventDefault();
 			e.stopPropagation();
-			if (!self.isManageMode()) return;
 			var id = $(this).attr("data-id");
 			if (!id) return;
 			self.deleteMessage(id, true);
@@ -125,7 +124,6 @@
 		this.$list.on("click", ".leave-msg-edit", function (e) {
 			e.preventDefault();
 			e.stopPropagation();
-			if (!self.isManageMode()) return;
 			var id = $(this).attr("data-id");
 			if (!id) return;
 			self.startEdit(id);
@@ -165,10 +163,6 @@
 		$(global).on("blur.leaveMsgShift", function () {
 			self.$dialog.removeClass("leave-msg-shift");
 		});
-	};
-
-	LeaveMsg.prototype.isManageMode = function () {
-		return !!(global.document && document.body && document.body.classList.contains("manage-mode"));
 	};
 
 	LeaveMsg.prototype.getUserName = function () {
@@ -389,7 +383,6 @@
 	};
 
 	LeaveMsg.prototype.deleteMessage = function (id, broadcast) {
-		if (!this.isManageMode()) return false;
 		id = String(id == null ? "" : id);
 		if (!id) return false;
 		var removed = this._removeById(id, true);
@@ -404,7 +397,6 @@
 	};
 
 	LeaveMsg.prototype.startEdit = function (id) {
-		if (!this.isManageMode()) return;
 		var msg = this._findById(id);
 		if (!msg) return;
 		this.editingId = msg.id;
@@ -419,7 +411,7 @@
 	};
 
 	LeaveMsg.prototype.saveEdit = function () {
-		if (!this.isManageMode() || !this.editingId) return;
+		if (!this.editingId) return;
 		var msg = this._findById(this.editingId);
 		if (!msg) return this.cancelEdit();
 		var text = clampText(this.editDraft, MAX_TEXT);
@@ -598,11 +590,6 @@
 
 	LeaveMsg.prototype.render = function () {
 		if (!this.$list || !this.$list.length) return;
-		var canDelete = this.isManageMode();
-		if (!canDelete) this.editingId = null;
-		if (this.$dialog && this.$dialog.length) {
-			this.$dialog.toggleClass("leave-msg-manage", canDelete);
-		}
 		var html = "";
 		for (var i = 0; i < this.messages.length; i++) {
 			html +=
@@ -641,7 +628,7 @@
 			var $edit = el.find(".leave-msg-edit");
 			$edit.attr("data-id", msg.id);
 			$edit.attr("title", "Edit this message for everyone");
-			if (canDelete && msg.id !== this.editingId) {
+			if (msg.id !== this.editingId) {
 				$del.removeAttr("hidden");
 				$edit.removeAttr("hidden");
 			} else {

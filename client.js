@@ -1021,8 +1021,8 @@ Client.isMybotAnonymousParticipant = function(part) {
 	return !!(part && (part.id === Client.MYBOT_ANONYMOUS_ID || part._id === Client.MYBOT_ANONYMOUS._id));
 };
 
-// Global show/hide switch for the lobby ghost, exposed via the #manage panel
-// (see script.js). This is NOT per-browser state: relay-server.js holds the
+// Global show/hide switch for the lobby ghost, controlled from the /manage page
+// This is NOT per-browser state: relay-server.js holds the
 // authoritative flag and pushes it to every connected client (see "manage-noob"
 // in roomSync.js), so toggling it changes what everyone sees, not just the
 // browser that flipped the switch. Client._lobbyNoobHidden only mirrors the
