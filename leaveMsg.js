@@ -157,11 +157,20 @@
 		});
 
 		// Edit/Delete only appear while Shift is held and the message is hovered (see screen.css).
-		$(document).on("keydown.leaveMsgShift keyup.leaveMsgShift", function (e) {
-			if (e.key === "Shift" || e.keyCode === 16) self.$dialog.toggleClass("leave-msg-shift", e.type === "keydown");
-		});
-		$(global).on("blur.leaveMsgShift", function () {
-			self.$dialog.removeClass("leave-msg-shift");
+		// Capture phase on window so piano/modal key handlers that stop propagation can't swallow Shift.
+		function setShift(on) {
+			self.$dialog.toggleClass("leave-msg-shift", !!on);
+		}
+		global.addEventListener("keydown", function (e) {
+			if (e.key === "Shift" || e.keyCode === 16 || e.shiftKey) setShift(true);
+		}, true);
+		global.addEventListener("keyup", function (e) {
+			if (e.key === "Shift" || e.keyCode === 16) setShift(false);
+		}, true);
+		global.addEventListener("blur", function () { setShift(false); });
+		// Mouse events carry shiftKey too, which covers Shift pressed before the page had focus.
+		this.$dialog.on("mousemove mouseover", function (e) {
+			setShift(e.shiftKey);
 		});
 	};
 

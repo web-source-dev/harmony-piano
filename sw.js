@@ -15,7 +15,7 @@
  */
 "use strict";
 
-var CACHE_NAME = "harmony-piano-ui-v6";
+var CACHE_NAME = "harmony-piano-ui-v7";
 
 var SHELL = [
 	"./",
