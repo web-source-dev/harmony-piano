@@ -7,7 +7,7 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20261002u"/>
+    <link rel="stylesheet" href="./screen.css?v=20261002x"/>
     <!-- Phone with "Desktop site" on: still use the phone layout (after the CSS it adjusts). -->
     <script src="./forceMobile.js?v=20260929a"></script>
     <link rel="canonical" href="https://multiplayerpiano.com/">
@@ -399,10 +399,10 @@
     <div class="harmony-tools-bar">
         <span class="harmony-tools-label">Play</span>
         <button type="button" id="harmony-blob-btn" class="harmony-tool-btn" title="Blob Friend — poke, stretch, throw">
-            <span class="harmony-tool-icon" aria-hidden="true">◉</span> Blob
+            <span class="harmony-tool-icon" aria-hidden="true">🫧</span> Blob
         </button>
         <button type="button" id="harmony-doodle-btn" class="harmony-tool-btn" title="Desktop Doodler — shared sketch pad">
-            <span class="harmony-tool-icon" aria-hidden="true">✎</span> Doodle
+            <span class="harmony-tool-icon" aria-hidden="true">✏️</span> Doodle
         </button>
         <button type="button" id="harmony-react-btn" class="harmony-tool-btn" title="Emoji reactions + confetti for the whole room">
             <span class="harmony-tool-icon" aria-hidden="true">🎉</span> React
@@ -438,7 +438,7 @@
             <span class="harmony-tool-icon" aria-hidden="true">🐵</span> Chaos
         </button>
         <button type="button" id="harmony-piano-btn" class="harmony-tool-btn" title="Show or hide the piano">
-            <span class="harmony-tool-icon" aria-hidden="true">♫</span> Piano
+            <span class="harmony-tool-icon" aria-hidden="true">🎹</span> Piano
         </button>
     </div>
     <div id="play-area" class="play-area" hidden>
@@ -546,6 +546,7 @@
         <div id="share-image-btn" class="ugly-button" title="Share an image with everyone in the room">Share Image</div>
         <div id="leave-msg-btn" class="ugly-button" title="Leave a message everyone in the room can read">Leave a msg</div>
         <div id="kiss-btn" class="ugly-button" title="Send a big kiss — everyone in the room sees and hears it">💋 Send Kiss</div>
+        <div id="wake-bell-btn" class="ugly-button" role="button" tabindex="0" title="Ring a loud 5-second wake-up bell for everyone in the room">🔔 Wake Up</div>
         <div id="love-btn" class="ugly-button" title="Love Corner">💞 Love</div>
         <div id="sound-btn" class="ugly-button sound-btn">Sound Select</div>
         <div id="status"></div>
@@ -1384,8 +1385,8 @@
     window.HARMONY_APP_SCRIPTS = [
         "./jquery.min.js",
         "./util.js",
-        "./client.js?v=20260927b",
-        "./roomSync.js?v=20260928m",
+        "./client.js?v=20261002w",
+        "./roomSync.js?v=20261002w",
         "./funSounds.js?v=20260924b",
         "./NoteQuota.js",
         "./lame.min.js",
@@ -1417,9 +1418,10 @@
         "./shareImage.js?v=20260712b",
         "./leaveMsg.js?v=20260922a",
         "./kissBlast.js?v=20260924b",
+        "./wakeBell.js?v=20261002a",
         "./loveBits.js?v=20260925b",
-        "./roomThemes.js?v=20261002u",
-        "./script.js?v=20261002s"
+        "./roomThemes.js?v=20261002v",
+        "./script.js?v=20261002w"
     ];
 </script>
 <!--<script src="https://mppclone.com/script.js"></script>-->

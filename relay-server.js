@@ -1179,6 +1179,7 @@ function mppRememberChat(chId, frame) {
 function mppSendChatHistory(sock, chId) {
 	mppSend(sock, { m: "c", c: mppChatHistory.get(chId) || [] });
 }
+var MPP_GHOST_QUIET_MS = 7000;
 function mppJoinRoom(sock, chId, set) {
 	var st = sock.mpp;
 	chId = (typeof chId === "string" && chId.length) ? chId.slice(0, 512) : "lobby";
@@ -1204,6 +1205,16 @@ function mppJoinRoom(sock, chId, set) {
 		if (isLobbyRoomId(chId)) room.settings.lobby = true;
 		created = true;
 	}
+	// Same browser rejoining after its connection died: drop the ghost of the
+	// old connection now instead of waiting for the heartbeat to notice. Only
+	// connections that have gone quiet are removed, so two live tabs of the same
+	// browser can both stay.
+	var ghosts = [];
+	room.parts.forEach(function (p) {
+		if (p.sock && p.sock !== sock && p._id === st.user._id && st.user._id.charAt(0) === "h"
+			&& Date.now() - (p.sock.lastRx || 0) > MPP_GHOST_QUIET_MS) ghosts.push(p.sock);
+	});
+	ghosts.forEach(function (g) { mppLeaveRoom(g); try { g.terminate(); } catch (e) {} });
 	var part = { id: st.pid, _id: st.user._id, name: st.user.name, color: st.user.color, x: 50, y: 50, sock: sock };
 	room.parts.set(st.pid, part);
 	st.room = chId;
@@ -1224,6 +1235,11 @@ function mppHandle(sock, msg) {
 	var room = st.room ? mppRooms[st.room] : null;
 	switch (msg.m) {
 		case "hi":
+			// A browser that reconnects keeps its identity (its token is a random
+			// per-browser value; only a hash of it is ever shown to others).
+			if (typeof msg.token === "string" && /^[A-Za-z0-9_-]{16,64}$/.test(msg.token) && !st.room) {
+				st.user._id = "h" + crypto.createHash("sha256").update("harmony-id|" + msg.token).digest("hex").slice(0, 24);
+			}
 			mppSend(sock, { m: "hi", t: Date.now(), u: { _id: st.user._id, name: st.user.name, color: st.user.color }, motd: "Harmony backup server" });
 			break;
 		case "t":
@@ -1323,8 +1339,10 @@ mppWss.on("connection", function (sock) {
 		pid: mppGenId(""),
 		x: 50, y: 50, room: null, lsSub: false
 	};
+	sock.lastRx = Date.now();
 	sock.on("message", function (raw) {
 		sock.missedPongs = 0; // any traffic proves the client is still there
+		sock.lastRx = Date.now();
 		var arr;
 		try { arr = JSON.parse(raw.toString()); } catch (e) { return; }
 		if (!Array.isArray(arr)) arr = [arr];
@@ -1337,8 +1355,9 @@ mppWss.on("connection", function (sock) {
 // Heartbeat: drop only connections that are really dead. Users on slow or
 // unstable internet can take a long time to answer a ping, so a socket is only
 // terminated after HEARTBEAT_MAX_MISSED heartbeats in a row with no pong and no
-// other traffic (~75s), instead of after a single missed pong.
-var HEARTBEAT_MS = 25000;
+// other traffic (~30s), instead of after a single missed pong. Live clients
+// ping every few seconds anyway, so this only ever removes dead ones.
+var HEARTBEAT_MS = 10000;
 var HEARTBEAT_MAX_MISSED = 3;
 function heartbeatSocket(socket) {
 	if ((socket.missedPongs || 0) >= HEARTBEAT_MAX_MISSED) { try { socket.terminate(); } catch (e) {} return; }

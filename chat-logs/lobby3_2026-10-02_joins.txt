@@ -1,7 +1,0 @@
-=== Join log: lobby3 | Date: 2026-10-02 ===
-
---- room "lobby3" log started at 2026-10-02 04:30:53 via localhost [HARMONY MIRROR ★] ---
-[2026-10-02 04:30:53] *** HARMONY *** Noob x_x joined via localhost [HARMONY MIRROR ★]
-
---- room "lobby3" log started at 2026-10-02 04:39:03 via localhost [HARMONY MIRROR ★] ---
-[2026-10-02 04:39:03] *** HARMONY *** Noob x_x joined via localhost [HARMONY MIRROR ★]

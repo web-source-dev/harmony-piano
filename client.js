@@ -173,13 +173,19 @@ Client.prototype.switchServer = function(index) {
 //     The UI gets "chat pending" / "chat delivered" / "chat failed" events.
 //   * Cursor-move updates are skipped while the upload is backed up so notes
 //     and chat aren't stuck behind stale mouse positions.
-Client.prototype.connectTimeoutMs = 30000;
-Client.prototype.joinTimeoutMs = 30000;
-Client.prototype.pingIntervalMs = 10000;
-Client.prototype.probeAfterMs = 25000;
-Client.prototype.probeTimeoutMs = 30000;
-Client.prototype.staleTimeoutMs = 90000;
-Client.prototype.watchdogMs = 5000;
+// The server answers every ping, so a few seconds of total silence already
+// means trouble. A spare connection is cheap (make-before-break), so it is
+// opened early; the old socket is only dropped the hard way after
+// staleTimeoutMs, when it is certainly dead.
+Client.prototype.connectTimeoutMs = 20000;
+Client.prototype.joinTimeoutMs = 20000;
+Client.prototype.pingIntervalMs = 5000;
+Client.prototype.probeAfterMs = 12000;
+Client.prototype.probeTimeoutMs = 20000;
+Client.prototype.staleTimeoutMs = 30000;
+Client.prototype.watchdogMs = 2000;
+Client.prototype.shakyAfterMs = 9000;      // UI shows "connection lost" after this much silence
+Client.prototype.chatStuckMs = 6000;       // chat unanswered this long -> open a spare connection
 Client.prototype.maxBufferedForCursor = 16 * 1024;
 Client.prototype.chatQueueMax = 30;
 Client.prototype.chatQueueMaxAgeMs = 5 * 60 * 1000;
@@ -188,6 +194,14 @@ Client.prototype.chatSendSpacingMs = 700;
 
 Client.prototype.isOnline = function() {
 	return typeof navigator === "undefined" || navigator.onLine !== false;
+};
+
+// "ok" | "shaky" (connected but nothing heard lately) | "down" (reconnecting).
+// Emitted as "link" so the UI can tell the user what is going on.
+Client.prototype._setLink = function(state) {
+	if(this.linkState === state) return;
+	this.linkState = state;
+	this.emit("link", state);
 };
 
 Client.prototype._clearConnTimers = function() {
@@ -228,9 +242,19 @@ Client.prototype.reconnectNow = function(reason) {
 	}
 };
 
-// Time since we last had any sign the current connection is alive.
+// How long something we sent (a ping or a chat message — the server answers
+// both) has gone unanswered. Measured from the request, not from the last
+// message, so a background tab whose timers are throttled to once a minute
+// isn't mistaken for a dead connection just because it pinged late.
 Client.prototype._silentFor = function() {
-	return Date.now() - Math.max(this.lastMessageTime || 0, this.lastProgressTime || 0);
+	if(!this.awaitingSince) return 0;
+	return Math.max(0, Date.now() - Math.max(this.awaitingSince, this.lastProgressTime || 0));
+};
+
+Client.prototype._ping = function() {
+	if(!this.isConnected()) return;
+	if(!this.awaitingSince) this.awaitingSince = Date.now();
+	this.sendArray([{m: "t", e: Date.now()}]);
 };
 
 // Cheap liveness check: ping if we haven't heard from the server lately, and
@@ -238,9 +262,8 @@ Client.prototype._silentFor = function() {
 Client.prototype.checkConnection = function() {
 	if(!this.canConnect) return;
 	if(this.isConnected()) {
-		var silent = this._silentFor();
-		if(silent > this.probeAfterMs) this._startProbe();
-		if(silent > 3000) this.sendArray([{m: "t", e: Date.now()}]);
+		if(this._silentFor() > this.probeAfterMs) this._startProbe();
+		this._ping();
 	} else if(!this.isConnecting()) {
 		this.reconnectNow("check");
 	}
@@ -280,6 +303,7 @@ Client.prototype._onSocketClosed = function(sock, evt) {
 	this._clearConnTimers();
 
 	this.emit("disconnect", evt);
+	if(this.canConnect) this._setLink("down");
 	this.emit("status", !this.canConnect ? "Offline mode"
 		: this.isOnline() ? "Reconnecting..." : "No internet — will reconnect automatically...");
 
@@ -344,8 +368,10 @@ Client.prototype._bindNetworkListeners = function() {
 			// The connection may have survived the outage, or may be half-dead.
 			// Ping it, and if it has been quiet open a spare in the background —
 			// no disconnect either way.
-			self.sendArray([{m: "t", e: Date.now()}]);
-			if(self._silentFor() > 5000) self._startProbe();
+			// A network change usually kills the old TCP connection without the
+			// browser noticing, so open a fresh one right away.
+			self._ping();
+			self._startProbe();
 			return;
 		}
 		self.reconnectNow("online");
@@ -404,7 +430,7 @@ Client.prototype._createSocket = function(uri, log) {
 	sock.addEventListener("open", function(evt) {
 		log && console.log(`ws open`)
 		if(sock === self._probe) {
-			self._sendOn(sock, [{m: "hi", x: 1, y: 1}]);
+			self._sendOn(sock, [{m: "hi", x: 1, y: 1, token: self._helloToken()}]);
 			return;
 		}
 		if(self.ws !== sock) return;
@@ -417,6 +443,7 @@ Client.prototype._createSocket = function(uri, log) {
 		if(sock === self._probe) { self._onProbeMessage(sock, transmission); return; }
 		if(self.ws !== sock) return;
 		self.lastMessageTime = sock._lastRx = Date.now();
+		self.awaitingSince = 0;
 		log && console.log(`message`, transmission)
 		self._dispatch(transmission);
 	});
@@ -448,13 +475,14 @@ Client.prototype._onSocketOpen = function(sock, promoted, log) {
 	clearTimeout(this.connectTimer);
 	this.connectionTime = Date.now();
 	this.lastMessageTime = Date.now();
+	this.awaitingSince = 0;
 	this.lastProgressTime = 0;
 	this.serverFailCount = 0;
 	if(this.serverIndex > 0 && !promoted) this.emit("status", "Connected to backup server");
 	this.emit("server", this.getServerInfo());
-	if(!promoted) this.sendArray([{"m": "hi", "x": 1, "y": 1, "🐈": this['🐈']++ || undefined }]);
+	if(!promoted) this.sendArray([{"m": "hi", "x": 1, "y": 1, "🐈": this['🐈']++ || undefined, token: this._helloToken() }]);
 	this.pingInterval = setInterval(function() {
-		self.sendArray([{m: "t", e: Date.now()}]);
+		self._ping();
 	}, this.pingIntervalMs);
 	this.watchdogInterval = setInterval(function() {
 		if(self.ws !== sock) return;
@@ -463,13 +491,17 @@ Client.prototype._onSocketOpen = function(sock, promoted, log) {
 		if(buf > 0 && typeof sock._lastBuf === "number" && buf < sock._lastBuf) self.lastProgressTime = Date.now();
 		sock._lastBuf = buf;
 		var silent = self._silentFor();
-		var hardSilent = Date.now() - (self.lastMessageTime || 0);
+		var hardSilent = self.awaitingSince ? Date.now() - self.awaitingSince : 0;
 		if(silent > self.staleTimeoutMs || hardSilent > self.staleTimeoutMs * 3) {
 			log && console.log(`connection stale`);
 			self._abandonSocket("stale");
 			return;
 		}
 		if(silent > self.probeAfterMs) self._startProbe();
+		// Our chat isn't coming back and the server is quiet: don't wait.
+		var oldest = self.chatInFlight[0];
+		if(oldest && Date.now() - oldest.sentAt > self.chatStuckMs && silent > self.chatStuckMs) self._startProbe();
+		if(self.joined) self._setLink(silent > self.shakyAfterMs ? "shaky" : "ok");
 		self._expireChat();
 	}, this.watchdogMs);
 	// Connected but never put into a channel: retry instead of sitting on
@@ -500,6 +532,24 @@ Client.prototype._onSocketOpen = function(sock, promoted, log) {
 
 	this.emit("connect");
 	if(!promoted) this.emit("status", "Joining channel...");
+};
+
+// Per-browser random token, sent only to our own backup server so a
+// reconnecting browser keeps its identity there (and its old "ghost" is
+// removed). Never sent to the public MPP server.
+Client.prototype._helloToken = function() {
+	if(this.serverIndex === 0) return undefined;
+	if(!this._token) {
+		try { this._token = localStorage.harmonyClientToken; } catch(e) {}
+		if(!this._token || !/^[A-Za-z0-9_-]{16,64}$/.test(this._token)) {
+			var t = "";
+			var chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+			for(var i = 0; i < 32; i++) t += chars.charAt(Math.floor(Math.random() * chars.length));
+			this._token = t;
+			try { localStorage.harmonyClientToken = t; } catch(e) {}
+		}
+	}
+	return this._token;
 };
 
 Client.prototype._startProbe = function() {
@@ -569,6 +619,7 @@ Client.prototype._promoteProbe = function(sock, rest) {
 		this.receiveServerTime(hi.t, hi.e || undefined);
 	}
 	this.lastMessageTime = Date.now();
+	this.awaitingSince = 0;
 	this._dispatch(rest);
 };
 
@@ -627,6 +678,7 @@ Client.prototype.sendChat = function(message) {
 Client.prototype._transmitChat = function(item) {
 	item.tries++;
 	item.sentAt = Date.now();
+	if(this.isConnected() && !this.awaitingSince) this.awaitingSince = item.sentAt;
 	this.chatInFlight.push(item);
 	this.sendArray([{m: "a", message: item.message}]);
 };
@@ -659,6 +711,10 @@ Client.prototype._expireChat = function() {
 		if(now - item.time > self.chatQueueMaxAgeMs) { self._failChat(item); return false; }
 		return true;
 	});
+};
+
+Client.normalizeChat = function(text) {
+	return String(text == null ? "" : text).replace(/\s+/g, " ").trim();
 };
 
 Client.prototype._isOwnChat = function(msg, allowName) {
@@ -740,13 +796,18 @@ Client.prototype.bindEventListeners = function() {
 		// Our own message came back: it's delivered.
 		if(!self.chatInFlight.length || !self._isOwnChat(msg, false)) return;
 		var text = msg.a != null ? msg.a : msg.message;
+		// Servers may trim or tidy the text, so compare loosely too.
+		var loose = Client.normalizeChat(text);
+		var at = -1;
 		for(var i = 0; i < self.chatInFlight.length; i++) {
-			if(self.chatInFlight[i].message === text) {
-				var item = self.chatInFlight.splice(i, 1)[0];
-				self._deliverChat(item);
-				return;
+			if(self.chatInFlight[i].message === text) { at = i; break; }
+		}
+		if(at < 0) {
+			for(var j = 0; j < self.chatInFlight.length; j++) {
+				if(Client.normalizeChat(self.chatInFlight[j].message) === loose) { at = j; break; }
 			}
 		}
+		if(at >= 0) self._deliverChat(self.chatInFlight.splice(at, 1)[0]);
 	});
 	this.on("c", function(msg) {
 		// Room chat history (sent on join). Anything we were about to re-send
@@ -758,7 +819,7 @@ Client.prototype.bindEventListeners = function() {
 				for(var i = 0; i < hist.length; i++) {
 					var h = hist[i];
 					var text = h.a != null ? h.a : h.message;
-					if(text !== item.message || !self._isOwnChat(h, true)) continue;
+					if(Client.normalizeChat(text) !== Client.normalizeChat(item.message) || !self._isOwnChat(h, true)) continue;
 					if(h.t && (h.t - self.serverTimeOffset) < item.time - 30000) continue;
 					self._deliverChat(item);
 					return false;
@@ -771,6 +832,7 @@ Client.prototype.bindEventListeners = function() {
 	this.on("ch", function(msg) {
 		var firstJoin = !self.joined;
 		self.joined = true;
+		self._setLink("ok");
 		clearTimeout(self.joinTimer);
 		self.desiredChannelId = msg.ch._id;
 		self.desiredChannelSettings = msg.ch.settings;

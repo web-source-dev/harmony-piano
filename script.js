@@ -115,6 +115,13 @@ $(function() {
 
 	var TIMING_TARGET = 1000;
 
+	// Room theme used when the room hasn't picked one ("classic" = plain color).
+	var DEFAULT_ROOM_THEME = "web";
+	function roomThemeOf(settings) {
+		var id = settings && settings.theme;
+		return (typeof id === "string" && id) ? id : DEFAULT_ROOM_THEME;
+	}
+
 
 // Utility
 
@@ -665,10 +672,10 @@ Rect.prototype.contains = function(x, y) {
 
 		Renderer.prototype.init.call(this, piano); // calls resize()
 
-		// create render loop
+		// create render loop (idle while the piano is hidden — see gPianoShown)
 		var self = this;
 		var render = function() {
-			self.redraw();
+			if(gPianoShown) self.redraw();
 			requestAnimationFrame(render);
 		};
 		requestAnimationFrame(render);
@@ -859,6 +866,8 @@ Rect.prototype.contains = function(x, y) {
 	};
 
 	CanvasRenderer.prototype.visualize = function(key, color) {
+		// Blips are only cleared by redraw(), so don't pile them up while hidden.
+		if(!gPianoShown) return;
 		key.timePlayed = Date.now();
 		key.blips.push({"time": key.timePlayed, "color": color});
 	};
@@ -1036,8 +1045,13 @@ Rect.prototype.contains = function(x, y) {
 
 ////////////////////////////////////////////////////////////////
 
+	// The piano starts hidden and nothing is downloaded for it until this user
+	// opens it with the Piano button (see setPianoCollapsed / activate()).
+	var gPianoShown = false;
+
 	function SoundSelector(piano) {
 	    this.initialized = false;
+	    this.deferred = true; // sample downloads wait for activate()
 	    this.keys = piano.keys;
 	    this.loading = {};
 	    this.notification;
@@ -1152,6 +1166,13 @@ Rect.prototype.contains = function(x, y) {
 	        return this.loadPack("MPP Classic");
 		}
 
+		// Piano not opened yet: just remember the choice, download nothing.
+		if (this.deferred) {
+			this.soundSelection = pack.name;
+			if (this.initialized) { try { localStorage.soundSelection = pack.name; } catch (e) {} }
+			return;
+		}
+
 		if (pack.name == this.soundSelection && !f) return;
 		if (pack.keys.length != Object.keys(this.piano.keys).length) {
 			this.piano.keys = {};
@@ -1188,6 +1209,13 @@ Rect.prototype.contains = function(x, y) {
 		}
 	    if(localStorage) localStorage.soundSelection = pack.name;
 	    this.soundSelection = pack.name;
+	};
+
+	// First time the piano is shown: load the selected sound pack.
+	SoundSelector.prototype.activate = function() {
+		if (!this.deferred) return;
+		this.deferred = false;
+		this.loadPack(this.soundSelection, true);
 	};
 
 	SoundSelector.prototype.removePack = function(name) {
@@ -1607,6 +1635,85 @@ Rect.prototype.contains = function(x, y) {
 	gClient.on("disconnect", function(evt) {
 		console.log(evt);
 	});
+
+	// Connection banner: tells the user when they've lost the connection and
+	// that it is coming back by itself — no page refresh needed.
+	(function() {
+		var banner = document.createElement("div");
+		banner.id = "conn-banner";
+		banner.className = "conn-banner";
+		banner.setAttribute("role", "status");
+		banner.setAttribute("aria-live", "polite");
+		banner.hidden = true;
+		var dot = document.createElement("span");
+		dot.className = "conn-banner-dot";
+		var text = document.createElement("span");
+		text.className = "conn-banner-text";
+		var btn = document.createElement("button");
+		btn.type = "button";
+		btn.className = "conn-banner-btn";
+		btn.textContent = "Reconnect now";
+		btn.addEventListener("click", function(e) {
+			e.stopPropagation();
+			text.textContent = "Reconnecting…";
+			gClient.reconnectNow("manual");
+			if(gRoomSync) gRoomSync.reconnectNow();
+		});
+		banner.appendChild(dot);
+		banner.appendChild(text);
+		banner.appendChild(btn);
+		document.body.appendChild(banner);
+		var hideTimer = null;
+		var wasBad = false;
+		function show(state, msg, withBtn) {
+			clearTimeout(hideTimer);
+			banner.className = "conn-banner conn-" + state;
+			text.textContent = msg;
+			btn.hidden = !withBtn;
+			banner.hidden = false;
+		}
+		gClient.on("link", function(state) {
+			if(state === "shaky") {
+				wasBad = true;
+				show("shaky", "Connection is weak — reconnecting…", true);
+			} else if(state === "down") {
+				wasBad = true;
+				show("down", navigator.onLine === false
+					? "You're offline — will reconnect when the internet is back"
+					: "Disconnected — reconnecting…", true);
+			} else if(state === "ok") {
+				if(!wasBad) { banner.hidden = true; return; }
+				wasBad = false;
+				show("ok", "Back online ✓", false);
+				hideTimer = setTimeout(function() { banner.hidden = true; }, 2500);
+			}
+		});
+		// The browser knows about a dropped network before any socket does.
+		var onlineCheck = null;
+		window.addEventListener("offline", function() {
+			clearInterval(onlineCheck);
+			wasBad = true;
+			show("down", "You're offline — will reconnect when the internet is back", false);
+		});
+		window.addEventListener("online", function() {
+			show("shaky", "Reconnecting…", true);
+			clearInterval(onlineCheck);
+			var tries = 0;
+			// The connection may have survived; wait until the server answers.
+			onlineCheck = setInterval(function() {
+				tries++;
+				if(gClient.isConnected() && gClient.joined && !gClient.awaitingSince) {
+					clearInterval(onlineCheck);
+					gClient.linkState = "ok";
+					wasBad = false;
+					show("ok", "Back online ✓", false);
+					hideTimer = setTimeout(function() { banner.hidden = true; }, 2500);
+				} else if(tries > 120) {
+					clearInterval(onlineCheck);
+				}
+			}, 500);
+		});
+	})();
 
 	// Setting status
 	(function() {
@@ -2099,7 +2206,7 @@ Rect.prototype.contains = function(x, y) {
 					$("#room-settings .checkbox[name=crownsolo]").prop("checked", settings.crownsolo);
 					$("#room-settings input[name=color]").val(settings.color);
 					if(window.RoomThemes) {
-						RoomThemes.buildPicker($("#room-settings .room-theme-grid"), settings.theme, function(id) {
+						RoomThemes.buildPicker($("#room-settings .room-theme-grid"), roomThemeOf(settings), function(id) {
 							// Takes effect right away; the server re-broadcasts it to everyone in the room.
 							gClient.setChannelSettings({theme: id});
 						});
@@ -2229,13 +2336,16 @@ Rect.prototype.contains = function(x, y) {
 		}
 
 		setColorToDefault();
+		if(window.RoomThemes) { clearInterval(colorIv); RoomThemes.apply(DEFAULT_ROOM_THEME); }
 
 		gClient.on("ch", function(ch) {
 			if(ch.ch.settings) {
 				// A prebuilt room theme (roomThemes.js) replaces the plain color.
-				if(window.RoomThemes && RoomThemes.has(ch.ch.settings.theme)) {
+				// Rooms that never picked one get the default theme.
+				var themeId = roomThemeOf(ch.ch.settings);
+				if(window.RoomThemes && RoomThemes.has(themeId)) {
 					clearInterval(colorIv);
-					RoomThemes.apply(ch.ch.settings.theme);
+					RoomThemes.apply(themeId);
 					return;
 				}
 				var wasThemed = window.RoomThemes && RoomThemes.current();
@@ -2450,7 +2560,7 @@ Rect.prototype.contains = function(x, y) {
 		}
 		if(isModifierShortcut(evt)) return;
 		//console.log(evt);
-		if(key_binding[code] !== undefined) {
+		if(key_binding[code] !== undefined && gPianoShown) {
 			var binding = key_binding[code];
 			if(!binding.held) {
 				binding.held = true;
@@ -2871,6 +2981,7 @@ Rect.prototype.contains = function(x, y) {
 	if(localStorage && localStorage.knowsYouCanUseKeyboard) gKnowsYouCanUseKeyboard = true;
 	if(!gKnowsYouCanUseKeyboard && !isMobileLayout()) {
 		window.gKnowsYouCanUseKeyboardTimeout = setTimeout(function() {
+			if(!gPianoShown) return;
 			window.gKnowsYouCanUseKeyboardNotification = new Notification({title: "Did you know!?!",
 				text: "You can play the piano with your keyboard, too.  Try it!", target: "#piano", duration: 10000});
 		}, 30000);
@@ -4079,6 +4190,10 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gKissBlast !== "undefined" && gKissBlast) gKissBlast.tryHandleChat(msg);
 			return true;
 		}
+		if(typeof WakeBell !== "undefined" && WakeBell.isSyncText(chatLine)) {
+			if(typeof gWakeBell !== "undefined" && gWakeBell) gWakeBell.tryHandleChat(msg);
+			return true;
+		}
 		if(window.RoomThemes && RoomThemes.isSyncText(chatLine)) {
 			RoomThemes.handleSync(msg);
 			return true;
@@ -4139,7 +4254,12 @@ Rect.prototype.contains = function(x, y) {
 			if(!li) return;
 			delete pendingLines[info.id];
 			li.removeClass("chat-pending").addClass("chat-failed");
-			li.find(".chat-pending-state").text(" (not sent — connection too slow)");
+			li.attr("title", "Click to send again");
+			li.find(".chat-pending-state").text(" (not sent — click to retry)");
+			li.one("click", function() {
+				li.remove();
+				gClient.sendChat(info.message);
+			});
 		});
 		gClient.on("a", function(msg) {
 			// Sync messages arriving over chat are the fallback path (relay off
@@ -4298,6 +4418,7 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof ShareImage !== "undefined" && ShareImage.isSyncText(chatLine)) return;
 				if(typeof LeaveMsg !== "undefined" && LeaveMsg.isSyncText(chatLine)) return;
 				if(typeof KissBlast !== "undefined" && KissBlast.isSyncText(chatLine)) return;
+				if(typeof WakeBell !== "undefined" && WakeBell.isSyncText(chatLine)) return;
 				if(typeof LoveBits !== "undefined" && LoveBits.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
@@ -5207,6 +5328,7 @@ Rect.prototype.contains = function(x, y) {
 	var gSoundBoard;
 	var gShareImage;
 	var gKissBlast;
+	var gWakeBell;
 	var gLoveBits;
 	var gLeaveMsg;
 	var gPartyGame;
@@ -5269,23 +5391,23 @@ Rect.prototype.contains = function(x, y) {
 		}
 	}
 
+	// The piano always starts hidden. Showing it is local to this user: the
+	// first time, its sounds are downloaded and the keys start rendering.
 	function setPianoCollapsed(on) {
 		gPianoCollapsed = !!on;
+		gPianoShown = !gPianoCollapsed;
 		document.body.classList.toggle("piano-collapsed", gPianoCollapsed);
+		if(gPianoShown) {
+			gSoundSelector.activate();
+			ensureAudioReady();
+			// It was display:none, so its size has to be measured again now.
+			requestAnimationFrame(function() { gPiano.renderer.resize(); });
+		}
 		updateHarmonyToolsUi();
-		try {
-			if(typeof localStorage !== "undefined") {
-				localStorage.harmonyPianoCollapsed = gPianoCollapsed ? "1" : "0";
-			}
-		} catch (e) {}
 	}
 
-	try {
-		if(typeof localStorage !== "undefined" && localStorage.harmonyPianoCollapsed === "1") {
-			gPianoCollapsed = true;
-			document.body.classList.add("piano-collapsed");
-		}
-	} catch (e) {}
+	gPianoCollapsed = true;
+	document.body.classList.add("piano-collapsed");
 
 	if(typeof BlobFriend !== "undefined") {
 		gBlobFriend = new BlobFriend({
@@ -5347,6 +5469,10 @@ Rect.prototype.contains = function(x, y) {
 			closeModal: closeModal
 		});
 		window.gKissBlast = gKissBlast;
+	}
+	if(typeof WakeBell !== "undefined") {
+		gWakeBell = new WakeBell({ client: gClient });
+		window.gWakeBell = gWakeBell;
 	}
 	if(typeof LoveBits !== "undefined") {
 		gLoveBits = new LoveBits({
@@ -7090,6 +7216,16 @@ Rect.prototype.contains = function(x, y) {
 				}
 				updateHarmonyToolsUi();
 			});
+		}
+		// Desktop: the Play bar is one scrollable row — let a normal mouse
+		// wheel scroll it sideways.
+		var toolsBar = document.querySelector(".harmony-tools-bar");
+		if(toolsBar) {
+			toolsBar.addEventListener("wheel", function(e) {
+				if(toolsBar.scrollWidth <= toolsBar.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+				toolsBar.scrollLeft += e.deltaY;
+				e.preventDefault();
+			}, { passive: false });
 		}
 		var pianoToggleBtn = document.getElementById("harmony-piano-btn");
 		if(pianoToggleBtn) {

@@ -32,9 +32,9 @@
 	// Slow / flaky internet: a socket can hang while connecting or die silently
 	// while still reporting OPEN. Give up on slow handshakes, and replace the
 	// socket if the relay (which answers every ping) goes quiet for too long.
-	var CONNECT_TIMEOUT_MS = 20000;
-	var PING_MS = 15000;
-	var STALE_MS = 50000;
+	var CONNECT_TIMEOUT_MS = 15000;
+	var PING_MS = 6000;
+	var STALE_MS = 18000;   // a ping unanswered this long = dead socket
 
 	RoomSync.prototype.isSupported = function () {
 		return typeof WebSocket === "function" && !!this.uri;
@@ -85,16 +85,17 @@
 			clearTimeout(self.connectTimer);
 			self.reconnectAttempts = 0;
 			self.lastRx = Date.now();
+			self.awaitingSince = 0;
 			self._send({ m: "hi", ch: self.channel, p: self.getIdentity() });
 			clearInterval(self.pingTimer);
 			self.pingTimer = setInterval(function () {
 				if (self.ws !== sock) return;
-				if (Date.now() - self.lastRx > STALE_MS) {
+				if (self.awaitingSince && Date.now() - self.awaitingSince > STALE_MS) {
 					try { console.warn("[RoomSync] relay went quiet — reconnecting"); } catch (e) {}
 					self._abandon(sock);
 					return;
 				}
-				self._send({ m: "ping" });
+				self._ping();
 			}, PING_MS);
 			try { console.info("[RoomSync] real-time relay connected:", self.uri); } catch (e) {}
 		});
@@ -102,6 +103,7 @@
 		sock.addEventListener("message", function (evt) {
 			if (self.ws !== sock) return;
 			self.lastRx = Date.now();
+			self.awaitingSince = 0;
 			var data;
 			try { data = JSON.parse(evt.data); } catch (e) { return; }
 			var arr = Array.isArray(data) ? data : [data];
@@ -162,16 +164,18 @@
 		if (this._listenersBound || typeof window === "undefined" || !window.addEventListener) return;
 		this._listenersBound = true;
 		var self = this;
+		// Back online: the old socket almost never survives a network change,
+		// so start over right away instead of waiting for it to time out.
 		window.addEventListener("online", function () {
-			if (self.isConnected() && Date.now() - self.lastRx < 5000) return;
+			if (self.isConnected() && Date.now() - self.lastRx < 2000) return;
 			self.reconnectNow();
 		});
 		document.addEventListener("visibilitychange", function () {
 			if (document.visibilityState !== "visible" || !self.canConnect) return;
-			if (!self.ws || (self.isConnected() && Date.now() - self.lastRx > STALE_MS)) {
+			if (!self.ws || (self.awaitingSince && Date.now() - self.awaitingSince > PING_MS)) {
 				self.reconnectNow();
 			} else if (self.isConnected()) {
-				self._send({ m: "ping" });
+				self._ping();
 			}
 		});
 	};
@@ -179,13 +183,19 @@
 	RoomSync.prototype._scheduleReconnect = function () {
 		if (!this.canConnect || this.reconnectTimer) return;
 		var self = this;
-		var lut = [500, 1000, 2000, 4000, 8000];
+		var lut = [300, 1000, 2000, 3000, 5000];
 		var idx = this.reconnectAttempts++;
 		if (idx >= lut.length) idx = lut.length - 1;
 		this.reconnectTimer = setTimeout(function () {
 			self.reconnectTimer = null;
 			self._connect();
 		}, lut[idx]);
+	};
+
+	RoomSync.prototype._ping = function () {
+		if (!this.isConnected()) return;
+		if (!this.awaitingSince) this.awaitingSince = Date.now();
+		this._send({ m: "ping" });
 	};
 
 	RoomSync.prototype._send = function (obj) {

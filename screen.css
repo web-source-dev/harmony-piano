@@ -2721,9 +2721,9 @@ body.room-media-hide-piano #cursors {
 	display: none !important;
 }
 
-/* —— Piano collapsed (hide from easy access) —— */
-body.piano-collapsed #piano,
-body.piano-collapsed #cursors {
+/* —— Piano collapsed (the default until the user opens it) ——
+   Cursors stay visible: people still move around the room without a piano. */
+body.piano-collapsed #piano {
 	display: none !important;
 }
 body.piano-collapsed #play-area {
@@ -6788,6 +6788,31 @@ body.love-got-kiss .love-layer { animation: loveBlush 1s ease-out; }
 		radial-gradient(ellipse at 50% -10%, rgba(255, 80, 160, 0.18), transparent 50%);
 	animation: rt-breathe 5s ease-in-out infinite alternate; }
 
+/* Love balloons: a low sunset glow and a soft pink sky */
+.rt-balloons::before { inset: 0;
+	background: radial-gradient(ellipse at 50% 108%, rgba(255, 190, 140, 0.45), transparent 55%),
+		radial-gradient(circle at 80% 12%, rgba(255, 210, 230, 0.2), transparent 35%);
+	animation: rt-breathe 8s ease-in-out infinite alternate; }
+
+/* Candlelight: warm light pooling on the table, dark corners */
+.rt-candles::before { inset: 0;
+	background: radial-gradient(ellipse at 50% 100%, rgba(255, 140, 50, 0.2), transparent 60%);
+	animation: rt-flicker 4.5s ease-in-out infinite; }
+.rt-candles::after { inset: 0;
+	background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.55) 100%); }
+
+/* Cupid: dreamy clouds drifting past */
+.rt-cupid::before { left: 0; top: 0; width: 200%; height: 100%;
+	/* each cloud stays inside its half-width tile so the loop has no seam */
+	background: radial-gradient(18% 14% at 22% 22%, rgba(255, 230, 240, 0.22), transparent),
+		radial-gradient(16% 12% at 40% 70%, rgba(255, 210, 230, 0.16), transparent),
+		radial-gradient(15% 11% at 66% 32%, rgba(255, 240, 245, 0.2), transparent),
+		radial-gradient(14% 12% at 82% 76%, rgba(255, 215, 235, 0.15), transparent);
+	background-size: 50% 100%;
+	animation: rt-fog 90s linear infinite; }
+.rt-cupid::after { inset: 0;
+	background: radial-gradient(ellipse at 50% -10%, rgba(255, 220, 160, 0.25), transparent 55%); }
+
 @keyframes rt-breathe { from { opacity: 0.7; } to { opacity: 1; } }
 @keyframes rt-spin { to { transform: rotate(360deg); } }
 
@@ -6868,3 +6893,645 @@ body.love-got-kiss .love-layer { animation: loveBlush 1s ease-out; }
 @media (prefers-reduced-motion: reduce) {
 	.room-theme-card, .room-theme-card:hover { transition: none; transform: none; }
 }
+
+/* —— Wake-up bell button (wakeBell.js) —— */
+#wake-bell-btn {
+	background: rgba(255, 182, 39, 0.14);
+	border-color: rgba(255, 182, 39, 0.45);
+	color: #ffd27a;
+	font-weight: 600;
+}
+#wake-bell-btn:hover { background: rgba(255, 182, 39, 0.26); }
+
+/* —— Connection banner (script.js, client "link" events) —— */
+.conn-banner {
+	position: fixed;
+	top: 12px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 2147481000;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	max-width: calc(100vw - 32px);
+	box-sizing: border-box;
+	padding: 8px 10px 8px 14px;
+	border-radius: 999px;
+	background: #2a2633;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+	color: #fff;
+	font: 600 13px "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+	text-shadow: none;
+}
+.conn-banner[hidden] { display: none; }
+.conn-banner-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: #ffb627; animation: conn-pulse 1s ease-in-out infinite alternate; }
+.conn-banner.conn-down .conn-banner-dot { background: #ff5d6c; }
+.conn-banner.conn-ok .conn-banner-dot { background: #3ddc84; animation: none; }
+.conn-banner.conn-ok { padding-right: 14px; }
+@keyframes conn-pulse { from { opacity: 0.35; } to { opacity: 1; } }
+.conn-banner-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conn-banner-btn {
+	flex-shrink: 0;
+	height: 28px;
+	padding: 0 12px;
+	border: 0;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.14);
+	color: #fff;
+	font: inherit;
+	cursor: pointer;
+}
+.conn-banner-btn:hover { background: rgba(255, 255, 255, 0.24); }
+.conn-banner-btn[hidden] { display: none; }
+#chat li.chat-failed { cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { .conn-banner-dot { animation: none; } }
+
+/* =====================================================================
+   Unified UI — one look for the toolbar, the Play dock and the older
+   popups, based on the Leave-a-message / Kiss / Room DJ dialogs.
+   (Last in the file on purpose so it wins over the older layers above.)
+   ===================================================================== */
+:root {
+	--ui-font: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+	--ui-bg: #1c212b;        /* dialog surface */
+	--ui-bg-2: #222833;      /* header / raised */
+	--ui-bg-3: #161b25;      /* inset rows */
+	--ui-input: #12161f;
+	--ui-ctl: #2a3140;       /* buttons */
+	--ui-ctl-hover: #343c4f;
+	--ui-line: #2c3342;
+	--ui-line-2: #3a4356;
+	--ui-text: #e8edf5;
+	--ui-text-2: #c5cddd;
+	--ui-muted: #8b95a8;
+	--ui-accent: #b7c9a4;    /* sage, as on "Post message" */
+	--ui-accent-ink: #152018;
+	--ui-focus: #6b8cae;
+	--ui-bar: rgba(22, 26, 35, 0.94);
+}
+
+/* ---- Popups: modal backdrop ---- */
+#modal .bg { background: rgba(8, 10, 16, 0.55); opacity: 1; backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
+
+/* ---- Popups: the older plain dialogs ---- */
+#all-rooms, #new-room, #room-settings, #sheet-play, #play-mp3, #cursor-looks {
+	background: var(--ui-bg);
+	color: var(--ui-text);
+	border: 1px solid #343b4a;
+	border-radius: 14px;
+	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+	font-family: var(--ui-font);
+	text-shadow: none;
+	box-sizing: border-box;
+	scrollbar-width: thin;
+	scrollbar-color: var(--ui-line-2) transparent;
+}
+#all-rooms *, #new-room *, #room-settings *, #sheet-play *, #play-mp3 *, #cursor-looks * { text-shadow: none; }
+#all-rooms p, #new-room p, #room-settings p, #sheet-play p, #play-mp3 p, #cursor-looks p { font-size: 14px; color: var(--ui-text-2); }
+#all-rooms label, #new-room label, #room-settings label, #sheet-play label, #play-mp3 label, #cursor-looks label { color: var(--ui-text-2); font-size: 14px; }
+
+/* titles */
+#all-rooms .all-rooms-title, #sheet-play .sheet-title, #play-mp3 .sheet-title, #cursor-looks .sheet-title {
+	color: #f3f6fb; font-size: 18px; font-weight: 650; letter-spacing: 0.2px;
+}
+#all-rooms .all-rooms-hint, #sheet-play .file-info, #play-mp3 .file-info, #cursor-looks .file-info,
+#all-rooms .all-rooms-count, #all-rooms .all-rooms-scan-status { color: var(--ui-muted); font-size: 12px; }
+
+/* text inputs, textareas */
+#all-rooms input[type=text], #new-room input.text, #sheet-play textarea, #room-settings input[type=text] {
+	box-sizing: border-box;
+	height: 38px;
+	padding: 0 12px;
+	font: 14px var(--ui-font);
+	color: #f0f3f8;
+	background: var(--ui-input);
+	border: 1px solid #343b4a;
+	border-radius: 8px;
+	outline: none;
+}
+#sheet-play textarea { height: auto; padding: 10px 12px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+#all-rooms input[type=text]:focus, #new-room input.text:focus, #sheet-play textarea:focus {
+	border-color: #5a7a9a; box-shadow: 0 0 0 3px rgba(90, 122, 154, 0.22);
+}
+#all-rooms input::placeholder, #new-room input::placeholder, #sheet-play textarea::placeholder { color: #5f6a7e; }
+#all-rooms input[type=checkbox], #new-room input[type=checkbox], #room-settings input[type=checkbox],
+#play-mp3 input[type=checkbox], #sheet-play input[type=checkbox] { accent-color: var(--ui-accent); width: 16px; height: 16px; vertical-align: -3px; }
+#sheet-play input[type=file], #play-mp3 input[type=file] { color: var(--ui-muted); font-size: 12px; }
+#sheet-play input[type=file]::file-selector-button, #play-mp3 input[type=file]::file-selector-button {
+	margin-right: 10px; padding: 7px 12px; border-radius: 7px; border: 1px solid var(--ui-line-2);
+	background: var(--ui-ctl); color: var(--ui-text); font: 600 12px var(--ui-font); cursor: pointer;
+}
+
+/* buttons inside these dialogs */
+#all-rooms .filter-btn, #sheet-play .tb-btn, #play-mp3 .tb-btn, #cursor-looks .tb-btn, #room-settings .drop-crown {
+	height: 34px;
+	padding: 0 14px;
+	font: 600 12.5px var(--ui-font);
+	color: var(--ui-text-2);
+	background: var(--ui-ctl);
+	border: 1px solid var(--ui-line-2);
+	border-radius: 8px;
+	cursor: pointer;
+	box-shadow: none;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+#all-rooms .filter-btn:hover, #sheet-play .tb-btn:hover, #play-mp3 .tb-btn:hover, #cursor-looks .tb-btn:hover, #room-settings .drop-crown:hover {
+	background: var(--ui-ctl-hover); border-color: #4a556c; color: #fff;
+}
+#all-rooms .filter-btn.active { background: var(--ui-accent); border-color: #9eb089; color: var(--ui-accent-ink); }
+#room-settings .drop-crown { display: inline-flex; align-items: center; min-height: 0; }
+
+/* primary "go" / "APPLY" buttons: static, sage like "Post message" */
+#new-room .submit, #room-settings .submit {
+	position: static;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	height: 38px;
+	padding: 0 20px;
+	font: 650 13px var(--ui-font);
+	letter-spacing: 0.2px;
+	text-transform: capitalize;
+	color: var(--ui-accent-ink);
+	background: var(--ui-accent);
+	border: 1px solid #9eb089;
+	border-radius: 8px;
+	box-shadow: none;
+	text-shadow: none;
+	cursor: pointer;
+}
+#new-room .submit:hover, #room-settings .submit:hover { background: #c5d5b4; }
+
+/* New Room */
+#new-room.dialog {
+	width: min(380px, calc(100vw - 32px)); height: auto; margin: 0; padding: 22px 22px 18px;
+	left: 50%; top: 50%; transform: translate(-50%, -50%);
+}
+#new-room.dialog::before { content: "New room"; display: block; margin-bottom: 14px; font-size: 18px; font-weight: 650; color: #f3f6fb; }
+#new-room p { margin: 0 0 12px; }
+#new-room input.text { width: 100%; }
+#new-room .submit { display: flex; margin: 4px 0 0 auto; }
+
+/* Room Settings */
+#room-settings.dialog {
+	width: min(520px, calc(100vw - 32px)); margin: 0; left: 50%; top: 50%; transform: translate(-50%, -50%);
+	padding: 20px 22px 18px; max-height: 86vh; overflow-y: auto;
+}
+#room-settings.dialog::before { content: "Room settings"; display: block; margin-bottom: 8px; font-size: 18px; font-weight: 650; color: #f3f6fb; }
+#room-settings p { margin: 10px 0; }
+#room-settings input[type=color] { width: 40px; height: 30px; padding: 0; border: 1px solid var(--ui-line-2); border-radius: 7px; background: transparent; vertical-align: middle; cursor: pointer; }
+#room-settings .room-theme-title { color: #f3f6fb; }
+#room-settings .room-theme-sub { color: var(--ui-muted); }
+
+/* All Rooms list */
+#all-rooms.dialog { padding: 20px; }
+#all-rooms .all-rooms-list { background: var(--ui-bg-3); border: 1px solid var(--ui-line); border-radius: 10px; }
+#all-rooms .room-item, #all-rooms .loading, #all-rooms .empty { color: var(--ui-text-2); border-color: var(--ui-line); background: transparent; }
+#all-rooms .room-item:hover { background: #222a38; }
+#all-rooms .room-item .name { color: #f3f6fb; }
+#all-rooms .room-item .meta { color: var(--ui-muted); }
+#all-rooms .room-item.lobby .name, #all-rooms .room-item.lobby { color: #d5e6c2; }
+#all-rooms .room-item.not-visible .name { color: #c3c8ff; }
+#all-rooms .room-item.banned .name { color: #ff9a9a; }
+
+/* Sheet / MP3 / Cursor looks */
+#sheet-play .sheet-row, #play-mp3 .sheet-row { color: var(--ui-text-2); }
+#cursor-looks .cursor-looks-body { background: var(--ui-bg-3); border: 1px solid var(--ui-line); }
+#cursor-looks .mp3-looks-label, #cursor-looks .cursor-size-label { color: var(--ui-muted); }
+#cursor-looks .mp3-look-chip { background: var(--ui-ctl); color: var(--ui-text); border-color: var(--ui-line-2); }
+#cursor-looks .mp3-look-chip.active { background: rgba(183, 201, 164, 0.18); border-color: var(--ui-accent); }
+#cursor-looks .cursor-upload-drop { background: var(--ui-input); border-color: var(--ui-line-2); color: var(--ui-text-2); }
+#cursor-looks .cursor-looks-done { background: var(--ui-accent); color: var(--ui-accent-ink); border-color: #9eb089; }
+
+/* ---- Popups: small menus anchored to buttons (Sound Select, MIDI, ...) ---- */
+.notification-body {
+	background: var(--ui-bg);
+	border-color: var(--ui-bg);
+	color: var(--ui-text-2);
+	font: 13px var(--ui-font);
+	text-shadow: none;
+	border-radius: 12px;
+	padding: 14px 16px;
+	box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px #343b4a;
+}
+.notification.classic .notification-body { background: var(--ui-bg); border-color: var(--ui-bg); }
+.notification .title { border-bottom: 1px solid var(--ui-line); color: #f3f6fb; font-size: 15px; font-weight: 650; padding: 0 22px 10px 0; margin-bottom: 10px; }
+.notification .x { top: 8px; right: 10px; font-size: 18px; color: var(--ui-muted); }
+.notification .x:hover { color: #fff; font-weight: normal; }
+.notification h1 { font-size: 12px; text-decoration: none; text-transform: uppercase; letter-spacing: 0.4px; color: var(--ui-muted); }
+.notification ul { list-style: none; padding: 0; margin: 0; }
+.notification .pack, .notification .connection, .notification .server-pick {
+	margin: 0 0 6px;
+	padding: 9px 12px;
+	font: 600 13px var(--ui-font);
+	color: var(--ui-text-2);
+	background: var(--ui-bg-3);
+	border: 1px solid var(--ui-line-2);
+	border-radius: 8px;
+}
+.notification .pack:hover, .notification .connection:hover, .notification .server-pick:hover { font-weight: 600; background: #222a38; color: #fff; }
+.notification .pack.enabled, .notification .connection.enabled, .notification .server-pick.enabled {
+	background: rgba(183, 201, 164, 0.16); border-color: var(--ui-accent); color: #fff;
+}
+.notification .pack.enabled:after, .notification .connection.enabled:after { color: var(--ui-accent); }
+.notification .connection:after { color: #d98989; }
+.notification .server-pick .server-pick-uri, .notification .server-pick-note { color: var(--ui-muted); }
+
+/* ---- Desktop: bottom bar, room picker, top-right Play dock ---- */
+@media (min-width: 761px) and (pointer: fine), (min-width: 1025px) {
+	html:not(.force-mobile) {
+		--chat-input-h: 50px;
+		--toolbar-min-h: 50px;
+	}
+	html:not(.force-mobile) #bottom {
+		background: var(--ui-bar);
+		border-top: 1px solid var(--ui-line);
+		box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.25);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+		font-family: var(--ui-font);
+	}
+	html:not(.force-mobile) #chat-input-bar {
+		background: transparent;
+		border-top: 0;
+		padding: 10px 14px 4px;
+	}
+	html:not(.force-mobile) #chat-input-bar input {
+		height: 36px;
+		padding: 0 14px;
+		font: 14px var(--ui-font);
+		color: #f0f3f8;
+		text-shadow: none;
+		background: var(--ui-input);
+		border: 1px solid #343b4a;
+		border-radius: 10px;
+		transition: border-color 0.15s ease, box-shadow 0.15s ease;
+	}
+	html:not(.force-mobile) #chat-input-bar input::placeholder { color: #6a7589; }
+	html:not(.force-mobile) #chat-input-bar input:focus { border-color: #5a7a9a; box-shadow: 0 0 0 3px rgba(90, 122, 154, 0.22); }
+
+	html:not(.force-mobile) #bottom .relative.toolbar-band {
+		gap: 6px;
+		padding: 6px 180px 10px 14px;
+	}
+	/* no "display" here: several buttons are shown/hidden by other rules */
+	html:not(.force-mobile) #bottom .ugly-button {
+		height: 30px;
+		min-height: 0;
+		padding: 0 11px;
+		font: 600 12px var(--ui-font);
+		line-height: 28px; /* after "font", which resets it */
+		letter-spacing: 0.1px;
+		color: var(--ui-text-2);
+		text-shadow: none;
+		background: var(--ui-ctl);
+		border: 1px solid var(--ui-line-2);
+		border-radius: 8px;
+		box-shadow: none;
+		transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+	}
+	html:not(.force-mobile) #bottom .ugly-button:hover { background: var(--ui-ctl-hover); border-color: #4a556c; color: #fff; }
+	html:not(.force-mobile) #bottom .ugly-button:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
+	html:not(.force-mobile) #bottom .ugly-button.stuck,
+	html:not(.force-mobile) body.hacks-open #hacks-toggle-btn,
+	html:not(.force-mobile) body.learn-panel-open #learn-btn,
+	html:not(.force-mobile) body.metronome-panel-open #metronome-btn {
+		background: rgba(183, 201, 164, 0.16); border-color: var(--ui-accent); color: #fff;
+	}
+
+	/* soft accent colours for the social buttons: tinted, same shape */
+	html:not(.force-mobile) #bottom #kiss-btn, html:not(.force-mobile) #bottom #love-btn { color: #ffc2d6; border-color: rgba(232, 87, 143, 0.45); background: rgba(232, 87, 143, 0.12); }
+	html:not(.force-mobile) #bottom #wake-bell-btn { color: #ffd27a; border-color: rgba(255, 182, 39, 0.45); background: rgba(255, 182, 39, 0.12); }
+	html:not(.force-mobile) #bottom #screen-share-btn { color: #b9d3ff; border-color: rgba(59, 130, 246, 0.45); background: rgba(59, 130, 246, 0.12); }
+	html:not(.force-mobile) #bottom #share-image-btn, html:not(.force-mobile) #bottom #leave-msg-btn { color: #a8e3da; border-color: rgba(34, 166, 153, 0.45); background: rgba(34, 166, 153, 0.12); }
+	html:not(.force-mobile) #bottom #kiss-btn:hover, html:not(.force-mobile) #bottom #love-btn:hover { background: rgba(232, 87, 143, 0.24); color: #fff; }
+	html:not(.force-mobile) #bottom #wake-bell-btn:hover { background: rgba(255, 182, 39, 0.24); color: #fff; }
+	html:not(.force-mobile) #bottom #screen-share-btn:hover { background: rgba(59, 130, 246, 0.24); color: #fff; }
+	html:not(.force-mobile) #bottom #share-image-btn:hover, html:not(.force-mobile) #bottom #leave-msg-btn:hover { background: rgba(34, 166, 153, 0.24); color: #fff; }
+
+	/* room picker */
+	html:not(.force-mobile) #room {
+		height: 30px;
+		box-sizing: border-box;
+		padding: 0 34px 0 12px;
+		display: flex;
+		align-items: center;
+		background: var(--ui-input);
+		border: 1px solid var(--ui-line-2);
+		border-radius: 8px;
+		box-shadow: none;
+	}
+	html:not(.force-mobile) #room > .info { font: 650 13px var(--ui-font); text-shadow: none; color: #f3f6fb; }
+	html:not(.force-mobile) #room > .info.lobby { color: #d5e6c2; }
+	html:not(.force-mobile) #room .expand {
+		width: 28px;
+		background-color: transparent;
+		border-left: 1px solid var(--ui-line-2);
+		border-radius: 0 8px 8px 0;
+		opacity: 0.8;
+	}
+	html:not(.force-mobile) #room .more {
+		bottom: calc(100% + 8px);
+		left: 0;
+		background: var(--ui-bg);
+		border: 1px solid #343b4a;
+		border-radius: 12px;
+		box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+		padding: 6px;
+		box-sizing: border-box;
+		scrollbar-width: thin;
+		scrollbar-color: var(--ui-line-2) transparent;
+	}
+	html:not(.force-mobile) #room .more > div { border-radius: 7px; }
+	html:not(.force-mobile) #room .more .info { color: var(--ui-text-2) !important; font-family: var(--ui-font); }
+	html:not(.force-mobile) #room .more .info.lobby { color: #d5e6c2 !important; }
+	html:not(.force-mobile) #room .more .info.not-visible { color: #c3c8ff !important; }
+	html:not(.force-mobile) #room .more .info:hover { background: #222a38; }
+	html:not(.force-mobile) #room .more .new { background: var(--ui-accent); color: var(--ui-accent-ink); border-bottom: 0; margin-bottom: 4px; }
+	html:not(.force-mobile) #room .more .new:hover { background: #c5d5b4; }
+
+	/* people count + volume on the right */
+	html:not(.force-mobile) #status {
+		top: auto;
+		bottom: 36px;
+		left: auto;
+		right: 14px;
+		width: 160px;
+		max-width: 160px;
+		height: 16px;
+		text-align: right;
+		font: 600 12px var(--ui-font);
+		color: var(--ui-muted);
+		text-shadow: none;
+	}
+	html:not(.force-mobile) #status .number { font-size: 13px; color: #f3f6fb; }
+	html:not(.force-mobile) #volume {
+		top: auto;
+		bottom: 12px;
+		transform: none;
+		right: 14px;
+		width: 160px;
+		height: 18px;
+	}
+	html:not(.force-mobile) #volume-slider {
+		-webkit-appearance: auto;
+		appearance: auto;
+		width: 100%;
+		height: 18px;
+		margin: 0;
+		background: none;
+		accent-color: var(--ui-accent);
+		cursor: pointer;
+	}
+	html:not(.force-mobile) #volume-label { display: none; }
+	html:not(.force-mobile) #quota { height: 2px; background: transparent; }
+	html:not(.force-mobile) #quota .value { background: var(--ui-accent); opacity: 0.7; }
+	html:not(.force-mobile) body.piano-collapsed #quota { display: none; }
+
+	/* top-right Play tools: shared states (layout is further down) */
+	html:not(.force-mobile) .harmony-tool-btn:hover { background: var(--ui-ctl-hover); border-color: #4a556c; color: #fff; }
+	html:not(.force-mobile) .harmony-tool-btn:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
+	html:not(.force-mobile) .harmony-tool-btn.active,
+	html:not(.force-mobile) #harmony-piano-btn.active {
+		background: rgba(183, 201, 164, 0.18);
+		border-color: var(--ui-accent);
+		color: #fff;
+		box-shadow: none;
+	}
+	html:not(.force-mobile) #harmony-piano-btn.piano-off { background: var(--ui-ctl); border-color: var(--ui-line-2); }
+
+}
+
+/* Button-anchored popups (Sound Select, MIDI, ...) draw above the bottom bar. */
+.notification { z-index: 850; }
+#room-settings .room-theme-card { color: var(--ui-text-2); }
+#room-settings .room-theme-card:hover { background: #222a38; }
+#room-settings .room-theme-card.selected { border-color: var(--ui-accent); background: rgba(183, 201, 164, 0.14); }
+#room-settings .room-theme-name { color: var(--ui-text-2); font-size: 12px; }
+/* Phone ✕ on the dialogs whose title is drawn by ::before: pin it top-right. */
+#modal #new-room > .mobile-dialog-close,
+#modal #room-settings > .mobile-dialog-close {
+	position: absolute;
+	top: 14px;
+	right: 14px;
+	float: none;
+	margin: 0;
+	width: 34px;
+	height: 34px;
+	line-height: 34px;
+	background: var(--ui-ctl);
+	border: 1px solid var(--ui-line-2);
+	box-shadow: none;
+}
+
+/* ---- Learn Piano + Metronome panels (same look as the dialogs) ---- */
+.learn-panel-inner, .metronome-panel-inner {
+	padding: 14px 16px 14px;
+	background: var(--ui-bg);
+	border: 1px solid #343b4a;
+	border-radius: 14px;
+	box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+	color: var(--ui-text-2);
+	font: 12px var(--ui-font);
+	text-shadow: none;
+}
+.learn-panel-inner *, .metronome-panel-inner * { text-shadow: none; }
+.learn-head, .metronome-head {
+	margin: -14px -16px 12px;
+	padding: 12px 16px;
+	background: var(--ui-bg-2);
+	border-bottom: 1px solid var(--ui-line);
+	border-radius: 14px 14px 0 0;
+}
+.learn-brand, .metronome-brand { color: #f3f6fb; font-size: 15px; font-weight: 650; }
+.learn-title, .metronome-status { color: var(--ui-muted); font-size: 12px; }
+.metronome-status.running { color: var(--ui-accent); }
+.metronome-status.counting { color: #ffd27a; }
+.learn-close, .metronome-close {
+	padding: 6px 11px;
+	font: 600 12px var(--ui-font);
+	color: var(--ui-text-2);
+	background: var(--ui-ctl);
+	border: 1px solid var(--ui-line-2);
+	border-radius: 7px;
+}
+.learn-close:hover, .metronome-close:hover { background: var(--ui-ctl-hover); color: #fff; }
+.learn-hint { color: #ffd27a; font-size: 18px; font-weight: 650; }
+.learn-meta, .learn-keyboard-hint, .metronome-hint, .metronome-room-note, .metronome-vol-label,
+.metronome-bpm-unit, .learn-label-toggles { color: var(--ui-muted); }
+.learn-label-toggles label, .learn-file-label, .metronome-field { color: var(--ui-text-2); font-size: 12px; }
+.learn-keyboard-hint kbd, .metronome-hint kbd {
+	padding: 1px 5px;
+	background: var(--ui-ctl);
+	border: 1px solid var(--ui-line-2);
+	border-radius: 4px;
+	color: var(--ui-text);
+	font: 600 10px var(--ui-font);
+}
+.metronome-visual { background: var(--ui-bg-3); border: 1px solid var(--ui-line); border-radius: 10px; padding: 10px 0 8px; }
+.metronome-bpm-value { color: #f3f6fb; }
+.metronome-beat-dot { background: var(--ui-ctl); border-color: var(--ui-line-2); }
+.metronome-beat-dot.active { background: var(--ui-focus); box-shadow: 0 0 8px rgba(107, 140, 174, 0.8); }
+.metronome-beat-dot.accent.active { background: var(--ui-accent); box-shadow: 0 0 10px rgba(183, 201, 164, 0.9); }
+.metronome-nudge {
+	width: 28px; height: 28px;
+	background: var(--ui-ctl); border: 1px solid var(--ui-line-2); border-radius: 7px; color: var(--ui-text);
+}
+.metronome-nudge:hover { background: var(--ui-ctl-hover); }
+.learn-select, .metronome-select, .metronome-bpm-num {
+	height: 30px;
+	padding: 0 8px;
+	font: 12px var(--ui-font);
+	color: var(--ui-text);
+	background: var(--ui-input);
+	border: 1px solid #343b4a;
+	border-radius: 7px;
+}
+.metronome-bpm-num { width: 58px; }
+#learn-panel input[type=range], #metronome-panel input[type=range] { accent-color: var(--ui-accent); }
+#learn-panel input[type=checkbox], #metronome-panel input[type=checkbox] { accent-color: var(--ui-accent); }
+.learn-file-label input[type=file] { color: var(--ui-muted); }
+.learn-file-label input[type=file]::file-selector-button {
+	margin-right: 8px; padding: 5px 10px; border-radius: 7px; border: 1px solid var(--ui-line-2);
+	background: var(--ui-ctl); color: var(--ui-text); font: 600 11px var(--ui-font); cursor: pointer;
+}
+#learn-panel .tb-btn, #metronome-panel .tb-btn {
+	height: 30px;
+	padding: 0 12px;
+	font: 600 12px var(--ui-font);
+	color: var(--ui-text-2);
+	text-shadow: none;
+	background: var(--ui-ctl);
+	border: 1px solid var(--ui-line-2);
+	border-radius: 7px;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+#learn-panel .tb-btn:hover, #metronome-panel .tb-btn:hover { background: var(--ui-ctl-hover); border-color: #4a556c; color: #fff; }
+#learn-panel .learn-play, #metronome-panel .metronome-play.primary {
+	background: var(--ui-accent) !important; border-color: #9eb089 !important; color: var(--ui-accent-ink);
+}
+#learn-panel .learn-play:hover, #metronome-panel .metronome-play.primary:hover { background: #c5d5b4 !important; }
+#metronome-hud {
+	background: var(--ui-bar);
+	border: 1px solid var(--ui-line-2);
+	font-family: var(--ui-font);
+	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.metronome-hud-bpm { color: #f3f6fb; }
+.metronome-hud-dot.pulse { background: var(--ui-accent); box-shadow: 0 0 8px rgba(183, 201, 164, 0.8); }
+
+/* ---- Hacks panel ---- */
+.hacks-dock-panel {
+	background: var(--ui-bg);
+	border: 1px solid #343b4a;
+	border-bottom: none;
+	border-radius: 14px 14px 0 0;
+	box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.35);
+	font-family: var(--ui-font);
+}
+.hacks-dock-header { padding: 8px 14px; background: var(--ui-bg-2); border-bottom: 1px solid var(--ui-line); }
+.hacks-dock-title { color: #f3f6fb; font-size: 14px; font-weight: 650; }
+.hacks-dock-sub { color: var(--ui-muted); font-size: 11px; }
+.hacks-dock-collapse { background: var(--ui-ctl); border-color: var(--ui-line-2); color: var(--ui-text-2); border-radius: 7px; }
+.hacks-dock-collapse:hover { background: var(--ui-ctl-hover); color: #fff; }
+.hacks-dock-body { padding: 10px 14px 12px; scrollbar-width: thin; scrollbar-color: var(--ui-line-2) transparent; }
+.hacks-zone-label { color: var(--ui-muted); font: 700 10px var(--ui-font); letter-spacing: 0.1em; }
+.hack-chip {
+	padding: 5px 10px;
+	font: 600 11px var(--ui-font);
+	color: var(--ui-text-2);
+	text-shadow: none;
+	background: var(--ui-ctl);
+	border: 1px solid var(--ui-line-2);
+	border-radius: 7px;
+	transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.hack-chip:hover { background: var(--ui-ctl-hover); border-color: #4a556c; color: #fff; }
+.hack-chip-go { background: rgba(183, 201, 164, 0.16); border-color: rgba(183, 201, 164, 0.55); color: #e3eed8; }
+.hack-chip-go:hover { background: rgba(183, 201, 164, 0.28); }
+.hack-chip-danger { background: rgba(217, 137, 137, 0.14); border-color: rgba(217, 137, 137, 0.5); color: #f3c4c4; }
+.hack-chip-danger:hover { background: rgba(217, 137, 137, 0.26); }
+.hack-chip-mini { padding: 4px 9px; font-size: 10.5px; }
+.hacks-presets { background: var(--ui-bg-3); border: 1px solid var(--ui-line); border-radius: 10px; }
+#hacks-dock .hacks-spam-input, #hacks-dock .hacks-spam-select, #hacks-dock .hacks-spam-num {
+	height: 30px;
+	box-sizing: border-box;
+	padding: 0 10px;
+	font: 12px var(--ui-font);
+	color: var(--ui-text);
+	text-shadow: none;
+	background: var(--ui-input);
+	border: 1px solid #343b4a;
+	border-radius: 7px;
+}
+#hacks-dock .hacks-field { color: var(--ui-muted); font: 12px var(--ui-font); text-shadow: none; }
+#hacks-dock .spam-status { background: var(--ui-ctl); color: var(--ui-muted); border-radius: 7px; font: 600 11px var(--ui-font); text-shadow: none; }
+#hacks-dock .spam-status.active { background: rgba(217, 137, 137, 0.3); color: #fff; }
+
+/* ---- Desktop: Play tools as small action buttons in the names row ---- */
+@media (min-width: 761px) and (pointer: fine), (min-width: 1025px) {
+	html:not(.force-mobile) #names { width: calc(50vw - 16px); }
+	html:not(.force-mobile) .harmony-tools,
+	html:not(.force-mobile):not(.dontshow) .harmony-tools {
+		top: 4px;
+		right: 8px;
+		max-width: 50vw;
+	}
+	html:not(.force-mobile) .harmony-tools-bar,
+	html:not(.force-mobile):not(.dontshow) .harmony-tools-bar {
+		display: flex;
+		flex-wrap: nowrap;
+		justify-content: flex-start;
+		align-items: center;
+		gap: 4px;
+		max-width: 50vw;
+		box-sizing: border-box;
+		margin: 0;
+		padding: 3px;
+		overflow-x: auto;
+		overflow-y: hidden;
+		overscroll-behavior-x: contain;
+		background: var(--ui-bar);
+		border: 1px solid var(--ui-line);
+		border-radius: 10px;
+		box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+		scrollbar-width: thin;
+		scrollbar-color: var(--ui-line-2) transparent;
+		font-family: var(--ui-font);
+	}
+	html:not(.force-mobile) .harmony-tools-bar::-webkit-scrollbar { height: 4px; }
+	html:not(.force-mobile) .harmony-tools-bar::-webkit-scrollbar-thumb { background: var(--ui-line-2); border-radius: 4px; }
+	html:not(.force-mobile) .harmony-tools-label {
+		flex: 0 0 auto;
+		padding: 0 4px 0 6px;
+		margin: 0;
+		font: 700 9.5px var(--ui-font);
+		letter-spacing: 0.12em;
+		color: var(--ui-muted);
+	}
+	html:not(.force-mobile) .harmony-tool-btn {
+		flex: 0 0 auto;
+		display: inline-flex;
+		flex-direction: row;
+		align-items: center;
+		gap: 5px;
+		height: 24px;
+		padding: 0 9px;
+		font: 600 11px var(--ui-font);
+		line-height: 1;
+		color: var(--ui-text-2);
+		text-shadow: none;
+		background: var(--ui-ctl);
+		border: 1px solid var(--ui-line-2);
+		border-radius: 7px;
+		overflow: visible;
+	}
+	html:not(.force-mobile) .harmony-tool-icon { font-size: 13px; line-height: 1; opacity: 1; }
+	html:not(.force-mobile) .harmony-tools .play-area { margin-top: 6px; }
+
+	/* chat uses the full width */
+	html:not(.force-mobile) #chat { right: 0; width: auto; font-family: var(--ui-font); font-size: 14px; }
+}
+/* keep the connection banner clear of the names / Play row */
+.conn-banner { top: 44px; }

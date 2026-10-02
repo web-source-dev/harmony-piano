@@ -182,26 +182,10 @@
 			desc: "Molten wax blobs rise, merge and sink",
 			bg: "linear-gradient(180deg, #1c0526 0%, #3a0a3a 50%, #5a1030 100%)",
 			bottom: "#2a0830", overlay: "lava", fx: "lava" },
-		{ id: "blackhole", name: "Event Horizon", icon: "🕳️", interactive: true,
-			desc: "A black hole with a blazing accretion disk drifts after you, bending starlight. Click to feed it gas and fire its jets",
-			bg: "radial-gradient(ellipse at center, #120a14 0%, #06040a 60%, #010102 100%)",
-			bottom: "#0a060c", fx: "blackhole" },
-		{ id: "ink", name: "Ink Bloom", icon: "🫗", interactive: true,
-			desc: "Neon ink curls through dark water as you move. Click to drop a blooming cloud of it",
-			bg: "radial-gradient(ellipse at center, #0c1420 0%, #060a12 60%, #020305 100%)",
-			bottom: "#080d16", fx: "ink" },
 		{ id: "neurons", name: "Neural Spark", icon: "🧠", interactive: true,
 			desc: "Neurons fire pulses down their dendrites in chain reactions. Your cursor charges them up, and a click sets off a cascade",
 			bg: "radial-gradient(ellipse at center, #0e1430 0%, #070a1c 60%, #02030a 100%)",
 			bottom: "#0a0e22", fx: "neurons" },
-		{ id: "zen", name: "Zen Garden", icon: "🪨", interactive: true,
-			desc: "Rake the sand with your cursor and watch it settle. Click to place a stone, click a stone to lift it",
-			bg: "radial-gradient(ellipse at 30% 20%, #8a7658 0%, #6a5a42 50%, #463a2b 100%)",
-			bottom: "#3e3426", fx: "zen" },
-		{ id: "orbits", name: "Orbit Lab", icon: "🪐", interactive: true,
-			desc: "Every cursor is a star with its own gravity. Click to launch planets into orbit and watch them collide and merge",
-			bg: "radial-gradient(ellipse at center, #10162e 0%, #070a18 60%, #020308 100%)",
-			bottom: "#0a0e20", fx: "orbits" },
 		{ id: "magnet", name: "Magnet Field", icon: "🧲", interactive: true,
 			desc: "Iron filings snap into line around your cursor's magnetic pole. Click to pulse a south pole and make them whip round",
 			bg: "radial-gradient(ellipse at center, #1c2028 0%, #101318 60%, #06070a 100%)",
@@ -210,10 +194,6 @@
 			desc: "Click to plant a cherry tree and watch it grow and bloom. Brush through the blossoms to shake petals loose",
 			bg: "linear-gradient(180deg, #1c2246 0%, #4a3a6a 45%, #a86a7a 80%, #d9967a 100%)",
 			bottom: "#2a2440", fx: "blossom" },
-		{ id: "lasers", name: "Prism Lasers", icon: "🔦", interactive: true,
-			desc: "Laser beams fan out from your cursor and ricochet around. Click to drop a crystal that splits them into rainbows, click it again to shatter it",
-			bg: "radial-gradient(ellipse at center, #0e1022 0%, #07081a 60%, #020208 100%)",
-			bottom: "#0a0b1e", fx: "lasers" },
 		{ id: "terrain", name: "Holo Terrain", icon: "🏔️", interactive: true,
 			desc: "Fly over a neon wireframe landscape. Hills rise under your cursor and clicks send shockwaves across it",
 			bg: "linear-gradient(180deg, #05020f 0%, #1a0630 34%, #12052a 40%, #06020e 100%)",
@@ -221,7 +201,21 @@
 		{ id: "piano", name: "Piano Aurora", icon: "🎹", interactive: true,
 			desc: "Plays along with the piano: every note in the room shoots up an orb in the player's color and lights the aurora and spectrum bars",
 			bg: "linear-gradient(180deg, #040818 0%, #0a1430 50%, #0e0a26 100%)",
-			bottom: "#0a0c22", fx: "piano" }
+			bottom: "#0a0c22", fx: "piano" },
+
+		// Love & romance (interactive)
+		{ id: "balloons", name: "Love Balloons", icon: "🎈", interactive: true,
+			desc: "Heart balloons float up on their strings. Bat them around with your cursor and click one to pop it into hearts",
+			bg: "linear-gradient(180deg, #2b1055 0%, #7b2869 42%, #c94b6d 72%, #f0a07a 100%)",
+			bottom: "#3a1450", overlay: "balloons", fx: "balloons" },
+		{ id: "candles", name: "Candlelight", icon: "🕯️", interactive: true,
+			desc: "A candlelit evening. Flames lean away from your cursor; click to blow candles out, then hover or click a wick to relight it",
+			bg: "radial-gradient(ellipse at 50% 100%, #3a1408 0%, #1e0a0a 45%, #0a0306 100%)",
+			bottom: "#1a0808", overlay: "candles", fx: "candles" },
+		{ id: "cupid", name: "Cupid's Arrows", icon: "💘", interactive: true,
+			desc: "Winged hearts flutter round your cursor. Click to loose a golden arrow at the nearest one, and line up two for a double match",
+			bg: "linear-gradient(170deg, #3d0f3f 0%, #8a2f6b 50%, #e2708f 100%)",
+			bottom: "#4a1347", overlay: "cupid", fx: "cupid" }
 	];
 	var BY_ID = {};
 	THEMES.forEach(function (t) { BY_ID[t.id] = t; });
@@ -2852,197 +2846,6 @@
 		},
 		// ── Scenes (each a small world of its own) ──
 
-		// A black hole drifts after the cursors. Its accretion disk spins
-		// faster further in, starlight bends around it, the far side of the
-		// disk is lensed up over the top, and clicks throw in streams of hot
-		// gas that flare the jets when they fall in.
-		blackhole: {
-			density: 0, pointer: true,
-			frame: function (c, dt, w, h, t, S) {
-				var i, j, p, n, rh = Math.min(w, h) * (isSmallScreen() ? 0.06 : 0.07), TILT = 0.27;
-				if (!S.disk) {
-					S.disk = []; S.stars = []; S.feed = []; S.cx = w / 2; S.cy = h / 2; S.jet = 0;
-					withSeed(seedBase, function () {
-						for (i = 0, n = scaledCount(1700); i < n; i++) S.disk.push(bhParticle({}, rh, true));
-						for (i = 0, n = scaledCount(260); i < n; i++) S.stars.push({ x: rand(0, w), y: rand(0, h), r: rand(0.4, 1.4), tw: rand(0, TAU) });
-					});
-				}
-				var tx = w / 2 + Math.sin(t * 0.09) * w * 0.18, ty = h * 0.45 + Math.sin(t * 0.13) * h * 0.12;
-				if (livePtrs.length) {
-					tx = ty = 0;
-					for (i = 0; i < livePtrs.length; i++) { tx += livePtrs[i].x; ty += livePtrs[i].y; }
-					tx /= livePtrs.length; ty /= livePtrs.length;
-				}
-				var e = Math.min(1, dt * 0.35);   // lags well behind, so cursors can stir the disk
-				S.cx += (tx - S.cx) * e; S.cy += (ty - S.cy) * e;
-				var cx = S.cx, cy = S.cy, rE = rh * 2.3;
-
-				// background stars, bent outward around the hole (a point-mass lens)
-				c.fillStyle = "#e8eeff";
-				for (i = 0; i < S.stars.length; i++) {
-					p = S.stars[i];
-					var dx = p.x - cx, dy = p.y - cy, d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-					var nd = (d + Math.sqrt(d * d + 4 * rE * rE)) / 2;   // lensed image radius
-					if (nd < rh * 1.25) continue;
-					var mag = Math.min(4, nd / d);
-					c.globalAlpha = Math.min(1, (0.35 + 0.35 * Math.sin(t * 1.7 + p.tw)) * (0.6 + mag * 0.4));
-					c.beginPath(); c.arc(cx + dx / d * nd, cy + dy / d * nd, p.r * Math.min(2, Math.sqrt(mag)), 0, TAU); c.fill();
-				}
-
-				// update the disk: Keplerian spin, a slow inward spiral, cursors carve through it
-				var D = S.disk;
-				for (i = 0; i < D.length; i++) {
-					p = D[i];
-					p.pa = p.a;
-					p.w = 1.7 * Math.pow(rh * 1.5 / p.r, 1.5);
-					p.a += p.w * dt;
-					p.r -= rh * 0.015 * p.drift * (rh * 3 / p.r) * dt;
-					p.x = cx + Math.cos(p.a) * p.r; p.y = cy + Math.sin(p.a) * p.r * TILT;
-					p.lit = 0;
-					for (j = 0; j < livePtrs.length; j++) {
-						var qx = livePtrs[j].x - p.x, qy = livePtrs[j].y - p.y, q2 = qx * qx + qy * qy;
-						if (q2 < 90 * 90) { var k = 1 - Math.sqrt(q2) / 90; p.r += k * 70 * dt; p.lit = Math.max(p.lit, k); }
-					}
-					if (p.r < rh * 1.12 || p.r > rh * 7.5) bhParticle(p, rh, false);
-				}
-				for (i = 0; i < clicks.length; i++) {   // a stream of hot gas, flung sideways so it spirals in
-					var gx = clicks[i].x - cx, gy = clicks[i].y - cy, gd = Math.sqrt(gx * gx + gy * gy) + 1;
-					var vs = Math.sqrt(rh * rh * 900 / gd) * 0.85;
-					for (j = 0; j < 70; j++)
-						S.feed.push({ x: clicks[i].x + rand(-12, 12), y: clicks[i].y + rand(-12, 12), vx: -gy / gd * vs * rand(0.8, 1.1), vy: gx / gd * vs * rand(0.8, 1.1),
-							px: clicks[i].x, py: clicks[i].y, age: -j * 0.012, hue: rand(190, 230) });
-				}
-				if (S.feed.length > 700) S.feed.splice(0, S.feed.length - 700);
-
-				c.globalCompositeOperation = "lighter";
-				c.globalAlpha = 0.55 + S.jet * 0.3;
-				var hs = rh * 11;
-				c.drawImage(glow("rgba(255,120,40,0.22)"), cx - hs / 2, cy - hs * TILT * 1.2, hs, hs * TILT * 2.4);
-				// back half of the disk, then its lensed image arching over the top
-				bhDisk(c, D, -1, 0, cx, cy, rh, TILT);
-				bhDisk(c, D, -1, 1, cx, cy, rh, TILT);
-				bhDisk(c, D, 1, 2, cx, cy, rh, TILT);
-				c.globalCompositeOperation = "source-over";
-				// the shadow and its razor-thin photon ring
-				c.globalAlpha = 1;
-				var sg = c.createRadialGradient(cx, cy, rh * 0.8, cx, cy, rh * 1.08);
-				sg.addColorStop(0, "#000"); sg.addColorStop(1, "rgba(0,0,0,0)");
-				c.fillStyle = sg;
-				c.beginPath(); c.arc(cx, cy, rh * 1.08, 0, TAU); c.fill();
-				c.globalCompositeOperation = "lighter";
-				c.strokeStyle = "rgba(255,225,180,0.85)"; c.lineWidth = 1.4;
-				c.beginPath(); c.arc(cx, cy, rh * 1.06, 0, TAU); c.stroke();
-				c.strokeStyle = "rgba(255,170,90,0.25)"; c.lineWidth = 5;
-				c.beginPath(); c.arc(cx, cy, rh * 1.1, 0, TAU); c.stroke();
-				// near half of the disk crosses in front of the hole
-				bhDisk(c, D, 1, 0, cx, cy, rh, TILT);
-
-				// infalling gas: gravity plus a little drag, so it spirals down
-				var G = rh * rh * 900, drag = Math.pow(0.82, dt);
-				c.lineCap = "round"; c.lineWidth = 2;
-				for (i = S.feed.length - 1; i >= 0; i--) {
-					p = S.feed[i];
-					p.age += dt;
-					if (p.age < 0) continue;
-					p.px = p.x; p.py = p.y;
-					for (var sub = 0; sub < 2; sub++) {
-						var fx = cx - p.x, fy = cy - p.y, f2 = fx * fx + fy * fy + 200, fd = Math.sqrt(f2);
-						p.vx = (p.vx + fx / fd * G / f2 * dt / 2) * Math.sqrt(drag); p.vy = (p.vy + fy / fd * G / f2 * dt / 2) * Math.sqrt(drag);
-						p.x += p.vx * dt / 2; p.y += p.vy * dt / 2;
-						if (fd < rh) break;
-					}
-					var rr = d2xy(p.x - cx, p.y - cy);
-					if (rr < rh * rh || p.age > 9) { if (rr < rh * rh) S.jet = Math.min(1.6, S.jet + 0.03); S.feed.splice(i, 1); continue; }
-					c.globalAlpha = Math.min(1, p.age * 4) * 0.8;
-					c.strokeStyle = "hsl(" + p.hue + ",100%,78%)";
-					c.beginPath(); c.moveTo(p.px, p.py); c.lineTo(p.x + 0.1, p.y); c.stroke();
-				}
-				// relativistic jets when it's feeding
-				S.jet = Math.max(0, S.jet - dt * 0.35);
-				if (S.jet > 0.02) {
-					var jl = rh * 7 * Math.min(1, S.jet), ja = Math.min(1, S.jet) * 0.6;
-					c.globalAlpha = 1;
-					for (var side = -1; side <= 1; side += 2) {
-						var jg = c.createLinearGradient(cx, cy, cx, cy + side * jl);
-						jg.addColorStop(0, "rgba(190,215,255," + (0.5 * ja).toFixed(3) + ")"); jg.addColorStop(1, "rgba(120,160,255,0)");
-						c.strokeStyle = jg;
-						for (var pass = 0; pass < 3; pass++) {   // wide haze, beam, hot core
-							c.lineWidth = [rh * 0.4, rh * 0.14, rh * 0.04][pass];
-							c.beginPath(); c.moveTo(cx, cy + side * rh * 1.08);
-							c.lineTo(cx + Math.sin(t * 3 + side) * rh * 0.15, cy + side * jl); c.stroke();
-						}
-					}
-				}
-				c.globalCompositeOperation = "source-over";
-				c.globalAlpha = 1;
-			}
-		},
-
-		// Neon ink poured into water: moving drips ink that curls into
-		// tendrils on a slow current; clicks drop a blooming cloud of it.
-		ink: {
-			density: 0, pointer: true,
-			frame: function (c, dt, w, h, t, S) {
-				var P = S.ink || (S.ink = []), i, j, p, hue = (t * 14) % 360;
-				function drop(x, y, vx, vy, hh, sz, life) {
-					P.push({ x: x, y: y, hist: [x, y], vx: vx, vy: vy, hue: ((hh % 360) + 360) % 360, s: sz, age: 0, max: life, spin: rand(-2.6, 2.6) });
-				}
-				eachMove(S, livePtrs, 5, function (x, y, ux, uy) {
-					for (var k = 0; k < 4; k++)
-						drop(x + rand(-4, 4), y + rand(-4, 4), ux * rand(50, 150) + rand(-30, 30), uy * rand(50, 150) + rand(-30, 30), hue + rand(-25, 25), rand(1.5, 3.5), rand(2.5, 5));
-				});
-				for (i = 0; i < clicks.length; i++) {
-					var pal = [hue, hue + 50, hue + 180];
-					for (j = 0; j < 280; j++) {
-						var a = rand(0, TAU), sp = Math.pow(rand(0, 1), 0.6) * 280;
-						drop(clicks[i].x, clicks[i].y, Math.cos(a) * sp, Math.sin(a) * sp, pal[j % 3] + rand(-15, 15), rand(1.5, 4.5), rand(3, 6.5));
-					}
-				}
-				var slot = Math.floor(t / 2.6);   // ambient drops, placed by the room clock
-				if (slot !== S.slot) {
-					S.slot = slot;
-					var R = mulberry(hashInts(seedBase, 4242, slot));
-					if (R() < 0.7) {
-						var ax = (0.1 + R() * 0.8) * w, ay = (0.1 + R() * 0.8) * h, ah = R() * 360;
-						for (j = 0; j < 110; j++) { var b = R() * TAU, bs = R() * 120; drop(ax, ay, Math.cos(b) * bs, Math.sin(b) * bs, ah + (R() - 0.5) * 60, 1 + R() * 3, 3 + R() * 3); }
-					}
-				}
-				if (P.length > 1900) P.splice(0, P.length - 1900);
-				var drag = Math.pow(0.35, dt), buckets = {};
-				for (i = P.length - 1; i >= 0; i--) {
-					p = P[i];
-					p.age += dt;
-					if (p.age >= p.max) { P.splice(i, 1); continue; }
-					var fa = (Math.sin(p.x * 0.004 + t * 0.2) + Math.cos(p.y * 0.005 - t * 0.15) + Math.sin((p.x + p.y) * 0.002 + t * 0.1)) * Math.PI;
-					var cs = Math.cos(p.spin * dt), sn = Math.sin(p.spin * dt), vx = p.vx * cs - p.vy * sn;   // curl
-					p.vy = (p.vx * sn + p.vy * cs) * drag; p.vx = vx * drag;
-					p.x += (p.vx + Math.cos(fa) * 16) * dt; p.y += (p.vy + Math.sin(fa) * 16) * dt;
-					p.hist.push(p.x, p.y);
-					if (p.hist.length > 64) p.hist.splice(0, 2);
-					var life = 1 - p.age / p.max, key = (((p.hue / 30) | 0) * 3 + Math.min(2, (p.s * life) | 0)) * 3 + Math.min(2, (life * 3) | 0);
-					(buckets[key] || (buckets[key] = [])).push(p);
-				}
-				c.globalCompositeOperation = "lighter";
-				c.lineCap = "round";
-				for (var k2 in buckets) {
-					var L = buckets[k2], ak = k2 % 3, wk = ((k2 / 3) | 0) % 3, hk = ((k2 / 9) | 0) * 30 + 15;
-					c.strokeStyle = "hsl(" + hk + ",95%,62%)";
-					c.globalAlpha = 0.16 + ak * 0.17;
-					c.lineWidth = 1.3 + wk * 1.6;
-					c.lineJoin = "round";
-					c.beginPath();
-					for (j = 0; j < L.length; j++) {
-						var hh = L[j].hist;
-						c.moveTo(hh[0], hh[1]);
-						for (var q = 2; q < hh.length; q += 2) c.lineTo(hh[q], hh[q + 1]);
-						if (hh.length < 4) c.lineTo(hh[0] + 0.1, hh[1]);
-					}
-					c.stroke();
-				}
-				c.globalCompositeOperation = "source-over";
-			}
-		},
-
 		// A living neural net: pulses race along curved dendrites, and a
 		// neuron that gets enough of them fires in turn, setting off chain
 		// reactions. Cursors charge the neurons around them; clicks fire a
@@ -3151,202 +2954,6 @@
 					}
 				}
 				c.globalAlpha = 1;
-			}
-		},
-
-		// Raked sand. Your cursor is the rake: the lines part around it and
-		// slowly settle back. Click to set down a stone and the sand flows
-		// around it in rings; click a stone to lift it away again.
-		zen: {
-			density: 0, pointer: true,
-			frame: function (c, dt, w, h, t, S) {
-				var i, j, r, p, k, st;
-				if (!S.rows) {
-					S.rows = []; S.stones = [];
-					var gap = isSmallScreen() ? 13 : 16, step = 11;
-					for (r = 0; r * gap < h + gap; r++) {
-						var row = [];
-						for (i = 0; i * step < w + step * 2; i++) row.push({ x: i * step - step, y: r * gap + gap / 2, ox: 0, oy: 0 });
-						S.rows.push(row);
-					}
-					withSeed(seedBase, function () {
-						for (i = 0; i < 3; i++) S.stones.push(zenStone(rand(0.15, 0.85) * w, rand(0.2, 0.8) * h, rand(26, 40)));
-					});
-				}
-				var stones = S.stones;
-				for (i = 0; i < clicks.length; i++) {
-					var hit = -1;
-					for (j = 0; j < stones.length; j++) if (d2xy(clicks[i].x - stones[j].x, clicks[i].y - stones[j].y) < stones[j].r * stones[j].r) hit = j;
-					if (hit >= 0) stones.splice(hit, 1);
-					else { stones.push(zenStone(clicks[i].x, clicks[i].y, rand(18, 36))); if (stones.length > 7) stones.shift(); }
-				}
-				var obs = [];
-				for (j = 0; j < stones.length; j++) obs.push({ x: stones[j].x, y: stones[j].y, r: stones[j].r * 1.05, R: stones[j].r * 2.6 + 40 });
-				for (j = 0; j < livePtrs.length; j++) obs.push({ x: livePtrs[j].x, y: livePtrs[j].y, r: 14, R: 85 });
-				var fast = Math.min(1, dt * 10), slow = Math.min(1, dt * 0.22);
-				for (r = 0; r < S.rows.length; r++) {
-					var R0 = S.rows[r];
-					for (i = 0; i < R0.length; i++) {
-						p = R0[i];
-						var tx = 0, ty = 0;
-						for (k = 0; k < obs.length; k++) {
-							var o = obs[k], dx = p.x - o.x, dy = p.y - o.y;
-							if (dx > o.R || dx < -o.R || dy > o.R || dy < -o.R) continue;
-							var d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-							if (d >= o.R) continue;
-							var nr = o.r + 5 + d * (o.R - o.r - 5) / o.R;   // squeeze the lines into rings round it
-							tx += dx / d * (nr - d); ty += dy / d * (nr - d);
-						}
-						// pushed fast, but the grooves only settle back slowly
-						var e = tx * tx + ty * ty > p.ox * p.ox + p.oy * p.oy ? fast : slow;
-						p.ox += (tx - p.ox) * e; p.oy += (ty - p.oy) * e;
-					}
-				}
-				c.lineJoin = "round"; c.lineCap = "round";
-				for (var pass = 0; pass < 2; pass++) {   // groove shadow, then the sunlit ridge
-					c.strokeStyle = pass ? "rgba(255,238,205,0.28)" : "rgba(20,12,4,0.42)";
-					c.lineWidth = pass ? 1.2 : 2.4;
-					var off = pass ? -1 : 1.3;
-					c.beginPath();
-					for (r = 0; r < S.rows.length; r++) {
-						var R1 = S.rows[r];
-						c.moveTo(R1[0].x + R1[0].ox, R1[0].y + R1[0].oy + off);
-						for (i = 1; i < R1.length; i++) c.lineTo(R1[i].x + R1[i].ox, R1[i].y + R1[i].oy + off);
-					}
-					c.stroke();
-				}
-				for (j = 0; j < stones.length; j++) {
-					st = stones[j];
-					st.age += dt;
-					var sc = Math.min(1, st.age * 5);   // drops in with a little bounce
-					sc = sc < 1 ? sc * (1.15 - 0.15 * sc) : 1;
-					c.save(); c.translate(st.x, st.y); c.scale(sc, sc);
-					c.fillStyle = "rgba(15,8,2,0.45)";
-					zenStonePath(c, st, 5, 7); c.fill();
-					var g = c.createRadialGradient(-st.r * 0.35, -st.r * 0.4, st.r * 0.1, 0, 0, st.r * 1.1);
-					g.addColorStop(0, st.light); g.addColorStop(1, st.dark);
-					c.fillStyle = g;
-					zenStonePath(c, st, 0, 0); c.fill();
-					c.fillStyle = "rgba(110,150,70,0.55)";   // a patch of moss
-					c.beginPath(); c.ellipse(st.r * 0.15, -st.r * 0.45, st.r * 0.38, st.r * 0.16, -0.3, 0, TAU); c.fill();
-					c.restore();
-				}
-			}
-		},
-
-		// A gravity sandbox. A sun sits in the middle and every cursor is a
-		// star; planets orbit them all, leave trails, merge when they
-		// collide and fall into the stars. Click to launch a new planet
-		// into orbit around the nearest star.
-		orbits: {
-			density: 0, pointer: true,
-			frame: function (c, dt, w, h, t, S) {
-				var i, j, p, q, wl, sc = Math.min(w, h) / 900, G = 9e5 * sc * sc * sc;
-				var wells = [{ x: w / 2, y: h / 2, m: 1.3, sun: true }];
-				for (i = 0; i < livePtrs.length; i++) wells.push({ x: livePtrs[i].x, y: livePtrs[i].y, m: 0.9 });
-				if (!S.bodies) {
-					S.bodies = []; S.bursts = [];
-					withSeed(seedBase, function () {
-						for (i = 0; i < 9; i++) {
-							var r = rand(0.12, 0.44) * Math.min(w, h), a = rand(0, TAU), v = Math.sqrt(G * 1.3 / r);
-							S.bodies.push(newPlanet(w / 2 + Math.cos(a) * r, h / 2 + Math.sin(a) * r, -Math.sin(a) * v, Math.cos(a) * v, rand(4, 9) * sc + 2));
-						}
-					});
-				}
-				var B = S.bodies, X = S.bursts;
-				function launch(x, y) {
-					var n = null, bd = Infinity;
-					for (var k = 0; k < wells.length; k++) { var dd = d2xy(wells[k].x - x, wells[k].y - y); if (dd < bd) { bd = dd; n = wells[k]; } }
-					var dx = x - n.x, dy = y - n.y, d = Math.sqrt(dx * dx + dy * dy) + 1, v = Math.sqrt(G * n.m / d) * rand(0.85, 1.1);
-					if (d < 30) { dx = 1; dy = 0; d = 1; v = 0; }
-					B.push(newPlanet(x, y, -dy / d * v, dx / d * v, rand(4, 10) * sc + 2));
-				}
-				for (i = 0; i < clicks.length; i++) launch(clicks[i].x, clicks[i].y);
-				S.spawn = (S.spawn || 0) - dt;
-				if (B.length < 6 && S.spawn <= 0) { S.spawn = 2.5; launch(rand(0.1, 0.9) * w, rand(0, 1) < 0.5 ? h * 0.08 : h * 0.92); }
-				if (B.length > 40) B.splice(0, B.length - 40);
-				function burst(x, y, col, n) {
-					for (var k = 0; k < n; k++) { var a = rand(0, TAU), v = rand(30, 220); X.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, age: 0, max: rand(0.5, 1.2), col: col }); }
-				}
-				for (var sub = 0; sub < 3; sub++) {
-					var h3 = dt / 3;
-					for (i = B.length - 1; i >= 0; i--) {
-						p = B[i];
-						var ax = 0, ay = 0, dead = false;
-						for (j = 0; j < wells.length; j++) {
-							wl = wells[j];
-							var dx = wl.x - p.x, dy = wl.y - p.y, r2 = dx * dx + dy * dy + 400 * sc, r = Math.sqrt(r2);
-							if (r < (wl.sun ? 22 : 12) * Math.max(1, sc)) dead = true;
-							ax += G * wl.m * dx / (r2 * r); ay += G * wl.m * dy / (r2 * r);
-						}
-						if (dead || p.x < -w || p.x > w * 2 || p.y < -h || p.y > h * 2) {
-							if (dead) burst(p.x, p.y, p.col, 30);
-							B.splice(i, 1); continue;
-						}
-						p.vx += ax * h3; p.vy += ay * h3; p.x += p.vx * h3; p.y += p.vy * h3;
-					}
-				}
-				for (i = 0; i < B.length; i++) for (j = B.length - 1; j > i; j--) {   // collisions merge
-					p = B[i]; q = B[j];
-					var rr = p.r + q.r;
-					if (d2xy(p.x - q.x, p.y - q.y) > rr * rr) continue;
-					var m = p.m + q.m;
-					p.vx = (p.vx * p.m + q.vx * q.m) / m; p.vy = (p.vy * p.m + q.vy * q.m) / m;
-					p.x = (p.x * p.m + q.x * q.m) / m; p.y = (p.y * p.m + q.y * q.m) / m;
-					p.r = Math.cbrt(p.r * p.r * p.r + q.r * q.r * q.r); p.m = m;
-					p.ring = p.ring || q.ring || p.r > 14 * sc + 4;
-					burst(p.x, p.y, q.col, 24);
-					B.splice(j, 1);
-				}
-				c.lineCap = "round";
-				for (i = 0; i < B.length; i++) {   // trails
-					p = B[i];
-					p.tt = (p.tt || 0) + dt;
-					if (p.tt > 0.04) { p.tt = 0; p.trail.push(p.x, p.y); if (p.trail.length > 90) p.trail.splice(0, 2); }
-					var T = p.trail;
-					c.strokeStyle = p.col; c.lineWidth = Math.max(1, p.r * 0.35);
-					for (j = 2; j < T.length; j += 2) {
-						c.globalAlpha = j / T.length * 0.45;
-						c.beginPath(); c.moveTo(T[j - 2], T[j - 1]); c.lineTo(T[j], T[j + 1]); c.stroke();
-					}
-				}
-				c.globalCompositeOperation = "lighter";
-				for (j = 0; j < wells.length; j++) {
-					wl = wells[j];
-					var gs = wl.sun ? 220 : 130;
-					c.globalAlpha = wl.sun ? 0.9 : 0.7 + 0.2 * Math.sin(t * 4 + j);
-					c.drawImage(glow(wl.sun ? "rgba(255,190,90,0.7)" : "rgba(150,190,255,0.6)"), wl.x - gs / 2, wl.y - gs / 2, gs, gs);
-					c.globalAlpha = 1; c.fillStyle = wl.sun ? "#fff3d0" : "#e8f0ff";
-					c.beginPath(); c.arc(wl.x, wl.y, wl.sun ? 9 : 4, 0, TAU); c.fill();
-				}
-				for (i = X.length - 1; i >= 0; i--) {
-					p = X[i];
-					p.age += dt;
-					if (p.age >= p.max) { X.splice(i, 1); continue; }
-					p.vx *= 0.96; p.vy *= 0.96; p.x += p.vx * dt; p.y += p.vy * dt;
-					c.globalAlpha = 1 - p.age / p.max;
-					c.fillStyle = p.col;
-					c.beginPath(); c.arc(p.x, p.y, 1.6, 0, TAU); c.fill();
-				}
-				c.globalCompositeOperation = "source-over";
-				c.globalAlpha = 1;
-				for (i = 0; i < B.length; i++) {   // planets, lit from the nearest star
-					p = B[i];
-					var n = null, bd = Infinity;
-					for (j = 0; j < wells.length; j++) { var dd = d2xy(wells[j].x - p.x, wells[j].y - p.y); if (dd < bd) { bd = dd; n = wells[j]; } }
-					var ld = Math.sqrt(bd) + 0.01, lx = (n.x - p.x) / ld, ly = (n.y - p.y) / ld;
-					if (p.ring) {
-						c.strokeStyle = "rgba(230,215,180,0.55)"; c.lineWidth = Math.max(1, p.r * 0.25);
-						c.beginPath(); c.ellipse(p.x, p.y, p.r * 2, p.r * 0.6, p.tilt, Math.PI, TAU); c.stroke();
-					}
-					var g = c.createRadialGradient(p.x + lx * p.r * 0.45, p.y + ly * p.r * 0.45, p.r * 0.1, p.x, p.y, p.r * 1.05);
-					g.addColorStop(0, p.lite); g.addColorStop(0.55, p.col); g.addColorStop(1, p.dark);
-					c.fillStyle = g;
-					c.beginPath(); c.arc(p.x, p.y, p.r, 0, TAU); c.fill();
-					if (p.ring) {
-						c.beginPath(); c.ellipse(p.x, p.y, p.r * 2, p.r * 0.6, p.tilt, 0, Math.PI); c.stroke();
-					}
-				}
 			}
 		},
 
@@ -3550,132 +3157,6 @@
 			}
 		},
 
-		// Laser beams fan out from every cursor and ricochet off the edges
-		// of the screen. Glass crystals split white beams into rainbows.
-		// Click to drop a crystal; click one to shatter it.
-		lasers: {
-			density: 0, pointer: true,
-			frame: function (c, dt, w, h, t, S) {
-				var i, j, cr;
-				if (!S.cr) {
-					S.cr = []; S.sh = [];
-					withSeed(seedBase, function () {
-						for (i = 0; i < 3; i++) S.cr.push({ x: rand(0.2, 0.8) * w, y: rand(0.2, 0.8) * h, r: rand(26, 38), rot: rand(0, TAU), vr: rand(-0.3, 0.3), age: 9 });
-					});
-				}
-				for (i = 0; i < clicks.length; i++) {
-					var hit = -1;
-					for (j = 0; j < S.cr.length; j++) if (d2xy(clicks[i].x - S.cr[j].x, clicks[i].y - S.cr[j].y) < S.cr[j].r * S.cr[j].r) hit = j;
-					if (hit >= 0) {
-						cr = S.cr.splice(hit, 1)[0];
-						for (j = 0; j < 40; j++) { var a = rand(0, TAU), v = rand(60, 320); S.sh.push({ x: cr.x, y: cr.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, rot: rand(0, TAU), age: 0, s: rand(3, 8), hue: rand(0, 360) }); }
-					} else {
-						S.cr.push({ x: clicks[i].x, y: clicks[i].y, r: rand(24, 36), rot: rand(0, TAU), vr: rand(-0.4, 0.4), age: 0 });
-						if (S.cr.length > 6) S.cr.shift();
-					}
-				}
-				var em = livePtrs.length ? livePtrs.slice(0, 4) : [ghostPointer(t, w, h)];
-				var segs = [], hits = [];
-				var RAIN = ["#ff3b5c", "#ff9a2e", "#ffe83a", "#4dff7a", "#3ab8ff", "#a95cff"];
-				function trace(x, y, dx, dy, col, bounces, skip, split, gen) {
-					gen = gen || 0;
-					while (bounces-- > 0 && segs.length < 500) {
-						var tw = Infinity, nx = 0, ny = 0;
-						if (dx > 0) { tw = (w - x) / dx; nx = -1; } else if (dx < 0) { tw = -x / dx; nx = 1; }
-						var ty = dy > 0 ? (h - y) / dy : dy < 0 ? -y / dy : Infinity;
-						if (ty < tw) { tw = ty; nx = 0; ny = dy > 0 ? -1 : 1; }
-						var best = null, bt = tw;
-						for (var k = 0; k < S.cr.length; k++) {
-							var C = S.cr[k];
-							if (C === skip) continue;
-							var fx = x - C.x, fy = y - C.y, b = fx * dx + fy * dy, q = fx * fx + fy * fy - C.r * C.r, disc = b * b - q;
-							if (disc < 0) continue;
-							var tt = -b - Math.sqrt(disc);
-							if (tt > 0.5 && tt < bt) { bt = tt; best = C; }
-						}
-						var ex = x + dx * bt, ey = y + dy * bt;
-						segs.push({ x0: x, y0: y, x1: ex, y1: ey, col: col, g: Math.min(3, gen++) });
-						if (best) {
-							var mx = ex - best.x, my = ey - best.y, ml = Math.sqrt(mx * mx + my * my) || 1;
-							mx /= ml; my /= ml;
-							if (col === "#ffffff" && split) {   // through the prism: out comes a rainbow fan
-								var fx2 = ex - best.x, fy2 = ey - best.y, b2 = fx2 * dx + fy2 * dy, out = -2 * b2;   // chord through the circle
-								var ox = ex + dx * out, oy = ey + dy * out;
-								segs.push({ x0: ex, y0: ey, x1: ox, y1: oy, col: "#ffffff", g: 0 });
-								for (var r = 0; r < RAIN.length; r++) {
-									var ang = (r - 2.5) * 0.09, cs = Math.cos(ang), sn = Math.sin(ang);
-									trace(ox, oy, dx * cs - dy * sn, dx * sn + dy * cs, RAIN[r], 3, best, false, 0);
-								}
-								hits.push(ex, ey);
-								return;
-							}
-							var dot = dx * mx + dy * my;   // colored light glances off the crystal
-							dx -= 2 * dot * mx; dy -= 2 * dot * my;
-							skip = best;
-						} else {
-							var dot2 = dx * nx + dy * ny;
-							dx -= 2 * dot2 * nx; dy -= 2 * dot2 * ny;
-							skip = null;
-						}
-						hits.push(ex, ey);
-						x = ex; y = ey;
-					}
-				}
-				for (i = 0; i < em.length; i++)
-					for (j = 0; j < 3; j++) {
-						var a2 = t * 0.45 + j * TAU / 3 + i * 0.9;
-						trace(em[i].x, em[i].y, Math.cos(a2), Math.sin(a2), "#ffffff", 4, null, true, 0);
-					}
-				c.globalCompositeOperation = "lighter";
-				c.lineCap = "round";
-				var by = {};
-				for (i = 0; i < segs.length; i++) { var bkey = segs[i].col + "|" + segs[i].g; (by[bkey] || (by[bkey] = [])).push(segs[i]); }
-				for (var bk2 in by) {
-					var L = by[bk2], col = bk2.split("|")[0], fade = [1, 0.6, 0.35, 0.2][+bk2.split("|")[1]];
-					for (var pass = 0; pass < 2; pass++) {
-						c.strokeStyle = pass ? col : (col === "#ffffff" ? "#7fb8ff" : col);
-						c.globalAlpha = (pass ? 0.9 : 0.16) * fade;
-						c.lineWidth = pass ? 1.4 : 7;
-						c.beginPath();
-						for (j = 0; j < L.length; j++) { c.moveTo(L[j].x0, L[j].y0); c.lineTo(L[j].x1, L[j].y1); }
-						c.stroke();
-					}
-				}
-				c.globalAlpha = 0.8;
-				for (i = 0; i < hits.length; i += 2) c.drawImage(glow("rgba(200,225,255,0.7)"), hits[i] - 11, hits[i + 1] - 11, 22, 22);
-				for (i = 0; i < em.length; i++) { c.globalAlpha = 0.9; c.drawImage(glow("rgba(170,210,255,0.8)"), em[i].x - 30, em[i].y - 30, 60, 60); }
-				c.globalCompositeOperation = "source-over";
-				for (i = 0; i < S.cr.length; i++) {   // the crystals: slowly turning glass hexagons
-					cr = S.cr[i];
-					cr.age += dt; cr.rot += cr.vr * dt;
-					var sc = Math.min(1, cr.age * 4);
-					c.save(); c.translate(cr.x, cr.y); c.rotate(cr.rot); c.scale(sc, sc);
-					c.globalAlpha = 1;
-					c.fillStyle = "rgba(170,210,255,0.1)"; c.strokeStyle = "rgba(210,235,255,0.75)"; c.lineWidth = 1.5;
-					c.beginPath();
-					for (j = 0; j < 6; j++) { var ha = j / 6 * TAU; c[j ? "lineTo" : "moveTo"](Math.cos(ha) * cr.r, Math.sin(ha) * cr.r); }
-					c.closePath(); c.fill(); c.stroke();
-					c.strokeStyle = "rgba(210,235,255,0.3)"; c.lineWidth = 1;
-					c.beginPath();
-					for (j = 0; j < 6; j += 2) { var hb = j / 6 * TAU; c.moveTo(Math.cos(hb) * cr.r, Math.sin(hb) * cr.r); c.lineTo(Math.cos(hb + Math.PI) * cr.r, Math.sin(hb + Math.PI) * cr.r); }
-					c.stroke();
-					c.restore();
-				}
-				for (i = S.sh.length - 1; i >= 0; i--) {   // shattered shards
-					var s2 = S.sh[i];
-					s2.age += dt;
-					if (s2.age > 1.4) { S.sh.splice(i, 1); continue; }
-					s2.vy += 300 * dt; s2.x += s2.vx * dt; s2.y += s2.vy * dt; s2.rot += 6 * dt;
-					c.globalAlpha = 1 - s2.age / 1.4;
-					c.fillStyle = "hsla(" + s2.hue + ",90%,80%,0.8)";
-					c.save(); c.translate(s2.x, s2.y); c.rotate(s2.rot);
-					c.beginPath(); c.moveTo(0, -s2.s); c.lineTo(s2.s * 0.6, s2.s * 0.5); c.lineTo(-s2.s * 0.6, s2.s * 0.5); c.fill();
-					c.restore();
-				}
-				c.globalAlpha = 1;
-			}
-		},
-
 		// Flying low over a neon wireframe landscape. Cursors raise hills
 		// under them and clicks send shockwaves rolling across the terrain.
 		terrain: {
@@ -3869,6 +3350,530 @@
 				c.globalCompositeOperation = "source-over";
 				c.globalAlpha = 1;
 			}
+		},
+
+		// Heart balloons rise on swinging strings. Cursors bat them about
+		// (harder the faster you swipe), they bump into each other, and a
+		// click on one pops it into a shower of hearts.
+		balloons: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				var B = S.b, V = ptrVel(S, dt), i, j, k, b, o, q, P, v, dx, dy, d;
+				if (!B) {
+					B = S.b = []; S.bits = []; S.rings = []; S.loose = [];
+					withSeed(seedBase, function () {
+						for (var n = scaledCount(18), m = 0; m < n; m++) B.push(newBalloon(w, h, true));
+					});
+				}
+				var e = Math.min(1, dt * 0.8), fr = Math.pow(0.02, dt), g = 1400 * dt * dt;
+				for (i = 0; i < B.length; i++) {
+					b = B[i];
+					var R = b.D * 0.38, reach = R + 60, near = 0;
+					// buoyancy and a lazy breeze; pushes ease back into this
+					b.vx += (Math.sin(t * 0.3 + b.ph) * 16 - b.vx) * e * 0.5;
+					b.vy += (-b.rise - b.vy) * e;
+					for (j = 0; j < livePtrs.length; j++) {
+						P = livePtrs[j]; v = V[P.id];
+						dx = b.x - P.x; dy = b.y - P.y;
+						if (dx > reach || dx < -reach || dy > reach || dy < -reach) continue;
+						d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+						if (d >= reach) continue;
+						k = 1 - d / reach;
+						if (k > near) near = k;
+						b.vx += (dx / d * 900 * k * k + (v ? v.vx : 0) * k * 5) * dt;
+						b.vy += (dy / d * 900 * k * k + (v ? v.vy : 0) * k * 5) * dt;
+					}
+					for (j = 0; j < clicks.length; j++) {
+						dx = b.x - clicks[j].x; dy = b.y - clicks[j].y; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+						if (d < b.D * 0.42) b.pop = true;
+						else if (d < 260) { k = 1 - d / 260; b.vx += dx / d * 420 * k; b.vy += dy / d * 420 * k; }
+					}
+					for (j = i + 1; j < B.length; j++) {   // balloons bump instead of overlapping
+						o = B[j];
+						var min = (b.D + o.D) * 0.36;
+						dx = o.x - b.x; dy = o.y - b.y;
+						if (dx > min || dx < -min || dy > min || dy < -min) continue;
+						d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+						if (d >= min) continue;
+						var push = (min - d) / d * 0.5, rel = ((o.vx - b.vx) * dx + (o.vy - b.vy) * dy) / d;
+						b.x -= dx * push; b.y -= dy * push; o.x += dx * push; o.y += dy * push;
+						if (rel < 0) {
+							b.vx += dx / d * rel * 0.5; b.vy += dy / d * rel * 0.5;
+							o.vx -= dx / d * rel * 0.5; o.vy -= dy / d * rel * 0.5;
+						}
+					}
+					var sp = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+					if (sp > 900) { b.vx *= 900 / sp; b.vy *= 900 / sp; }
+					b.x += b.vx * dt; b.y += b.vy * dt;
+					if (b.x < R) { b.x = R; b.vx = Math.abs(b.vx) * 0.6; }
+					if (b.x > w - R) { b.x = w - R; b.vx = -Math.abs(b.vx) * 0.6; }
+					// tilt with the wind and wobble when batted
+					var tilt = clamp(b.vx * 0.006, -0.5, 0.5) + Math.sin(t * 0.8 + b.ph) * 0.06;
+					b.vr += ((tilt - b.rot) * 30 - b.vr * 4) * dt;
+					b.rot += b.vr * dt;
+					b.hov += (near - b.hov) * Math.min(1, dt * 8);
+					// the string swings below the knot
+					var pts = b.pts, seg = b.D * 0.2;
+					pts[0].x = b.x - Math.sin(b.rot) * b.D * BALLOON_KNOT; pts[0].y = b.y + Math.cos(b.rot) * b.D * BALLOON_KNOT;
+					for (k = 1; k < pts.length; k++) {
+						q = pts[k];
+						var qx = q.x, qy = q.y;
+						q.x += (q.x - q.px) * fr; q.y += (q.y - q.py) * fr + g;
+						q.px = qx; q.py = qy;
+						for (j = 0; j < livePtrs.length; j++) {
+							dx = q.x - livePtrs[j].x; dy = q.y - livePtrs[j].y; d = dx * dx + dy * dy;
+							if (d < 900 && d > 0.01) { d = Math.sqrt(d); q.x += dx / d * (30 - d) * 0.5; q.y += dy / d * (30 - d) * 0.5; }
+						}
+						var pr = pts[k - 1];
+						dx = q.x - pr.x; dy = q.y - pr.y; d = Math.sqrt(dx * dx + dy * dy) + 0.001;
+						q.x = pr.x + dx / d * seg; q.y = pr.y + dy / d * seg;
+					}
+				}
+				for (i = 0; i < B.length; i++) {
+					b = B[i];
+					if (b.pop) {
+						heartPuff(S.bits, b.x, b.y, 20, 360, [b.c1, b.c2, "#ffffff"], 14, 0.3);
+						S.rings.push({ x: b.x, y: b.y, age: 0, col: b.c1 });
+						S.loose.push({ pts: b.pts, age: 0 });   // the string drops away
+						B[i] = newBalloon(w, h, false);
+					} else if (b.y < -b.D * 2.6) B[i] = newBalloon(w, h, false);
+				}
+				if (S.loose.length > 12) S.loose.splice(0, S.loose.length - 12);
+				eachMove(S, livePtrs, 34, function (x, y) { heartPuff(S.bits, x, y, 1, 40, ["#ffd6e0", "#ffffff", "#ffb3c6"], 8, 0.5); });
+
+				c.lineWidth = 1.2; c.lineCap = "round";
+				for (i = S.loose.length - 1; i >= 0; i--) {
+					var L = S.loose[i];
+					L.age += dt;
+					if (L.age > 1.4) { S.loose.splice(i, 1); continue; }
+					for (k = 0; k < L.pts.length; k++) {
+						q = L.pts[k];
+						var lx = q.x, ly = q.y;
+						q.x += (q.x - q.px) * fr; q.y += (q.y - q.py) * fr + g;
+						q.px = lx; q.py = ly;
+						if (k) {
+							dx = q.x - L.pts[k - 1].x; dy = q.y - L.pts[k - 1].y; d = Math.sqrt(dx * dx + dy * dy) + 0.001;
+							if (d > 14) { q.x = L.pts[k - 1].x + dx / d * 14; q.y = L.pts[k - 1].y + dy / d * 14; }
+						}
+					}
+					c.globalAlpha = 1 - L.age / 1.4;
+					c.strokeStyle = "rgba(255,240,245,0.6)";
+					ropePath(c, L.pts); c.stroke();
+				}
+				c.globalAlpha = 1;
+				c.strokeStyle = "rgba(255,240,245,0.6)";
+				for (i = 0; i < B.length; i++) { ropePath(c, B[i].pts); c.stroke(); }
+				for (i = 0; i < B.length; i++) {
+					b = B[i];
+					var sq = 1 + b.hov * 0.08 + Math.min(0.12, Math.abs(b.vr) * 0.02);
+					if (b.hov > 0.05) {   // a warm glow behind the one you're touching
+						c.globalCompositeOperation = "lighter"; c.globalAlpha = b.hov * 0.5;
+						var gz = b.D * 1.8;
+						c.drawImage(glow(b.c1), b.x - gz / 2, b.y - gz / 2, gz, gz);
+						c.globalCompositeOperation = "source-over"; c.globalAlpha = 1;
+					}
+					c.save(); c.translate(b.x, b.y); c.rotate(b.rot); c.scale(sq, 2 - sq);
+					c.drawImage(balloonSprite(b.c1, b.c2), -b.D / 2, -b.D / 2, b.D, b.D);
+					c.restore();
+				}
+				stepRings(c, S.rings, dt, 300, 0.5);
+				stepHearts(c, S.bits, dt, -30);
+			}
+		},
+
+		// Candles on a table, with a few floating above it. Flames lean away
+		// from your cursor like a breath; a fast swipe or a click blows them
+		// out with a curl of smoke (sometimes heart-shaped), and resting on a
+		// wick or clicking it lights it again. The room dims as they go out.
+		candles: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				var C = S.c, V = ptrVel(S, dt), i, j, k, q, P, v, dx, dy, d;
+				S.clock = (S.clock || 0) + dt;
+				if (!C) {
+					C = S.c = []; S.smoke = []; S.wisps = []; S.bits = []; S.dust = []; S.petals = []; S.rings = [];
+					withSeed(seedBase, function () {
+						var sm = isSmallScreen() ? 0.8 : 1, m, n, s;
+						for (m = 0, n = Math.max(3, Math.round(w / 300)); m < n; m++) {
+							s = rand(0.5, 0.72) * sm;
+							C.push(newCandle((m + 0.5 + rand(-0.3, 0.3)) / n * w, rand(0.22, 0.5) * h, s, rand(60, 100) * s, true));
+						}
+						[{ y: 0.86, s: 0.68, gap: 80 }, { y: 0.97, s: 1, gap: 105 }].forEach(function (row) {
+							for (m = 0, n = Math.max(4, Math.round(w / (row.gap * sm))); m < n; m++) {
+								s = row.s * sm * rand(0.85, 1.1);
+								C.push(newCandle((m + 0.5 + rand(-0.28, 0.28)) / n * w, row.y * h, s, rand(50, 140) * s, false));
+							}
+						});
+						for (m = 0, n = Math.round(w / 45); m < n; m++)
+							S.petals.push({ x: rand(0, w), y: rand(0.9, 0.99) * h, vx: 0, vy: 0, rot: rand(0, TAU), vr: 0, s: rand(5, 9) * sm,
+								col: pick(["#9b1028", "#c9184a", "#7a0c1f", "#e5383b"]) });
+						for (m = 0; m < 36; m++) S.dust.push({ x: rand(0, w), y: rand(0, h), vy: -rand(4, 14), ph: rand(0, TAU), s: rand(2, 5) });
+					});
+				}
+				// a click on a dark wick lights it; anywhere else it's a puff of air
+				var gusts = [];
+				for (j = 0; j < clicks.length; j++) {
+					var relit = false;
+					for (i = 0; i < C.length; i++)
+						if (!C[i].on && d2(C[i].wx, C[i].wy - 6, clicks[j].x, clicks[j].y) < 40 * 40) { candleLight(S, C[i]); relit = true; }
+					if (!relit) { gusts.push(clicks[j]); S.rings.push({ x: clicks[j].x, y: clicks[j].y, age: 0, col: "rgba(255,225,190,0.5)" }); }
+				}
+				var lit = 0;
+				for (i = 0; i < C.length; i++) {
+					q = C[i];
+					if (q.float) {   // floating candles bob, and can be nudged aside
+						for (j = 0; j < livePtrs.length; j++) {
+							dx = q.bx - livePtrs[j].x; dy = q.base - q.ch / 2 - livePtrs[j].y; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+							if (d < 120) { k = 1 - d / 120; q.ovx += dx / d * 900 * k * dt; q.ovy += dy / d * 900 * k * dt; }
+						}
+						q.ovx += (-q.ox * 8 - q.ovx * 2.5) * dt; q.ovy += (-q.oy * 8 - q.ovy * 2.5) * dt;
+						q.ox += q.ovx * dt; q.oy += q.ovy * dt;
+					}
+					q.bx = q.x + q.ox;
+					q.base = q.by + q.oy + (q.float ? Math.sin(t * 0.7 + q.ph) * 9 : 0);
+					q.wx = q.bx; q.wy = q.base - q.ch - 5 * q.s;   // tip of the wick
+					var want = Math.sin(t * 0.6 + q.ph) * 0.05, flick = 0, hovering = false;
+					for (j = 0; j < livePtrs.length; j++) {
+						P = livePtrs[j]; v = V[P.id];
+						dx = q.wx - P.x; dy = q.wy - 12 * q.s - P.y;
+						if (dx > 200 || dx < -200 || dy > 200 || dy < -200) continue;
+						d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+						if (d >= 200) continue;
+						k = 1 - d / 200;
+						want += dx / d * k * 0.7 + (v ? clamp(v.vx * 0.0005, -0.6, 0.6) : 0) * k;   // lean away, and with the draft
+						if (k > flick) flick = k;
+						if (q.on && v && v.sp > 1500 && d < 60) candleOut(S, q);
+						if (!q.on && d < 34 && (!v || v.sp < 400)) {
+							hovering = true;
+							q.hover += dt;
+							if (q.hover > 0.45) candleLight(S, q);
+						}
+					}
+					if (!hovering) q.hover = Math.max(0, q.hover - dt);
+					for (j = 0; j < gusts.length; j++) {
+						dx = q.wx - gusts[j].x; dy = q.wy - 8 * q.s - gusts[j].y; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+						if (d < 140) candleOut(S, q);
+						if (d < 340) q.lv += (dx > 0 ? 1 : -1) * (1 - d / 340) * 16;
+					}
+					if (!q.on && S.clock > q.relightAt) candleLight(S, q);
+					q.lv += ((clamp(want, -1.1, 1.1) - q.lean) * 50 - q.lv * 8) * dt;
+					q.lean = clamp(q.lean + q.lv * dt, -1.3, 1.3);
+					q.lit += ((q.on ? 1 : 0) - q.lit) * Math.min(1, dt * (q.on ? 3 : 14));
+					q.flick = flick;
+					q.fk = 1 + 0.07 * Math.sin(t * 13 + q.fl) + 0.05 * Math.sin(t * 23.7 + q.fl * 2) + flick * rand(-0.12, 0.12);
+					lit += q.lit;
+					if (q.smokeT > 0) {   // a thin stream of smoke right after it goes out
+						q.smokeT -= dt;
+						S.smoke.push({ x: q.wx, y: q.wy - 2, vx: rand(-6, 6) + q.lean * 20, vy: rand(-55, -35), age: 0, max: rand(2, 3.2), s: rand(3, 5) * q.s, ph: rand(0, TAU) });
+					}
+				}
+				if (S.smoke.length > 400) S.smoke.splice(0, S.smoke.length - 400);
+				var litFrac = C.length ? lit / C.length : 1;
+
+				// warm light over the table, brighter the more candles burn
+				c.globalCompositeOperation = "lighter";
+				c.globalAlpha = litFrac * (0.85 + 0.15 * Math.sin(t * 5.3));
+				c.drawImage(glow("rgba(255,140,60,0.22)"), -w * 0.1, h * 0.55, w * 1.2, h * 0.9);
+				c.globalCompositeOperation = "source-over"; c.globalAlpha = 1;
+				// rose petals scattered on the table; brush or puff them around
+				var pf = Math.pow(0.08, dt);
+				for (i = 0; i < S.petals.length; i++) {
+					var pe = S.petals[i];
+					for (j = 0; j < livePtrs.length; j++) {
+						dx = pe.x - livePtrs[j].x; dy = pe.y - livePtrs[j].y; d = dx * dx + dy * dy;
+						if (d < 2500) {
+							d = Math.sqrt(d) + 0.01; v = V[livePtrs[j].id];
+							pe.vx += (dx / d * 300 + (v ? v.vx : 0) * 2) * dt; pe.vy += dy / d * 120 * dt; pe.vr += rand(-6, 6) * dt;
+						}
+					}
+					for (j = 0; j < gusts.length; j++) {
+						dx = pe.x - gusts[j].x; dy = pe.y - gusts[j].y; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+						if (d < 220) { k = 1 - d / 220; pe.vx += dx / d * 380 * k; pe.vy += dy / d * 120 * k; pe.vr += rand(-8, 8) * k; }
+					}
+					pe.vx *= pf; pe.vy *= pf; pe.vr *= pf;
+					pe.x += pe.vx * dt; pe.y = clamp(pe.y + pe.vy * dt, h * 0.9, h * 0.995); pe.rot += pe.vr * dt;
+					if (pe.x < -10) pe.x += w + 20; else if (pe.x > w + 10) pe.x -= w + 20;
+					c.fillStyle = pe.col;
+					c.beginPath(); c.ellipse(pe.x, pe.y, pe.s, pe.s * 0.55, pe.rot, 0, TAU); c.fill();
+				}
+				// wax bodies
+				for (i = 0; i < C.length; i++) {
+					q = C[i];
+					var cw = q.cw, x0 = q.bx - cw / 2, top = q.base - q.ch, ry = cw * 0.18;
+					var gr = c.createLinearGradient(x0, 0, x0 + cw, 0);
+					gr.addColorStop(0, "#8a6440"); gr.addColorStop(0.32, "#f1d9b8"); gr.addColorStop(0.62, "#dcbb8f"); gr.addColorStop(1, "#7a5534");
+					c.fillStyle = gr;
+					c.beginPath();
+					c.moveTo(x0, top); c.lineTo(x0, q.base);
+					c.ellipse(q.bx, q.base, cw / 2, ry, 0, Math.PI, 0, true);
+					c.lineTo(x0 + cw, top);
+					c.ellipse(q.bx, top, cw / 2, ry, 0, 0, Math.PI, true);
+					c.closePath(); c.fill();
+					c.fillStyle = "rgba(246,226,196,0.95)";   // drips of melted wax
+					for (j = 0; j < q.drips.length; j++) {
+						var dr = q.drips[j], dxp = q.bx + dr.x, dl = top + ry * 0.6 + dr.len;
+						c.beginPath(); c.moveTo(dxp - dr.w / 2, top); c.lineTo(dxp - dr.w / 2, dl);
+						c.arc(dxp, dl, dr.w / 2, Math.PI, 0, true); c.lineTo(dxp + dr.w / 2, top); c.fill();
+					}
+					c.fillStyle = q.lit > 0.05 ? "#f7e2c2" : "#d9c19c";
+					c.beginPath(); c.ellipse(q.bx, top, cw / 2, ry, 0, 0, TAU); c.fill();
+					if (q.lit > 0.02) {   // the pool of melted wax glows
+						c.fillStyle = "rgba(255,190,110," + (0.55 * q.lit).toFixed(3) + ")";
+						c.beginPath(); c.ellipse(q.bx, top, cw * 0.32, ry * 0.6, 0, 0, TAU); c.fill();
+					}
+					c.strokeStyle = "#2a1a10"; c.lineWidth = Math.max(1, 1.6 * q.s);
+					c.beginPath(); c.moveTo(q.bx, top); c.quadraticCurveTo(q.bx, top - 3 * q.s, q.wx + q.lean * 1.5, q.wy); c.stroke();
+				}
+				// the room dims as the candles go out
+				if (litFrac < 0.999) {
+					c.fillStyle = "rgba(8,2,6," + (0.6 * (1 - litFrac)).toFixed(3) + ")";
+					c.fillRect(0, 0, w, h);
+				}
+				// halos, then the flames themselves
+				c.globalCompositeOperation = "lighter";
+				for (i = 0; i < C.length; i++) {
+					q = C[i];
+					var ember = clamp(1 - (S.clock - q.outAt) / 2, 0, 1);
+					if (!q.on && ember > 0) {   // the wick still glows for a moment
+						c.globalAlpha = ember;
+						c.drawImage(glow("rgba(255,110,40,0.9)"), q.wx - 5, q.wy - 5, 10, 10);
+					}
+					if (q.lit < 0.03) continue;
+					var G = 230 * q.s * q.lit * q.fk, G2 = G * 0.3, fy = q.wy - 10 * q.s;
+					c.globalAlpha = 0.9;
+					c.drawImage(glow("rgba(255,150,60,0.3)"), q.wx - G / 2, fy - G / 2, G, G);
+					c.drawImage(glow("rgba(255,210,140,0.5)"), q.wx - G2 / 2, fy - G2 / 2, G2, G2);
+				}
+				c.globalCompositeOperation = "source-over"; c.globalAlpha = 1;
+				for (i = 0; i < C.length; i++) {
+					q = C[i];
+					if (q.lit < 0.03) continue;
+					var fh = 34 * q.s * q.lit * q.fk * (1 + Math.abs(q.lean) * 0.25), fw = fh * 40 / 72 * (1 - Math.abs(q.lean) * 0.12);
+					c.save();
+					c.translate(q.wx, q.wy); c.rotate(q.lean * 0.85 + Math.sin(t * 9 + q.fl) * 0.03);
+					c.drawImage(flameSprite(), -fw / 2, -fh * 60 / 72, fw, fh);
+					c.restore();
+				}
+				// smoke curls up and swirls away from cursors
+				var sxf = Math.pow(0.5, dt), syf = Math.pow(0.8, dt);
+				for (i = S.smoke.length - 1; i >= 0; i--) {
+					var sm = S.smoke[i];
+					sm.age += dt;
+					if (sm.age >= sm.max) { S.smoke.splice(i, 1); continue; }
+					sm.vx += Math.sin(sm.age * 3 + sm.ph) * 30 * dt;
+					for (j = 0; j < livePtrs.length; j++) {
+						dx = sm.x - livePtrs[j].x; dy = sm.y - livePtrs[j].y; d = dx * dx + dy * dy;
+						if (d < 4900) { d = Math.sqrt(d) + 0.01; sm.vx += dx / d * 260 * dt; sm.vy += dy / d * 120 * dt; }
+					}
+					sm.vx *= sxf; sm.vy *= syf;
+					sm.x += sm.vx * dt; sm.y += sm.vy * dt;
+					var sz = sm.s * (1 + sm.age * 2.2), sf = 1 - sm.age / sm.max;
+					c.globalAlpha = sf * sf * 0.5;
+					c.drawImage(glow("rgba(205,200,215,0.45)"), sm.x - sz, sm.y - sz, sz * 2, sz * 2);
+				}
+				c.lineCap = "round"; c.lineJoin = "round";
+				for (i = S.wisps.length - 1; i >= 0; i--) {   // a heart drawn in smoke
+					var wi = S.wisps[i];
+					wi.age += dt;
+					if (wi.age > 2.8) { S.wisps.splice(i, 1); continue; }
+					var wsz = (8 + wi.age * 13) * wi.s, wa = clamp((wi.age - 0.4) * 2, 0, 1) * (1 - wi.age / 2.8);
+					if (wa <= 0) continue;
+					c.save();
+					c.translate(wi.x + Math.sin(wi.age * 2) * 6, wi.y - wi.age * 34 - wsz * 0.2);
+					c.rotate(wi.rot + Math.sin(wi.age * 1.6) * 0.15);
+					heartPath(c, wsz);
+					c.globalAlpha = 1;
+					c.strokeStyle = "rgba(220,214,228," + (wa * 0.25).toFixed(3) + ")"; c.lineWidth = 6; c.stroke();
+					c.strokeStyle = "rgba(235,230,240," + (wa * 0.55).toFixed(3) + ")"; c.lineWidth = 1.6; c.stroke();
+					c.restore();
+				}
+				// dust motes drifting through the candlelight
+				c.globalCompositeOperation = "lighter";
+				for (i = 0; i < S.dust.length; i++) {
+					var du = S.dust[i];
+					du.y += du.vy * dt; du.x += Math.sin(t * 0.4 + du.ph) * 8 * dt;
+					for (j = 0; j < livePtrs.length; j++) {
+						dx = du.x - livePtrs[j].x; dy = du.y - livePtrs[j].y; d = dx * dx + dy * dy;
+						if (d < 8100) { d = Math.sqrt(d) + 0.01; du.x += dx / d * (90 - d) * 2 * dt; du.y += dy / d * (90 - d) * 2 * dt; }
+					}
+					if (du.y < -10) { du.y = h + 10; du.x = Math.random() * w; }
+					c.globalAlpha = (0.35 + 0.25 * Math.sin(t * 1.3 + du.ph * 3)) * (0.3 + 0.7 * litFrac);
+					c.drawImage(glow("rgba(255,205,140,0.7)"), du.x - du.s * 2, du.y - du.s * 2, du.s * 4, du.s * 4);
+				}
+				c.globalCompositeOperation = "source-over"; c.globalAlpha = 1;
+				stepRings(c, S.rings, dt, 380, 0.6);
+				stepHearts(c, S.bits, dt, -20);
+			}
+		},
+
+		// Winged hearts flutter about and gather round cursors. Click to loose
+		// a golden arrow at the nearest heart; arrows fly on through, so
+		// lining up two hearts makes a match. Cupid takes the odd shot himself.
+		cupid: {
+			density: 0, pointer: true,
+			frame: function (c, dt, w, h, t, S) {
+				var Hs = S.hearts, A, i, j, k, q, P, g, dx, dy, d, clock = S.clock = (S.clock || 0) + dt;
+				if (!Hs) {
+					Hs = S.hearts = []; S.arrows = []; S.bits = []; S.rings = []; S.bigs = []; S.lastShot = 0;
+					withSeed(seedBase, function () {
+						for (var n = scaledCount(16), m = 0; m < n; m++) Hs.push(newCupidHeart(w, h, false, -9));
+					});
+				}
+				function targetFor(x, y, maxD) {
+					var best = null, bd = maxD * maxD;
+					for (var n = 0; n < Hs.length; n++) {
+						var hh = Hs[n];
+						if (hh.hit || clock - hh.born < 0.5) continue;
+						var dd = d2(hh.x, hh.y, x, y);
+						if (dd < bd) { bd = dd; best = hh; }
+					}
+					return best;
+				}
+				function shoot(x, y, tgt, ang) {
+					if (tgt) ang = Math.atan2(tgt.y - y, tgt.x - x);
+					S.arrows.push({ x: x, y: y, ang: ang, sp: 1150, tgt: tgt, age: 0, hits: 0, first: null, tr: [] });
+					S.lastShot = clock;
+				}
+				for (i = 0; i < clicks.length; i++) {
+					var cl = clicks[i], tg = targetFor(cl.x, cl.y, 900);
+					if (tg && d2(tg.x, tg.y, cl.x, cl.y) < 3600) {   // clicked right on a heart: the arrow zips in from nearby
+						var za = rand(0, TAU);
+						shoot(tg.x - Math.cos(za) * 160, tg.y - Math.sin(za) * 160, tg);
+					} else shoot(cl.x, cl.y, tg, -Math.PI / 2);
+				}
+				if (clock - S.lastShot > 7 && clock > 2) {   // Cupid's own shot from the side of the screen
+					var it = targetFor(w / 2, h / 2, 1e5);
+					if (it) shoot(it.x < w / 2 ? -40 : w + 40, rand(0.15, 0.8) * h, it);
+					else S.lastShot = clock;
+				}
+				// hearts drift up and come to circle cursors
+				for (i = 0; i < Hs.length; i++) {
+					q = Hs[i];
+					if (q.hit) continue;   // a pierced heart hangs where it was struck
+					var dvx = Math.sin(t * 0.5 + q.ph) * 14, dvy = -q.rise;
+					g = nearest(livePtrs, q.x, q.y);
+					if (g) {
+						dx = g.x - q.x; dy = g.y - q.y; d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+						if (d < 340) {
+							k = Math.min(1, (340 - d) / 120);
+							var pull = clamp((d - (70 + q.D)) * 1.5, -160, 160);
+							dvx += (dx / d * pull - dy / d * 70) * k; dvy += (dy / d * pull + dx / d * 70) * k;
+						}
+					}
+					for (j = i + 1; j < Hs.length; j++) {   // keep a little personal space
+						var o = Hs[j], min = (q.D + o.D) * 0.45;
+						dx = o.x - q.x; dy = o.y - q.y;
+						if (dx > min || dx < -min || dy > min || dy < -min) continue;
+						d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+						if (d >= min || o.hit) continue;
+						var sep = (min - d) / d * 0.3;
+						q.x -= dx * sep; q.y -= dy * sep; o.x += dx * sep; o.y += dy * sep;
+					}
+					var e = Math.min(1, dt * 1.5);
+					q.vx += (dvx - q.vx) * e; q.vy += (dvy - q.vy) * e;
+					q.x += q.vx * dt; q.y += q.vy * dt;
+					if (q.x < -q.D) q.x += w + q.D * 2; else if (q.x > w + q.D) q.x -= w + q.D * 2;
+					if (q.y < -q.D) Hs[i] = newCupidHeart(w, h, true, clock);
+				}
+				// arrows home in gently, pierce every heart in their path, and fly on
+				for (i = S.arrows.length - 1; i >= 0; i--) {
+					A = S.arrows[i];
+					A.age += dt;
+					if (A.tgt && !A.tgt.hit && Hs.indexOf(A.tgt) >= 0)
+						A.ang += clamp(angDiff(A.ang, Math.atan2(A.tgt.y - A.y, A.tgt.x - A.x)), -5 * dt, 5 * dt);
+					A.x += Math.cos(A.ang) * A.sp * dt; A.y += Math.sin(A.ang) * A.sp * dt;
+					A.tr.push(A.x, A.y);
+					if (A.tr.length > 16) A.tr.splice(0, 2);
+					for (j = 0; j < Hs.length; j++) {
+						q = Hs[j];
+						if (q.hit || clock - q.born < 0.5 || d2(q.x, q.y, A.x, A.y) >= q.D * q.D * 0.18) continue;
+						q.hit = clock; q.ang = A.ang; A.hits++;
+						heartPuff(S.bits, q.x, q.y, 6, 160, [q.col, "#fff1c1"], 8, 0.6);
+						if (A.hits === 1) A.first = q;
+						else if (A.hits === 2) {   // a match!
+							S.bigs.push({ x: (A.first.x + q.x) / 2, y: (A.first.y + q.y) / 2, age: 0 });
+							S.rings.push({ x: (A.first.x + q.x) / 2, y: (A.first.y + q.y) / 2, age: 0, col: "rgba(255,215,120,0.95)" });
+						}
+					}
+					if (Math.random() < 0.8)
+						heartPuff(S.bits, A.x - Math.cos(A.ang) * 40, A.y - Math.sin(A.ang) * 40, 1, 20, ["#fff1c1", "#ffd27a"], 5, 1);
+					if (A.age > 3 || A.x < -220 || A.x > w + 220 || A.y < -220 || A.y > h + 220) S.arrows.splice(i, 1);
+				}
+				for (i = 0; i < Hs.length; i++) {   // struck hearts burst after a beat
+					q = Hs[i];
+					if (!q.hit || clock - q.hit < 0.35) continue;
+					heartPuff(S.bits, q.x, q.y, 22, 380, [q.col, "#ffffff", "#ffd6e0", "#ff4d6d"], 13, 0.3);
+					S.rings.push({ x: q.x, y: q.y, age: 0, col: "rgba(255,210,120,0.9)" });
+					Hs[i] = newCupidHeart(w, h, false, clock);
+				}
+				eachMove(S, livePtrs, 36, function (x, y) { heartPuff(S.bits, x, y, 1, 30, ["#ffb3c6", "#ffffff", "#ff8fab"], 8, 0.4); });
+
+				// aim: a dotted golden line to the heart each cursor would hit
+				var aims = [];
+				c.setLineDash([3, 7]); c.lineWidth = 1.2; c.strokeStyle = "#ffd27a";
+				for (i = 0; i < livePtrs.length; i++) {
+					P = livePtrs[i];
+					var at = targetFor(P.x, P.y, 420);
+					if (!at) continue;
+					var af = clamp(1 - Math.sqrt(d2(P.x, P.y, at.x, at.y)) / 420, 0, 1);
+					aims.push(at, af);
+					c.globalAlpha = af * 0.6;
+					c.beginPath(); c.moveTo(P.x, P.y); c.lineTo(at.x, at.y); c.stroke();
+				}
+				c.setLineDash([]);
+				for (i = 0; i < Hs.length; i++) {
+					q = Hs[i];
+					var ap = clamp((clock - q.born) / 0.6, 0, 1);
+					var sc = ap < 1 ? Math.sin(ap * Math.PI / 2) * (1 + 0.25 * Math.sin(ap * Math.PI)) : 1;
+					sc *= 1 + 0.06 * heartbeat(t + q.ph, 70);
+					if (q.hit) sc *= 1 + 0.25 * Math.abs(Math.sin((clock - q.hit) * 30));
+					var D = q.D * sc;
+					if (D < 1) continue;
+					c.globalCompositeOperation = "lighter"; c.globalAlpha = (q.hit ? 0.9 : 0.4) * ap;
+					c.drawImage(glow(q.hit ? "#fff1c1" : q.col), q.x - D, q.y - D, D * 2, D * 2);
+					c.globalCompositeOperation = "source-over"; c.globalAlpha = ap;
+					if (q.wings) drawWings(c, q.x, q.y, D, Math.sin(t * 9 + q.ph));
+					c.save(); c.translate(q.x, q.y); c.rotate(Math.sin(t * 1.3 + q.ph) * 0.12);
+					c.drawImage(heartSprite(q.col), -D / 2, -D / 2, D, D);
+					c.restore();
+					if (q.hit) drawArrow(c, q.x + Math.cos(q.ang) * D * 0.45, q.y + Math.sin(q.ang) * D * 0.45, q.ang, D * 1.1);   // stuck through
+				}
+				c.globalAlpha = 1;
+				c.lineWidth = 1.5;
+				for (i = 0; i < aims.length; i += 2) {   // a turning reticle on the target
+					q = aims[i];
+					var rr = q.D * 0.66, rot = t * 2;
+					c.globalAlpha = aims[i + 1] * 0.85; c.strokeStyle = "#ffe7a3";
+					for (k = 0; k < 4; k++) { c.beginPath(); c.arc(q.x, q.y, rr, rot + k * Math.PI / 2, rot + k * Math.PI / 2 + 0.8); c.stroke(); }
+				}
+				c.globalAlpha = 1;
+				for (i = 0; i < S.arrows.length; i++) {
+					A = S.arrows[i];
+					c.strokeStyle = "rgba(255,215,130,0.35)"; c.lineWidth = 2;
+					c.beginPath(); c.moveTo(A.tr[0], A.tr[1]);
+					for (j = 2; j < A.tr.length; j += 2) c.lineTo(A.tr[j], A.tr[j + 1]);
+					c.stroke();
+					drawArrow(c, A.x, A.y, A.ang, 44);
+				}
+				for (i = S.bigs.length - 1; i >= 0; i--) {   // the matched pair become one big heart
+					var bg = S.bigs[i];
+					bg.age += dt;
+					if (bg.age > 2.2) {
+						heartPuff(S.bits, bg.x, bg.y, 30, 420, ["#ffd27a", "#fff1c1", "#ff4d6d", "#ffffff"], 14, 0.5);
+						S.bigs.splice(i, 1); continue;
+					}
+					bg.y -= 40 * dt;
+					var bz = 90 * Math.min(1, bg.age * 4) * (1 + 0.12 * heartbeat(bg.age, 100));
+					c.globalAlpha = Math.min(1, (2.2 - bg.age) * 2);
+					c.globalCompositeOperation = "lighter";
+					c.drawImage(glow("rgba(255,200,110,0.6)"), bg.x - bz, bg.y - bz, bz * 2, bz * 2);
+					c.globalCompositeOperation = "source-over";
+					c.drawImage(heartSprite("#ff2a55"), bg.x - bz / 2, bg.y - bz / 2, bz, bz);
+				}
+				c.globalAlpha = 1;
+				stepRings(c, S.rings, dt, 300, 0.6);
+				stepHearts(c, S.bits, dt, -30);
+			}
 		}
 	};
 
@@ -3895,75 +3900,6 @@
 			out = "rgba(" + m[1] + "," + m[2] + "," + m[3] + ",";
 		}
 		return (rgbaCache[col] = out);
-	}
-
-	// Black hole disk: colors from the white-hot inner edge out to dull red.
-	var BH_COLS = ["255,250,235", "255,225,160", "255,180,90", "255,130,50", "230,80,30", "170,40,25"];
-	function bhParticle(p, rh, first) {
-		p.r = first ? rh * (1.6 + Math.pow(rand(0, 1), 1.7) * 5) : rh * rand(5.5, 6.8);
-		p.a = rand(0, TAU); p.w = 0; p.drift = rand(0.5, 1.5);
-		p.x = p.y = 0;
-		return p;
-	}
-	// half: -1 far side, 1 near side. mode 0: the disk itself, 1: the far
-	// side's image lensed up over the hole, 2: the near side's faint image under it.
-	function bhDisk(c, D, half, mode, cx, cy, rh, TILT) {
-		var paths = [], i, p, k;
-		for (i = 0; i < D.length; i++) {
-			p = D[i];
-			var s = Math.sin(p.a);
-			if (half < 0 ? s >= 0 : s < 0) continue;
-			k = clamp(((p.r - rh * 1.2) / (rh * 5.5) * 6) | 0, 0, 5) * 2 + (Math.cos(p.a) > 0 ? 1 : 0);   // Doppler: one side brighter
-			(paths[k] || (paths[k] = [])).push(p);
-		}
-		c.lineCap = "round";
-		for (k = 0; k < paths.length; k++) {
-			var L = paths[k];
-			if (!L) continue;
-			var ci = k >> 1, al = ((k & 1) ? 0.75 : 0.32) * (1 - ci * 0.1);
-			c.strokeStyle = "rgb(" + BH_COLS[ci] + ")";
-			c.globalAlpha = mode === 1 ? al * 0.7 : mode === 2 ? al * 0.25 : al;
-			c.lineWidth = mode ? 1.3 : 2.1 - ci * 0.18;
-			c.beginPath();
-			for (i = 0; i < L.length; i++) {
-				p = L[i];
-				var a0 = p.a - p.w * 0.16;
-				if (mode === 0) { c.moveTo(cx + Math.cos(a0) * p.r, cy + Math.sin(a0) * p.r * TILT); c.lineTo(p.x + 0.1, p.y); }
-				else {
-					var rr = mode === 1 ? rh * 1.18 + (p.r - rh * 1.5) * 0.2 : rh * 1.1 + (p.r - rh * 1.5) * 0.08;
-					c.moveTo(cx + Math.cos(a0) * rr, cy + Math.sin(a0) * rr); c.lineTo(cx + Math.cos(p.a) * rr + 0.1, cy + Math.sin(p.a) * rr);
-				}
-			}
-			c.stroke();
-		}
-	}
-
-	// Zen garden stones: a lumpy rounded outline, in one of a few greys.
-	var STONE_TONES = [["#9a958c", "#3f3b35"], ["#8b8f93", "#33373b"], ["#a3927a", "#45392c"], ["#7d7a76", "#2c2a27"]];
-	function zenStone(x, y, r) {
-		var sh = [], tone = pick(STONE_TONES);
-		for (var i = 0; i < 9; i++) sh.push(rand(0.82, 1.08));
-		return { x: x, y: y, r: r, sh: sh, light: tone[0], dark: tone[1], age: 0 };
-	}
-	function zenStonePath(c, st, ox, oy) {
-		var n = st.sh.length, pts = [], i;
-		for (i = 0; i < n; i++) {
-			var a = i / n * TAU;
-			pts.push({ x: ox + Math.cos(a) * st.r * st.sh[i], y: oy + Math.sin(a) * st.r * st.sh[i] * 0.82 });
-		}
-		c.beginPath();
-		c.moveTo((pts[0].x + pts[n - 1].x) / 2, (pts[0].y + pts[n - 1].y) / 2);
-		for (i = 0; i < n; i++) {
-			var q = pts[(i + 1) % n];
-			c.quadraticCurveTo(pts[i].x, pts[i].y, (pts[i].x + q.x) / 2, (pts[i].y + q.y) / 2);
-		}
-		c.closePath();
-	}
-
-	function newPlanet(x, y, vx, vy, r) {
-		var hue = rand(0, 360) | 0;
-		return { x: x, y: y, vx: vx, vy: vy, r: r, m: r * r * r, col: "hsl(" + hue + ",55%,55%)", lite: "hsl(" + hue + ",75%,82%)",
-			dark: "hsl(" + hue + ",50%,14%)", ring: rand(0, 1) < 0.25, tilt: rand(-0.4, 0.4), trail: [] };
 	}
 
 	// A cherry tree as a flat list of branches (parents before children),
@@ -4038,6 +3974,223 @@
 			segs.push(boltPath(R, s.x, s.y, s.x + Math.cos(ang) * L, s.y + Math.sin(ang) * L, L * 0.4));
 		}
 		return segs;
+	}
+
+	// ── Helpers for the love themes ─────────────────────────────────────
+	// heartPath(c, S) spans x ±0.6S and y -0.3S..0.72S; the sprites below
+	// shift it so the heart sits centered in its square.
+	var heartCache = {};
+	function heartSprite(col) {
+		if (heartCache[col]) return heartCache[col];
+		var s = 64, S = s * 0.62, cv = document.createElement("canvas");
+		cv.width = cv.height = s;
+		var g = cv.getContext("2d");
+		g.translate(s / 2, s / 2 - S * 0.21);
+		g.shadowColor = col; g.shadowBlur = 8;
+		g.fillStyle = col;
+		heartPath(g, S); g.fill();
+		g.shadowBlur = 0;
+		g.fillStyle = "rgba(255,255,255,0.4)";
+		g.beginPath(); g.ellipse(-S * 0.3, -S * 0.05, S * 0.1, S * 0.06, -0.7, 0, TAU); g.fill();
+		return (heartCache[col] = cv);
+	}
+
+	var BALLOON_KNOT = 0.365;   // knot below the sprite's center, as a fraction of its size
+	var balloonCache = {};
+	function balloonSprite(c1, c2) {
+		var key = c1 + c2;
+		if (balloonCache[key]) return balloonCache[key];
+		var s = 128, S = s * 0.62, cv = document.createElement("canvas");
+		cv.width = cv.height = s;
+		var g = cv.getContext("2d");
+		g.translate(s / 2, s / 2 - S * 0.21);
+		var grd = g.createRadialGradient(-S * 0.25, -S * 0.1, S * 0.04, 0, S * 0.2, S * 0.85);
+		grd.addColorStop(0, c1); grd.addColorStop(1, c2);
+		g.fillStyle = grd;
+		heartPath(g, S); g.fill();
+		g.fillStyle = c2;
+		g.beginPath(); g.moveTo(0, S * 0.7); g.lineTo(-S * 0.065, S * 0.8); g.lineTo(S * 0.065, S * 0.8); g.closePath(); g.fill();
+		g.fillStyle = "rgba(255,255,255,0.55)";   // shiny foil highlights
+		g.beginPath(); g.ellipse(-S * 0.3, -S * 0.07, S * 0.12, S * 0.06, -0.8, 0, TAU); g.fill();
+		g.fillStyle = "rgba(255,255,255,0.3)";
+		g.beginPath(); g.arc(-S * 0.13, -S * 0.2, S * 0.035, 0, TAU); g.fill();
+		return (balloonCache[key] = cv);
+	}
+	var BALLOON_PAL = [["#ff8fa3", "#d90429"], ["#ffc2d1", "#ff4d8d"], ["#ffffff", "#ffb3c6"], ["#f1c0ff", "#9d4edd"],
+		["#ffe5a8", "#f4a259"], ["#ff9ecf", "#c9184a"], ["#ffd6e0", "#e5383b"]];
+	function newBalloon(w, h, first) {
+		var D = rand(56, 90) * (isSmallScreen() ? 0.75 : 1), x = rand(0.06, 0.94) * w;
+		var y = first ? rand(0.12, 1) * h : h + D * rand(1, 2.5), pal = pick(BALLOON_PAL);
+		var b = { D: D, x: x, y: y, vx: 0, vy: 0, rise: rand(18, 34), ph: rand(0, TAU), rot: 0, vr: 0, hov: 0, c1: pal[0], c2: pal[1], pts: [] };
+		for (var k = 0; k < 8; k++) {
+			var py = y + D * (BALLOON_KNOT + k * 0.2);
+			b.pts.push({ x: x, y: py, px: x, py: py });
+		}
+		return b;
+	}
+
+	// Candle flame: a teardrop whose base sits 60/72 of the way down the sprite.
+	var flameSpr = null;
+	function flameSprite() {
+		if (flameSpr) return flameSpr;
+		var cw = 40, ch = 72, bx = 20, by = 60, cv = document.createElement("canvas");
+		cv.width = cw; cv.height = ch;
+		var g = cv.getContext("2d");
+		function tear(rw, th, col) {
+			g.fillStyle = col;
+			g.beginPath();
+			g.moveTo(bx, by - th);
+			g.bezierCurveTo(bx + rw * 0.3, by - th * 0.55, bx + rw, by - rw * 1.5, bx + rw, by - rw);
+			g.arc(bx, by - rw, rw, 0, Math.PI);
+			g.bezierCurveTo(bx - rw, by - rw * 1.5, bx - rw * 0.3, by - th * 0.55, bx, by - th);
+			g.fill();
+		}
+		g.shadowColor = "rgba(255,150,40,1)"; g.shadowBlur = 7;
+		tear(8, 52, "rgba(255,120,30,0.9)");
+		g.shadowBlur = 0;
+		tear(6, 40, "#ffc94d");
+		tear(4, 26, "#fff3c4");
+		g.fillStyle = "rgba(90,140,255,0.55)";   // blue at the base of the flame
+		g.beginPath(); g.ellipse(bx, by - 3, 3.5, 2.5, 0, 0, TAU); g.fill();
+		return (flameSpr = cv);
+	}
+
+	// Mini hearts and twinkles thrown off by the love themes.
+	function heartPuff(L, x, y, n, speed, cols, size, sparks) {
+		for (var i = 0; i < n; i++) {
+			var a = rand(0, TAU), v = speed * rand(0.3, 1);
+			L.push({ x: x, y: y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, age: 0, max: rand(0.8, 1.6),
+				s: (size || 12) * rand(0.6, 1.3), col: pick(cols), rot: rand(-0.5, 0.5), vr: rand(-3, 3), spark: rng() < (sparks || 0) });
+		}
+		if (L.length > 500) L.splice(0, L.length - 500);
+	}
+	function stepHearts(c, L, dt, g) {
+		var drag = Math.pow(0.2, dt), i, p, f, z;
+		for (i = L.length - 1; i >= 0; i--) {
+			p = L[i];
+			p.age += dt;
+			if (p.age >= p.max) { L.splice(i, 1); continue; }
+			p.vx *= drag; p.vy = p.vy * drag + g * dt;
+			p.x += p.vx * dt; p.y += p.vy * dt; p.rot += p.vr * dt;
+			if (p.spark) continue;
+			f = 1 - p.age / p.max; z = p.s * (0.7 + 0.3 * f);
+			c.globalAlpha = Math.sqrt(f);
+			c.save(); c.translate(p.x, p.y); c.rotate(p.rot);
+			c.drawImage(heartSprite(p.col), -z / 2, -z / 2, z, z);
+			c.restore();
+		}
+		c.globalCompositeOperation = "lighter";   // twinkles in one additive pass
+		for (i = 0; i < L.length; i++) {
+			p = L[i];
+			if (!p.spark) continue;
+			f = 1 - p.age / p.max; z = p.s * (0.6 + 0.4 * Math.sin(p.age * 22 + p.rot * 9));
+			c.globalAlpha = f;
+			c.drawImage(glow(p.col), p.x - z, p.y - z, z * 2, z * 2);
+		}
+		c.globalCompositeOperation = "source-over";
+		c.globalAlpha = 1;
+	}
+	function stepRings(c, L, dt, grow, life) {
+		c.lineWidth = 2;
+		for (var i = L.length - 1; i >= 0; i--) {
+			var r = L[i];
+			r.age += dt;
+			if (r.age >= life) { L.splice(i, 1); continue; }
+			c.globalAlpha = (1 - r.age / life) * 0.8;
+			c.strokeStyle = r.col;
+			c.beginPath(); c.arc(r.x, r.y, 8 + r.age * grow, 0, TAU); c.stroke();
+		}
+		c.globalAlpha = 1;
+	}
+
+	// Smoothed velocity (px/s) of each live pointer, keyed by pointer id.
+	function ptrVel(S, dt) {
+		var V = S.vel || (S.vel = {}), seen = {};
+		for (var i = 0; i < livePtrs.length; i++) {
+			var p = livePtrs[i], v = V[p.id];
+			seen[p.id] = 1;
+			if (!v) { V[p.id] = { x: p.x, y: p.y, vx: 0, vy: 0, sp: 0 }; continue; }
+			var mx = p.x - v.x, my = p.y - v.y;
+			if (Math.abs(mx) + Math.abs(my) > 600) { v.vx = v.vy = 0; }   // teleport, not a swipe
+			else if (dt > 0) {
+				var e = Math.min(1, dt * 12);
+				v.vx += (mx / dt - v.vx) * e; v.vy += (my / dt - v.vy) * e;
+			}
+			v.x = p.x; v.y = p.y; v.sp = Math.sqrt(v.vx * v.vx + v.vy * v.vy);
+		}
+		for (var id in V) if (!seen[id]) delete V[id];
+		return V;
+	}
+
+	function ropePath(c, pts) {
+		c.beginPath(); c.moveTo(pts[0].x, pts[0].y);
+		for (var i = 1; i < pts.length - 1; i++)
+			c.quadraticCurveTo(pts[i].x, pts[i].y, (pts[i].x + pts[i + 1].x) / 2, (pts[i].y + pts[i + 1].y) / 2);
+		c.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+	}
+
+	// Heart rhythm: a "lub-dub" double thump, 0..1.
+	function heartbeat(t, bpm) {
+		var u = (t * bpm / 60) % 1, a = (u - 0.08) / 0.05, b = (u - 0.3) / 0.06;
+		return Math.exp(-a * a) + 0.6 * Math.exp(-b * b);
+	}
+
+	function newCandle(x, by, s, ch, float) {
+		var cw = rand(17, 26) * s, drips = [];
+		for (var i = 0, n = 1 + ((rng() * 3) | 0); i < n; i++) drips.push({ x: rand(-0.36, 0.36) * cw, len: rand(0.08, 0.3) * ch, w: rand(2.5, 4.5) * s });
+		return { x: x, by: by, s: s, cw: cw, ch: ch, float: float, drips: drips, ph: rand(0, TAU), fl: rand(0, 100),
+			on: true, lit: 1, lean: 0, lv: 0, hover: 0, flick: 0, fk: 1, outAt: -99, relightAt: 0, smokeT: 0,
+			ox: 0, oy: 0, ovx: 0, ovy: 0, bx: x, base: by, wx: x, wy: by - ch };
+	}
+	function candleOut(S, q) {
+		if (!q.on) return;
+		q.on = false; q.hover = 0;
+		q.outAt = S.clock; q.relightAt = S.clock + rand(8, 14); q.smokeT = 0.8;
+		if (Math.random() < 0.45 && S.wisps.length < 6) S.wisps.push({ x: q.wx, y: q.wy - 10 * q.s, age: 0, s: q.s, rot: rand(-0.2, 0.2) });
+	}
+	function candleLight(S, q) {
+		if (q.on) return;
+		q.on = true; q.hover = 0; q.lit = Math.max(q.lit, 0.2);
+		heartPuff(S.bits, q.wx, q.wy - 6 * q.s, 9, 110, ["#ffe7a3", "#ffc46b", "#fff6d8"], 6, 1);
+	}
+
+	var CUPID_COLS = ["#ff2a55", "#ff4d6d", "#ff758f", "#ff8fab", "#ffb3c6", "#e5383b", "#ffffff", "#ffd6e0"];
+	function newCupidHeart(w, h, below, born) {
+		var D = rand(36, 66) * (isSmallScreen() ? 0.8 : 1);
+		return { x: rand(0.05, 0.95) * w, y: below ? h + D : rand(0.08, 0.85) * h, vx: 0, vy: 0, D: D, col: pick(CUPID_COLS),
+			ph: rand(0, TAU), rise: rand(10, 26), wings: rng() < 0.5, born: born, hit: 0, ang: 0 };
+	}
+	function drawWings(c, x, y, D, flap) {
+		c.fillStyle = "rgba(255,255,255,0.85)";
+		for (var s = -1; s <= 1; s += 2) {
+			c.save();
+			c.translate(x + s * D * 0.3, y - D * 0.08);
+			c.rotate(s * (-0.5 + flap * 0.35));
+			c.scale(s, 1);
+			for (var f = 0; f < 3; f++) {   // three feathers per wing
+				c.beginPath();
+				c.ellipse(D * (0.2 + f * 0.04), -D * 0.05 + f * D * 0.09, D * (0.26 - f * 0.05), D * 0.075, -0.35 + f * 0.25, 0, TAU);
+				c.fill();
+			}
+			c.restore();
+		}
+	}
+
+	// Cupid's arrow: tip at the origin, pointing along +x.
+	function drawArrow(c, x, y, ang, L) {
+		c.save();
+		c.translate(x, y); c.rotate(ang);
+		c.strokeStyle = "#ffd27a"; c.lineWidth = 2; c.lineCap = "round";
+		c.beginPath(); c.moveTo(-L, 0); c.lineTo(-4, 0); c.stroke();
+		c.fillStyle = "#fff1c1";
+		c.beginPath(); c.moveTo(6, 0); c.lineTo(-5, -5); c.lineTo(-3, 0); c.lineTo(-5, 5); c.closePath(); c.fill();
+		c.fillStyle = "#ff8fab";   // heart-pink fletching
+		for (var s = -1; s <= 1; s += 2) {
+			c.beginPath(); c.moveTo(-L + 12, 0);
+			c.quadraticCurveTo(-L + 4, s * 9, -L - 4, s * 8);
+			c.lineTo(-L + 1, 0); c.closePath(); c.fill();
+		}
+		c.restore();
 	}
 
 	// ── Cursor reactions for the ambient themes ─────────────────────────
