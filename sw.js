@@ -15,7 +15,7 @@
  */
 "use strict";
 
-var CACHE_NAME = "harmony-piano-ui-v10";
+var CACHE_NAME = "harmony-piano-ui-v11";
 
 var SHELL = [
 	"./",
@@ -60,6 +60,7 @@ var SHELL = [
 	"./wakeBell.js",
 	"./loveBits.js",
 	"./roomThemes.js",
+	"./worldEntry.js",
 	"./mm.mp3",
 	"./script.js",
 	"./workerTimer.js",
@@ -173,7 +174,11 @@ self.addEventListener("fetch", function (event) {
 	if (url.pathname === "/sw.js" || url.pathname.slice(-5) === "/sw.js") return;
 
 	if (request.mode === "navigate" || isHtmlPath(url.pathname)) {
-		event.respondWith(networkFirst(request, "./index.html"));
+		// Only the piano page itself is stored as the index.html shell; other
+		// pages (world.html) are cached under their own URL so they never
+		// overwrite it.
+		var isIndex = url.pathname === "/" || url.pathname === "/index.html";
+		event.respondWith(networkFirst(request, isIndex ? "./index.html" : url.pathname));
 		return;
 	}
 
