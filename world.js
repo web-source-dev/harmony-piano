@@ -1106,7 +1106,8 @@ function openDraw() {
 	easel.canvas.style.cssText = "width:100%;display:block;cursor:crosshair;touch-action:none";
 	$("#dp-canvas").appendChild(easel.canvas);
 	// frame the camera so you can see yourself painting
-	cam.yaw = def.face + Math.PI + 0.55; cam.pitch = 0.3; cam.dist = 2.6;
+	// side-on view: you, your brush and the paper (the building wall is right behind you)
+	cam.yaw = def.face - Math.PI / 2 + 0.3; cam.pitch = 0.25; cam.dist = 2.3;
 	sendPose(true);
 }
 function closeDraw() {
