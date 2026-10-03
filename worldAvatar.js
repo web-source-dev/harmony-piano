@@ -31,7 +31,7 @@ export const MOODS = [
 ];
 const MOOD_COLOR = Object.fromEntries(MOODS.map(m => [m.id, m.color]));
 // arm-layer animations that make the cheeks go pink
-const LOVE_UPPERS = new Set(["blush", "lovestruck", "heartarms", "smooch", "cheekkiss", "cuddle", "slowdance", "propose", "kiss", "hug", "nightkiss"]);
+const LOVE_UPPERS = new Set(["blush", "lovestruck", "heartarms", "smooch", "cheekkiss", "cuddle", "slowdance", "propose", "kiss", "hug", "nightkiss", "carry", "carrykiss"]);
 // solo ones also float little hearts
 const HEART_UPPERS = new Set(["blush", "lovestruck", "heartarms"]);
 
@@ -238,7 +238,8 @@ export class Avatar {
 		this.lookYaw = null;   // desired head turn (radians, relative), or null
 		this.coupleSide = 0;
 		this.coupleRole = null;   // "lapholder" / "lapsitter" (armchair), "under" / "over" (lying on the sofa)
-		this.carriedBy = null;    // set while someone carries us in their arms (world.js places the root)   // where the person we're cuddling/kissing is: -1 right, 1 left, 0 in front
+		this.carriedBy = null;    // set while someone carries us in their arms (world.js places the root)
+		this.kissAdj = 0;         // extra lean toward our partner so faces really meet in a kiss (world.js measures it)   // where the person we're cuddling/kissing is: -1 right, 1 left, 0 in front
 		this.prop = null;
 		this.zzz = [];
 		this.mood = "happy";
@@ -949,15 +950,27 @@ export class Avatar {
 			P.arm[0].x = -1.45; P.arm[0].z = -0.05; P.arm[0].e = -0.35 + Math.sin(t * 3) * 0.04;
 			P.arm[1].x = -0.55; P.arm[1].z = 0.1; P.arm[1].e = -0.9;
 			P.headX = -0.3;
-		} else if (up === "carry") {
+		} else if (up === "carry" || up === "carrykiss") {
 			// someone in your arms: arms out in front (hands placed by IK), leaning back a touch to take the weight
 			P.arm[0].x = P.arm[1].x = -1.0; P.arm[0].e = P.arm[1].e = -1.3;
 			P.arm[0].z = 0.15; P.arm[1].z = -0.15;
 			P.torsoX = -0.1 + breathe; P.headX = 0.25; P.headY = -0.35;
+			if (up === "carrykiss") {
+				// lean down to the right, where their face is (the rest of the lean is measured: kissAdj)
+				const k = Math.min(1, ut * 2.5);
+				P.torsoX = 0.02 * k; P.torsoZ = (0.12 + this.kissAdj) * k;
+				P.headX = 0.32 * k; P.headY = -0.55 * k; P.headZ = 0.12 * k;
+				if (ut > 0.35) P.eyes = 0.05;
+			}
 		} else if (up === "cuddle" || up === "smooch" || up === "cheekkiss") {
 			const kiss = up !== "cuddle";
 			const role = this.coupleRole;
-			if (lying && role === "under") {
+			if (base === "carried") {
+				// in their arms: roll toward them and curl up to their face (lean measured: kissAdj)
+				P.bodyRY = kiss ? 1.0 : 0.6;
+				P.torsoX = (kiss ? 0.3 : 0.22) + (kiss ? this.kissAdj : 0);
+				P.headY = 0.3; P.headX = -0.15;
+			} else if (lying && role === "under") {
 				// on your back along the sofa, arm round them (IK), face turned to theirs
 				P.bodyRY = side * (kiss ? 0.45 : 0.25);
 				P.headY = side * (kiss ? 0.65 : 0.45);
@@ -1003,6 +1016,11 @@ export class Avatar {
 				P.headY = up === "cheekkiss" ? 0.32 : 0;
 				P.arm[0].x = P.arm[1].x = -1.0; P.arm[0].e = P.arm[1].e = -0.8;
 				if (up === "smooch") { P.leg[1].x = 0.3; P.leg[1].k = 0.7; P.foot[1] = 0.4; }   // the little foot pop
+			}
+			// kisses: the measured extra lean toward them (sideways on a seat, forward when facing / lying on your side)
+			if (kiss && base !== "carried") {
+				if (side && !lying) P.torsoZ += -side * this.kissAdj;
+				else P.torsoX += this.kissAdj;
 			}
 			if (kiss && ut > 0.35) P.eyes = 0.05;
 			if (up === "cuddle" && !lying && side) P.eyes = (t % 6) < 2 ? 0.05 : 1;   // drowsy, content blinks

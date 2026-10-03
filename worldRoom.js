@@ -508,7 +508,7 @@ export function buildRoom(scene) {
 		// lying along the sofa for a cuddle (only used when someone carries their partner over):
 		// one on their back against the backrest, the other half on top of them on the front edge
 		{ id: "sofaLieA", x: -3.5, z: -1.47, h: -Math.PI / 2, y: 0.66, lie: true, sofaLie: "under", excl: ["sofa0", "sofa1", "sofa2"] },
-		{ id: "sofaLieB", x: -3.47, z: -1.73, h: -Math.PI / 2, y: 0.74, lie: true, sofaLie: "over", excl: ["sofa0", "sofa1", "sofa2"] }
+		{ id: "sofaLieB", x: -3.47, z: -1.73, h: -Math.PI / 2, y: 0.77, lie: true, sofaLie: "over", excl: ["sofa0", "sofa1", "sofa2"] }
 	];
 	interact("sofa", { label: "Sit on the sofa", stand: [-2.6, -2.4], sit: ["sofa0", "sofa1", "sofa2"] }, sofa);
 
