@@ -170,11 +170,15 @@ body.night #tl, body.night #bar { background: rgba(14,14,34,.86); }
 .ib:hover { background: rgba(50,40,60,.92); }
 #bottom { position: absolute; left: 50%; transform: translateX(-50%); bottom: max(14px, env(safe-area-inset-bottom)); width: min(760px, calc(100% - 28px)); display: flex; flex-direction: column; gap: 8px; align-items: stretch; pointer-events: none; }
 #bottom > * { pointer-events: auto; }
-#log { display: flex; flex-direction: column; gap: 4px; max-height: 170px; overflow: hidden; justify-content: flex-end; pointer-events: none; padding: 0 4px; }
-#log .ln { font-size: 14px; text-shadow: 0 1px 3px rgba(0,0,0,.9); animation: lnIn .25s ease-out; transition: opacity 1s; }
+/* chat history: every message, scroll up to read older ones (saved on the server) */
+#log { display: flex; flex-direction: column; gap: 4px; max-height: 170px; overflow-y: auto; overscroll-behavior: contain; padding: 6px 8px; border-radius: 12px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.25) transparent; transition: background .2s; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px); mask-image: linear-gradient(to bottom, transparent 0, #000 18px); }
+#log:hover, #log:focus-within { background: rgba(20,14,28,.45); }
+#log.empty { display: none; }
+#log > :first-child { margin-top: auto; }
+#log::-webkit-scrollbar { width: 6px; }
+#log::-webkit-scrollbar-thumb { background: rgba(255,255,255,.25); border-radius: 3px; }
+#log .ln { font-size: 14px; line-height: 1.35; text-shadow: 0 1px 3px rgba(0,0,0,.9); animation: lnIn .25s ease-out; overflow-wrap: anywhere; }
 #log .ln b { font-weight: 900; }
-#log .ln.sys { color: #ffd9a8; font-style: italic; }
-#log .ln.old { opacity: 0; }
 @keyframes lnIn { from { transform: translateY(6px); opacity: 0; } }
 #bar { display: flex; gap: 8px; align-items: center; padding: 7px; }
 #chat { flex: 1; min-width: 0; padding: 11px 14px; border-radius: 10px; border: none; background: rgba(255,255,255,.07); color: var(--text); font: inherit; font-size: 15px; outline: none; }
@@ -197,6 +201,16 @@ body.night #tl, body.night #bar { background: rgba(14,14,34,.86); }
 .toast { pointer-events: auto; padding: 12px 14px 12px 16px; display: flex; align-items: center; gap: 12px; width: 100%; font-weight: 700; font-size: 14px; animation: tIn .3s cubic-bezier(.2,1.4,.4,1); border-left: 4px solid var(--accent); }
 .toast span { flex: 1; }
 .toast.out { opacity: 0; transform: translateY(-8px); transition: all .3s; }
+/* small action notices (cuddles, kisses, someone came in...) - centred at the top, gone in a few seconds */
+.note { max-width: 100%; padding: 5px 12px; border-radius: 999px; background: rgba(28,20,36,.72); color: #ffe2bf; font-size: 12.5px; font-weight: 700; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,.25); animation: tIn .3s ease-out; transition: opacity .4s, transform .4s; }
+.note b { color: #fff; }
+.note.out { opacity: 0; transform: translateY(-6px); }
+/* memories: pick from the media library */
+.phlib-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.phlib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; max-height: min(52vh, 420px); overflow-y: auto; }
+.phlib-it { padding: 0; border: 2px solid transparent; border-radius: 10px; overflow: hidden; background: rgba(255,255,255,.06); cursor: pointer; aspect-ratio: 4 / 3; }
+.phlib-it img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.phlib-it:hover, .phlib-it.on { border-color: var(--accent); }
 @keyframes tIn { from { opacity: 0; transform: translateY(-14px) scale(.96); } }
 #joy { position: absolute; left: 22px; bottom: 96px; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,.07); border: 1px solid var(--line); display: none; touch-action: none; }
 #joy i { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(255,255,255,.28); }
@@ -335,6 +349,7 @@ body.touch #help { display: none; }
 	.ttt { grid-template-columns: repeat(3, 76px); } .ttt-c { width: 76px; height: 76px; }
 	.c4-grid { grid-template-columns: repeat(7, 34px); gap: 5px; } .c4-c { width: 34px; height: 34px; }
 	.photos { grid-template-columns: 1fr 1fr; }
+	#log { max-height: 120px; }
 	#help { display: none; }
 	#lobby { align-items: flex-end; background: linear-gradient(0deg, rgba(20,15,25,.9) 0%, rgba(20,15,25,0) 70%); }
 	#lobby .card { max-height: 72vh; }
@@ -394,7 +409,7 @@ body.touch #help { display: none; }
 	<div id="tr">
 		<button class="chip ib" id="b-night" title="Night mode: lights out, fairy lights on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><span class="lbl">Night</span></button>
 		<button class="chip ib" id="b-sound" title="Sound on/off"></button>
-		<button class="chip ib" id="b-gfx" title="Graphics quality"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4M6 13l3-3 3 2 4-4 2 2"/></svg><span class="lbl">Auto</span></button>
+		<button class="chip ib" id="b-gfx" title="Graphics quality"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4M6 13l3-3 3 2 4-4 2 2"/></svg><span class="lbl">High</span></button>
 		<button class="chip ib" id="b-look" title="Change your character"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.4 14.5L16 10 4 20"/><circle cx="8.5" cy="8.5" r="2.5"/><rect x="2" y="2" width="20" height="20" rx="5"/></svg><span class="lbl">Look</span></button>
 		<button class="chip ib" id="b-exit" title="Back to the piano"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span class="lbl">Piano</span></button>
 	</div>
@@ -414,7 +429,7 @@ body.touch #help { display: none; }
 		<button class="btn" id="carrydown">Put down</button>
 	</div>
 	<div id="bottom">
-		<div id="log"></div>
+		<div id="log" class="empty" aria-live="polite"></div>
 		<div id="bar" class="chip">
 			<input id="chat" maxlength="240" placeholder="Say something..." autocomplete="off">
 			<div class="emotes">

@@ -283,12 +283,91 @@ function saveChatLog(body, cb) {
 	try {
 		fs.mkdirSync(LOG_DIR, { recursive: true });
 		if (!fs.existsSync(file)) {
-			var label = /_joins/.test(logName) ? "Join log" : (/_prompts/.test(logName) ? "Corner prompts" : "Chat");
+			var label = /_joins/.test(logName) ? "Join log" : (/_prompts/.test(logName) ? "Corner prompts" : (/_world/.test(logName) ? "World chat" : "Chat"));
 			fs.appendFileSync(file, "=== " + label + ": " + (data.room || room) + " | Date: " + date + " ===\n", "utf8");
 		}
 		fs.appendFileSync(file, line, "utf8");
 		cb(null, file);
 	} catch (e) { cb(e); }
+}
+
+// ---- Harmony World (world.html): chat history + the wall photos, kept per room on the server.
+// Chat lines also go to chat-logs/<room>_<date>_world.txt so /manage shows them like piano chat.
+var WORLD_DIR = path.join(ROOT, "world-data");
+var WORLD_CHAT_MAX = 500;
+var WORLD_STATE_KEYS = /^(photo|cap)[0-2]$/;
+var gWorld = Object.create(null);   // room -> { chat: [], state: {}, timer }
+function worldFile(room) { return path.join(WORLD_DIR, sanitizeRoom(room) + ".json"); }
+function worldRoom(room) {
+	room = sanitizeRoom(room || "lobby");
+	if (gWorld[room]) return gWorld[room];
+	var data = { chat: [], state: {} };
+	try {
+		var j = JSON.parse(fs.readFileSync(worldFile(room), "utf8"));
+		if (j && Array.isArray(j.chat)) data.chat = j.chat.slice(-WORLD_CHAT_MAX);
+		if (j && j.state && typeof j.state === "object") data.state = j.state;
+	} catch (e) {}
+	data.room = room;
+	gWorld[room] = data;
+	return data;
+}
+function saveWorldSoon(w) {
+	if (w.timer) return;
+	w.timer = setTimeout(function () {
+		w.timer = null;
+		try {
+			fs.mkdirSync(WORLD_DIR, { recursive: true });
+			var file = worldFile(w.room), tmp = file + ".tmp";
+			fs.writeFileSync(tmp, JSON.stringify({ chat: w.chat, state: w.state }), "utf8");
+			fs.renameSync(tmp, file);
+		} catch (e) { console.error("world save failed:", e && e.message || e); }
+	}, 800);
+}
+function worldTimeStamp(d) {
+	function pad(n) { return n < 10 ? "0" + n : "" + n; }
+	return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+}
+function addWorldChat(room, data) {
+	var w = worldRoom(room);
+	var text = String(data.text || "").replace(/[\r\n]+/g, " ").trim().slice(0, 240);
+	if (!text) return null;
+	var msg = {
+		id: String(data.id || "").slice(0, 40) || (Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
+		ts: Date.now(),
+		name: String(data.name || "?").slice(0, 24),
+		color: /^#[0-9a-f]{3,8}$/i.test(String(data.color || "")) ? data.color : "#ffffff",
+		text: text
+	};
+	if (w.chat.some(function (m) { return m.id === msg.id; })) return msg;   // sent twice (retry)
+	w.chat.push(msg);
+	if (w.chat.length > WORLD_CHAT_MAX) w.chat.splice(0, w.chat.length - WORLD_CHAT_MAX);
+	saveWorldSoon(w);
+	var d = new Date(msg.ts), date = worldTimeStamp(d).slice(0, 10);
+	saveChatLog(JSON.stringify({
+		room: w.room, date: date,
+		file: w.room + "_" + date + "_world.txt",
+		line: "[" + worldTimeStamp(d) + "] " + msg.name + ": " + msg.text
+	}), function () {});
+	return msg;
+}
+function setWorldState(room, k, v, ts) {
+	if (!WORLD_STATE_KEYS.test(String(k))) return false;
+	v = v == null ? "" : String(v);
+	// captions are short; photos are a media-library link or a small compressed picture
+	if (/^cap/.test(k)) v = v.slice(0, 40);
+	else if (v && !/^\/media-library\/[^/]+$/.test(v) && !/^data:image\/(jpeg|png|webp|gif);base64,/.test(v)) return false;
+	if (v.length > 400000) return false;
+	var w = worldRoom(room);
+	ts = +ts || Date.now();
+	if (w.state[k] && w.state[k].ts >= ts) return false;
+	w.state[k] = { v: v, ts: ts };
+	saveWorldSoon(w);
+	return true;
+}
+function listLibraryImages() {
+	return listMedia().library.filter(function (m) { return m.kind === "image"; }).map(function (m) {
+		return { url: m.url, title: m.title || m.file };
+	});
 }
 
 function cacheControlFor(urlPath) {
@@ -315,7 +394,7 @@ function cacheControlFor(urlPath) {
 function isPrivatePath(urlPath) {
 	var p = String(urlPath).replace(/\\/g, "/").toLowerCase();
 	if (/(^|\/)\./.test(p)) return true;
-	if (p.indexOf("/chat-logs/") === 0 || p.indexOf("/leave-msgs/") === 0 || p.indexOf("/__pycache__/") === 0) return true;
+	if (p.indexOf("/chat-logs/") === 0 || p.indexOf("/leave-msgs/") === 0 || p.indexOf("/world-data/") === 0 || p.indexOf("/__pycache__/") === 0) return true;
 	if (p === "/manage-state.json" || /\.py$/.test(p)) return true;
 	return false;
 }
@@ -352,7 +431,7 @@ function readJsonBody(req, limit, cb) {
 }
 
 function parseLogName(name) {
-	var m = /^(.*)_(\d{4}-\d{2}-\d{2})(?:_(joins|prompts))?\.txt$/.exec(name);
+	var m = /^(.*)_(\d{4}-\d{2}-\d{2})(?:_(joins|prompts|world))?\.txt$/.exec(name);
 	if (!m) return { room: name.replace(/\.txt$/, ""), date: "", type: "chat" };
 	return { room: m[1], date: m[2], type: m[3] || "chat" };
 }
@@ -805,6 +884,31 @@ var server = http.createServer(function (req, res) {
 					? { ok: false, error: String(err && err.message || err) }
 					: { ok: true, room: roomPost, messages: merged.messages, deletedIds: merged.deletedIds }));
 			});
+		});
+		return;
+	}
+
+	// ---- Harmony World: chat history, wall photos, media-library pictures to choose from
+	if (req.method === "GET" && route === "/api/world") {
+		var wq = url.parse(req.url, true).query || {};
+		var wr = worldRoom(wq.room || "lobby");
+		sendJson(res, 200, { ok: true, room: wr.room, chat: wr.chat.slice(-300), state: wr.state });
+		return;
+	}
+	if (req.method === "GET" && route === "/api/world/library") {
+		sendJson(res, 200, { ok: true, images: listLibraryImages() });
+		return;
+	}
+	if (req.method === "POST" && (route === "/api/world/chat" || route === "/api/world/state")) {
+		readJsonBody(req, 600000, function (err, data) {
+			if (err || !data) { sendJson(res, 400, { ok: false, error: "Invalid JSON" }); return; }
+			if (route === "/api/world/chat") {
+				var msg = addWorldChat(data.room, data);
+				sendJson(res, msg ? 200 : 400, msg ? { ok: true, msg: msg } : { ok: false, error: "Empty message" });
+			} else {
+				var okSet = setWorldState(data.room, data.k, data.v, data.ts);
+				sendJson(res, 200, { ok: true, saved: okSet });
+			}
 		});
 		return;
 	}

@@ -882,15 +882,36 @@ export function buildRoom(scene) {
 		photos.push({
 			mesh: ph,
 			setImage(url) {
-				if (!url) { ph.material.map = placeholderPhoto(i); ph.material.needsUpdate = true; return; }
-				new THREE.TextureLoader().load(url, t => {
+				const token = ph.userData.imgToken = (ph.userData.imgToken || 0) + 1;
+				const swap = t => {
+					const old = ph.material.map;
+					ph.material.map = t; ph.material.needsUpdate = true;
+					if (old && old.userData.photo) old.dispose();
+				};
+				if (!url) { swap(placeholderPhoto(i)); return; }
+				const img = new Image();
+				img.decoding = "async";
+				img.onload = () => {
+					if (token !== ph.userData.imgToken) return;   // a newer photo was chosen meanwhile
+					// big library pictures are shrunk to frame size first (saves memory on phones)
+					let src = img;
+					const MAX = 768, s = Math.min(1, MAX / Math.max(img.width, img.height));
+					if (s < 1) {
+						src = document.createElement("canvas");
+						src.width = Math.round(img.width * s); src.height = Math.round(img.height * s);
+						src.getContext("2d").drawImage(img, 0, 0, src.width, src.height);
+					}
+					const t = src === img ? new THREE.Texture(img) : new THREE.CanvasTexture(src);
 					t.colorSpace = THREE.SRGBColorSpace;
-					const img = t.image, a = img.width / img.height, target = 0.58 / 0.44;
+					t.userData.photo = true;
+					const a = src.width / src.height, target = 0.58 / 0.44;
 					// cover-crop so any photo fills the frame without stretching
 					if (a > target) { t.repeat.set(target / a, 1); t.offset.set((1 - target / a) / 2, 0); }
 					else { t.repeat.set(1, a / target); t.offset.set(0, (1 - a / target) / 2); }
-					ph.material.map = t; ph.material.needsUpdate = true;
-				});
+					t.needsUpdate = true;
+					swap(t);
+				};
+				img.src = url;
 			}
 		});
 		f.traverse(c => { c.userData.photoIndex = i; });

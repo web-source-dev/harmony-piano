@@ -52,7 +52,7 @@ if (params.get("n") && !profile.name) profile.name = params.get("n").slice(0, 24
 
 // ============================================================ graphics quality
 // Everything in the world works the same on every device; only how hard the GPU works changes.
-// "Auto" starts from a guess about the device and then watches the real frame rate: it lowers the
+// High is the default. "Auto" starts from a guess about the device and then watches the real frame rate: it lowers the
 // render resolution first, and only on a really struggling device makes the shadows cheaper.
 const LS_GFX = "harmonyWorldGfx";
 const GFX = [
@@ -76,8 +76,8 @@ function detectTier() {
 	if (mobile || mem <= 4 || cores <= 4) return 1;
 	return 2;
 }
-const gfx = { pref: lsGet(LS_GFX, "auto"), auto: 2, scale: 1 };
-if (!["auto", "low", "medium", "high"].includes(gfx.pref)) gfx.pref = "auto";
+const gfx = { pref: lsGet(LS_GFX, "high"), auto: 2, scale: 1 };   // full quality unless you pick something else
+if (!["auto", "low", "medium", "high"].includes(gfx.pref)) gfx.pref = "high";
 gfx.auto = detectTier();
 const gfxTier = () => gfx.pref === "auto" ? gfx.auto : ["low", "medium", "high"].indexOf(gfx.pref);
 // scale it down a bit straight away on weak devices so the first seconds are already smooth
@@ -209,6 +209,7 @@ function setShared(k, v) {
 	persist();
 	send({ t: "set", k, v, ts: S[k].ts });
 	applyKey(k, false);
+	if (WORLD_SAVED.test(k)) { clearTimeout(worldSaveT[k]); worldSaveT[k] = setTimeout(() => saveWorldKey(k), k.indexOf("cap") === 0 ? 800 : 0); }
 }
 function receiveSet(k, v, ts) {
 	if (typeof k !== "string" || k.length > 64) return;
@@ -286,7 +287,13 @@ function onNet(d) {
 		case "set": receiveSet(d.k, d.v, +d.ts || 0); break;
 		case "strokes": (d.list || []).forEach(st => mergeStroke(st)); redrawEasel(); break;
 		case "seg": onSeg(d); break;
-		case "chat": if (p) { p.avatar.say(String(d.text).slice(0, 240)); addLog("<b style='color:" + p.look.top + "'>" + esc(p.look.name) + "</b> " + esc(String(d.text).slice(0, 240))); if (audio) audio.sfx("pop", 0.5); } break;
+		case "chat":
+			if (p) {
+				const text = String(d.text).slice(0, 240);
+				p.avatar.say(text);
+				if (!d.auto) { chatMsg({ id: typeof d.mid === "string" ? d.mid : null, ts: now(), name: p.look.name, color: p.look.top, text }); if (audio) audio.sfx("pop", 0.5); }
+			}
+			break;
 		case "fx": onFx(d, p); break;
 		case "note": {
 			const n = +d.n;
@@ -384,15 +391,129 @@ function applyKey(k, remote) {
 }
 function applyAll() { Object.keys(Object.assign({}, DEFAULTS, S)).forEach(k => applyKey(k, null)); }
 
-// ============================================================ chat log / toasts
+// ============================================================ chat log / notices / toasts
+// Real chat goes in the scrollable chat history above the input (saved on the server, see
+// /api/world). Everything else - cuddles, kisses, "X came in", tips - is a small notice at the top.
 function addLog(html, sys) {
+	if (sys) notice(html);
+	else chatLine(html);
+}
+const NOTICE_MAX = 3;
+function notice(html) {
+	const box = $("#toasts");
 	const el = document.createElement("div");
-	el.className = "ln" + (sys ? " sys" : "");
+	el.className = "note";
 	el.innerHTML = html;
+	box.insertBefore(el, box.firstChild);
+	const notes = box.querySelectorAll(".note");
+	for (let i = NOTICE_MAX; i < notes.length; i++) notes[i].remove();
+	setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 400); }, 4500);
+}
+// Chat history lives on the server (every device sees it, it survives anything), and this device
+// also keeps its own copy so a refresh shows everything instantly, even before the server answers.
+// My own messages wait in a queue until the server confirms them, so none get lost offline.
+const CHAT_MAX = 300;
+const LS_CHAT = "harmonyWorldChat:" + ROOM_NAME, LS_CHATQ = "harmonyWorldChatQ:" + ROOM_NAME;
+const validMsg = m => m && typeof m.id === "string" && typeof m.text === "string" && m.text;
+let chatList = (lsGet(LS_CHAT, []) || []).filter(validMsg);       // {id, ts, name, color, text}, oldest first
+let chatQueue = (lsGet(LS_CHATQ, []) || []).filter(validMsg);     // mine, not yet saved on the server
+const chatIds = new Set(chatList.map(m => m.id));
+let chatStoreT = 0;
+function storeChat() { clearTimeout(chatStoreT); chatStoreT = setTimeout(() => lsSet(LS_CHAT, chatList.slice(-CHAT_MAX)), 300); }
+function chatHtml(m) { return `<b style="color:${/^#[0-9a-f]{3,8}$/i.test(m.color || "") ? m.color : "#fff"}">${esc(m.name || "?")}</b> ${esc(m.text)}`; }
+// a new live message: add it at the bottom
+function chatMsg(m) {
+	if (!m || !m.text) return;
+	if (!m.id) m.id = "x" + now().toString(36) + Math.random().toString(36).slice(2, 6);
+	if (chatIds.has(m.id)) return;
+	chatIds.add(m.id);
+	chatList.push(m);
+	if (chatList.length > CHAT_MAX) chatList.splice(0, chatList.length - CHAT_MAX);
+	storeChat();
+	chatLine(chatHtml(m), new Date(m.ts || now()));
+}
+// messages from the server's history: fold in whatever this device didn't have, in time order
+function mergeChat(list) {
+	let added = false;
+	(list || []).filter(validMsg).forEach(m => { if (!chatIds.has(m.id)) { chatIds.add(m.id); chatList.push(m); added = true; } });
+	if (!added) return;
+	chatList.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+	if (chatList.length > CHAT_MAX) chatList.splice(0, chatList.length - CHAT_MAX);
+	storeChat();
+	renderChat();
+}
+function renderChat() {
 	const log = $("#log");
+	log.innerHTML = "";
+	chatList.forEach(m => chatLine(chatHtml(m), new Date(m.ts || now()), true));
+	log.scrollTop = log.scrollHeight;
+	log.classList.toggle("empty", !log.children.length);
+}
+function chatLine(html, t, bulk) {
+	const log = $("#log");
+	const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 30;
+	const el = document.createElement("div");
+	el.className = "ln";
+	el.innerHTML = html;
+	el.title = (t || new Date()).toLocaleString();
 	log.appendChild(el);
-	while (log.children.length > 8) log.removeChild(log.firstChild);
-	setTimeout(() => el.classList.add("old"), 14000);
+	if (bulk) return;
+	while (log.children.length > CHAT_MAX) log.removeChild(log.firstChild);
+	// stay pinned to the newest message unless you scrolled up to read older ones
+	if (atBottom) log.scrollTop = log.scrollHeight;
+	log.classList.remove("empty");
+}
+function newChatId() { return MY_ID + "-" + now().toString(36) + Math.random().toString(36).slice(2, 5); }
+// save my chat line on the server (history for everyone + the /manage chat logs)
+function saveChat(m) {
+	chatQueue.push({ id: m.id, ts: m.ts, name: m.name, color: m.color, text: m.text });
+	lsSet(LS_CHATQ, chatQueue.slice(-100));
+	flushChat();
+}
+let chatFlushing = false, chatRetryT = 0;
+function flushChat() {
+	if (chatFlushing || !chatQueue.length || !/^https?:$/.test(location.protocol)) return;
+	chatFlushing = true;
+	const m = chatQueue[0];
+	fetch("/api/world/chat", { method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
+		body: JSON.stringify({ room: ROOM_NAME, id: m.id, name: m.name, color: m.color, text: m.text }) })
+		.then(r => {
+			chatFlushing = false;
+			// saved (or rejected as empty: nothing to retry) -> next one; anything else -> try again soon
+			if (r.ok || r.status === 400) { chatQueue.shift(); lsSet(LS_CHATQ, chatQueue); flushChat(); }
+			else { clearTimeout(chatRetryT); chatRetryT = setTimeout(flushChat, 10000); }
+		})
+		.catch(() => { chatFlushing = false; clearTimeout(chatRetryT); chatRetryT = setTimeout(flushChat, 10000); });
+}
+// the wall photos + captions are saved on the server too, so they're there whenever anyone comes back
+const WORLD_SAVED = /^(photo|cap)[0-2]$/;
+const worldSaveT = {};
+function saveWorldKey(k) {
+	if (!WORLD_SAVED.test(k) || !S[k] || !/^https?:$/.test(location.protocol)) return;
+	fetch("/api/world/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: ROOM_NAME, k, v: S[k].v, ts: S[k].ts }) }).catch(() => {});
+}
+// chat history + saved photos when you come in (keeps retrying until the server answers)
+let worldLoaded = false, worldRetryT = 0;
+function loadWorld() {
+	renderChat();   // this device's copy right away
+	fetchWorld();
+}
+function fetchWorld() {
+	if (worldLoaded || !/^https?:$/.test(location.protocol)) return;
+	const retry = () => { clearTimeout(worldRetryT); worldRetryT = setTimeout(fetchWorld, 10000); };
+	fetch("/api/world?room=" + encodeURIComponent(ROOM_NAME), { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(j => {
+		if (!j || !j.ok) { retry(); return; }
+		worldLoaded = true;
+		mergeChat(j.chat);
+		flushChat();   // anything I sent while the server was away
+		const st = j.state || {};
+		Object.keys(st).forEach(k => {
+			if (!WORLD_SAVED.test(k) || !st[k]) return;
+			const mine = S[k];
+			if (mine && mine.ts > st[k].ts) saveWorldKey(k);   // this device has something newer: put it on the server
+			else receiveSet(k, st[k].v, +st[k].ts || 0);
+		});
+	}).catch(retry);
 }
 function toast(text, action, onAction, ms = 7000) {
 	const el = document.createElement("div");
@@ -474,7 +595,7 @@ function busy(p, line, log) {
 	const pr = p.look.gender === "female" ? "her" : "him";
 	const say = line.replace("{n}", p.look.name);
 	myAvatar.say(say);
-	send({ t: "chat", text: say });
+	send({ t: "chat", text: say, auto: 1 });
 	addLog(esc(log.replace("{n}", p.look.name).replace("{pr}", pr)), true);
 	if (audio) audio.sfx("pop", 0.4);
 }
@@ -666,7 +787,7 @@ function wakePeer(id) {
 		if (!q || !isAsleep(q)) return;
 		doUpper("shake", 2400, id);
 		myAvatar.say("Wake up, sleepyhead!");
-		send({ t: "chat", text: "Wake up, sleepyhead!" });
+		send({ t: "chat", text: "Wake up, sleepyhead!", auto: 1 });
 		setTimeout(() => { send({ t: "wake", to: id }); if (audio) audio.sfx("alarm", 0.35); addLog("You woke up " + esc(q.look.name), true); }, 1500);
 	});
 }
@@ -876,7 +997,7 @@ function startFight() {
 		const h2 = peers.get(r.by);
 		if (!h2 || get("remote").by !== r.by) return;
 		myAvatar.say("Give me that remote!");
-		send({ t: "chat", text: "Give me that remote!" });
+		send({ t: "chat", text: "Give me that remote!", auto: 1 });
 		setShared("fight", { id: Math.random().toString(36).slice(2, 8), a: r.by, an: r.name, b: MY_ID, bn: profile.name, start: now() + 2600, end: now() + 2600 + 6000 });
 	};
 	if (l < 1.1) go(); else walkTo(holder.x + dx / l * 0.8, holder.z + dz / l * 0.8, go);
@@ -1040,13 +1161,16 @@ function openPhotos() {
 		const src = get("photo" + i);
 		return `<div class="ph" style="--r:${[-2, 1.5, -1][i]}deg"><div class="img" data-view="${i}" style="${src ? `background-image:url('${src}')` : "background:linear-gradient(135deg,#f3d9e3,#dfe8f5)"}"></div>
 			<input data-cap="${i}" maxlength="40" placeholder="caption..." value="${esc(get("cap" + i) || "")}">
-			<div class="row"><button class="btn" data-pick="${i}">${src ? "Change" : "Add photo"}</button>${src ? `<button class="btn" data-del="${i}">Remove</button>` : ""}</div></div>`;
-	}).join("")}</div><input type="file" accept="image/*" id="phfile" class="hidden"><p class="muted" style="margin:14px 0 0">Photos hang on the wall for everyone. They're kept in this room on each device.</p>`;
+			<div class="row"><button class="btn" data-pick="${i}">Upload</button><button class="btn" data-lib="${i}">Library</button>${src ? `<button class="btn" data-del="${i}">Remove</button>` : ""}</div></div>`;
+	}).join("")}</div><input type="file" accept="image/*" id="phfile" class="hidden">
+	<div id="phlib" class="phlib hidden"><div class="phlib-head"><b id="phlib-t">Choose a photo</b><button class="btn" id="phlib-x">Back</button></div><div class="phlib-grid" id="phlib-g"><p class="muted">Loading the media library...</p></div></div>
+	<p class="muted" style="margin:14px 0 0">Photos hang on the wall for everyone and stay saved in this room - upload one or pick from the media library.</p>`;
 	const body = openModal("photos", "Our Memories", html, 680);
 	let slot = 0;
 	const file = body.querySelector("#phfile");
 	body.querySelectorAll("[data-pick]").forEach(b => b.onclick = () => { slot = +b.dataset.pick; file.click(); });
-	body.querySelectorAll("[data-del]").forEach(b => b.onclick = () => setShared("photo" + b.dataset.del, ""));
+	body.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { setShared("photo" + b.dataset.del, ""); openPhotos(); });
+	body.querySelectorAll("[data-lib]").forEach(b => b.onclick = () => openPhotoLibrary(body, +b.dataset.lib));
 	body.querySelectorAll("[data-cap]").forEach(inp => inp.oninput = () => { clearTimeout(inp._t); inp._t = setTimeout(() => setShared("cap" + inp.dataset.cap, inp.value.slice(0, 40)), 400); });
 	body.querySelectorAll("[data-view]").forEach(d => d.onclick = () => {
 		const src = get("photo" + d.dataset.view);
@@ -1065,6 +1189,32 @@ function openPhotos() {
 			addLog("You hung up a new photo", true);
 		}).catch(() => toast("That image couldn't be used. Try another one."));
 	};
+}
+
+// pick one of the media library's pictures for a frame on the wall
+let libCache = null;
+function openPhotoLibrary(body, slot) {
+	const box = body.querySelector("#phlib"), grid = body.querySelector("#phlib-g");
+	body.querySelector(".photos").classList.add("hidden");
+	box.classList.remove("hidden");
+	body.querySelector("#phlib-t").textContent = "Choose a photo for frame " + (slot + 1);
+	body.querySelector("#phlib-x").onclick = () => openPhotos();
+	const show = list => {
+		if (!list.length) { grid.innerHTML = `<p class="muted">No pictures in the media library yet. Add some on the /manage page (Media tab).</p>`; return; }
+		grid.innerHTML = list.map((m, i) => `<button class="phlib-it${get("photo" + slot) === m.url ? " on" : ""}" data-i="${i}" title="${esc(m.title)}"><img loading="lazy" src="${esc(m.url)}" alt=""></button>`).join("");
+		grid.querySelectorAll(".phlib-it").forEach(b => b.onclick = () => {
+			const m = list[+b.dataset.i];
+			setShared("photo" + slot, m.url);
+			send({ t: "fx", kind: "sys", text: profile.name + " hung up a new photo" });
+			addLog("You hung up a new photo", true);
+			openPhotos();
+		});
+	};
+	if (libCache) { show(libCache); return; }
+	fetch("/api/world/library", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(j => {
+		libCache = (j && j.images) || [];
+		if (modalKind === "photos" && !box.classList.contains("hidden")) show(libCache);
+	}).catch(() => { grid.innerHTML = `<p class="muted">Couldn't load the media library.</p>`; });
 }
 
 // ---------- love notes
@@ -1629,7 +1779,7 @@ function loveAct(e) {
 	}
 	if (e === "cuddle") {
 		if (me.carrying) { carryToCuddle(); return; }
-		if (me.carriedBy) { myAvatar.say("Take me to bed for a cuddle?"); send({ t: "chat", text: "Take me to bed for a cuddle?" }); return; }
+		if (me.carriedBy) { myAvatar.say("Take me to bed for a cuddle?"); send({ t: "chat", text: "Take me to bed for a cuddle?", auto: 1 }); return; }
 		// standing next to someone who's standing too: offer to scoop them up and carry them to the bed / sofa
 		if (!me.sit && !me.carriedBy) {
 			const id = nearestPeer(12);
@@ -1703,7 +1853,7 @@ function loveFx(e, q) {
 	else if (e === "propose") {
 		updateProps();
 		if (audio) audio.sfx("chime", 0.7);
-		setTimeout(() => { if (me.upper !== "propose") return; myAvatar.say("Will you be mine?"); send({ t: "chat", text: "Will you be mine?" }); }, 900);
+		setTimeout(() => { if (me.upper !== "propose") return; myAvatar.say("Will you be mine?"); send({ t: "chat", text: "Will you be mine?", auto: 1 }); }, 900);
 	}
 }
 // someone kissed / cuddled / asked us to dance / proposed: join in
@@ -1751,7 +1901,7 @@ function sayYes(id) {
 	me.h = Math.atan2(p.x - me.x, p.z - me.z);
 	doUpper("heartarms", 3200);
 	myAvatar.say("Yes! Yes! YES!");
-	send({ t: "chat", text: "Yes! Yes! YES!" });
+	send({ t: "chat", text: "Yes! Yes! YES!", auto: 1 });
 	send({ t: "act", kind: "yes", to: id });
 	send({ t: "fx", kind: "yes" });
 	heartsFx(myAvatar.root, 14);
@@ -2202,9 +2352,11 @@ chatEl.addEventListener("keydown", e => {
 	if (e.key === "Enter") {
 		const text = chatEl.value.trim().slice(0, 240);
 		if (text) {
+			const m = { id: newChatId(), ts: now(), name: profile.name, color: profile.top, text };
 			myAvatar.say(text);
-			send({ t: "chat", text });
-			addLog("<b style='color:" + profile.top + "'>" + esc(profile.name) + "</b> " + esc(text));
+			send({ t: "chat", text, mid: m.id });
+			chatMsg(m);
+			saveChat(m);
 			chatEl.value = "";
 		} else chatEl.blur();
 	}
@@ -2894,11 +3046,11 @@ const SND_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stro
 function renderSound() { $("#b-sound").innerHTML = muted ? SND_OFF : SND_ON; if (audio) audio.setMuted(muted); }
 $("#b-sound").onclick = () => { muted = !muted; lsSet("harmonyWorldMuted", muted); renderSound(); };
 $("#b-exit").onclick = leaveToPiano;
-// graphics: Auto -> High -> Medium -> Low -> Auto
+// graphics: High -> Medium -> Low -> Auto -> High
 const GFX_LABEL = { auto: "Auto", high: "High", medium: "Medium", low: "Low" };
 function renderGfxBtn() { $("#b-gfx .lbl").textContent = GFX_LABEL[gfx.pref]; $("#b-gfx").title = "Graphics: " + GFX_LABEL[gfx.pref] + (gfx.pref === "auto" ? " (now " + GFX[gfxTier()].name + ")" : ""); }
 $("#b-gfx").onclick = () => {
-	const order = ["auto", "high", "medium", "low"];
+	const order = ["high", "medium", "low", "auto"];
 	gfx.pref = order[(order.indexOf(gfx.pref) + 1) % order.length];
 	lsSet(LS_GFX, gfx.pref);
 	if (gfx.pref === "auto") { gfx.auto = detectTier(); gfx.scale = 1; }
@@ -3124,6 +3276,7 @@ $("#enter").onclick = async () => {
 	cam.yaw = Math.atan2(me.x - (-1.5), me.z - (-3.5));
 	applyKey("tv", null);
 	startNetwork();
+	loadWorld();
 	addLog("Welcome to your little world, " + esc(profile.name) + ". Click anything to use it.", true);
 	pendingLetters.splice(0).forEach(v => onLetter("letter:" + v.id, v, false));
 	setTimeout(() => $("#help").classList.add("gone"), 45000);
@@ -3213,8 +3366,8 @@ function frame() {
 }
 
 // ============================================================ boot
-applyGfx();
 (window.requestIdleCallback || (fn => setTimeout(fn, 1500)))(() => { if (!gridBlocked) buildGrid(); });
+applyGfx();
 $("#rname").textContent = ROOM_NAME === "lobby" ? "Lobby World" : ROOM_NAME;
 redrawEasel();
 applyAll();

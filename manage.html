@@ -376,6 +376,7 @@
                 <option value="chat">Chat</option>
                 <option value="joins">Joins</option>
                 <option value="prompts">Corner prompts</option>
+                <option value="world">World chat</option>
               </select>
             </div>
             <div class="log-list" id="log-list"></div>
@@ -833,7 +834,7 @@
     var room = $("log-room").value, type = $("log-type").value;
     return state.logs.filter(function (l) { return (!room || l.room === room) && (!type || l.type === type); });
   }
-  var TYPE_LABEL = { chat: "Chat", joins: "Joins", prompts: "Corner prompts" };
+  var TYPE_LABEL = { chat: "Chat", joins: "Joins", prompts: "Corner prompts", world: "World chat" };
   function renderLogList() {
     var list = $("log-list");
     list.textContent = "";
