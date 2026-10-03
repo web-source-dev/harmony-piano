@@ -831,8 +831,6 @@ function wakeNearest() {
 	if (!id) { myAvatar.say("Everyone's already awake!"); return; }
 	wakePeer(id);
 }
-$("#wakebtn").onclick = () => sitUpInBed();
-$("#getupbtn").onclick = () => standUp();
 
 // ---------- night mode
 function applyNight(remote) {
@@ -3232,6 +3230,7 @@ function sleeperOpts(id, out) {
 	out.push({ k: "G", label: "Goodnight kiss for " + q.look.name, fn: () => goodnightKiss(id) });
 	out.push({ k: "R", label: "Wake " + q.look.name + " up", fn: () => wakePeer(id) });
 }
+const MOON_IC = '<svg viewBox="0 0 24 24" fill="#cfe0ff"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
 function updatePrompt() {
 	const opts = [];
 	let best = null;
@@ -3273,16 +3272,22 @@ function updatePrompt() {
 			if (c && k) opts.push({ k, label: "Pick up the coffee", fn: () => pickCup(c.id) });
 		}
 	}
-	// seated / lying down: always offer a way back up (the sleep card has its own buttons)
-	if (!busyNow && me.sit && $("#sleepov").classList.contains("hidden")) opts.push({ k: "Esc", label: "Stand up", fn: () => standUp() });
+	// seated / lying down: always offer a way back up
+	if (!busyNow && me.sit) {
+		if (!$("#sleepov").classList.contains("hidden")) {
+			opts.unshift({ k: null, label: "Sleeping... sweet dreams", icon: MOON_IC });
+			if (onBed() && !opts.some(o => o.k === "F")) opts.push({ k: "F", label: "Sit up", fn: () => sitUpInBed() });
+			opts.push({ k: "Esc", label: onBed() ? "Get out of bed" : "Get up", fn: () => standUp() });
+		} else opts.push({ k: "Esc", label: "Stand up", fn: () => standUp() });
+	}
 	nearId = best;
 	promptOpts = opts;
 	const pr = $("#prompt");
 	const sig = opts.map(o => o.k + o.label).join("|");
 	if (sig !== promptSig) {
 		promptSig = sig;
-		pr.innerHTML = opts.map((o, i) => `<div class="po chip" data-i="${i}"><kbd>${o.k}</kbd><span>${esc(o.label)}</span></div>`).join("");
-		pr.querySelectorAll(".po").forEach(el => el.onclick = () => { const o = promptOpts[+el.dataset.i]; if (o) o.fn(); });
+		pr.innerHTML = opts.map((o, i) => o.k ? `<div class="po chip" data-i="${i}"><kbd>${o.k}</kbd><span>${esc(o.label)}</span></div>` : `<div class="po chip info">${o.icon || ""}<span>${esc(o.label)}</span></div>`).join("");
+		pr.querySelectorAll(".po[data-i]").forEach(el => el.onclick = () => { const o = promptOpts[+el.dataset.i]; if (o) o.fn(); });
 	}
 	pr.classList.toggle("off", !opts.length);
 }

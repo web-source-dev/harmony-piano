@@ -135,14 +135,13 @@ button { font: inherit; color: inherit; }
 .rm-yt { display: flex; gap: 6px; margin-top: 4px; }
 .rm-yt .input { padding: 9px 10px; font-size: 13px; }
 .input.bad { border-color: #ff6b6b !important; }
-#pianobar { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); padding: 10px 14px; display: flex; align-items: center; gap: 14px; max-width: calc(100% - 28px); font-size: 13px; }
+#pianobar { align-self: center; padding: 10px 14px; display: flex; align-items: center; gap: 14px; max-width: calc(100% - 28px); font-size: 13px; }
 #pianobar .keys { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; }
 #pianobar kbd { display: inline-grid; place-items: center; min-width: 20px; height: 22px; border-radius: 5px; background: #fff; color: #2a1f33; font: 900 11px "Nunito", sans-serif; padding: 0 4px; box-shadow: 0 2px 0 #b8a9c9; }
 #pianobar kbd.bk { background: #2a2530; color: #fff; box-shadow: 0 2px 0 #000; }
-#carrybar { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); padding: 10px 14px; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 28px); font-size: 13px; white-space: nowrap; }
-#sleepov { position: fixed; inset: 0; z-index: 11; pointer-events: none; background: radial-gradient(ellipse at 50% 40%, rgba(10,12,40,.15), rgba(5,6,24,.78)); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 130px; animation: fade 1.2s; }
-#sleepov .card { pointer-events: auto; padding: 14px 18px; display: flex; gap: 14px; align-items: center; font-weight: 800; }
-#sleepov .moonic { width: 30px; height: 30px; }
+#carrybar { align-self: center; padding: 10px 14px; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 28px); font-size: 13px; white-space: nowrap; }
+/* sleeping: just dims the room - the "Sit up" / "Get out of bed" buttons live in the action row above the chat */
+#sleepov { position: fixed; inset: 0; z-index: 9; pointer-events: none; background: radial-gradient(ellipse at 50% 40%, rgba(10,12,40,.15), rgba(5,6,24,.78)); animation: fade 1.2s; }
 #fight { position: fixed; left: 50%; top: 76px; transform: translateX(-50%); z-index: 13; width: min(460px, calc(100% - 28px)); padding: 16px; border-radius: 20px; text-align: center; cursor: pointer; user-select: none; touch-action: manipulation; border: 2px solid rgba(255,122,162,.6); }
 #fight.spectate { cursor: default; border-color: var(--line); }
 #fight.tap { animation: tapPulse .12s; }
@@ -177,7 +176,7 @@ body.night #tl, body.night #bar { background: rgba(14,14,34,.86); }
 #bottom > * { pointer-events: auto; }
 /* keep the chat (history + bar) underneath the action buttons so they stay clickable */
 #bottom { z-index: 1; }
-#prompt, #pianobar, #carrybar, #toasts { z-index: 2; }
+#toasts { z-index: 2; }
 /* chat history: every message, scroll up to read older ones (saved on the server) */
 #log { display: flex; flex-direction: column; gap: 4px; max-height: 170px; overflow-y: auto; overscroll-behavior: contain; padding: 6px 8px; border-radius: 12px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.25) transparent; transition: background .2s; -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px); mask-image: linear-gradient(to bottom, transparent 0, #000 18px); }
 #log:hover, #log:focus-within { background: rgba(20,14,28,.45); }
@@ -196,11 +195,16 @@ body.night #tl, body.night #bar { background: rgba(14,14,34,.86); }
 .em:hover { background: rgba(255,255,255,.16); }
 .em:active { transform: scale(.92); }
 .em svg { width: 22px; height: 22px; }
-#prompt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: max-content; max-width: calc(100% - 28px); transition: opacity .2s, transform .2s; pointer-events: auto; }
+/* action buttons sit in the chat column, between the messages and the chat bar, so they never cover messages */
+#prompt { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; animation: poIn .2s ease-out; }
+@keyframes poIn { from { opacity: 0; transform: translateY(6px); } }
 #prompt .po { padding: 10px 16px; font-weight: 800; display: flex; align-items: center; gap: 10px; white-space: nowrap; cursor: pointer; }
 #prompt .po:hover { background: rgba(50,40,60,.92); }
+#prompt .po.info { cursor: default; color: #cfe0ff; }
+#prompt .po.info:hover { background: var(--panel); }
+#prompt .po.info svg { width: 20px; height: 20px; }
 #prompt kbd { display: inline-grid; place-items: center; min-width: 26px; height: 26px; border-radius: 7px; background: #fff; color: #2a1f33; font: 900 13px "Nunito", sans-serif; box-shadow: 0 2px 0 #b8a9c9; padding: 0 6px; }
-#prompt.off { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(8px); }
+#prompt.off { display: none; }
 #tip { position: fixed; padding: 6px 10px; font-size: 13px; font-weight: 800; pointer-events: none; z-index: 11; transform: translate(14px, 14px); white-space: nowrap; }
 #help { position: absolute; right: 14px; top: calc(max(14px, env(safe-area-inset-top)) + 52px); font-size: 12px; color: var(--muted); padding: 8px 12px; line-height: 1.55; max-width: 230px; transition: opacity 1.2s; }
 #help.gone { opacity: 0; pointer-events: none; }
@@ -396,7 +400,7 @@ body.touch #help { display: none; }
 	#lobby { align-items: flex-end; background: linear-gradient(0deg, rgba(20,15,25,.9) 0%, rgba(20,15,25,0) 70%); }
 	#lobby .card { max-height: 72vh; }
 	.ib .lbl { display: none; }
-	#prompt { bottom: 128px; }
+	#prompt .po { padding: 8px 12px; gap: 8px; font-size: 13px; }
 	.emotes .em { width: 36px; height: 36px; }
 	.em kbd { display: none; }
 	.wh-ring { --R: 112px; }
@@ -456,22 +460,22 @@ body.touch #help { display: none; }
 		<button class="chip ib" id="b-exit" title="Back to the piano"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span class="lbl">Piano</span></button>
 	</div>
 	<div id="toasts"></div>
-	<div id="prompt" class="off"></div>
 	<div id="help" class="chip"><b>WASD</b> / arrows to walk, <b>Shift</b> to run<br><b>Drag</b> to look around, <b>scroll</b> to zoom<br><b>Click</b> anything to walk there and use it<br><b>E</b> / <b>F</b> to use things, <b>Esc</b> to stand up<br><b>1</b> blow a kiss, <b>2</b> kiss, <b>3</b> pick up<br><b>Z</b> actions, <b>X</b> love, <b>C</b> mood<br><b>Enter</b> to chat</div>
 	<div id="joy"><i></i></div>
-	<div id="pianobar" class="chip hidden">
-		<b>Playing piano</b>
-		<div class="keys"><kbd>Z</kbd><kbd class="bk">S</kbd><kbd>X</kbd><kbd class="bk">D</kbd><kbd>C</kbd><kbd>V</kbd> ... <kbd>A</kbd><kbd class="bk">W</kbd><kbd>S</kbd><kbd class="bk">E</kbd><kbd>D</kbd><kbd>F</kbd> ...</div>
-		<span class="muted">or click the keys</span>
-		<button class="btn" id="pianostand">Stand up</button>
-	</div>
-	<div id="carrybar" class="chip hidden">
-		<span id="carrytxt"></span>
-		<button class="btn primary" id="carrycuddle">Cuddle</button>
-		<button class="btn" id="carrydown">Put down</button>
-	</div>
 	<div id="bottom">
 		<div id="log" class="empty" aria-live="polite"></div>
+		<div id="prompt" class="off"></div>
+		<div id="pianobar" class="chip hidden">
+			<b>Playing piano</b>
+			<div class="keys"><kbd>Z</kbd><kbd class="bk">S</kbd><kbd>X</kbd><kbd class="bk">D</kbd><kbd>C</kbd><kbd>V</kbd> ... <kbd>A</kbd><kbd class="bk">W</kbd><kbd>S</kbd><kbd class="bk">E</kbd><kbd>D</kbd><kbd>F</kbd> ...</div>
+			<span class="muted">or click the keys</span>
+			<button class="btn" id="pianostand">Stand up</button>
+		</div>
+		<div id="carrybar" class="chip hidden">
+			<span id="carrytxt"></span>
+			<button class="btn primary" id="carrycuddle">Cuddle</button>
+			<button class="btn" id="carrydown">Put down</button>
+		</div>
 		<div id="bar" class="chip">
 			<input id="chat" maxlength="240" placeholder="Say something..." autocomplete="off">
 			<div class="emotes">
@@ -518,7 +522,7 @@ body.touch #help { display: none; }
 	<div class="row" style="margin-top:10px;justify-content:space-between"><span class="muted">Only the person holding it can change the TV.</span><button class="btn ghost" id="rm-drop">Put down</button></div>
 </div>
 
-<div id="sleepov" class="hidden"><div class="card chip"><svg class="moonic" viewBox="0 0 24 24" fill="#cfe0ff"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><span>Sleeping... sweet dreams</span><button class="btn primary" id="wakebtn">Sit up</button><button class="btn" id="getupbtn">Get out of bed</button></div></div>
+<div id="sleepov" class="hidden"></div>
 
 <div id="fight" class="chip hidden">
 	<div class="ttl">Fight for the remote</div>
@@ -530,7 +534,7 @@ body.touch #help { display: none; }
 <div id="modal" class="hidden"><div class="win"><header><h2 id="mtitle"></h2><button class="x" id="mclose" aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div class="body" id="mbody"></div></div></div>
 
 <script src="./roomSync.js?v=20261002w"></script>
-<script type="module" src="./world.js?v=20261004a"></script>
+<script type="module" src="./world.js?v=20261004c"></script>
 <script>
 // If the module never boots (old browser / CDN blocked), say so instead of spinning forever.
 setTimeout(function () {
