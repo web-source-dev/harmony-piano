@@ -1240,6 +1240,9 @@ export function buildRoom(scene) {
 		photos, setPlant, waterFx, record, coffee, ball, envs,
 		// lights that only matter in one area; the world hides the other area's lights (cheaper shading)
 		areaLights: { room: [tvLight, fairyLight, nightLight, lampLight], terrace: terrace.lights },
+		// small accent lights: area-only too, and switched off entirely on the low graphics setting
+		minorLights: { room: [candleLight, arcadeLight, ul], terrace: terrace.minorLights },
+		shadowLights: [mainLight],
 		pianoKeys, pressKey, remote: { mesh: remote, parent: ct }, setNightLamp, nightLamp,
 		setFairy: k => { fairyLight.intensity = 1.5 * k; bulbs.forEach(b => { b.userData.k = k; }); },
 		update(dt, t) { updaters.forEach(u => u(dt, t)); }

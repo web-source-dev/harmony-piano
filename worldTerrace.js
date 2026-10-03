@@ -301,6 +301,7 @@ export function buildTerrace(scene, h) {
 
 	return {
 		lights: [l1, l2, fireLight],
+		minorLights: [lanLight],   // small accent lights the low graphics setting switches off
 		swing, easel: { canvas: easelCanvas, tex: easelTex, point: easelPoint, stands: easelStands, face: Math.PI },
 		telescope: { eyepiece, dir: MOON, stand: scopeStand },
 		fire: { x: fx, z: fz },

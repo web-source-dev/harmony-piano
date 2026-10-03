@@ -50,14 +50,47 @@ const profile = Object.assign({
 if (!MOODS.some(m => m.id === profile.mood)) profile.mood = "happy";
 if (params.get("n") && !profile.name) profile.name = params.get("n").slice(0, 24);
 
+// ============================================================ graphics quality
+// Everything in the world works the same on every device; only how hard the GPU works changes.
+// "Auto" starts from a guess about the device and then watches the real frame rate: it lowers the
+// render resolution first, and only on a really struggling device makes the shadows cheaper.
+const LS_GFX = "harmonyWorldGfx";
+const GFX = [
+	{ name: "Low", px: 1.0, shadows: false, map: 1024, every: 4, soft: false, tvFps: 15, arcFps: 6 },
+	{ name: "Medium", px: 1.25, shadows: true, map: 1024, every: 3, soft: false, tvFps: 24, arcFps: 8 },
+	{ name: "High", px: 1.5, shadows: true, map: 2048, every: 2, soft: true, tvFps: 30, arcFps: 10 }
+];
+function detectTier() {
+	const mem = navigator.deviceMemory || 8, cores = navigator.hardwareConcurrency || 8;
+	const mobile = /Android|iPhone|iPad|iPod|Mobile|Silk/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 900);
+	let gpu = "";
+	try {
+		const gl = document.createElement("canvas").getContext("webgl");
+		const ext = gl && gl.getExtension("WEBGL_debug_renderer_info");
+		if (ext) gpu = String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL));
+		const lose = gl && gl.getExtension("WEBGL_lose_context");
+		if (lose) lose.loseContext();
+	} catch (e) { /* no WebGL info: fall back to the other hints */ }
+	const weakGpu = /SwiftShader|llvmpipe|Software|Mali-[4T]|Mali-G(31|51|52|57)\b|Adreno \(TM\) [3-5]\d\d|Adreno [3-5]\d\d|PowerVR|Intel\(R\) HD Graphics( [2-5]\d\d\d?)?$/i.test(gpu);
+	if (weakGpu || mem <= 2 || cores <= 2) return 0;
+	if (mobile || mem <= 4 || cores <= 4) return 1;
+	return 2;
+}
+const gfx = { pref: lsGet(LS_GFX, "auto"), auto: 2, scale: 1 };
+if (!["auto", "low", "medium", "high"].includes(gfx.pref)) gfx.pref = "auto";
+gfx.auto = detectTier();
+const gfxTier = () => gfx.pref === "auto" ? gfx.auto : ["low", "medium", "high"].indexOf(gfx.pref);
+// scale it down a bit straight away on weak devices so the first seconds are already smooth
+if (gfx.pref === "auto") gfx.scale = gfx.auto === 0 ? 0.8 : 1;
+
 // ============================================================ renderer/scene
 const canvas = $("#view");
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: gfxTier() >= 2, alpha: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, GFX[gfxTier()].px) * gfx.scale);
 renderer.setSize(innerWidth, innerHeight);
 renderer.setClearColor(0x000000, 0);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = GFX[gfxTier()].soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -100,7 +133,30 @@ let audio = null;
 	renderer.shadowMap.needsUpdate = true;
 }
 
+let gfxApplied = null;
+function applyGfx() {
+	const tier = gfxTier(), g = GFX[tier];
+	renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, g.px) * gfx.scale);
+	renderer.setSize(innerWidth, innerHeight);
+	if (gfxApplied === tier) return;
+	gfxApplied = tier;
+	// shadow on/off or soft/hard changes the shaders: rebuild them once
+	const rebuild = renderer.shadowMap.enabled !== g.shadows || (renderer.shadowMap.type === THREE.PCFSoftShadowMap) !== g.soft;
+	renderer.shadowMap.enabled = g.shadows;
+	renderer.shadowMap.type = g.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+	for (const l of [moon].concat(room.shadowLights || [])) {
+		l.castShadow = g.shadows;
+		if (l.shadow.mapSize.x !== g.map) {
+			l.shadow.mapSize.set(g.map, g.map);
+			if (l.shadow.map) { l.shadow.map.dispose(); l.shadow.map = null; }
+		}
+	}
+	if (rebuild) scene.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => { m.needsUpdate = true; }); });
+	renderer.shadowMap.needsUpdate = true;
+	renderGfxBtn();
+}
 addEventListener("resize", () => {
+	renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, GFX[gfxTier()].px) * gfx.scale);
 	renderer.setSize(innerWidth, innerHeight);
 	cssRenderer.setSize(innerWidth, innerHeight);
 	camera.aspect = innerWidth / innerHeight;
@@ -2292,13 +2348,34 @@ function findPath(sx, sz, tx, tz) {
 	const g = new Float32Array(N).fill(Infinity), came = new Int32Array(N).fill(-1), closed = new Uint8Array(N);
 	const start = s0[1] * W + s0[0], goal = t0[1] * W + t0[0];
 	const hfun = c => Math.hypot((c % W) - t0[0], Math.floor(c / W) - t0[1]);
-	const open = [start]; g[start] = 0;
+	g[start] = 0;
 	const f = new Float32Array(N).fill(Infinity); f[start] = hfun(start);
+	// binary min-heap on f (the old linear scan got slow on long walks on weak phones)
+	const heap = [start];
+	const push = c => {
+		let i = heap.push(c) - 1;
+		while (i > 0) { const p = (i - 1) >> 1; if (f[heap[p]] <= f[c]) break; heap[i] = heap[p]; i = p; }
+		heap[i] = c;
+	};
+	const pop = () => {
+		const top = heap[0], last = heap.pop();
+		if (heap.length) {
+			let i = 0;
+			for (;;) {
+				const l = 2 * i + 1, r = l + 1;
+				let m = i, mv = f[last];
+				if (l < heap.length && f[heap[l]] < mv) { m = l; mv = f[heap[l]]; }
+				if (r < heap.length && f[heap[r]] < mv) m = r;
+				if (m === i) break;
+				heap[i] = heap[m]; i = m;
+			}
+			heap[i] = last;
+		}
+		return top;
+	};
 	let found = false, iter = 0;
-	while (open.length && iter++ < 20000) {
-		let bi = 0;
-		for (let k = 1; k < open.length; k++) if (f[open[k]] < f[open[bi]]) bi = k;
-		const c = open[bi]; open[bi] = open[open.length - 1]; open.pop();
+	while (heap.length && iter++ < 20000) {
+		const c = pop();
 		if (c === goal) { found = true; break; }
 		if (closed[c]) continue;
 		closed[c] = 1;
@@ -2310,7 +2387,7 @@ function findPath(sx, sz, tx, tz) {
 			if (di && dj && (!cellFree(ci + di, cj) || !cellFree(ci, cj + dj))) continue; // no corner cutting
 			const nc = nj * W + ni;
 			const ng = g[c] + (di && dj ? 1.414 : 1);
-			if (ng < g[nc]) { g[nc] = ng; came[nc] = c; f[nc] = ng + hfun(nc); open.push(nc); }
+			if (ng < g[nc]) { g[nc] = ng; came[nc] = c; f[nc] = ng + hfun(nc); push(nc); }
 		}
 	}
 	if (!found) return null;
@@ -2817,6 +2894,21 @@ const SND_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stro
 function renderSound() { $("#b-sound").innerHTML = muted ? SND_OFF : SND_ON; if (audio) audio.setMuted(muted); }
 $("#b-sound").onclick = () => { muted = !muted; lsSet("harmonyWorldMuted", muted); renderSound(); };
 $("#b-exit").onclick = leaveToPiano;
+// graphics: Auto -> High -> Medium -> Low -> Auto
+const GFX_LABEL = { auto: "Auto", high: "High", medium: "Medium", low: "Low" };
+function renderGfxBtn() { $("#b-gfx .lbl").textContent = GFX_LABEL[gfx.pref]; $("#b-gfx").title = "Graphics: " + GFX_LABEL[gfx.pref] + (gfx.pref === "auto" ? " (now " + GFX[gfxTier()].name + ")" : ""); }
+$("#b-gfx").onclick = () => {
+	const order = ["auto", "high", "medium", "low"];
+	gfx.pref = order[(order.indexOf(gfx.pref) + 1) % order.length];
+	lsSet(LS_GFX, gfx.pref);
+	if (gfx.pref === "auto") { gfx.auto = detectTier(); gfx.scale = 1; }
+	else gfx.scale = 1;
+	perf.n = perf.t = perf.good = 0; perf.cool = 1;
+	applyGfx();
+	renderGfxBtn();
+	toast("Graphics: <b>" + GFX_LABEL[gfx.pref] + "</b>" + (gfx.pref === "auto" ? " - adjusts itself to keep things smooth" : ""), null, null, 3500);
+};
+renderGfxBtn();
 
 // emote + mood menu
 const EMOTES = [
@@ -3042,8 +3134,31 @@ setInterval(() => { if (entered) send(poseMsg()); }, 5000);
 // ============================================================ main loop
 const clock = new THREE.Clock();
 let tvAcc = 0, arcAcc = 0, ytAcc = 0, lastArea = null, frameNo = 0;
+// Auto quality: every ~1.5s look at the real frame rate. Too slow -> render fewer pixels (down to 60%),
+// still too slow at the bottom -> cheaper tier. Smooth for a while -> win the resolution back.
+// (Never steps the tier back up by itself, so it can't flicker between settings.)
+const perf = { n: 0, t: 0, good: 0, cool: 0 };
+function watchPerf(raw) {
+	if (gfx.pref !== "auto" || document.hidden) return;
+	if (raw > 0.25) { perf.n = 0; perf.t = 0; return; }   // tab was in the background / a one-off hitch
+	perf.n++; perf.t += raw;
+	if (perf.t < 1.5) return;
+	const fps = perf.n / perf.t;
+	perf.n = 0; perf.t = 0;
+	if (perf.cool > 0) { perf.cool--; return; }
+	if (fps < 45) {
+		perf.good = 0;
+		if (gfx.scale > 0.61) { gfx.scale = Math.max(0.6, gfx.scale - 0.1); applyGfx(); perf.cool = 1; }
+		else if (gfx.auto > 0 && fps < 38) { gfx.auto--; gfx.scale = 0.9; applyGfx(); perf.cool = 2; }
+	} else if (fps > 57 && gfx.scale < 1) {
+		if (++perf.good >= 3) { perf.good = 0; gfx.scale = Math.min(1, gfx.scale + 0.1); applyGfx(); perf.cool = 1; }
+	} else perf.good = 0;
+}
 function frame() {
-	const dt = Math.min(0.05, clock.getDelta());
+	const raw = clock.getDelta();
+	const dt = Math.min(0.05, raw);
+	watchPerf(raw);
+	const G = GFX[gfxTier()];
 	const t = clock.elapsedTime;
 	if (entered) updateMe(dt);
 	else {
@@ -3055,7 +3170,11 @@ function frame() {
 	myAvatar.update(dt);
 	// only light the area you're in (fewer lights = much cheaper shading)
 	const inTerrace = areaOf(cam.tx, cam.tz) === "terrace" || (entered && areaOf(me.x, me.z) === "terrace");
-	if (inTerrace !== lastArea) { lastArea = inTerrace; room.areaLights.room.forEach(l => { l.visible = !inTerrace; }); room.areaLights.terrace.forEach(l => { l.visible = inTerrace; }); }
+	if (inTerrace !== lastArea) {
+		lastArea = inTerrace;
+		room.areaLights.room.concat(room.minorLights.room).forEach(l => { l.visible = !inTerrace; });
+		room.areaLights.terrace.concat(room.minorLights.terrace).forEach(l => { l.visible = inTerrace; });
+	}
 	room.terrace.swing.occupied = me.sit === "swing0" || me.sit === "swing1" || [...peers.values()].some(p => p.sit === "swing0" || p.sit === "swing1");
 	updateFightRemote(clock.elapsedTime);
 	updatePeers(dt);
@@ -3067,8 +3186,8 @@ function frame() {
 	updateCamera(dt, t);
 	if (entered) updatePrompt();
 	tvAcc += dt; arcAcc += dt; ytAcc += dt;
-	if (tvAcc > 1 / 30) { tvAcc = 0; drawTVFrame(t); }
-	if (arcAcc > 0.1) { arcAcc = 0; Games.drawArcade(room.arcade.canvas, get("game"), rpsLists(), t); room.arcade.tex.needsUpdate = true; }
+	if (tvAcc > 1 / G.tvFps) { tvAcc = 0; drawTVFrame(t); }
+	if (arcAcc > 1 / G.arcFps) { arcAcc = 0; Games.drawArcade(room.arcade.canvas, get("game"), rpsLists(), t); room.arcade.tex.needsUpdate = true; }
 	if (marker.material.opacity > 0) { marker.material.opacity = Math.max(0, marker.material.opacity - dt * 1.5); marker.scale.multiplyScalar(1 + dt); }
 	if (audio && get("music").on) {
 		const d = Math.hypot(me.x - 6.4, me.z + 0.9);
@@ -3087,13 +3206,15 @@ function frame() {
 		$("#netdot").title = conn ? "Connected - everyone sees you" : "Offline - reconnecting";
 		if (conn) send({ t: "hello", lk: lookPayload(), pose: poseMsg() });
 	}
-	if ((frameNo++ & 1) === 0) renderer.shadowMap.needsUpdate = true;
+	if (G.shadows && frameNo++ % G.every === 0) renderer.shadowMap.needsUpdate = true;
 	renderer.render(scene, camera);
 	if (yt) cssRenderer.render(cssScene, camera);
 	requestAnimationFrame(frame);
 }
 
 // ============================================================ boot
+applyGfx();
+(window.requestIdleCallback || (fn => setTimeout(fn, 1500)))(() => { if (!gridBlocked) buildGrid(); });
 $("#rname").textContent = ROOM_NAME === "lobby" ? "Lobby World" : ROOM_NAME;
 redrawEasel();
 applyAll();
