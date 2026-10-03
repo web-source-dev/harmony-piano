@@ -502,9 +502,13 @@ export function buildRoom(scene) {
 	add(sofa, rbox(0.5, 0.04, 0.95, 0.02), mat("#efe6d8", 1), 1.0, 0.62, 0.05, { rz: 0.35 });
 	box(-3.85, -1.35, -2.05, -1.05);
 	const sitSpots = [
-		{ id: "sofa0", x: -3.37, z: -1.62, h: Math.PI, y: 0.15 },
-		{ id: "sofa1", x: -2.6, z: -1.62, h: Math.PI, y: 0.15 },
-		{ id: "sofa2", x: -1.83, z: -1.62, h: Math.PI, y: 0.15 }
+		{ id: "sofa0", x: -3.37, z: -1.62, h: Math.PI, y: 0.15, excl: ["sofaLieA", "sofaLieB"] },
+		{ id: "sofa1", x: -2.6, z: -1.62, h: Math.PI, y: 0.15, excl: ["sofaLieA", "sofaLieB"] },
+		{ id: "sofa2", x: -1.83, z: -1.62, h: Math.PI, y: 0.15, excl: ["sofaLieA", "sofaLieB"] },
+		// lying along the sofa for a cuddle (only used when someone carries their partner over):
+		// one on their back against the backrest, the other half on top of them on the front edge
+		{ id: "sofaLieA", x: -3.5, z: -1.47, h: -Math.PI / 2, y: 0.66, lie: true, sofaLie: "under", excl: ["sofa0", "sofa1", "sofa2"] },
+		{ id: "sofaLieB", x: -3.47, z: -1.73, h: -Math.PI / 2, y: 0.74, lie: true, sofaLie: "over", excl: ["sofa0", "sofa1", "sofa2"] }
 	];
 	interact("sofa", { label: "Sit on the sofa", stand: [-2.6, -2.4], sit: ["sofa0", "sofa1", "sofa2"] }, sofa);
 
@@ -575,7 +579,9 @@ export function buildRoom(scene) {
 	// curled up sideways on the lap of whoever is in the armchair
 	{
 		const a = sitSpots[sitSpots.length - 1];
-		sitSpots.push({ id: "armchairLap", x: a.x + Math.sin(a.h) * 0.22, z: a.z + Math.cos(a.h) * 0.22, h: a.h + Math.PI / 2, y: a.y + 0.22, lap: "armchair" });
+		// (far enough forward and a little to their right that the two bodies touch instead of overlapping)
+		const fw = 0.33, rt = 0.07;
+		sitSpots.push({ id: "armchairLap", x: a.x + Math.sin(a.h) * fw - Math.cos(a.h) * rt, z: a.z + Math.cos(a.h) * fw + Math.sin(a.h) * rt, h: a.h + Math.PI / 2, y: a.y + 0.22, lap: "armchair" });
 	}
 	interact("armchair", { label: "Sit in the armchair", stand: [-0.4, -3.6], sit: ["armchair"] }, arm);
 
@@ -1011,9 +1017,13 @@ export function buildRoom(scene) {
 	bedRug.userData.floor = true;
 	box(-4.1, -2.3, 3.82, 6);
 	// lying spots: feet at the foot end, head on the pillow (toward +z)
-	sitSpots.push({ id: "bedL", x: -3.62, z: 4.1, h: Math.PI, y: 0.7, lie: true });
-	sitSpots.push({ id: "bedR", x: -2.78, z: 4.1, h: Math.PI, y: 0.7, lie: true });
-	interact("bed", { label: "Go to sleep", stand: [-1.85, 4.1], sit: ["bedL", "bedR"] }, bedG);
+	sitSpots.push({ id: "bedL", x: -3.62, z: 4.1, h: Math.PI, y: 0.7, lie: true, bed: true, excl: ["bedSitL"] });
+	sitSpots.push({ id: "bedR", x: -2.78, z: 4.1, h: Math.PI, y: 0.7, lie: true, bed: true, excl: ["bedSitR"] });
+	// sitting up in bed: back against the pillows, legs stretched out on the mattress
+	// (the same place as the lying spot on that side, so only one of the two at a time)
+	sitSpots.push({ id: "bedSitL", x: -3.62, z: 5.4, h: Math.PI, y: 0.24, bed: true, bedsit: true, excl: ["bedL"], stand: [-4.5, 4.9] });
+	sitSpots.push({ id: "bedSitR", x: -2.78, z: 5.4, h: Math.PI, y: 0.24, bed: true, bedsit: true, excl: ["bedR"], stand: [-1.9, 4.7] });
+	interact("bed", { label: "Sit on the bed", stand: [-1.85, 4.1], sit: ["bedSitL", "bedSitR"], lie: ["bedL", "bedR"] }, bedG);
 	// bedside table + night lamp
 	const bst = group(scene, -1.95, 0, 5.6, Math.PI);
 	add(bst, rbox(0.5, 0.55, 0.42, 0.02), lightWood, 0, 0.3, 0);

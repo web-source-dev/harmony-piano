@@ -31,7 +31,7 @@ export const MOODS = [
 ];
 const MOOD_COLOR = Object.fromEntries(MOODS.map(m => [m.id, m.color]));
 // arm-layer animations that make the cheeks go pink
-const LOVE_UPPERS = new Set(["blush", "lovestruck", "heartarms", "smooch", "cheekkiss", "cuddle", "slowdance", "propose", "kiss", "hug"]);
+const LOVE_UPPERS = new Set(["blush", "lovestruck", "heartarms", "smooch", "cheekkiss", "cuddle", "slowdance", "propose", "kiss", "hug", "nightkiss"]);
 // solo ones also float little hearts
 const HEART_UPPERS = new Set(["blush", "lovestruck", "heartarms"]);
 
@@ -236,7 +236,9 @@ export class Avatar {
 		this.paintUV = { u: 0.5, v: 0.5 };
 		this.pianoHits = [0, 0];
 		this.lookYaw = null;   // desired head turn (radians, relative), or null
-		this.coupleSide = 0;   // where the person we're cuddling/kissing is: -1 right, 1 left, 0 in front
+		this.coupleSide = 0;
+		this.coupleRole = null;   // "lapholder" / "lapsitter" (armchair), "under" / "over" (lying on the sofa)
+		this.carriedBy = null;    // set while someone carries us in their arms (world.js places the root)   // where the person we're cuddling/kissing is: -1 right, 1 left, 0 in front
 		this.prop = null;
 		this.zzz = [];
 		this.mood = "happy";
@@ -689,7 +691,9 @@ export class Avatar {
 		this.t += dt;
 		const k = 1 - Math.pow(0.0004, dt);
 		const t = this.t;
-		const base = this.anim, up = this.upper;
+		// "bedsit" (sitting up in bed) is a sit with the legs stretched out along the mattress
+		const bedsit = this.anim === "bedsit";
+		const base = bedsit ? "sit" : this.anim, up = this.upper;
 		if (up !== this._lastUp) { this._lastUp = up; this.upperT = 0; }
 		this.upperT += dt;
 		const ut = this.upperT;
@@ -715,6 +719,14 @@ export class Avatar {
 			P.arm[0].x = P.arm[1].x = -0.45; P.arm[0].e = P.arm[1].e = -0.75;
 			P.arm[0].z = -0.12; P.arm[1].z = 0.12;
 			P.torsoX = -0.04 + breathe;
+			if (bedsit) {
+				// back against the pillows, legs out straight, hands resting on the duvet
+				P.leg[0].x = P.leg[1].x = -1.56; P.leg[0].k = P.leg[1].k = 0.1;
+				P.foot[0] = P.foot[1] = -0.35;
+				P.torsoX = -0.16 + breathe;
+				P.arm[0].x = P.arm[1].x = -0.35; P.arm[0].e = P.arm[1].e = -0.55;
+				P.arm[0].z = -0.18; P.arm[1].z = 0.18;
+			}
 		} else if (base === "floor") {
 			// sitting cross-legged on the floor
 			P.bodyY = -0.7;
@@ -723,6 +735,16 @@ export class Avatar {
 			P.arm[0].x = P.arm[1].x = -0.55; P.arm[0].e = P.arm[1].e = -0.6;
 			P.arm[0].z = -0.3; P.arm[1].z = 0.3;
 			P.torsoX = 0.05 + breathe;
+		} else if (base === "carried") {
+			// lying across someone's arms: knees over one arm, curled a little toward them, arm round their neck
+			// (the root is tilted flat, local +x faces the person carrying us)
+			P.leg[0].x = P.leg[1].x = -1.05; P.leg[0].k = P.leg[1].k = 1.45;
+			P.leg[0].z = -0.03; P.leg[1].z = 0.03;
+			P.foot[0] = P.foot[1] = 0.35;
+			P.torsoX = 0.22 + breathe; P.bodyRY = 0.4;
+			P.headX = -0.08; P.headY = 0.55;
+			P.arm[0].x = -0.55; P.arm[0].z = -0.3; P.arm[0].e = -1.2;
+			P.arm[1].x = -1.7; P.arm[1].e = -1.1;
 		} else if (base === "sleep") {
 			P.leg[0].z = -0.04; P.leg[1].z = 0.04; P.leg[0].k = P.leg[1].k = 0.12;
 			P.arm[0].z = -0.12; P.arm[1].z = 0.12; P.arm[0].e = P.arm[1].e = -0.2;
@@ -747,7 +769,7 @@ export class Avatar {
 			}
 		}
 		// mood body language when nothing else is going on
-		if (!up && base !== "sleep") {
+		if (!up && base !== "sleep" && base !== "carried") {
 			if (mood === "sad" || mood === "missing") {
 				P.torsoX += 0.13; P.headX += 0.28;
 				if (!moving && base === "idle" && mood === "missing" && (t % 9) < 3.5) { P.arm[0].x = -0.9; P.arm[0].z = 0.55; P.arm[0].e = -1.5; }
@@ -767,7 +789,7 @@ export class Avatar {
 				P.headZ = Math.sin(t * 1.5) * 0.1;
 			}
 		}
-		if (this.lookYaw !== null && base !== "sleep" && !moving) {
+		if (this.lookYaw !== null && base !== "sleep" && base !== "carried" && !moving) {
 			P.headY = Math.max(-0.95, Math.min(0.95, this.lookYaw));
 		}
 
@@ -881,7 +903,12 @@ export class Avatar {
 		} else if (up === "shake") {
 			const sh = Math.sin(t * 20) * 0.12;
 			P.arm[0].x = P.arm[1].x = -1.25 + sh; P.arm[0].e = P.arm[1].e = -0.5;
-			P.torsoX = 0.4; P.headX = 0.1;
+			if (base === "sit" && this.coupleSide) {
+				// in bed beside them: lean over sideways onto their shoulder
+				const sd = this.coupleSide;
+				P.torsoX = 0.05; P.torsoZ = -sd * 0.7 + sh * 0.15; P.headZ = -sd * 0.2; P.headX = 0.3; P.headY = sd * 0.2;
+			} else if (base === "sleep") { P.bodyRY = (this.coupleSide || 1) * 0.9; }
+			else { P.torsoX = 0.4; P.headX = 0.1; }
 		} else if (up === "give") {
 			P.arm[0].x = -1.3; P.arm[0].z = 0.05; P.arm[0].e = -0.35; P.headX = 0.1;
 		} else if (up === "stumble") {
@@ -922,9 +949,38 @@ export class Avatar {
 			P.arm[0].x = -1.45; P.arm[0].z = -0.05; P.arm[0].e = -0.35 + Math.sin(t * 3) * 0.04;
 			P.arm[1].x = -0.55; P.arm[1].z = 0.1; P.arm[1].e = -0.9;
 			P.headX = -0.3;
+		} else if (up === "carry") {
+			// someone in your arms: arms out in front (hands placed by IK), leaning back a touch to take the weight
+			P.arm[0].x = P.arm[1].x = -1.0; P.arm[0].e = P.arm[1].e = -1.3;
+			P.arm[0].z = 0.15; P.arm[1].z = -0.15;
+			P.torsoX = -0.1 + breathe; P.headX = 0.25; P.headY = -0.35;
 		} else if (up === "cuddle" || up === "smooch" || up === "cheekkiss") {
 			const kiss = up !== "cuddle";
-			if (lying) {
+			const role = this.coupleRole;
+			if (lying && role === "under") {
+				// on your back along the sofa, arm round them (IK), face turned to theirs
+				P.bodyRY = side * (kiss ? 0.45 : 0.25);
+				P.headY = side * (kiss ? 0.65 : 0.45);
+				P.arm[0].e = P.arm[1].e = -0.6;
+			} else if (lying && role === "over") {
+				// rolled right onto your side, half on top of them, head tucked in by their shoulder
+				P.bodyRY = side * 1.25;
+				P.headY = side * (kiss ? 0.4 : 0.15); P.headX = kiss ? 0 : 0.15;
+				P.torsoX = 0.1;
+				P.leg[0].x = P.leg[1].x = -0.3; P.leg[0].k = 0.5; P.leg[1].k = 0.25;
+				P.arm[0].e = P.arm[1].e = -0.9;
+			} else if (role === "lapholder") {
+				// someone on your lap: sit back into the chair and look up at them (arms round their waist via IK)
+				P.torsoX = kiss ? 0.0 : -0.14;
+				P.headX = kiss ? -0.15 : -0.05;
+				P.headY = kiss ? -0.5 : -0.3;
+			} else if (role === "lapsitter" && side) {
+				// on their lap: stay upright on their thighs, just rest your head back on their shoulder
+				P.torsoZ = -side * 0.06;
+				P.headZ = -side * (kiss ? 0.1 : 0.3);
+				P.headY = side * (kiss ? 0.9 : 0.45);
+				P.headX = kiss ? -0.1 : 0;
+			} else if (lying) {
 				// roll onto your side toward them
 				P.bodyRY = side * (kiss ? 1.0 : 0.85);
 				P.headY = side * (kiss ? 0.45 : 0.3);
@@ -950,6 +1006,22 @@ export class Avatar {
 			}
 			if (kiss && ut > 0.35) P.eyes = 0.05;
 			if (up === "cuddle" && !lying && side) P.eyes = (t % 6) < 2 ? 0.05 : 1;   // drowsy, content blinks
+		} else if (up === "nightkiss") {
+			// lean right over someone asleep and kiss their cheek
+			const k = Math.min(1, ut * 1.6), sd = side || 1;
+			if (lying) {
+				// propped up on an elbow, rolled toward them
+				P.bodyRY = sd * 1.05 * k; P.torsoX = 0.35 * k; P.torsoZ = -sd * 0.25 * k;
+				P.headX = 0.25 * k; P.headZ = -sd * 0.2 * k;
+				P.arm[sd < 0 ? 1 : 0].x = -0.6; P.arm[sd < 0 ? 1 : 0].e = -1.4;
+			} else {
+				// sitting up beside them: bend right over sideways, face down to their cheek
+				P.torsoX = 0.08 * k; P.torsoZ = -sd * 1.02 * k;
+				P.headX = 0.3 * k; P.headZ = -sd * 0.3 * k; P.headY = sd * 0.25 * k;
+				// the far hand braces on the mattress
+				P.arm[sd < 0 ? 1 : 0].z = sd * 0.9 * k; P.arm[sd < 0 ? 1 : 0].e = -0.2;
+			}
+			if (ut > 0.6) P.eyes = 0.05;
 		} else if (up === "slowdance") {
 			const b = t * 1.3;
 			P.bodyRY = Math.sin(b) * 0.12;
@@ -1006,7 +1078,7 @@ export class Avatar {
 			if (crying) { const k = ((t * (0.9 + i * 0.2)) % 1); tr.position.y = -0.012 - k * 0.07; tr.material.opacity = 1 - k; }
 		});
 		this.updateMoodFx(dt, base, up);
-		this.shadowBlob.visible = base !== "sleep";
+		this.shadowBlob.visible = base !== "sleep" && base !== "carried";
 		this.shadowBlob.material.opacity = base === "sit" ? 0.1 : 0.22;
 		this.propHolder.visible = !!this.prop;
 

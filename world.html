@@ -81,22 +81,33 @@ button { font: inherit; color: inherit; }
 .ib.on { background: linear-gradient(135deg, rgba(120,140,255,.45), rgba(80,60,160,.5)); border-color: #9fb0ff; }
 #tl .zz { font-size: 11px; color: #a9c1ff; font-style: italic; }
 #tl .ppl .mf { width: 18px; height: 18px; flex: none; }
-/* emote + mood menu */
-#emotemenu { position: absolute; left: 50%; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 66px); transform: translateX(-50%); width: min(620px, calc(100% - 28px)); padding: 14px; border-radius: 18px; z-index: 11; animation: pop .22s cubic-bezier(.2,1.3,.4,1); max-height: 60vh; overflow-y: auto; }
-#emotemenu h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-#em-grid, #em-love { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin-bottom: 14px; }
-.emb { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 9px 4px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.05); cursor: pointer; font-size: 12px; font-weight: 800; }
-.emb:hover { background: rgba(255,255,255,.12); }
-#em-love { margin-bottom: 6px; }
-.emb.love { border-color: rgba(255,120,160,.35); background: rgba(255,90,140,.08); }
-.emb.love:hover { background: rgba(255,90,140,.18); }
-.em-hint { margin: 0 0 14px; font-size: 12px; line-height: 1.4; color: var(--muted); }
-.emb .ei { width: 26px; height: 26px; display: block; }
-.emb .ei svg { width: 26px; height: 26px; }
-#em-moods { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
-.moodb { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.05); cursor: pointer; font-size: 13px; font-weight: 800; }
-.moodb img { width: 24px; height: 24px; }
-.moodb.on { border-color: var(--accent); background: rgba(255,122,162,.16); }
+/* action / love / mood wheels */
+#wheel { position: fixed; inset: 0; z-index: 12; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: radial-gradient(circle at 50% 50%, rgba(20,12,30,.55), rgba(10,6,16,.2) 70%); }
+#wheel.hidden { display: none; }
+.wh-ring { --R: 150px; position: relative; width: calc(var(--R) * 2 + 76px); height: calc(var(--R) * 2 + 76px); border-radius: 50%; animation: whIn .2s cubic-bezier(.2,1.3,.4,1); }
+.wh-ring::before { content: ""; position: absolute; inset: 22px; border-radius: 50%; background: rgba(30,22,40,.74); border: 1px solid var(--line); box-shadow: 0 20px 60px rgba(0,0,0,.45), inset 0 0 40px rgba(255,255,255,.04); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+#wheel.love .wh-ring::before { background: rgba(48,18,36,.76); border-color: rgba(255,120,160,.3); }
+@keyframes whIn { from { transform: scale(.7) rotate(-20deg); opacity: 0; } }
+.wh-center { position: absolute; left: 50%; top: 50%; width: 132px; height: 132px; margin: -66px 0 0 -66px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: rgba(255,255,255,.05); border: 1px solid var(--line); pointer-events: none; padding: 10px; }
+.wh-title { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 800; }
+.wh-label { font-size: 17px; font-weight: 900; margin-top: 4px; line-height: 1.15; }
+.wh-sub { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.3; }
+.wh-it { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; border: 1px solid var(--line); background: rgba(255,255,255,.07); cursor: pointer; display: grid; place-items: center; color: var(--text); transform: translate(var(--tx), var(--ty)); transition: transform .12s, background .12s, border-color .12s; padding: 0; }
+.wh-it svg, .wh-it img { width: 28px; height: 28px; }
+.wh-it .n { position: absolute; right: -3px; top: -3px; min-width: 18px; height: 18px; border-radius: 9px; background: #fff; color: #2a1f33; font: 900 10px/18px "Nunito", sans-serif; box-shadow: 0 1px 0 #b8a9c9; }
+.wh-it:hover, .wh-it.sel { background: rgba(255,255,255,.2); border-color: #fff; transform: translate(var(--tx), var(--ty)) scale(1.16); }
+#wheel.love .wh-it { border-color: rgba(255,120,160,.4); background: rgba(255,90,140,.12); }
+#wheel.love .wh-it:hover, #wheel.love .wh-it.sel { background: rgba(255,90,140,.38); border-color: #ffc2d4; }
+.wh-it.on { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,122,162,.35); }
+.wh-tabs { display: flex; gap: 6px; }
+.wh-tabs button { display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line); background: rgba(30,22,40,.85); color: var(--text); font: 800 13px "Nunito", sans-serif; cursor: pointer; }
+.wh-tabs button.on { border-color: var(--accent); background: rgba(255,122,162,.25); }
+.wh-tabs kbd, .em kbd { display: inline-grid; place-items: center; min-width: 16px; height: 16px; border-radius: 4px; background: rgba(255,255,255,.85); color: #2a1f33; font: 900 10px "Nunito", sans-serif; padding: 0 3px; }
+.wh-hint { font-size: 12px; color: var(--muted); text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+.em { position: relative; }
+.em kbd { position: absolute; right: 1px; bottom: 1px; min-width: 13px; height: 13px; font-size: 9px; opacity: .8; pointer-events: none; }
+.em.wb { background: rgba(255,255,255,.1); }
+.em.wb.on { background: rgba(255,122,162,.3); }
 #scope { position: fixed; inset: 0; z-index: 8; pointer-events: none; background: radial-gradient(circle at 50% 50%, transparent 0 34vmin, rgba(0,0,0,.92) 35.5vmin); }
 #scope::after { content: ""; position: absolute; left: 50%; top: 50%; width: 71vmin; height: 71vmin; transform: translate(-50%,-50%); border-radius: 50%; box-shadow: inset 0 0 40px rgba(0,0,0,.8), 0 0 0 3px rgba(255,255,255,.08); }
 #scope .hint { position: absolute; left: 50%; bottom: 90px; transform: translateX(-50%); color: #cfd8ff; font-weight: 800; font-size: 14px; text-shadow: 0 1px 4px #000; }
@@ -123,6 +134,7 @@ button { font: inherit; color: inherit; }
 #pianobar .keys { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; }
 #pianobar kbd { display: inline-grid; place-items: center; min-width: 20px; height: 22px; border-radius: 5px; background: #fff; color: #2a1f33; font: 900 11px "Nunito", sans-serif; padding: 0 4px; box-shadow: 0 2px 0 #b8a9c9; }
 #pianobar kbd.bk { background: #2a2530; color: #fff; box-shadow: 0 2px 0 #000; }
+#carrybar { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); padding: 10px 14px; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 28px); font-size: 13px; white-space: nowrap; }
 #sleepov { position: fixed; inset: 0; z-index: 9; pointer-events: none; background: radial-gradient(ellipse at 50% 40%, rgba(10,12,40,.15), rgba(5,6,24,.78)); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 130px; animation: fade 1.2s; }
 #sleepov .card { pointer-events: auto; padding: 14px 18px; display: flex; gap: 14px; align-items: center; font-weight: 800; }
 #sleepov .moonic { width: 30px; height: 30px; }
@@ -172,7 +184,9 @@ body.night #tl, body.night #bar { background: rgba(14,14,34,.86); }
 .em:hover { background: rgba(255,255,255,.16); }
 .em:active { transform: scale(.92); }
 .em svg { width: 22px; height: 22px; }
-#prompt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); padding: 10px 16px; font-weight: 800; display: flex; align-items: center; gap: 10px; white-space: nowrap; cursor: pointer; transition: opacity .2s, transform .2s; }
+#prompt { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: max-content; max-width: calc(100% - 28px); transition: opacity .2s, transform .2s; pointer-events: auto; }
+#prompt .po { padding: 10px 16px; font-weight: 800; display: flex; align-items: center; gap: 10px; white-space: nowrap; cursor: pointer; }
+#prompt .po:hover { background: rgba(50,40,60,.92); }
 #prompt kbd { display: inline-grid; place-items: center; min-width: 26px; height: 26px; border-radius: 7px; background: #fff; color: #2a1f33; font: 900 13px "Nunito", sans-serif; box-shadow: 0 2px 0 #b8a9c9; padding: 0 6px; }
 #prompt.off { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(8px); }
 #tip { position: fixed; padding: 6px 10px; font-size: 13px; font-weight: 800; pointer-events: none; z-index: 11; transform: translate(14px, 14px); white-space: nowrap; }
@@ -327,6 +341,13 @@ body.touch #help { display: none; }
 	.ib .lbl { display: none; }
 	#prompt { bottom: 128px; }
 	.emotes .em { width: 36px; height: 36px; }
+	.em kbd { display: none; }
+	.wh-ring { --R: 112px; }
+	.wh-it { width: 50px; height: 50px; margin: -25px 0 0 -25px; }
+	.wh-it svg, .wh-it img { width: 24px; height: 24px; }
+	.wh-center { width: 104px; height: 104px; margin: -52px 0 0 -52px; }
+	.wh-label { font-size: 15px; }
+	.wh-hint { display: none; }
 }
 </style>
 </head>
@@ -377,8 +398,8 @@ body.touch #help { display: none; }
 		<button class="chip ib" id="b-exit" title="Back to the piano"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span class="lbl">Piano</span></button>
 	</div>
 	<div id="toasts"></div>
-	<div id="prompt" class="chip off"><kbd>E</kbd><span id="ptext"></span></div>
-	<div id="help" class="chip"><b>WASD</b> / arrows to walk, <b>Shift</b> to run<br><b>Drag</b> to look around, <b>scroll</b> to zoom<br><b>Click</b> anything to walk there and use it<br><b>Enter</b> to chat, <b>Esc</b> to stand up</div>
+	<div id="prompt" class="off"></div>
+	<div id="help" class="chip"><b>WASD</b> / arrows to walk, <b>Shift</b> to run<br><b>Drag</b> to look around, <b>scroll</b> to zoom<br><b>Click</b> anything to walk there and use it<br><b>E</b> / <b>F</b> to use things, <b>Esc</b> to stand up<br><b>Z</b> actions, <b>X</b> love, <b>C</b> mood, <b>1-6</b> quick emotes<br><b>Enter</b> to chat</div>
 	<div id="joy"><i></i></div>
 	<div id="pianobar" class="chip hidden">
 		<b>Playing piano</b>
@@ -386,30 +407,35 @@ body.touch #help { display: none; }
 		<span class="muted">or click the keys</span>
 		<button class="btn" id="pianostand">Stand up</button>
 	</div>
+	<div id="carrybar" class="chip hidden">
+		<span id="carrytxt"></span>
+		<button class="btn primary" id="carrycuddle">Cuddle</button>
+		<button class="btn" id="carrydown">Put down</button>
+	</div>
 	<div id="bottom">
 		<div id="log"></div>
 		<div id="bar" class="chip">
 			<input id="chat" maxlength="240" placeholder="Say something..." autocomplete="off">
 			<div class="emotes">
-				<button class="em" data-e="wave" title="Wave"><svg viewBox="0 0 24 24" fill="none" stroke="#ffd59e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v1M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button>
-				<button class="em" data-e="heart" title="Send hearts"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.4 3.2 4.5 7 4.5c2.1 0 3.6 1.2 5 3 1.4-1.8 2.9-3 5-3 3.8 0 6 3.9 4.5 7.3C19.5 16.4 12 21 12 21z" fill="#ff6b8b"/></svg></button>
-				<button class="em" data-e="dance" title="Dance"><svg viewBox="0 0 24 24" fill="none" stroke="#a8e6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></button>
-				<button class="em" data-e="clap" title="Clap"><svg viewBox="0 0 24 24" fill="none" stroke="#ffe08a" stroke-width="2" stroke-linecap="round"><path d="M8 13l4-6 2 1-3 6M11 15l4-6 2 1-4 7c-1.5 2.5-4.5 3-6.5 1.5S4 14 6 12l2-2"/><path d="M15 3l1-2M19 5l2-1M18 1l-1 2"/></svg></button>
-				<button class="em" id="b-more" title="More emotes and your mood"><svg viewBox="0 0 24 24" fill="none" stroke="#ffd59e" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1" fill="#ffd59e"/><circle cx="15" cy="10" r="1" fill="#ffd59e"/><path d="M8.5 14.5c1.8 2 5.2 2 7 0"/></svg></button>
-				<button class="em" data-e="dice" title="Roll a die"><svg viewBox="0 0 24 24" fill="none" stroke="#e2d6ff" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.4" fill="#e2d6ff"/><circle cx="16" cy="16" r="1.4" fill="#e2d6ff"/><circle cx="12" cy="12" r="1.4" fill="#e2d6ff"/></svg></button>
+				<button class="em" data-e="wave" title="Wave (1)"><svg viewBox="0 0 24 24" fill="none" stroke="#ffd59e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v1M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg><kbd>1</kbd></button>
+				<button class="em" data-e="heart" title="Send hearts (2)"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.4 3.2 4.5 7 4.5c2.1 0 3.6 1.2 5 3 1.4-1.8 2.9-3 5-3 3.8 0 6 3.9 4.5 7.3C19.5 16.4 12 21 12 21z" fill="#ff6b8b"/></svg><kbd>2</kbd></button>
+				<button class="em" data-e="dance" title="Dance (3)"><svg viewBox="0 0 24 24" fill="none" stroke="#a8e6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><kbd>3</kbd></button>
+				<button class="em" data-e="clap" title="Clap (4)"><svg viewBox="0 0 24 24" fill="none" stroke="#ffe08a" stroke-width="2" stroke-linecap="round"><path d="M8 13l4-6 2 1-3 6M11 15l4-6 2 1-4 7c-1.5 2.5-4.5 3-6.5 1.5S4 14 6 12l2-2"/><path d="M15 3l1-2M19 5l2-1M18 1l-1 2"/></svg><kbd>4</kbd></button>
+				<button class="em wb" id="b-wact" data-wheel="act" title="Actions (Z)"><svg viewBox="0 0 24 24" fill="none" stroke="#a8e6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v6l-4 7M12 13.5l4 7M6 9.5l6-1.5 6-3"/></svg><kbd>Z</kbd></button>
+				<button class="em wb" id="b-wlove" data-wheel="love" title="Love (X)"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.4 3.2 4.5 7 4.5c2.1 0 3.6 1.2 5 3 1.4-1.8 2.9-3 5-3 3.8 0 6 3.9 4.5 7.3C19.5 16.4 12 21 12 21z" fill="none" stroke="#ff8fb0" stroke-width="2"/><path d="M9 11.5c1 1.5 5 1.5 6 0" fill="none" stroke="#ff8fb0" stroke-width="1.8" stroke-linecap="round"/></svg><kbd>X</kbd></button>
+				<button class="em wb" id="b-wmood" data-wheel="mood" title="Your mood (C)"><svg viewBox="0 0 24 24" fill="none" stroke="#ffd59e" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1" fill="#ffd59e"/><circle cx="15" cy="10" r="1" fill="#ffd59e"/><path d="M8.5 14.5c1.8 2 5.2 2 7 0"/></svg><kbd>C</kbd></button>
+				<button class="em" data-e="dice" title="Roll a die (5)"><svg viewBox="0 0 24 24" fill="none" stroke="#e2d6ff" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.4" fill="#e2d6ff"/><circle cx="16" cy="16" r="1.4" fill="#e2d6ff"/><circle cx="12" cy="12" r="1.4" fill="#e2d6ff"/></svg><kbd>5</kbd></button>
 			</div>
 		</div>
 	</div>
 </div>
 <div id="tip" class="chip hidden"></div>
-<div id="emotemenu" class="chip hidden">
-	<h4>Actions</h4>
-	<div id="em-grid"></div>
-	<h4>Love</h4>
-	<div id="em-love"></div>
-	<p class="em-hint">Kiss, slow dance and propose walk you over to the nearest person. To cuddle, sit together: the sofa, the bed, the swing, the bean bags, the candlelit table, or someone's lap in the armchair.</p>
-	<h4>Your mood (everyone sees it)</h4>
-	<div id="em-moods"></div>
+<div id="wheel" class="hidden">
+	<div class="wh-ring" id="wh-ring">
+		<div class="wh-center"><div class="wh-title" id="wh-title"></div><div class="wh-label" id="wh-label"></div><div class="wh-sub" id="wh-sub"></div></div>
+	</div>
+	<div class="wh-tabs"><button data-wheel="act"><kbd>Z</kbd>Actions</button><button data-wheel="love"><kbd>X</kbd>Love</button><button data-wheel="mood"><kbd>C</kbd>Mood</button></div>
+	<div class="wh-hint">Number keys pick &middot; <b>Esc</b> or click outside to close</div>
 </div>
 <div id="scope" class="hidden"><div class="hint">Watch for shooting stars - Esc to stop</div></div>
 
@@ -432,7 +458,7 @@ body.touch #help { display: none; }
 	<div class="row" style="margin-top:10px;justify-content:space-between"><span class="muted">Only the person holding it can change the TV.</span><button class="btn ghost" id="rm-drop">Put down</button></div>
 </div>
 
-<div id="sleepov" class="hidden"><div class="card chip"><svg class="moonic" viewBox="0 0 24 24" fill="#cfe0ff"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><span>Sleeping... sweet dreams</span><button class="btn primary" id="wakebtn">Wake up</button></div></div>
+<div id="sleepov" class="hidden"><div class="card chip"><svg class="moonic" viewBox="0 0 24 24" fill="#cfe0ff"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><span>Sleeping... sweet dreams</span><button class="btn primary" id="wakebtn">Sit up</button><button class="btn" id="getupbtn">Get out of bed</button></div></div>
 
 <div id="fight" class="chip hidden">
 	<div class="ttl">Fight for the remote</div>
