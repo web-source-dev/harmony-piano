@@ -120,6 +120,11 @@ button { font: inherit; color: inherit; }
 .side .x { width: 32px; height: 32px; border-radius: 9px; border: none; background: rgba(255,255,255,.08); cursor: pointer; display: grid; place-items: center; }
 #dp-canvas { border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 6px 20px rgba(0,0,0,.35); touch-action: none; }
 #drawpanel .tools { margin-top: 10px; }
+#lovepanel { max-height: calc(100vh - 90px); overflow-y: auto; }
+#lovepanel .letter textarea { min-height: 150px; }
+#lovepanel .lp-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+#lovepanel .lp-row .muted { font-size: 12px; }
+#lovepanel .letters { margin-top: 14px; }
 #remotepanel { width: min(300px, calc(100% - 28px)); }
 .rm-body { background: linear-gradient(#26232c, #17151b); border-radius: 22px; padding: 14px; border: 1px solid #38333f; box-shadow: inset 0 1px 0 rgba(255,255,255,.06); }
 .rm-screen { background: #0e1a14; color: #7cff9a; font: 800 14px/1 "Nunito", monospace; padding: 10px 12px; border-radius: 10px; text-align: center; margin-bottom: 12px; box-shadow: inset 0 0 12px rgba(124,255,154,.15); }
@@ -196,6 +201,7 @@ body.night #tl, body.night #bar { background: rgba(14,14,34,.86); }
 #tip { position: fixed; padding: 6px 10px; font-size: 13px; font-weight: 800; pointer-events: none; z-index: 11; transform: translate(14px, 14px); white-space: nowrap; }
 #help { position: absolute; right: 14px; top: calc(max(14px, env(safe-area-inset-top)) + 52px); font-size: 12px; color: var(--muted); padding: 8px 12px; line-height: 1.55; max-width: 230px; transition: opacity 1.2s; }
 #help.gone { opacity: 0; pointer-events: none; }
+body.tvmode #help { display: none; }
 #help b { color: var(--text); }
 #toasts { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; align-items: center; width: min(440px, calc(100% - 28px)); pointer-events: none; }
 .toast { pointer-events: auto; padding: 12px 14px 12px 16px; display: flex; align-items: center; gap: 12px; width: 100%; font-weight: 700; font-size: 14px; animation: tIn .3s cubic-bezier(.2,1.4,.4,1); border-left: 4px solid var(--accent); }
@@ -333,6 +339,36 @@ body.touch #help { display: none; }
 .c4-col { border: none; background: transparent; cursor: pointer; border-radius: 10px; }
 .c4-col:not(:disabled):hover { background: rgba(255,255,255,.12); }
 .c4-col:disabled { cursor: default; }
+.g-pts { margin-left: 4px; color: #fff; }
+.bgrid { display: grid; gap: 2px; padding: 8px; border-radius: 14px; }
+.bgrid.gomoku { grid-template-columns: repeat(10, 34px); background: #d9b77a; }
+.bgrid.rev { grid-template-columns: repeat(8, 42px); background: #1d7a4f; }
+.bc { aspect-ratio: 1; border: none; border-radius: 6px; background: rgba(0,0,0,.08); cursor: pointer; display: grid; place-items: center; padding: 0; }
+.bgrid.rev .bc { background: rgba(0,0,0,.12); }
+.bc:not(:disabled):hover { background: rgba(255,255,255,.3); }
+.bc:disabled { cursor: default; }
+.bc.hint::after { content: ""; width: 22%; height: 22%; border-radius: 50%; background: rgba(255,255,255,.45); }
+.bc.win { box-shadow: 0 0 0 3px #fff inset; }
+.bc .st { width: 80%; height: 80%; border-radius: 50%; display: block; }
+.bc .st.p0 { background: radial-gradient(circle at 35% 35%, #ff9ccc, #e0367f); }
+.bc .st.p1 { background: radial-gradient(circle at 35% 35%, #a8f0ff, #1fa8cc); }
+.bc .st.new { animation: pop .25s; }
+.dots { display: grid; grid-template-columns: repeat(4, 12px 52px) 12px; grid-template-rows: repeat(4, 12px 52px) 12px; padding: 10px; background: rgba(255,255,255,.04); border-radius: 14px; }
+.dots .dt { width: 12px; height: 12px; border-radius: 50%; background: #fff; display: block; }
+.dots .bx { display: block; margin: 3px; border-radius: 6px; }
+.dots .bx.p0 { background: rgba(255,79,163,.45); } .dots .bx.p1 { background: rgba(65,224,255,.4); }
+.dots .eg { border: none; padding: 0; background: transparent; cursor: pointer; position: relative; }
+.dots .eg::after { content: ""; position: absolute; border-radius: 4px; background: rgba(255,255,255,.1); }
+.dots .eg.h::after { left: 2px; right: 2px; top: 3px; bottom: 3px; } .dots .eg.v::after { top: 2px; bottom: 2px; left: 3px; right: 3px; }
+.dots .eg:not(:disabled):hover::after { background: rgba(255,255,255,.45); }
+.dots .eg.p0::after { background: #ff4fa3; } .dots .eg.p1::after { background: #41e0ff; }
+.dots .eg:disabled { cursor: default; }
+.mem { display: grid; grid-template-columns: repeat(4, 74px); gap: 8px; }
+.mc { width: 74px; height: 74px; border-radius: 14px; border: none; cursor: pointer; font-size: 34px; background: linear-gradient(135deg, #7c5cff, #5b3fd1); box-shadow: inset 0 -4px 0 rgba(0,0,0,.2); transition: transform .2s; }
+.mc:not(:disabled):hover { transform: translateY(-2px); }
+.mc:disabled { cursor: default; }
+.mc.up { background: #f7f1e3; animation: pop .25s; }
+.mc.m0 { background: #5a2343; box-shadow: 0 0 0 3px #ff4fa3 inset; } .mc.m1 { background: #1d4a5a; box-shadow: 0 0 0 3px #41e0ff inset; }
 .rps { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; }
 .rps-score { font-size: 42px; font-weight: 900; } .rps-score .c0 { color: #ff8fc0; } .rps-score .c1 { color: #7fdcff; }
 .rps-pick { display: flex; gap: 10px; }
@@ -348,6 +384,9 @@ body.touch #help { display: none; }
 @media (max-width: 560px) {
 	.ttt { grid-template-columns: repeat(3, 76px); } .ttt-c { width: 76px; height: 76px; }
 	.c4-grid { grid-template-columns: repeat(7, 34px); gap: 5px; } .c4-c { width: 34px; height: 34px; }
+	.bgrid.gomoku { grid-template-columns: repeat(10, 27px); } .bgrid.rev { grid-template-columns: repeat(8, 34px); }
+	.dots { grid-template-columns: repeat(4, 12px 42px) 12px; grid-template-rows: repeat(4, 12px 42px) 12px; }
+	.mem { grid-template-columns: repeat(4, 62px); } .mc { width: 62px; height: 62px; font-size: 28px; }
 	.photos { grid-template-columns: 1fr 1fr; }
 	#log { max-height: 120px; }
 	#help { display: none; }
@@ -415,7 +454,7 @@ body.touch #help { display: none; }
 	</div>
 	<div id="toasts"></div>
 	<div id="prompt" class="off"></div>
-	<div id="help" class="chip"><b>WASD</b> / arrows to walk, <b>Shift</b> to run<br><b>Drag</b> to look around, <b>scroll</b> to zoom<br><b>Click</b> anything to walk there and use it<br><b>E</b> / <b>F</b> to use things, <b>Esc</b> to stand up<br><b>Z</b> actions, <b>X</b> love, <b>C</b> mood, <b>1-6</b> quick emotes<br><b>Enter</b> to chat</div>
+	<div id="help" class="chip"><b>WASD</b> / arrows to walk, <b>Shift</b> to run<br><b>Drag</b> to look around, <b>scroll</b> to zoom<br><b>Click</b> anything to walk there and use it<br><b>E</b> / <b>F</b> to use things, <b>Esc</b> to stand up<br><b>1</b> blow a kiss, <b>2</b> kiss, <b>3</b> pick up<br><b>Z</b> actions, <b>X</b> love, <b>C</b> mood<br><b>Enter</b> to chat</div>
 	<div id="joy"><i></i></div>
 	<div id="pianobar" class="chip hidden">
 		<b>Playing piano</b>
@@ -433,14 +472,12 @@ body.touch #help { display: none; }
 		<div id="bar" class="chip">
 			<input id="chat" maxlength="240" placeholder="Say something..." autocomplete="off">
 			<div class="emotes">
-				<button class="em" data-e="wave" title="Wave (1)"><svg viewBox="0 0 24 24" fill="none" stroke="#ffd59e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v1M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg><kbd>1</kbd></button>
-				<button class="em" data-e="heart" title="Send hearts (2)"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.4 3.2 4.5 7 4.5c2.1 0 3.6 1.2 5 3 1.4-1.8 2.9-3 5-3 3.8 0 6 3.9 4.5 7.3C19.5 16.4 12 21 12 21z" fill="#ff6b8b"/></svg><kbd>2</kbd></button>
-				<button class="em" data-e="dance" title="Dance (3)"><svg viewBox="0 0 24 24" fill="none" stroke="#a8e6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg><kbd>3</kbd></button>
-				<button class="em" data-e="clap" title="Clap (4)"><svg viewBox="0 0 24 24" fill="none" stroke="#ffe08a" stroke-width="2" stroke-linecap="round"><path d="M8 13l4-6 2 1-3 6M11 15l4-6 2 1-4 7c-1.5 2.5-4.5 3-6.5 1.5S4 14 6 12l2-2"/><path d="M15 3l1-2M19 5l2-1M18 1l-1 2"/></svg><kbd>4</kbd></button>
+				<button class="em" data-e="kiss" title="Blow a kiss (1)"><svg viewBox="0 0 24 24" fill="none" stroke="#ff8fb0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12c2-2 4-2 6 0 2-2 4-2 6 0-2 3-4 4-6 4s-4-1-6-4z"/><path d="M17 5l2-2M19 8h3M14 4l.5-2.5"/></svg><kbd>1</kbd></button>
+				<button class="em" data-e="smooch" title="Kiss (2)"><svg viewBox="0 0 24 24" fill="none" stroke="#ff6b8b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12c2.2-2.6 4.8-2.6 8 0 3.2-2.6 5.8-2.6 8 0-2.6 3.6-5 4.6-8 4.6S6.6 15.6 4 12z"/><path d="M4 12h16"/></svg><kbd>2</kbd></button>
+				<button class="em" data-e="carry" title="Pick up (3)"><svg viewBox="0 0 24 24" fill="none" stroke="#ffd59e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="4" r="2"/><circle cx="17" cy="7.5" r="1.8"/><path d="M9 7v7l-2 7M9 14l2 7M9 9l3 3 7-1M12 12l-5 1.5M15.5 11l2.5 2.5h3"/></svg><kbd>3</kbd></button>
 				<button class="em wb" id="b-wact" data-wheel="act" title="Actions (Z)"><svg viewBox="0 0 24 24" fill="none" stroke="#a8e6ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.5" r="2"/><path d="M12 7.5v6l-4 7M12 13.5l4 7M6 9.5l6-1.5 6-3"/></svg><kbd>Z</kbd></button>
 				<button class="em wb" id="b-wlove" data-wheel="love" title="Love (X)"><svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.4 3.2 4.5 7 4.5c2.1 0 3.6 1.2 5 3 1.4-1.8 2.9-3 5-3 3.8 0 6 3.9 4.5 7.3C19.5 16.4 12 21 12 21z" fill="none" stroke="#ff8fb0" stroke-width="2"/><path d="M9 11.5c1 1.5 5 1.5 6 0" fill="none" stroke="#ff8fb0" stroke-width="1.8" stroke-linecap="round"/></svg><kbd>X</kbd></button>
 				<button class="em wb" id="b-wmood" data-wheel="mood" title="Your mood (C)"><svg viewBox="0 0 24 24" fill="none" stroke="#ffd59e" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="9" cy="10" r="1" fill="#ffd59e"/><circle cx="15" cy="10" r="1" fill="#ffd59e"/><path d="M8.5 14.5c1.8 2 5.2 2 7 0"/></svg><kbd>C</kbd></button>
-				<button class="em" data-e="dice" title="Roll a die (5)"><svg viewBox="0 0 24 24" fill="none" stroke="#e2d6ff" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.4" fill="#e2d6ff"/><circle cx="16" cy="16" r="1.4" fill="#e2d6ff"/><circle cx="12" cy="12" r="1.4" fill="#e2d6ff"/></svg><kbd>5</kbd></button>
 			</div>
 		</div>
 	</div>
@@ -455,6 +492,10 @@ body.touch #help { display: none; }
 </div>
 <div id="scope" class="hidden"><div class="hint">Watch for shooting stars - Esc to stop</div></div>
 
+<div id="lovepanel" class="side chip hidden">
+	<h3><span class="grow" id="lp-title">Love notes</span><button class="x" id="lp-close" aria-label="Close love notes"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></h3>
+	<div id="lp-body"></div>
+</div>
 <div id="drawpanel" class="side chip hidden">
 	<h3><span class="grow">Drawing easel</span><button class="x" id="dp-close" aria-label="Stop drawing"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></h3>
 	<div id="dp-canvas"></div>

@@ -348,7 +348,8 @@ export function buildRoom(scene) {
 	brickSeg(win.x1 - win.x0, H + 0.6 - win.y1, (win.x0 + win.x1) / 2, (H + 0.6 + win.y1) / 2);
 	add(scene, new THREE.BoxGeometry(14.6, 0.25, 12.6), mat("#4a4048", 0.9), 0, H + 0.13, 0);
 	add(scene, new THREE.BoxGeometry(14.6, 0.35, 0.2), mat("#d8cfc4", 0.8), 0, H + 0.42, -6.25);
-	// French doors standing open onto the terrace
+	// French doors onto the terrace (open by default; anyone can close / open them)
+	const doorLeaves = [];
 	{
 		const dw = DOOR.x1 - DOOR.x0, dcx = (DOOR.x0 + DOOR.x1) / 2;
 		const fm = mat("#fbf8f2", 0.45);
@@ -359,6 +360,8 @@ export function buildRoom(scene) {
 		const glassM = new THREE.MeshPhysicalMaterial({ color: "#d8ecff", transparent: true, opacity: 0.18, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
 		for (const side of [-1, 1]) {
 			const hinge = group(scene, side < 0 ? DOOR.x0 : DOOR.x1, 0, -6.22, side < 0 ? -1.75 : 1.75);
+			hinge.userData.openRot = hinge.rotation.y;
+			doorLeaves.push(hinge);
 			const leaf = dw / 2;
 			const ox = side < 0 ? leaf / 2 : -leaf / 2;
 			add(hinge, new THREE.BoxGeometry(leaf, 0.08, 0.05), fm, ox, 0.04, 0);
@@ -371,7 +374,14 @@ export function buildRoom(scene) {
 			hinge.add(gl);
 			add(hinge, new THREE.SphereGeometry(0.025, 10, 8), brass, ox + (side < 0 ? 1 : -1) * (leaf / 2 - 0.08), 1.05, 0.04);
 		}
+		// stand on whichever side you're on: inside the room, or out on the terrace
+		interact("terraceDoor", { label: "Close the terrace door", stand: [dcx, -5.45], standOut: [dcx, -6.95] }, ...doorLeaves);
 	}
+	const terraceDoor = { open: true };
+	updaters.push(dt => {
+		const k = Math.min(1, dt * 5);
+		doorLeaves.forEach(h => { const want = terraceDoor.open ? h.userData.openRot : 0; h.rotation.y += (want - h.rotation.y) * k; });
+	});
 	const frameM = mat("#fbf8f2", 0.45);
 	const wcx = (win.x0 + win.x1) / 2, wcy = (win.y0 + win.y1) / 2, ww = win.x1 - win.x0, wh = win.y1 - win.y0;
 	add(scene, new THREE.BoxGeometry(ww + 0.16, 0.08, 0.26), frameM, wcx, win.y1 + 0.04, -6.05);
@@ -542,8 +552,6 @@ export function buildRoom(scene) {
 	updaters.push((dt, t) => { const f = 0.85 + Math.sin(t * 13) * 0.08 + Math.sin(t * 7.3) * 0.07; flame.scale.set(1, 2 * f, 1); candleLight.intensity = 0.6 * f; });
 	box(-3.3, -1.9, -3.88, -3.12);
 	interact("notes", { label: "Open our shared notebook", stand: [-1.55, -3.5] }, book);
-	// mugs from the coffee machine appear here
-	const mugSpots = [[-0.05, -0.18], [0.18, -0.22], [-0.15, 0.2]];
 
 	// Floor lamp
 	const lamp = group(scene, -4.35, 0, -0.95);
@@ -868,7 +876,9 @@ export function buildRoom(scene) {
 	for (const sx of [-0.2, 0.2]) add(chair, new THREE.CylinderGeometry(0.016, 0.016, 0.5, 8), wood, sx, 0.73, -0.2);
 	for (let i = 0; i < 3; i++) add(chair, new THREE.BoxGeometry(0.4, 0.05, 0.02), wood, 0, 0.62 + i * 0.13, -0.2);
 	box(4.95, 6.25, 5.25, 6);
-	interact("desk", { label: "Write a love note", stand: [5.0, 4.5], face: 0.6 }, desk, chair);
+	box(5.37, 5.83, 4.72, 5.18);
+	sitSpots.push({ id: "deskChair", x: 5.6, z: 4.9, h: 0, y: 0.04 });
+	interact("desk", { label: "Write a love note", stand: [5.0, 4.5], face: 0.6, sit: ["deskChair"] }, desk, chair);
 
 	// ------------------------------------------------------------ left wall
 	// Memory photo frames + console table
@@ -976,7 +986,8 @@ export function buildRoom(scene) {
 	box(-7, -6.3, 2.55, 6);
 	interact("coffee", { label: "Make coffee", stand: [-5.75, 3.75], face: -Math.PI / 2 }, cm);
 
-	const coffee = { brewing: 0, mugs: [] };
+	const coffee = { brewing: 0, ready: false };
+	coffee.setReady = on => { coffee.ready = !!on; if (coffee.brewing <= 0) { brewCup.visible = coffee.ready; brewCup.userData.fill.scale.y = 1; } };
 	const steamParts = [];
 	const steamM = new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.35, depthWrite: false });
 	function emitSteam(worldPos, n) {
@@ -997,7 +1008,8 @@ export function buildRoom(scene) {
 			brewCup.visible = true;
 			brewCup.userData.fill.scale.y = Math.max(0.01, Math.min(1, (p - 0.25) / 0.6));
 			if (Math.random() < 0.5) emitSteam(cm.localToWorld(new THREE.Vector3(0, 0.47, -0.05)), 1);
-			if (coffee.brewing <= 0) { stream.visible = false; brewCup.visible = false; cmLed.material.color.set("#3a3a3a"); if (coffee.onDone) coffee.onDone(); }
+			// the finished cup waits under the spout until someone picks it up
+			if (coffee.brewing <= 0) { stream.visible = false; brewCup.userData.fill.scale.y = 1; cmLed.material.color.set("#3a3a3a"); if (coffee.onDone) coffee.onDone(); }
 		}
 		for (let i = steamParts.length - 1; i >= 0; i--) {
 			const s = steamParts[i];
@@ -1008,19 +1020,8 @@ export function buildRoom(scene) {
 			s.material.opacity = Math.max(0, 0.35 - s.userData.life * 0.22);
 			if (s.material.opacity <= 0) { scene.remove(s); s.geometry.dispose(); s.material.dispose(); steamParts.splice(i, 1); }
 		}
-		coffee.mugs.forEach(m => { if (m.visible && Math.random() < dt * 3) emitSteam(m.localToWorld(new THREE.Vector3(0, 0.1, 0)), 1); });
+		if (brewCup.visible && coffee.brewing <= 0 && Math.random() < dt * 3) emitSteam(brewCup.localToWorld(new THREE.Vector3(0, 0.1, 0)), 1);
 	});
-	// mugs displayed on the coffee table
-	for (let i = 0; i < 3; i++) {
-		const m = makeMug(["#f7f1e3", "#e07a5f", "#81b29a"][i]);
-		m.position.set(mugSpots[i][0], 0.45, mugSpots[i][1]);
-		m.rotation.y = i * 1.3;
-		m.visible = false;
-		m.userData.fill.scale.y = 1;
-		ct.add(m);
-		coffee.mugs.push(m);
-	}
-	interact("mug", { label: "Drink a coffee", stand: [-3.8, -3.3] }, ...coffee.mugs);
 
 	// ------------------------------------------------------------ bed corner
 	const bedG = group(scene, -3.2, 0, 4.92, Math.PI);
@@ -1259,6 +1260,7 @@ export function buildRoom(scene) {
 		easel: terrace.easel,
 		terrace,
 		photos, setPlant, waterFx, record, coffee, ball, envs,
+		terraceDoor, setTerraceDoor: on => { terraceDoor.open = !!on; },
 		// lights that only matter in one area; the world hides the other area's lights (cheaper shading)
 		areaLights: { room: [tvLight, fairyLight, nightLight, lampLight], terrace: terrace.lights },
 		// small accent lights: area-only too, and switched off entirely on the low graphics setting

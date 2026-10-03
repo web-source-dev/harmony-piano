@@ -794,6 +794,9 @@ export class Avatar {
 			P.headY = Math.max(-0.95, Math.min(0.95, this.lookYaw));
 		}
 
+		// carrying a mug: forearm held level out in front so it stays upright
+		if (this.propKind === "mug" && !up && base !== "sleep" && base !== "carried") { P.arm[0].x = -0.2; P.arm[0].z = -0.15; P.arm[0].e = -1.35; }
+
 		// ---- upper layer
 		if (up === "wave") {
 			P.arm[0].z = -2.65 + Math.sin(t * 9) * 0.22; P.arm[0].x = -0.1; P.arm[0].e = -0.35 + Math.sin(t * 9) * 0.35;
@@ -822,6 +825,12 @@ export class Avatar {
 			const s = (Math.sin(t * 2.2) + 1) / 2;
 			P.arm[0].x = -1.25 - s * 0.35; P.arm[0].z = -0.35; P.arm[0].e = -1.7 - s * 0.25; P.arm[0].y = 0.3;
 			P.headX = -0.12 - s * 0.18;
+		} else if (up === "write") {
+			// bent over the desk, pen scribbling, other hand holding the paper
+			const w = Math.sin(t * 14) * 0.03;
+			P.arm[0].x = -0.8 + w; P.arm[0].z = 0.12 + Math.sin(t * 3.1) * 0.05; P.arm[0].e = -1.05;
+			P.arm[1].x = -0.65; P.arm[1].z = -0.2; P.arm[1].e = -1.25;
+			P.torsoX += 0.14; P.headX = 0.32;
 		} else if (up === "paint") {
 			const { u, v } = this.paintUV;
 			P.arm[0].x = -1.15 - (0.5 - v) * 0.8 + Math.sin(t * 9) * 0.02;

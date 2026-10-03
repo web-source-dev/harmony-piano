@@ -186,7 +186,17 @@ export function buildTerrace(scene, h) {
 	const fireLight = new THREE.PointLight("#ff8a3d", 5, 7, 2);
 	fireLight.position.set(fx, 0.6, fz);
 	scene.add(fireLight);
-	const embers = [];
+	// a fixed pool of embers, reused (creating and disposing meshes every few frames churned the GPU and GC)
+	const emberGeo = new THREE.SphereGeometry(0.01, 4, 3);
+	const embers = Array.from({ length: 20 }, () => {
+		const e = new THREE.Mesh(emberGeo, new THREE.MeshBasicMaterial({ color: "#ffb347", toneMapped: false, transparent: true }));
+		e.visible = false;
+		e.userData.v = new THREE.Vector3();
+		e.userData.life = 0;
+		scene.add(e);
+		return e;
+	});
+	let fireOn = true;
 	updaters.push((dt, t) => {
 		flames.forEach((f, i) => {
 			const k = 0.75 + Math.sin(t * 9 + f.userData.ph) * 0.2 + Math.sin(t * 15 + i) * 0.1;
@@ -194,20 +204,22 @@ export function buildTerrace(scene, h) {
 			f.position.y = 0.12 + 0.225 * k;
 			f.rotation.y += dt;
 		});
-		fireLight.intensity = 4.2 + Math.sin(t * 13) * 0.6 + Math.sin(t * 7.7) * 0.5;
-		if (Math.random() < dt * 8) {
-			const e = new THREE.Mesh(new THREE.SphereGeometry(0.01, 4, 3), new THREE.MeshBasicMaterial({ color: "#ffb347", toneMapped: false, transparent: true }));
-			e.position.set(fx + (Math.random() - 0.5) * 0.3, 0.4, fz + (Math.random() - 0.5) * 0.3);
-			e.userData.v = new THREE.Vector3((Math.random() - 0.5) * 0.2, 0.6 + Math.random() * 0.6, (Math.random() - 0.5) * 0.2);
-			e.userData.life = 0;
-			scene.add(e); embers.push(e);
+		fireLight.intensity = fireOn ? 4.2 + Math.sin(t * 13) * 0.6 + Math.sin(t * 7.7) * 0.5 : 0;
+		if (fireOn && Math.random() < dt * 8) {
+			const e = embers.find(e => !e.visible);
+			if (e) {
+				e.position.set(fx + (Math.random() - 0.5) * 0.3, 0.4, fz + (Math.random() - 0.5) * 0.3);
+				e.userData.v.set((Math.random() - 0.5) * 0.2, 0.6 + Math.random() * 0.6, (Math.random() - 0.5) * 0.2);
+				e.userData.life = 0;
+				e.visible = true;
+			}
 		}
-		for (let i = embers.length - 1; i >= 0; i--) {
-			const e = embers[i];
+		for (const e of embers) {
+			if (!e.visible) continue;
 			e.userData.life += dt;
 			e.position.addScaledVector(e.userData.v, dt);
 			e.material.opacity = Math.max(0, 1 - e.userData.life / 1.8);
-			if (e.userData.life > 1.8) { scene.remove(e); e.geometry.dispose(); e.material.dispose(); embers.splice(i, 1); }
+			if (e.userData.life > 1.8) e.visible = false;
 		}
 	});
 	box(fx - 0.62, fx + 0.62, fz - 0.62, fz + 0.62);
@@ -305,6 +317,7 @@ export function buildTerrace(scene, h) {
 		swing, easel: { canvas: easelCanvas, tex: easelTex, point: easelPoint, stands: easelStands, face: Math.PI },
 		telescope: { eyepiece, dir: MOON, stand: scopeStand },
 		fire: { x: fx, z: fz },
-		setFireOn: on => { flames.forEach(f => { f.visible = on; }); fireLight.visible = on; }
+		// dim the light rather than hiding it: a hidden light changes the light count and recompiles every shader
+		setFireOn: on => { fireOn = on; flames.forEach(f => { f.visible = on; }); }
 	};
 }
