@@ -365,7 +365,9 @@ function setWorldState(room, k, v, ts) {
 	return true;
 }
 function listLibraryImages() {
-	return listMedia().library.filter(function (m) { return m.kind === "image"; }).map(function (m) {
+	// Library pictures first, then images shared in rooms (room-media/).
+	var media = listMedia();
+	return media.library.concat(media.recent).filter(function (m) { return m.kind === "image"; }).map(function (m) {
 		return { url: m.url, title: m.title || m.file };
 	});
 }

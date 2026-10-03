@@ -1233,9 +1233,10 @@ function openPhotoLibrary(body, slot) {
 		});
 	};
 	if (libCache) { show(libCache); return; }
-	fetch("/api/world/library", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(j => {
-		libCache = (j && j.images) || [];
-		if (modalKind === "photos" && !box.classList.contains("hidden")) show(libCache);
+	fetch("/api/world/library", { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(j => {
+		const list = (j && j.images) || [];
+		libCache = list.length ? list : null;
+		if (modalKind === "photos" && !box.classList.contains("hidden")) show(list);
 	}).catch(() => { grid.innerHTML = `<p class="muted">Couldn't load the media library.</p>`; });
 }
 
