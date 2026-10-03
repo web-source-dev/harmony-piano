@@ -84,9 +84,13 @@ button { font: inherit; color: inherit; }
 /* emote + mood menu */
 #emotemenu { position: absolute; left: 50%; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 66px); transform: translateX(-50%); width: min(620px, calc(100% - 28px)); padding: 14px; border-radius: 18px; z-index: 11; animation: pop .22s cubic-bezier(.2,1.3,.4,1); max-height: 60vh; overflow-y: auto; }
 #emotemenu h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-#em-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin-bottom: 14px; }
+#em-grid, #em-love { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin-bottom: 14px; }
 .emb { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 9px 4px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,.05); cursor: pointer; font-size: 12px; font-weight: 800; }
 .emb:hover { background: rgba(255,255,255,.12); }
+#em-love { margin-bottom: 6px; }
+.emb.love { border-color: rgba(255,120,160,.35); background: rgba(255,90,140,.08); }
+.emb.love:hover { background: rgba(255,90,140,.18); }
+.em-hint { margin: 0 0 14px; font-size: 12px; line-height: 1.4; color: var(--muted); }
 .emb .ei { width: 26px; height: 26px; display: block; }
 .emb .ei svg { width: 26px; height: 26px; }
 #em-moods { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
@@ -401,6 +405,9 @@ body.touch #help { display: none; }
 <div id="emotemenu" class="chip hidden">
 	<h4>Actions</h4>
 	<div id="em-grid"></div>
+	<h4>Love</h4>
+	<div id="em-love"></div>
+	<p class="em-hint">Kiss, slow dance and propose walk you over to the nearest person. To cuddle, sit together: the sofa, the bed, the swing, the bean bags, the candlelit table, or someone's lap in the armchair.</p>
 	<h4>Your mood (everyone sees it)</h4>
 	<div id="em-moods"></div>
 </div>

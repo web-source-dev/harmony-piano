@@ -572,6 +572,11 @@ export function buildRoom(scene) {
 	for (const sx of [-0.38, 0.38]) for (const sz of [-0.36, 0.36]) add(arm, new THREE.CylinderGeometry(0.02, 0.015, 0.16, 8), darkWood, sx, 0.08, sz);
 	box(-0.05, 0.85, -4.55, -3.65);
 	sitSpots.push({ id: "armchair", x: 0.4 + Math.sin(-Math.PI / 2 - 0.55) * 0.08, z: -4.1 + Math.cos(-Math.PI / 2 - 0.55) * 0.08, h: -Math.PI / 2 - 0.55, y: 0.13 });
+	// curled up sideways on the lap of whoever is in the armchair
+	{
+		const a = sitSpots[sitSpots.length - 1];
+		sitSpots.push({ id: "armchairLap", x: a.x + Math.sin(a.h) * 0.22, z: a.z + Math.cos(a.h) * 0.22, h: a.h + Math.PI / 2, y: a.y + 0.22, lap: "armchair" });
+	}
 	interact("armchair", { label: "Sit in the armchair", stand: [-0.4, -3.6], sit: ["armchair"] }, arm);
 
 	// Ceiling pendant light (main light)

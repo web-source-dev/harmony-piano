@@ -8,7 +8,10 @@
  * Animation is two layers:
  *   anim  (base)  : "idle" (stand/walk/run from speed) | "sit" | "sleep"
  *   upper (arms)  : null | "wave" | "dance" | "clap" | "heart" | "drink" |
- *                   "paint" | "tug" | "piano"
+ *                   "paint" | "tug" | "piano" | ... and the love ones:
+ *                   "blush" | "lovestruck" | "heartarms" | "wink" | "propose" |
+ *                   "cuddle" | "smooch" | "cheekkiss" | "slowdance"
+ *                   (the couple ones read `coupleSide` to lean the right way)
  * The root group sits on the floor at the character's feet and faces +Z.
  */
 import * as THREE from "three";
@@ -27,6 +30,10 @@ export const MOODS = [
 	{ id: "angry", label: "Angry", color: "#ff595e" }
 ];
 const MOOD_COLOR = Object.fromEntries(MOODS.map(m => [m.id, m.color]));
+// arm-layer animations that make the cheeks go pink
+const LOVE_UPPERS = new Set(["blush", "lovestruck", "heartarms", "smooch", "cheekkiss", "cuddle", "slowdance", "propose", "kiss", "hug"]);
+// solo ones also float little hearts
+const HEART_UPPERS = new Set(["blush", "lovestruck", "heartarms"]);
 
 // A tiny face that shows a mood (drawn, not an emoji) - used on name tags and in the HUD.
 export function drawMoodFace(g, x, y, r, mood) {
@@ -191,6 +198,20 @@ function makeProp(kind) {
 		}
 		g.position.set(0, -0.07, 0.03);
 		g.rotation.x = Math.PI / 2.4;
+	} else if (kind === "ring") {
+		// open velvet box with a sparkly ring, held out on the palm
+		const velvet = new THREE.MeshStandardMaterial({ color: "#a3123a", roughness: 0.85 });
+		g.add(mesh(new RoundedBoxGeometry(0.07, 0.04, 0.07, 2, 0.008), velvet));
+		const lid = mesh(new RoundedBoxGeometry(0.07, 0.012, 0.07, 2, 0.005), velvet);
+		lid.position.set(0, 0.045, -0.04); lid.rotation.x = -1.25; g.add(lid);
+		const gold = new THREE.MeshStandardMaterial({ color: "#ffd36b", metalness: 1, roughness: 0.22 });
+		const band = mesh(new THREE.TorusGeometry(0.017, 0.004, 8, 20), gold);
+		band.position.y = 0.035; g.add(band);
+		const gem = mesh(new THREE.OctahedronGeometry(0.011), new THREE.MeshStandardMaterial({ color: "#e8f6ff", emissive: "#bfe6ff", emissiveIntensity: 0.6, metalness: 0.2, roughness: 0.05 }));
+		gem.position.y = 0.058; g.add(gem);
+		g.userData.gem = gem;
+		g.position.set(0, -0.06, 0.05);
+		g.rotation.x = Math.PI / 2;
 	}
 	return g;
 }
@@ -215,6 +236,7 @@ export class Avatar {
 		this.paintUV = { u: 0.5, v: 0.5 };
 		this.pianoHits = [0, 0];
 		this.lookYaw = null;   // desired head turn (radians, relative), or null
+		this.coupleSide = 0;   // where the person we're cuddling/kissing is: -1 right, 1 left, 0 in front
 		this.prop = null;
 		this.zzz = [];
 		this.mood = "happy";
@@ -260,7 +282,7 @@ export class Avatar {
 		const iris = new THREE.MeshStandardMaterial({ color: female ? "#5a3a2a" : "#3d2a1f", roughness: 0.2 });
 		const lip = new THREE.MeshStandardMaterial({ color: female ? "#c9566a" : skinC.clone().multiplyScalar(0.72), roughness: 0.45 });
 		const blush = new THREE.MeshBasicMaterial({ color: "#ff8fa3", transparent: true, opacity: female ? 0.35 : 0.18, depthWrite: false });
-		this.blushM = blush; this.blushBase = blush.opacity;
+		this.blushM = blush; this.blushBase = blush.opacity; this._rosy = false;
 
 		const body = new THREE.Group();
 		this.body = body;
@@ -869,6 +891,76 @@ export class Avatar {
 			P.leg[0].x = 0.4; P.leg[0].k = 0.3;
 		}
 
+		// ---- love layer (hands that touch the other person are placed by IK in world.js)
+		const side = this.coupleSide;
+		const lying = base === "sleep";
+		if (up === "blush") {
+			// hands on the cheeks, swaying shyly
+			P.arm[0].x = P.arm[1].x = -1.7; P.arm[0].z = 0.3; P.arm[1].z = -0.3; P.arm[0].e = P.arm[1].e = -2.4;
+			P.headX = 0.18; P.headZ = Math.sin(t * 2.2) * 0.16; P.torsoY = Math.sin(t * 2.2) * 0.12;
+		} else if (up === "lovestruck") {
+			// hands clasped under the chin, dreamy head tilt
+			P.arm[0].x = P.arm[1].x = -1.3; P.arm[0].z = 0.32; P.arm[1].z = -0.32; P.arm[0].e = P.arm[1].e = -2.1;
+			P.headX = -0.12; P.headZ = Math.sin(t * 1.6) * 0.2; P.bodyRY = Math.sin(t * 1.6) * 0.08;
+			if (base === "idle" && !moving) P.bodyY = -Math.abs(Math.sin(t * 3.2)) * 0.02;
+		} else if (up === "heartarms") {
+			// arms make a big heart over the head (hands meet via IK)
+			P.arm[0].z = -2.45; P.arm[1].z = 2.45; P.arm[0].e = P.arm[1].e = -1.2;
+			P.headX = -0.1; P.torsoZ = Math.sin(t * 2) * 0.05;
+		} else if (up === "wink") {
+			// finger-gun wink
+			P.arm[0].x = -1.35; P.arm[0].z = -0.1; P.arm[0].e = -0.25;
+			P.headZ = 0.14; P.headX = -0.05;
+		} else if (up === "propose") {
+			// down on one knee, ring held out, looking up at them
+			const k = Math.min(1, ut * 2);
+			P.bodyY = -0.42 * k;
+			P.leg[0].x = -1.45 * k; P.leg[0].k = 1.5 * k; P.leg[0].z = -0.05;
+			P.leg[1].x = 0.15 * k; P.leg[1].k = 1.65 * k; P.leg[1].z = 0.05;
+			P.foot[1] = 0.6 * k;
+			P.torsoX = 0.05;
+			P.arm[0].x = -1.45; P.arm[0].z = -0.05; P.arm[0].e = -0.35 + Math.sin(t * 3) * 0.04;
+			P.arm[1].x = -0.55; P.arm[1].z = 0.1; P.arm[1].e = -0.9;
+			P.headX = -0.3;
+		} else if (up === "cuddle" || up === "smooch" || up === "cheekkiss") {
+			const kiss = up !== "cuddle";
+			if (lying) {
+				// roll onto your side toward them
+				P.bodyRY = side * (kiss ? 1.0 : 0.85);
+				P.headY = side * (kiss ? 0.45 : 0.3);
+				P.arm[0].e = P.arm[1].e = -0.6;
+			} else if (side) {
+				// side by side (sofa, swing, bean bags, a lap): lean in, head on their shoulder
+				P.torsoZ = -side * (kiss ? 0.24 : 0.17);
+				P.headZ = -side * (kiss ? 0.12 : 0.34);
+				P.headY = side * (kiss ? 0.95 : 0.3);
+				P.headX = kiss ? -0.05 : 0.08;
+			} else if (base === "sit") {
+				// across a table: lean forward on the elbows toward them
+				P.torsoX = kiss ? 0.32 : 0.14; P.headX = kiss ? -0.12 : 0.02;
+				P.arm[0].x = P.arm[1].x = -1.1; P.arm[0].e = P.arm[1].e = -0.5;
+				P.headZ = kiss ? 0.22 : Math.sin(t * 1.3) * 0.06;
+			} else {
+				// standing face to face
+				P.torsoX = kiss ? 0.1 : 0.04; P.headX = kiss ? 0.06 : 0;
+				P.headZ = kiss ? (up === "cheekkiss" ? 0.38 : 0.24) : 0;
+				P.headY = up === "cheekkiss" ? 0.32 : 0;
+				P.arm[0].x = P.arm[1].x = -1.0; P.arm[0].e = P.arm[1].e = -0.8;
+				if (up === "smooch") { P.leg[1].x = 0.3; P.leg[1].k = 0.7; P.foot[1] = 0.4; }   // the little foot pop
+			}
+			if (kiss && ut > 0.35) P.eyes = 0.05;
+			if (up === "cuddle" && !lying && side) P.eyes = (t % 6) < 2 ? 0.05 : 1;   // drowsy, content blinks
+		} else if (up === "slowdance") {
+			const b = t * 1.3;
+			P.bodyRY = Math.sin(b) * 0.12;
+			P.torsoZ = Math.sin(b) * 0.05;
+			P.bodyY = -Math.abs(Math.sin(b)) * 0.02;
+			P.leg[0].x = Math.max(0, Math.sin(b)) * 0.18; P.leg[1].x = Math.max(0, -Math.sin(b)) * 0.18;
+			P.leg[0].k = Math.max(0, Math.sin(b)) * 0.25; P.leg[1].k = Math.max(0, -Math.sin(b)) * 0.25;
+			P.arm[0].x = P.arm[1].x = -1.4; P.arm[0].e = P.arm[1].e = -0.7;
+			P.headZ = 0.18 + Math.sin(b) * 0.05; P.headX = 0.05;
+		}
+
 		// ---- apply with smoothing
 		const B = this.body, T = this.torso, H = this.head;
 		this._e(B.position, "y", P.bodyY, k);
@@ -896,7 +988,12 @@ export class Avatar {
 		}
 		// blink (or closed while asleep)
 		const blink = P.eyes < 0.5 ? 1 : ((t % 4.1) < 0.13 ? 1 : 0);
-		this.lids.forEach(l => { const target = blink ? 1.45 : -0.45; l.rotation.x += (target - l.rotation.x) * Math.min(1, dt * 30); if (l.userData.lash) l.userData.lash.visible = !blink; });
+		const wink = up === "wink" && ut > 0.25 && ut < 1.1;
+		this.lids.forEach((l, i) => { const shut = blink || (wink && i === 0); const target = shut ? 1.45 : -0.45; l.rotation.x += (target - l.rotation.x) * Math.min(1, dt * 30); if (l.userData.lash) l.userData.lash.visible = !shut; });
+		// rosy cheeks while being sweet
+		const rosy = LOVE_UPPERS.has(up);
+		if (rosy !== this._rosy) { this._rosy = rosy; if (rosy) this.blushM.opacity = 0.85; else this.applyFace(); }
+		if (this.prop && this.prop.userData.gem) this.prop.userData.gem.rotation.y += dt * 3;
 		const openMouth = up === "laugh" || up === "yawn" || up === "cheer" || (mood === "excited" && !up) || (mood === "sleepy" && (t % 7) < 1.2);
 		this.mouthO.visible = openMouth && base !== "sleep";
 		if (openMouth) this.mouthO.scale.y = up === "yawn" || mood === "sleepy" ? 1.4 : 0.8 + Math.abs(Math.sin(t * 16)) * 0.4;
@@ -914,7 +1011,7 @@ export class Avatar {
 		this.propHolder.visible = !!this.prop;
 
 		// sleepy z's
-		if (base === "sleep") {
+		if (base === "sleep" && !up) {
 			if (!this.zzz.length || t - this.zzz[this.zzz.length - 1].userData.born > 1.1) {
 				const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: ZZZ_TEX, transparent: true, depthWrite: false }));
 				s.userData.born = t;
@@ -930,7 +1027,7 @@ export class Avatar {
 			s.position.set(0.1 + Math.sin(age * 2) * 0.05, 1.6 + age * 0.05, 0.3 + age * 0.15);
 			s.scale.setScalar(0.1 + age * 0.06);
 			s.material.opacity = Math.max(0, 1 - age / 3);
-			if (age > 3 || base !== "sleep") { this.root.remove(s); s.material.dispose(); this.zzz.splice(i, 1); }
+			if (age > 3 || base !== "sleep" || up) { this.root.remove(s); s.material.dispose(); this.zzz.splice(i, 1); }
 		}
 
 		// name tag + bubble ride just above the head
@@ -950,10 +1047,11 @@ export class Avatar {
 	updateMoodFx(dt, base, up) {
 		this.moodT += dt;
 		const m = this.mood;
-		if (base !== "sleep" && this.moodT > (m === "angry" ? 0.5 : 1.8) && (m === "angry" || m === "love")) {
+		const hearts = m === "love" || HEART_UPPERS.has(up);
+		if (base !== "sleep" && this.moodT > (m === "angry" && !hearts ? 0.5 : HEART_UPPERS.has(up) ? 0.45 : 1.8) && (m === "angry" || hearts)) {
 			this.moodT = 0;
 			let o;
-			if (m === "angry") o = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.7, depthWrite: false }));
+			if (m === "angry" && !hearts) o = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.7, depthWrite: false }));
 			else {
 				const sh = new THREE.Shape();
 				sh.moveTo(0, -0.03); sh.bezierCurveTo(-0.04, 0, -0.04, 0.035, 0, 0.02); sh.bezierCurveTo(0.04, 0.035, 0.04, 0, 0, -0.03);
@@ -970,7 +1068,7 @@ export class Avatar {
 			o.userData.life += dt;
 			o.position.y += dt * 0.35;
 			o.position.x += o.userData.side * dt * 0.08;
-			o.scale.setScalar(1 + o.userData.life * (m === "angry" ? 1.5 : 0.3));
+			o.scale.setScalar(1 + o.userData.life * (o.geometry.type === "SphereGeometry" ? 1.5 : 0.3));
 			o.material.opacity = Math.max(0, 0.8 - o.userData.life * 0.6);
 			if (o.userData.life > 1.3) { this.root.remove(o); o.geometry.dispose(); o.material.dispose(); this.moodFx.splice(i, 1); }
 		}

@@ -204,6 +204,11 @@ export class WorldAudio {
 			case "clap": noise(0.08, 1800, 0.8, 0.35); noise(0.08, 1500, 0.8, 0.25, 0.09); break;
 			case "laugh": for (let i = 0; i < 6; i++) tone(520 - i * 18, 380 - i * 18, 0.12, "triangle", 0.07, i * 0.16); break;
 			case "page": noise(0.25, 2500, 0.5, 0.08); break;
+			// little lip "smack" (cheek kiss) / a longer "mmm-wah" with a chime (kiss)
+			case "smack": noise(0.05, 2400, 2.5, 0.3); tone(900, 1500, 0.07, "sine", 0.08); break;
+			case "smooch": tone(200, 260, 0.3, "sine", 0.06); noise(0.06, 2200, 2.5, 0.32, 0.32); tone(1100, 1700, 0.08, "sine", 0.09, 0.32); [0, 4, 7].forEach((n, i) => tone(mtof(84 + n), 0, 0.7, "triangle", 0.06, 0.45 + i * 0.08)); break;
+			case "wink": tone(1600, 2400, 0.08, "sine", 0.08); tone(2400, 0, 0.25, "triangle", 0.05, 0.08); break;
+			case "yes": [0, 4, 7, 12, 16, 19, 24].forEach((n, i) => tone(mtof(67 + n), 0, 0.9, "triangle", 0.09, i * 0.09)); noise(0.8, 6000, 0.5, 0.05, 0.6, "highpass"); break;
 		}
 	}
 }
