@@ -3273,6 +3273,8 @@ function updatePrompt() {
 			if (c && k) opts.push({ k, label: "Pick up the coffee", fn: () => pickCup(c.id) });
 		}
 	}
+	// seated / lying down: always offer a way back up (the sleep card has its own buttons)
+	if (!busyNow && me.sit && $("#sleepov").classList.contains("hidden")) opts.push({ k: "Esc", label: "Stand up", fn: () => standUp() });
 	nearId = best;
 	promptOpts = opts;
 	const pr = $("#prompt");
