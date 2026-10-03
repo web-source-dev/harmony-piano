@@ -17,8 +17,8 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
-import { Avatar, SKIN_TONES, HAIR_COLORS, OUTFIT_COLORS } from "./worldAvatar.js";
-import { buildRoom, ROOM, heartMesh } from "./worldRoom.js";
+import { Avatar, SKIN_TONES, HAIR_COLORS, OUTFIT_COLORS, MOODS, drawMoodFace } from "./worldAvatar.js";
+import { buildRoom, ROOM, DOOR, TERRACE, MOON_DIR, walkable, areaOf, heartMesh } from "./worldRoom.js";
 import { WorldAudio, TRACKS } from "./worldAudio.js";
 import * as Games from "./worldGames.js";
 
@@ -45,14 +45,15 @@ if (!ME_PID) { ME_PID = "p" + Math.random().toString(36).slice(2, 12); lsSet("ha
 
 const profile = Object.assign({
 	name: "", gender: Math.random() < 0.5 ? "female" : "male",
-	skin: SKIN_TONES[1], hair: HAIR_COLORS[1], top: OUTFIT_COLORS[0], bottom: OUTFIT_COLORS[4]
+	skin: SKIN_TONES[1], hair: HAIR_COLORS[1], top: OUTFIT_COLORS[0], bottom: OUTFIT_COLORS[4], mood: "happy"
 }, lsGet(LS_PROFILE, {}));
+if (!MOODS.some(m => m.id === profile.mood)) profile.mood = "happy";
 if (params.get("n") && !profile.name) profile.name = params.get("n").slice(0, 24);
 
 // ============================================================ renderer/scene
 const canvas = $("#view");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
 renderer.setSize(innerWidth, innerHeight);
 renderer.setClearColor(0x000000, 0);
 renderer.shadowMap.enabled = true;
@@ -74,16 +75,30 @@ const hemi = new THREE.HemisphereLight("#ffe6cf", "#3a2a35", 0.55);
 scene.add(hemi);
 const moon = new THREE.DirectionalLight("#a9b8ff", 1.8);
 moon.position.set(5, 6.5, -12);
-moon.target.position.set(2.2, 0, -2);
+moon.target.position.set(-0.5, 0, -4);
 moon.castShadow = true;
 moon.shadow.mapSize.set(2048, 2048);
-Object.assign(moon.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 30 });
+Object.assign(moon.shadow.camera, { left: -13, right: 13, top: 13, bottom: -13, near: 1, far: 34 });
 moon.shadow.bias = -0.0005;
 moon.shadow.normalBias = 0.03;
 scene.add(moon, moon.target);
 
 const room = buildRoom(scene);
 let audio = null;
+// Shadows are the biggest cost: tiny props (books, keys, petals, jars...) don't need to cast them,
+// and the shadow maps only refresh every other frame (only people and the ball really move).
+{
+	const ws = new THREE.Vector3();
+	scene.updateMatrixWorld(true);
+	scene.traverse(o => {
+		if (!o.isMesh || !o.castShadow) return;
+		if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+		o.getWorldScale(ws);
+		if (o.geometry.boundingSphere.radius * Math.max(ws.x, ws.y, ws.z) < 0.22) o.castShadow = false;
+	});
+	renderer.shadowMap.autoUpdate = false;
+	renderer.shadowMap.needsUpdate = true;
+}
 
 addEventListener("resize", () => {
 	renderer.setSize(innerWidth, innerHeight);
@@ -96,9 +111,10 @@ addEventListener("resize", () => {
 const me = {
 	x: 0.8 + (Math.random() - 0.5) * 1.5, z: 1.6 + (Math.random() - 0.5) * 1.2, h: Math.PI,
 	speed: 0, anim: "idle", upper: null, upperUntil: 0, sit: null, target: null, targetAct: null, stuck: 0,
-	pu: 0.5, pv: 0.5
+	pu: 0.5, pv: 0.5, path: [], partner: null, holding: null
 };
 const myAvatar = new Avatar(Object.assign({}, profile, { name: profile.name || "You" }));
+myAvatar.setMood(profile.mood);
 scene.add(myAvatar.root);
 const cam = { yaw: 0.35, pitch: 0.38, dist: 4.2, tx: me.x, ty: 1.2, tz: me.z };
 const RADIUS = 0.28;
@@ -154,7 +170,7 @@ function send(obj) {
 	sync.broadcast("W3|" + JSON.stringify(obj));
 }
 function poseMsg() {
-	return { t: "p", x: +me.x.toFixed(2), z: +me.z.toFixed(2), h: +me.h.toFixed(2), a: me.anim, u: me.upper, s: me.sit, sp: +me.speed.toFixed(2), pr: myAvatar.propKind, pu: +me.pu.toFixed(2), pv: +me.pv.toFixed(2) };
+	return { t: "p", x: +me.x.toFixed(2), z: +me.z.toFixed(2), h: +me.h.toFixed(2), a: me.anim, u: me.upper, s: me.sit, sp: +me.speed.toFixed(2), pr: myAvatar.propKind, pu: +me.pu.toFixed(2), pv: +me.pv.toFixed(2), md: profile.mood, tg: me.partner };
 }
 function startNetwork() {
 	if (typeof RoomSync === "undefined" || !/^https?:$/.test(location.protocol)) {
@@ -219,13 +235,14 @@ function onNet(d) {
 			const n = +d.n;
 			if (audio) audio.pianoNote(n, 0.18);
 			room.pressKey(n, false);
-			if (p) p.avatar.pianoHit(n < 66 ? 1 : 0);
+			if (p) noteHand(p.avatar, n);
 			noteFx();
 			break;
 		}
 		case "ball": ballState(d); break;
-		case "tug": if (fightView && d.f === fightView.id) fightView.other = Math.max(fightView.other, +d.n || 0); break;
-		case "wake": if (d.to === MY_ID && me.anim === "sleep") { if (audio) audio.sfx("alarm"); document.body.classList.add("shake"); setTimeout(() => document.body.classList.remove("shake"), 900); standUp(); toast(`<b>${esc(p ? p.look.name : "Someone")}</b> woke you up!`, null, null, 5000); } break;
+		case "tug": if (fightView && d.f === fightView.id) { fightView.other = Math.max(fightView.other, +d.n || 0); if (d.fin) fightView.gotFinal = true; } break;
+		case "wake": if (d.to === MY_ID && me.anim === "sleep") { if (audio) audio.sfx("alarm"); document.body.classList.add("shake"); setTimeout(() => document.body.classList.remove("shake"), 900); standUp(); if (p) me.h = Math.atan2(p.x - me.x, p.z - me.z); doUpper("yawn", 2600); toast(`<b>${esc(p ? p.look.name : "Someone")}</b> woke you up!`, null, null, 5000); } break;
+		case "act": onPartnerAct(d, p); break;
 	}
 	if (p) p.last = now();
 }
@@ -245,14 +262,18 @@ function upsertPeer(id, lk) {
 	refreshPeople();
 	return p;
 }
-const BASE_ANIMS = ["idle", "sit", "sleep"];
-const UPPER_ANIMS = ["wave", "dance", "clap", "heart", "drink", "paint", "tug", "piano"];
-const PROPS = ["mug", "brush", "remote"];
+const BASE_ANIMS = ["idle", "sit", "sleep", "floor"];
+const UPPER_ANIMS = ["wave", "dance", "clap", "heart", "drink", "paint", "tug", "piano", "laugh", "cry", "kiss", "hug", "highfive", "jump", "bow", "cheer", "think", "shrug", "facepalm", "yawn", "warm", "telescope", "shake", "give", "stumble"];
+const PROPS = ["mug", "brush", "remote", "flower"];
 function applyPose(p, d, snap) {
 	if (typeof d.x !== "number") return;
 	p.tx = d.x; p.tz = d.z; p.th = d.h; p.sit = d.s || null;
 	p.anim = BASE_ANIMS.includes(d.a) ? d.a : "idle";
+	const prevUpper = p.upper;
 	p.upper = UPPER_ANIMS.includes(d.u) ? d.u : (UPPER_ANIMS.includes(d.a) ? d.a : null);
+	p.partner = typeof d.tg === "string" ? d.tg : null;
+	if (d.md && MOODS.some(m => m.id === d.md) && d.md !== p.avatar.mood) { p.avatar.setMood(d.md); refreshPeople(); }
+	if (!snap && !p.fresh && p.upper !== prevUpper) inviteFor(p);
 	p.avatar.setProp(PROPS.includes(d.pr) ? d.pr : null);
 	if (typeof d.pu === "number") p.avatar.paintUV = { u: d.pu, v: d.pv };
 	if (snap || p.fresh) { p.x = p.tx; p.z = p.tz; p.h = p.th; p.fresh = false; }
@@ -267,9 +288,14 @@ function removePeer(id) {
 	// they took the remote with them: put it back on the table
 	if (get("remote").by === id) setShared("remote", { by: "", name: "" });
 }
+const moodImgs = {};
+function moodImg(m) {
+	if (!moodImgs[m]) { const c = document.createElement("canvas"); c.width = c.height = 40; drawMoodFace(c.getContext("2d"), 20, 20, 18, m); moodImgs[m] = c.toDataURL(); }
+	return `<img class="mf" src="${moodImgs[m]}" alt="${m}" title="${(MOODS.find(x => x.id === m) || {}).label || ""}">`;
+}
 function refreshPeople() {
-	const rows = [`<div><i style="background:${profile.top}"></i>${esc(profile.name || "You")} (you)</div>`];
-	peers.forEach(p => rows.push(`<div><i style="background:${p.look.top}"></i>${esc(p.look.name)}${p.anim === "sleep" ? " <span class='zz'>sleeping</span>" : ""}</div>`));
+	const rows = [`<div>${moodImg(profile.mood)}${esc(profile.name || "You")} (you)</div>`];
+	peers.forEach(p => rows.push(`<div>${moodImg(p.avatar.mood)}${esc(p.look.name)}${p.anim === "sleep" ? " <span class='zz'>sleeping</span>" : ""}</div>`));
 	$("#ppl").innerHTML = rows.join("");
 }
 
@@ -353,8 +379,10 @@ function interact(id) {
 	if (def.face !== undefined && !def.sit && !me.sit) me.h = def.face;
 	switch (id) {
 		case "tv": case "remote": useRemote(); break;
-		case "sofa": case "armchair": sitOn(def.sit); break;
-		case "piano": startPiano(); break;
+		case "piano": { const who = whoSits("bench"); if (who) busy(who, "Can I play after you, {n}?", "{n} is playing the piano - let {pr} finish first"); else startPiano(); break; }
+		case "telescope": { const who = whoDoes("telescope"); if (who) busy(who, "My turn next, {n}!", "{n} is looking at the stars - wait for {pr} to finish"); else startScope(); break; }
+		case "fire": me.h = def.face; doUpper("warm", 7000); if (audio) audio.sfx("whoosh", 0.3); break;
+		case "flowers": pickFlower(); break;
 		case "bed": goToBed(); break;
 		case "notes": openNotes(); break;
 		case "mug": drinkCoffee(); break;
@@ -370,7 +398,28 @@ function interact(id) {
 		case "photos": openPhotos(); break;
 		case "coffee": makeCoffee(); break;
 		case "easel": openDraw(); break;
+		default: if (def.sit) sitOn(def.sit);
 	}
+}
+// someone else is already using it: say so instead of barging in
+function whoSits(spotId) { for (const [id, p] of peers) if (p.sit === spotId) return p; return null; }
+function whoDoes(upper) { for (const [id, p] of peers) if (p.upper === upper) return p; return null; }
+function busy(p, line, log) {
+	const pr = p.look.gender === "female" ? "her" : "him";
+	const say = line.replace("{n}", p.look.name);
+	myAvatar.say(say);
+	send({ t: "chat", text: say });
+	addLog(esc(log.replace("{n}", p.look.name).replace("{pr}", pr)), true);
+	if (audio) audio.sfx("pop", 0.4);
+}
+// start a timed action (arms layer)
+function doUpper(u, ms, partner) {
+	if (me.anim === "sleep") standUp(true);
+	me.upper = u;
+	me.upperUntil = performance.now() + ms;
+	me.partner = partner || null;
+	updateProps();
+	sendPose(true);
 }
 function labelOf(id) {
 	if (id === "mug") return get("coffee").n > 0 ? "Drink a coffee" : "No coffee yet - make one in the kitchen";
@@ -381,6 +430,9 @@ function labelOf(id) {
 		return "Pick up the TV remote";
 	}
 	if (id === "bed") return freeSpot(room.interactables.bed.sit) ? "Go to sleep" : "Wake them up";
+	if (id === "piano" && whoSits("bench")) return whoSits("bench").look.name + " is playing - wait your turn";
+	if (id === "telescope" && whoDoes("telescope")) return whoDoes("telescope").look.name + " is stargazing";
+	if (id === "flowers") return me.holding === "flower" ? "Pick another flower" : "Pick a flower";
 	const l = room.interactables[id].label;
 	return typeof l === "function" ? l() : l;
 }
@@ -467,12 +519,21 @@ function goToBed() {
 	addLog("You curled up in bed. Sweet dreams.", true);
 	send({ t: "fx", kind: "sys", text: profile.name + " went to sleep" });
 }
+// walk over to the bed and gently shake them awake
 function wakePeer(id) {
 	const p = peers.get(id);
 	if (!p || p.anim !== "sleep") return;
-	send({ t: "wake", to: id });
-	addLog("You woke up " + esc(p.look.name), true);
-	if (audio) audio.sfx("alarm", 0.4);
+	const spot = room.sitSpots.find(s => s.id === p.sit);
+	const side = spot && spot.id === "bedR" ? [-1.95, 4.95] : [-4.45, 4.95];
+	walkTo(side[0], side[1], () => {
+		const q = peers.get(id);
+		if (!q || q.anim !== "sleep") return;
+		me.h = Math.atan2(q.x - me.x, (q.z + 0.9) - me.z);
+		doUpper("shake", 2200, id);
+		myAvatar.say("Wake up, sleepyhead!");
+		send({ t: "chat", text: "Wake up, sleepyhead!" });
+		setTimeout(() => { send({ t: "wake", to: id }); if (audio) audio.sfx("alarm", 0.35); addLog("You woke up " + esc(q.look.name), true); }, 1300);
+	});
 }
 $("#wakebtn").onclick = () => standUp();
 
@@ -513,8 +574,15 @@ function playKey(n) {
 	if (audio) audio.pianoNote(n, 0.25);
 	send({ t: "note", n });
 	room.pressKey(n, true);
-	myAvatar.pianoHit(n < 66 ? 1 : 0);
+	noteHand(myAvatar, n);
 	noteFx();
+}
+// which hand plays it: low notes left, high notes right
+function noteHand(av, n) {
+	const i = n < 62 ? 1 : 0;
+	av._pn = av._pn || [69, 53]; av._pt = av._pt || [0, 0];
+	av._pn[i] = n; av._pt[i] = performance.now();
+	av.pianoHit(i);
 }
 $("#pianostand").onclick = () => standUp();
 
@@ -523,6 +591,7 @@ const YT_RE = /(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\
 const HOLE = new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0, blending: THREE.NoBlending, toneMapped: false });
 const tvScreenMat = room.tv.screen.material;
 let yt = null; // { id, obj, iframe }
+let lastYt = "";
 function ytCmd(func, args) {
 	if (!yt || !yt.iframe.contentWindow) return;
 	try { yt.iframe.contentWindow.postMessage(JSON.stringify({ event: "command", func, args: args || [] }), "*"); } catch (e) {}
@@ -572,7 +641,10 @@ function applyTV(remote) {
 	if (tv.on && tv.yt && entered) { const fresh = !yt || yt.id !== tv.yt; mountYouTube(tv); if (!fresh) syncYouTube(true); }
 	else unmountYouTube();
 	if (!tv.on) room.tv.off();
-	if (remote && tv.on && tv.yt) addLog("A video is playing on the TV - turn your sound on", true);
+	if (remote && tv.on && tv.yt && tv.yt !== lastYt && entered) {
+		toast("A video just started on the TV", "Go watch", () => walkTo(room.interactables.sofa.stand[0], room.interactables.sofa.stand[1], "sofa"), 12000);
+	}
+	lastYt = tv.on ? tv.yt : "";
 	renderRemote();
 }
 function drawTVFrame(t) {
@@ -642,13 +714,24 @@ function startFight() {
 	const r = get("remote");
 	const f = get("fight");
 	if (f && now() < f.end + 1500) return;
-	setShared("fight", { id: Math.random().toString(36).slice(2, 8), a: r.by, an: r.name, b: MY_ID, bn: profile.name, start: now() + 2400, end: now() + 2400 + 6000 });
+	const holder = peers.get(r.by);
+	if (!holder) return;
+	// walk right up to them first, then grab the other end of the remote
+	const dx = me.x - holder.x, dz = me.z - holder.z, l = Math.hypot(dx, dz) || 1;
+	const go = () => {
+		const h2 = peers.get(r.by);
+		if (!h2 || get("remote").by !== r.by) return;
+		myAvatar.say("Give me that remote!");
+		send({ t: "chat", text: "Give me that remote!" });
+		setShared("fight", { id: Math.random().toString(36).slice(2, 8), a: r.by, an: r.name, b: MY_ID, bn: profile.name, start: now() + 2600, end: now() + 2600 + 6000 });
+	};
+	if (l < 1.1) go(); else walkTo(holder.x + dx / l * 0.8, holder.z + dz / l * 0.8, go);
 }
 function applyFight() {
 	const f = get("fight");
-	if (!f) { fightView = null; $("#fight").classList.add("hidden"); if (me.upper === "tug") { me.upper = null; sendPose(true); } return; }
+	if (!f) { fightView = null; $("#fight").classList.add("hidden"); fightRemote.visible = false; if (me.upper === "tug") { me.upper = null; me.partner = null; updateProps(); sendPose(true); } return; }
 	if (fightView && fightView.id === f.id) return;
-	fightView = Object.assign({ mine: 0, other: 0, decided: false, lastSent: 0, lastCount: 9 }, f);
+	fightView = Object.assign({ mine: 0, other: 0, decided: false, lastSent: 0, lastCount: 9, k: 0.5, gotFinal: false, sentFinal: false }, f);
 	const inFight = f.a === MY_ID || f.b === MY_ID;
 	$("#fight").classList.remove("hidden");
 	$("#fight").classList.toggle("spectate", !inFight);
@@ -659,6 +742,9 @@ function applyFight() {
 		if (drawOpen) closeDraw();
 		closeRemote();
 		me.upper = "tug";
+		me.partner = f.a === MY_ID ? f.b : f.a;
+		me.target = null; me.path = [];
+		updateProps();
 		const opp = peers.get(f.a === MY_ID ? f.b : f.a);
 		if (opp) me.h = Math.atan2(opp.x - me.x, opp.z - me.z);
 		sendPose(true);
@@ -670,6 +756,7 @@ function tugTap() {
 	if (!f || now() < f.start || now() > f.end) return;
 	if (f.a !== MY_ID && f.b !== MY_ID) return;
 	f.mine++;
+	if (now() - f.lastSent > 90) { f.lastSent = now(); send({ t: "tug", f: f.id, n: f.mine }); }
 	if (audio) audio.sfx("tug", 0.5);
 	const el = $("#fight");
 	el.classList.remove("tap"); void el.offsetWidth; el.classList.add("tap");
@@ -683,6 +770,7 @@ function updateFight() {
 	const aScore = f.a === MY_ID ? f.mine : f.other, bScore = f.b === MY_ID ? f.mine : f.other;
 	// bar: 0 = holder winning fully, 1 = challenger
 	const k = (bScore + 5) / (aScore + bScore + 10);
+	f.k += (k - f.k) * 0.2;
 	$("#f-bar i").style.left = (k * 100) + "%";
 	$("#f-sa").textContent = inFight || t > f.end ? aScore : "";
 	$("#f-sb").textContent = inFight || t > f.end ? bScore : "";
@@ -696,23 +784,50 @@ function updateFight() {
 		msg = (inFight ? "MASH SPACE / TAP!  " : "Fight for the remote!  ") + Math.ceil((f.end - t) / 1000) + "s";
 	} else msg = "Time!";
 	$("#f-msg").textContent = msg;
-	if (inFight && t - f.lastSent > 120 && t < f.end + 400) { f.lastSent = t; send({ t: "tug", f: f.id, n: f.mine }); }
-	// the holder's client decides (the challenger does if the holder vanished)
-	const wait = f.a === MY_ID ? 700 : f.b === MY_ID ? 3500 : -1;
-	if (!f.decided && wait >= 0 && t > f.end + wait) {
+	if (inFight && t - f.lastSent > 120 && t < f.end) { f.lastSent = t; send({ t: "tug", f: f.id, n: f.mine }); }
+	if (inFight && t > f.end && !f.sentFinal) { f.sentFinal = true; send({ t: "tug", f: f.id, n: f.mine, fin: 1 }); }
+	// the holder's client decides once it has the challenger's final count (or after a timeout);
+	// the challenger decides only if the holder vanished
+	const ready = f.a === MY_ID ? (f.gotFinal && t > f.end + 300) || t > f.end + 3000 : f.b === MY_ID ? t > f.end + 6000 : false;
+	if (!f.decided && ready) {
 		f.decided = true;
 		const winB = bScore > aScore;
 		const winId = winB ? f.b : f.a, winName = winB ? f.bn : f.an;
 		setShared("remote", { by: winId, name: winName });
 		setShared("fight", null);
-		send({ t: "fx", kind: "fightend", w: winName, sa: aScore, sb: bScore });
-		fightResult(winName, aScore, bScore);
+		send({ t: "fx", kind: "fightend", w: winName, wid: winId, a: f.a, b: f.b, sa: aScore, sb: bScore });
+		fightResult(winName, aScore, bScore, winId, f.a, f.b);
 	}
 }
-function fightResult(winName, sa, sb) {
+function fightResult(winName, sa, sb, wid, a, b) {
 	toast(`<b>${esc(winName)}</b> won the remote! (${sa} : ${sb})`, null, null, 5000);
-	if (audio) audio.sfx(winName === profile.name ? "win" : "chime");
-	if (winName === profile.name) heartsFx(myAvatar.root, 6, "#ffd34f");
+	if (audio) audio.sfx(wid === MY_ID ? "win" : "chime");
+	if (wid === MY_ID) { heartsFx(myAvatar.root, 6, "#ffd34f"); setTimeout(() => doUpper("cheer", 2400), 50); }
+	else if (a === MY_ID || b === MY_ID) setTimeout(() => { doUpper("stumble", 1300); myAvatar.say("Hey! Not fair!"); }, 50);
+}
+// the remote both people pull on during a fight (lives between their hands)
+const fightRemote = new THREE.Group();
+{
+	const body = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.022, 0.18), new THREE.MeshStandardMaterial({ color: "#1d1d22", roughness: 0.45 }));
+	body.castShadow = true;
+	const btn = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.006, 10), new THREE.MeshStandardMaterial({ color: "#e63946", emissive: "#e63946", emissiveIntensity: 0.5 }));
+	btn.position.set(0, 0.013, -0.06);
+	fightRemote.add(body, btn);
+	fightRemote.visible = false;
+	scene.add(fightRemote);
+}
+function avatarOf(id) { return id === MY_ID ? myAvatar : (peers.get(id) || {}).avatar; }
+function updateFightRemote(t) {
+	const f = fightView;
+	if (!f) { fightRemote.visible = false; return; }
+	const A = avatarOf(f.a), B = avatarOf(f.b);
+	if (!A || !B) { fightRemote.visible = false; return; }
+	const pa = A.root.position, pb = B.root.position;
+	const pull = Math.max(0.15, Math.min(0.85, 0.5 + (f.k - 0.5) * 0.9));
+	const wob = now() > f.start && now() < f.end ? Math.sin(t * 22) * 0.025 : 0;
+	fightRemote.position.set(pa.x + (pb.x - pa.x) * pull, 1.02 + wob, pa.z + (pb.z - pa.z) * pull);
+	fightRemote.rotation.set(0, Math.atan2(pb.x - pa.x, pb.z - pa.z), wob * 4);
+	fightRemote.visible = true;
 }
 
 // ---------- music
@@ -974,7 +1089,11 @@ const DRAW_COLS = ["#2b2d42", "#e63946", "#ff7aa2", "#f4a261", "#e9c46a", "#2a9d
 function openDraw() {
 	const def = room.interactables.easel;
 	if (me.sit) standUp(true);
-	me.x = def.stand[0]; me.z = def.stand[1]; me.h = def.face;
+	// two painters fit side by side; take whichever spot is free
+	const taken = s => [...peers.values()].some(p => p.upper === "paint" && Math.hypot(p.x - s[0], p.z - s[1]) < 0.3);
+	const stand = def.stands.slice().sort((a, b) => Math.hypot(a[0] - me.x, a[1] - me.z) - Math.hypot(b[0] - me.x, b[1] - me.z)).find(s => !taken(s));
+	if (!stand) { const p = whoDoes("paint"); if (p) busy(p, "Save a corner of the paper for me!", "Both spots at the easel are taken"); return; }
+	me.x = stand[0]; me.z = stand[1]; me.h = def.face;
 	me.upper = "paint";
 	updateProps();
 	drawOpen = true;
@@ -1051,6 +1170,10 @@ function openArcade(menu) {
 		body.querySelectorAll("[data-g]").forEach(b => b.onclick = () => startGame(b.dataset.g));
 		return;
 	}
+	if (g.players[1] && g.winner === null && !g.players.includes(MY_ID) && g.players[1] !== "cpu") {
+		const p = peers.get(g.players[0]) || peers.get(g.players[1]);
+		if (p) busy(p, "I'll play the winner!", g.names[0] + " and " + g.names[1] + " are playing - you can watch");
+	}
 	const body = openModal("arcade", Games.GAME_LIST.find(x => x.type === g.type).name, "", 520);
 	Games.renderGame(body, g, gameCtx());
 }
@@ -1108,10 +1231,10 @@ function applyGame(k, remote) {
 	}
 	lastGameSig = sig;
 	if (remote && k === "game" && !g.moves && g.players[0] !== MY_ID && !g.players[1] && modalKind !== "arcade") {
-		toast(`<b>${esc(g.names[0])}</b> started ${Games.GAME_LIST.find(x => x.type === g.type).name} on the arcade`, "Join", () => { openArcade(); gameCtx().onJoin(); }, 20000);
+		toast(`<b>${esc(g.names[0])}</b> started ${Games.GAME_LIST.find(x => x.type === g.type).name} on the arcade`, "Go play", () => walkTo(room.interactables.arcade.stand[0], room.interactables.arcade.stand[1], () => { me.h = room.interactables.arcade.face; openArcade(); gameCtx().onJoin(); }), 20000);
 	}
 	if (remote && k === "game" && g.players[1] && g.players[0] === MY_ID && g.moves === 0 && g.players[1] !== "cpu" && modalKind !== "arcade") {
-		toast(`<b>${esc(g.names[1])}</b> joined your game`, "Play", () => openArcade(), 8000);
+		toast(`<b>${esc(g.names[1])}</b> joined your game`, "Go play", () => walkTo(room.interactables.arcade.stand[0], room.interactables.arcade.stand[1], "arcade"), 8000);
 	}
 }
 
@@ -1215,7 +1338,9 @@ function onFx(d, p) {
 		case "water": room.waterFx(); if (audio) audio.sfx("water", 0.6); addLog(esc(name) + " watered the plant", true); break;
 		case "dice": rollDie(Math.max(1, Math.min(6, d.v | 0)), +d.x, +d.z, +d.h, name); break;
 		case "hearts": if (p) heartsFx(p.avatar.root, 7); if (audio) audio.sfx("love", 0.5); break;
-		case "fightend": fightResult(String(d.w || "Someone").slice(0, 24), +d.sa || 0, +d.sb || 0); break;
+		case "fightend": fightResult(String(d.w || "Someone").slice(0, 24), +d.sa || 0, +d.sb || 0, d.wid, d.a, d.b); break;
+		case "flower": if (d.to === MY_ID) { me.holding = "flower"; updateProps(); sendPose(true); heartsFx(myAvatar.root, 6); if (audio) audio.sfx("love"); toast(`<b>${esc(name)}</b> gave you a flower`, null, null, 6000); } break;
+		case "star": shootingStar(); break;
 		case "sys": if (d.text) addLog(esc(String(d.text).slice(0, 120)), true); break;
 	}
 }
@@ -1227,17 +1352,141 @@ function emote(e) {
 		return;
 	}
 	if (me.anim === "sleep") standUp();
-	if (me.upper === "piano" || me.upper === "paint" || me.upper === "tug") return;
-	if (e === "dance" && me.sit) standUp();
-	me.upper = e;
-	me.upperUntil = performance.now() + (e === "dance" ? 8000 : e === "wave" ? 2600 : 2200);
+	if (me.upper === "piano" || me.upper === "paint" || me.upper === "tug" || me.upper === "telescope") return;
+	if (e === "floor") { if (me.sit) standUp(true); me.anim = me.anim === "floor" ? "idle" : "floor"; me.upper = null; sendPose(true); return; }
+	if (e === "hug" || e === "highfive") { partnerEmote(e); return; }
+	if (me.anim === "floor" && ["dance", "jump", "bow"].includes(e)) me.anim = "idle";
+	if (["dance", "jump", "bow"].includes(e) && me.sit) standUp();
+	doUpper(e, EMOTE_MS[e] || 2400);
+	if (e === "heart") { heartsFx(myAvatar.root, 7); send({ t: "fx", kind: "hearts" }); if (audio) audio.sfx("love", 0.5); }
+	if (e === "kiss") setTimeout(() => { heartsFx(myAvatar.root, 4, "#ff4d6d"); send({ t: "fx", kind: "hearts" }); if (audio) audio.sfx("love", 0.4); }, 750);
+	if (e === "laugh" && audio) audio.sfx("laugh");
+	if (e === "jump" && audio) setTimeout(() => audio.sfx("kick", 0.3), 650);
+}
+const EMOTE_MS = { wave: 2600, dance: 8000, clap: 2200, heart: 2200, laugh: 3000, cry: 4200, kiss: 1700, jump: 1800, bow: 2200, cheer: 3000, think: 4000, shrug: 2000, facepalm: 2500, yawn: 3000 };
+function nearestPeer(maxD) {
+	let best = null, bd = maxD;
+	peers.forEach((p, id) => { const d = Math.hypot(p.x - me.x, p.z - me.z); if (d < bd && p.anim !== "sleep") { bd = d; best = id; } });
+	return best;
+}
+// hug / high-five: walk up to the closest person and actually touch them
+function partnerEmote(e) {
+	const id = nearestPeer(12);
+	if (!id) { myAvatar.say(e === "hug" ? "I need someone to hug..." : "High five? Anyone?"); return; }
+	const p = peers.get(id);
+	const dx = me.x - p.x, dz = me.z - p.z, l = Math.hypot(dx, dz) || 1;
+	const gap = e === "hug" ? 0.42 : 0.62;
+	const start = () => {
+		const q = peers.get(id);
+		if (!q) return;
+		me.h = Math.atan2(q.x - me.x, q.z - me.z);
+		doUpper(e, e === "hug" ? 3200 : 1500, id);
+		send({ t: "act", kind: e, to: id });
+		if (e === "hug") { heartsFx(myAvatar.root, 5); if (audio) audio.sfx("love", 0.5); }
+		else if (audio) setTimeout(() => audio.sfx("clap"), 550);
+	};
+	if (l < gap + 0.25) start(); else walkTo(p.x + dx / l * gap, p.z + dz / l * gap, start);
+}
+// someone hugged / high-fived / is giving us something: turn and join in
+function onPartnerAct(d, p) {
+	if (d.to !== MY_ID || !p) return;
+	if (me.anim === "sleep") return;
+	if (me.sit) standUp(true);
+	me.target = null; me.path = [];
+	me.h = Math.atan2(p.x - me.x, p.z - me.z);
+	if (d.kind === "hug") { doUpper("hug", 3200, d.id); heartsFx(myAvatar.root, 5); if (audio) audio.sfx("love", 0.5); }
+	else if (d.kind === "highfive") { doUpper("highfive", 1500, d.id); if (audio) setTimeout(() => audio.sfx("clap"), 550); }
+	else if (d.kind === "give") doUpper("give", 1600, d.id);
+}
+
+// ---------- flowers from the terrace
+function pickFlower() {
+	me.holding = "flower";
 	updateProps();
 	sendPose(true);
-	if (e === "heart") { heartsFx(myAvatar.root, 7); send({ t: "fx", kind: "hearts" }); if (audio) audio.sfx("love", 0.5); }
+	if (audio) audio.sfx("pop", 0.5);
+	addLog("You picked a flower. Click someone to give it to them.", true);
+}
+function giveFlower(id) {
+	const p = peers.get(id);
+	if (!p || me.holding !== "flower") return;
+	const dx = me.x - p.x, dz = me.z - p.z, l = Math.hypot(dx, dz) || 1;
+	const hand = () => {
+		const q = peers.get(id);
+		if (!q) return;
+		me.h = Math.atan2(q.x - me.x, q.z - me.z);
+		doUpper("give", 1600, id);
+		send({ t: "act", kind: "give", to: id });
+		setTimeout(() => { me.holding = null; updateProps(); sendPose(true); send({ t: "fx", kind: "flower", to: id }); addLog("You gave " + esc(q.look.name) + " a flower", true); }, 1100);
+	};
+	if (l < 1.0) hand(); else walkTo(p.x + dx / l * 0.7, p.z + dz / l * 0.7, hand);
+}
+
+// ---------- telescope
+let scopeOn = false, starT = 0;
+const MOON_POINT = new THREE.Vector3(0, 0, -3).addScaledVector(MOON_DIR, 50);   // the moon painted on the sky dome
+function startScope() {
+	const tel = room.terrace.telescope;
+	if (me.sit) standUp(true);
+	me.x = tel.stand[0]; me.z = tel.stand[1];
+	me.h = room.interactables.telescope.face;
+	scopeOn = true;
+	doUpper("telescope", 1e9);
+	$("#scope").classList.remove("hidden");
+	addLog("You're looking at the moon. Watch for shooting stars! (Esc to stop)", true);
+}
+function stopScope() {
+	if (!scopeOn) return;
+	scopeOn = false;
+	$("#scope").classList.add("hidden");
+	if (me.upper === "telescope") { me.upper = null; me.upperUntil = 0; sendPose(true); }
+}
+const stars = [];
+function shootingStar() {
+	const dir = room.terrace.telescope.dir.clone();
+	const side = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0, 1, 0)).normalize();
+	const up = new THREE.Vector3().crossVectors(side, dir).normalize();
+	const start = dir.clone().multiplyScalar(40).addScaledVector(side, (Math.random() - 0.5) * 18).addScaledVector(up, 4 + Math.random() * 8).add(new THREE.Vector3(0, 0, -3));
+	const vel = side.clone().multiplyScalar(Math.random() < 0.5 ? -1 : 1).addScaledVector(up, -0.6).normalize().multiplyScalar(26);
+	const m = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.12, 4.5, 6), new THREE.MeshBasicMaterial({ color: "#fff6d8", transparent: true, opacity: 0.95, toneMapped: false, depthWrite: false }));
+	m.position.copy(start);
+	m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vel.clone().normalize().negate());
+	m.userData = { vel, life: 0 };
+	scene.add(m);
+	stars.push(m);
+}
+function updateStars(dt) {
+	starT += dt;
+	if (scopeOn && starT > 1.6 + Math.random() * 2) { starT = 0; shootingStar(); send({ t: "fx", kind: "star" }); }
+	for (let i = stars.length - 1; i >= 0; i--) {
+		const m = stars[i];
+		m.userData.life += dt;
+		m.position.addScaledVector(m.userData.vel, dt);
+		m.material.opacity = Math.max(0, 0.95 - m.userData.life * 0.9);
+		if (m.userData.life > 1.1) { scene.remove(m); m.geometry.dispose(); m.material.dispose(); stars.splice(i, 1); }
+	}
+}
+
+// ---------- invitations: "go there" walks you over instead of teleporting a popup
+const lastInvite = {};
+function inviteFor(p) {
+	if (!entered || !p.upper || me.anim === "sleep") return;
+	const t = now();
+	if (lastInvite[p.upper] && t - lastInvite[p.upper] < 25000) return;
+	const n = esc(p.look.name);
+	let text = null, btn = null, go = null;
+	if (p.upper === "piano") { text = `<b>${n}</b> is playing the piano`; btn = "Go listen"; go = () => walkTo(0.95, 3.9, () => { me.h = Math.atan2(0.2 - me.x, 5.4 - me.z); }); }
+	else if (p.upper === "paint") { text = `<b>${n}</b> is painting on the terrace`; btn = "Paint together"; go = () => { const st = room.interactables.easel.stands; const free = st.find(s => Math.hypot(s[0] - p.x, s[1] - p.z) > 0.3) || st[1]; walkTo(free[0], free[1], "easel"); }; }
+	else if (p.upper === "telescope") { text = `<b>${n}</b> is looking at the stars`; btn = "Go see"; go = () => walkTo(room.terrace.telescope.stand[0] - 0.6, room.terrace.telescope.stand[1] + 0.6, () => { me.h = Math.atan2(p.x - me.x, p.z - me.z); }); }
+	else if (p.upper === "warm") { text = `<b>${n}</b> is sitting by the fire`; btn = "Join"; go = () => walkTo(room.terrace.fire.x - 1.05, room.terrace.fire.z - 0.05, "bean0"); }
+	if (!text) return;
+	lastInvite[p.upper] = t;
+	toast(text, btn, go, 12000);
 }
 // what's in your hand: a mug while drinking, the brush while painting, else the remote if you hold it
 function updateProps() {
-	const kind = me.upper === "drink" ? "mug" : me.upper === "paint" ? "brush" : get("remote").by === MY_ID ? "remote" : null;
+	const kind = me.upper === "drink" ? "mug" : me.upper === "paint" ? "brush" : me.upper === "tug" ? null
+		: me.holding === "flower" ? "flower" : get("remote").by === MY_ID ? "remote" : null;
 	myAvatar.setProp(kind);
 }
 
@@ -1251,9 +1500,12 @@ addEventListener("keydown", e => {
 		if (document.querySelector(".bigphoto")) document.querySelector(".bigphoto").remove();
 		else if (modalKind) closeModal();
 		else if (typing()) document.activeElement.blur();
+		else if (scopeOn) stopScope();
+		else if ($("#emotemenu") && !$("#emotemenu").classList.contains("hidden")) $("#emotemenu").classList.add("hidden");
 		else if (drawOpen) closeDraw();
 		else if (remoteOpen) closeRemote();
 		else if (me.sit) standUp();
+		else if (me.anim === "floor") { me.anim = "idle"; sendPose(true); }
 		return;
 	}
 	if (typing()) return;
@@ -1343,6 +1595,7 @@ canvas.addEventListener("pointerup", e => {
 	if (pid) {
 		const p = peers.get(pid);
 		if (p && p.anim === "sleep") wakePeer(pid);
+		else if (p && me.holding === "flower") giveFlower(pid);
 		else if (p) { if (!me.sit) me.h = Math.atan2(p.x - me.x, p.z - me.z); emote("wave"); }
 		return;
 	}
@@ -1369,7 +1622,7 @@ function hoverAt(x, y) {
 		if (h.object.userData.note !== undefined) { pointer = true; label = me.upper === "piano" ? null : "Play the piano"; }
 		else {
 			const pid = findPeer(h.object);
-			if (pid) { const p = peers.get(pid); label = p ? (p.anim === "sleep" ? "Wake " + p.look.name + " up" : "Wave at " + p.look.name) : null; }
+			if (pid) { const p = peers.get(pid); label = p ? (p.anim === "sleep" ? "Wake " + p.look.name + " up" : me.holding === "flower" ? "Give " + p.look.name + " your flower" : "Wave at " + p.look.name) : null; }
 			else { const id = findInteract(h.object); if (id) label = labelOf(id); }
 		}
 	}
@@ -1381,10 +1634,90 @@ function hoverAt(x, y) {
 function walkTo(x, z, act) {
 	if (me.sit) standUp(true);
 	if (drawOpen) closeDraw();
-	me.target = { x: Math.max(ROOM.minX + 0.4, Math.min(ROOM.maxX - 0.4, x)), z: Math.max(ROOM.minZ + 0.4, Math.min(ROOM.maxZ - 0.4, z)) };
+	stopScope();
+	if (me.anim === "floor") me.anim = "idle";
+	// route around furniture (and through the French doors between room and terrace)
+	const pts = findPath(me.x, me.z, x, z) || [{ x, z }];
+	me.final = pts[pts.length - 1];
+	me.target = pts.shift();
+	me.path = pts;
 	me.targetAct = act;
 	me.stuck = 0;
 }
+// ---------- grid A* pathfinding over everything you can walk on
+const GRID = { x0: -7.1, z0: -12.1, s: 0.2, w: 72, h: 92 };
+let gridBlocked = null;
+function buildGrid() {
+	gridBlocked = new Uint8Array(GRID.w * GRID.h);
+	for (let j = 0; j < GRID.h; j++) for (let i = 0; i < GRID.w; i++) {
+		const x = GRID.x0 + (i + 0.5) * GRID.s, z = GRID.z0 + (j + 0.5) * GRID.s;
+		gridBlocked[j * GRID.w + i] = blocked(x, z, true) ? 1 : 0;
+	}
+}
+function cellOf(x, z) { return [Math.floor((x - GRID.x0) / GRID.s), Math.floor((z - GRID.z0) / GRID.s)]; }
+function cellFree(i, j) { return i >= 0 && j >= 0 && i < GRID.w && j < GRID.h && !gridBlocked[j * GRID.w + i]; }
+function nearestFree(i, j) {
+	if (cellFree(i, j)) return [i, j];
+	for (let r = 1; r < 12; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+		if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
+		if (cellFree(i + di, j + dj)) return [i + di, j + dj];
+	}
+	return null;
+}
+function lineClear(ax, az, bx, bz) {
+	const d = Math.hypot(bx - ax, bz - az), n = Math.ceil(d / 0.08);
+	for (let k = 1; k <= n; k++) { const u = k / n; if (blocked(ax + (bx - ax) * u, az + (bz - az) * u, true)) return false; }
+	return true;
+}
+function findPath(sx, sz, tx, tz) {
+	if (!gridBlocked) buildGrid();
+	if (lineClear(sx, sz, tx, tz)) return [{ x: tx, z: tz }];
+	const s0 = nearestFree(...cellOf(sx, sz)), t0 = nearestFree(...cellOf(tx, tz));
+	if (!s0 || !t0) return null;
+	const W = GRID.w, N = W * GRID.h;
+	const g = new Float32Array(N).fill(Infinity), came = new Int32Array(N).fill(-1), closed = new Uint8Array(N);
+	const start = s0[1] * W + s0[0], goal = t0[1] * W + t0[0];
+	const hfun = c => Math.hypot((c % W) - t0[0], Math.floor(c / W) - t0[1]);
+	const open = [start]; g[start] = 0;
+	const f = new Float32Array(N).fill(Infinity); f[start] = hfun(start);
+	let found = false, iter = 0;
+	while (open.length && iter++ < 20000) {
+		let bi = 0;
+		for (let k = 1; k < open.length; k++) if (f[open[k]] < f[open[bi]]) bi = k;
+		const c = open[bi]; open[bi] = open[open.length - 1]; open.pop();
+		if (c === goal) { found = true; break; }
+		if (closed[c]) continue;
+		closed[c] = 1;
+		const ci = c % W, cj = Math.floor(c / W);
+		for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+			if (!di && !dj) continue;
+			const ni = ci + di, nj = cj + dj;
+			if (!cellFree(ni, nj)) continue;
+			if (di && dj && (!cellFree(ci + di, cj) || !cellFree(ci, cj + dj))) continue; // no corner cutting
+			const nc = nj * W + ni;
+			const ng = g[c] + (di && dj ? 1.414 : 1);
+			if (ng < g[nc]) { g[nc] = ng; came[nc] = c; f[nc] = ng + hfun(nc); open.push(nc); }
+		}
+	}
+	if (!found) return null;
+	const cells = [];
+	for (let c = goal; c !== -1; c = came[c]) cells.push(c);
+	cells.reverse();
+	const raw = cells.map(c => ({ x: GRID.x0 + ((c % W) + 0.5) * GRID.s, z: GRID.z0 + (Math.floor(c / W) + 0.5) * GRID.s }));
+	raw.push(blocked(tx, tz, true) ? raw[raw.length - 1] : { x: tx, z: tz });
+	// string-pull: skip every waypoint we can walk straight past
+	const out = [];
+	let ax = sx, az = sz, k = 0;
+	while (k < raw.length) {
+		let far = k;
+		for (let m = raw.length - 1; m > k; m--) if (lineClear(ax, az, raw[m].x, raw[m].z)) { far = m; break; }
+		out.push(raw[far]);
+		ax = raw[far].x; az = raw[far].z;
+		k = far + 1;
+	}
+	return out;
+}
+function runAct(a) { if (typeof a === "function") a(); else if (a) interact(a); }
 const marker = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.17, 28), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0, depthWrite: false }));
 marker.rotation.x = -Math.PI / 2;
 scene.add(marker);
@@ -1409,7 +1742,7 @@ function joyMove(e) {
 
 // ============================================================ movement + collision
 function blocked(x, z, ignorePeers) {
-	if (x < ROOM.minX + RADIUS || x > ROOM.maxX - RADIUS || z < ROOM.minZ + RADIUS || z > ROOM.maxZ - RADIUS) return true;
+	if (!walkable(x, z, RADIUS)) return true;
 	for (const c of room.colliders) if (x > c.minX - RADIUS && x < c.maxX + RADIUS && z > c.minZ - RADIUS && z < c.maxZ + RADIUS) return true;
 	if (ignorePeers) return false;
 	// other people are solid too (only blocks moving closer, so you can never get stuck inside someone)
@@ -1435,6 +1768,14 @@ function placeAvatar(av, x, z, h, sitId) {
 	const spot = sitId && room.sitSpots.find(s => s.id === sitId);
 	av.root.position.set(x, spot ? spot.y : 0, z);
 	if (spot && spot.lie) { av.root.rotation.order = "YXZ"; av.root.rotation.set(-Math.PI / 2, spot.h, 0); }
+	else if (spot && spot.swing) {
+		// ride along with the swing seat
+		const sw = room.terrace.swing, a = sw.angle;
+		av.root.position.x -= Math.sin(a) * sw.L * Math.sin(spot.h);
+		av.root.position.z -= Math.sin(a) * sw.L * Math.cos(spot.h);
+		av.root.position.y += (1 - Math.cos(a)) * sw.L;
+		av.root.rotation.order = "YXZ"; av.root.rotation.set(a, spot.h, 0);
+	}
 	else { av.root.rotation.order = "XYZ"; av.root.rotation.set(0, h, 0); }
 }
 // turn the head toward the nearest other person who's close by
@@ -1458,9 +1799,11 @@ function updateMe(dt) {
 	const run = keys.has("shift");
 	let mx = 0, mz = 0, want = 0;
 	if (Math.abs(ix) + Math.abs(iz) > 0.08) {
-		me.target = null;
+		me.target = null; me.path = [];
 		if (me.sit) standUp();
 		if (drawOpen) closeDraw();
+		stopScope();
+		if (me.anim === "floor") { me.anim = "idle"; sendPose(true); }
 		const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
 		const rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
 		mx = fx * iz + rx * ix; mz = fz * iz + rz * ix;
@@ -1470,9 +1813,12 @@ function updateMe(dt) {
 	} else if (me.target) {
 		const dx = me.target.x - me.x, dz = me.target.z - me.z, l = Math.hypot(dx, dz);
 		if (l < 0.12) {
-			me.target = null;
-			if (me.targetAct) { const a = me.targetAct; me.targetAct = null; interact(a); }
-		} else { mx = dx / l; mz = dz / l; want = Math.min(1.25, 0.4 + l); }
+			if (me.path.length) me.target = me.path.shift();
+			else {
+				me.target = null;
+				if (me.targetAct) { const a = me.targetAct; me.targetAct = null; runAct(a); }
+			}
+		} else { mx = dx / l; mz = dz / l; want = Math.min(1.25, 0.4 + l + (me.path.length ? 1 : 0)); }
 	}
 	if (me.sit) want = 0;
 	me.speed += (want - me.speed) * Math.min(1, dt * 10);
@@ -1481,22 +1827,25 @@ function updateMe(dt) {
 		const nx = me.x + mx * v, nz = me.z + mz * v;
 		const ox = me.x, oz = me.z;
 		// if we somehow ended up inside furniture, let us walk straight out of it
-		const trapped = blocked(me.x, me.z, true);
-		if (trapped || !blocked(nx, me.z)) me.x = nx;
-		if (trapped || !blocked(me.x, nz)) me.z = nz;
-		me.x = Math.max(ROOM.minX + RADIUS, Math.min(ROOM.maxX - RADIUS, me.x));
-		me.z = Math.max(ROOM.minZ + RADIUS, Math.min(ROOM.maxZ - RADIUS, me.z));
+		const trapped = blocked(me.x, me.z, true) && walkable(me.x, me.z, 0.05);
+		if ((trapped && walkable(nx, me.z, 0.05)) || !blocked(nx, me.z)) me.x = nx;
+		if ((trapped && walkable(me.x, nz, 0.05)) || !blocked(me.x, nz)) me.z = nz;
 		me.h = angleLerp(me.h, Math.atan2(mx, mz), Math.min(1, dt * 12));
 		if (me.target) {
 			const moved = Math.hypot(me.x - ox, me.z - oz);
-			if (moved < v * 0.25) { me.stuck += dt; if (me.stuck > 0.6) { const a = me.targetAct; me.target = null; me.targetAct = null; if (a && Math.hypot(room.interactables[a].stand[0] - me.x, room.interactables[a].stand[1] - me.z) < 2.6) interact(a); } }
+			if (moved < v * 0.25) { me.stuck += dt; if (me.stuck > 0.6) { const a = me.targetAct, fin = me.final || me.target; me.target = null; me.targetAct = null; me.path = []; if (a && fin && Math.hypot(fin.x - me.x, fin.z - me.z) < 2.0) runAct(a); } }
 			else me.stuck = 0;
 		}
-		if (["wave", "dance", "clap", "heart", "paint", "piano"].includes(me.upper)) { me.upper = null; updateProps(); }
+		if (me.upper && !["drink", "tug"].includes(me.upper)) { me.upper = null; me.partner = null; updateProps(); }
 	}
 	if (me.upperUntil && performance.now() > me.upperUntil) {
 		me.upperUntil = 0;
-		if (["wave", "dance", "clap", "heart", "drink"].includes(me.upper)) { me.upper = null; updateProps(); sendPose(true); }
+		if (me.upper && !["paint", "piano", "tug", "telescope"].includes(me.upper)) { me.upper = null; me.partner = null; updateProps(); sendPose(true); }
+	}
+	// keep facing whoever we're hugging / fighting
+	if (me.partner && ["tug", "hug", "highfive", "give"].includes(me.upper)) {
+		const q = peers.get(me.partner);
+		if (q) me.h = angleLerp(me.h, Math.atan2(q.x - me.x, q.z - me.z), Math.min(1, dt * 8));
 	}
 	placeAvatar(myAvatar, me.x, me.z, me.h, me.sit);
 	myAvatar.speed = me.sit ? 0 : me.speed;
@@ -1504,6 +1853,69 @@ function updateMe(dt) {
 	myAvatar.upper = me.upper;
 	myAvatar.lookYaw = me.sit ? null : lookYawFor(me.x, me.z, me.h, peers.values());
 	sendPose(false);
+}
+// Where should each hand be? (real contact with keys, paper, mouth, people, the remote)
+const _ik = [new THREE.Vector3(), new THREE.Vector3()], _ikB = [new THREE.Vector3(), new THREE.Vector3()];
+const _tmpV = new THREE.Vector3(), _tmpV2 = new THREE.Vector3();
+function assignIK(av, upper, sit, partnerId, store) {
+	av.ik[0] = av.ik[1] = null;
+	av.ikReach[0] = av.ikReach[1] = 0.075;
+	av.ikPole = null;
+	if (!upper) return;
+	const t = performance.now();
+	if (upper === "piano" && sit === "bench") {
+		const pn = av._pn || [69, 53], pt = av._pt || [0, 0];
+		for (let i = 0; i < 2; i++) {
+			const k = room.pianoKeys.get(pn[i]);
+			if (!k) continue;
+			k.getWorldPosition(store[i]);
+			const pressed = t - pt[i] < 190;
+			store[i].y += pressed ? 0.004 : 0.045;
+			store[i].z -= 0.03;   // toward the player, on the playing end of the key
+			av.ik[i] = store[i];
+		}
+	} else if (upper === "paint") {
+		room.easel.point(av.paintUV.u, av.paintUV.v, store[0]);
+		av.ik[0] = store[0];
+		av.ikReach[0] = 0.235;      // the brush tip, not the hand, touches the paper
+	} else if (upper === "drink") {
+		const s = (Math.sin(av.t * 2.2) + 1) / 2;
+		const mouth = av.head.localToWorld(_tmpV.set(0.01, 0.02, 0.27));
+		const chest = av.head.localToWorld(_tmpV2.set(0.02, -0.3, 0.3));
+		store[0].copy(chest).lerp(mouth, s > 0.4 ? 1 : s / 0.4);
+		av.ik[0] = store[0];
+	} else if (["shake", "hug", "highfive", "give"].includes(upper) && partnerId) {
+		const pav = avatarOf(partnerId);
+		if (!pav) return;
+		const me3 = av.root.position, pp = pav.root.position;
+		if (upper === "shake") {
+			pav.torso.getWorldPosition(store[0]);
+			store[1].copy(store[0]);
+			store[0].x += 0.12; store[1].x -= 0.12;
+			store[0].y += 0.05 + Math.sin(t / 50) * 0.03; store[1].y += 0.05 + Math.sin(t / 50) * 0.03;
+			av.ik[0] = store[0]; av.ik[1] = store[1];
+		} else if (upper === "hug") {
+			const dx = pp.x - me3.x, dz = pp.z - me3.z, l = Math.hypot(dx, dz) || 1;
+			const fx = dx / l, fz = dz / l, rx = fz, rz = -fx;
+			const y = 1.12 * pav.body.scale.y;
+			store[0].set(pp.x + fx * 0.1 - rx * 0.13, y, pp.z + fz * 0.1 - rz * 0.13);
+			store[1].set(pp.x + fx * 0.1 + rx * 0.13, y + 0.05, pp.z + fz * 0.1 + rz * 0.13);
+			av.ik[0] = store[0]; av.ik[1] = store[1];
+			av.ikPole = _tmpV.set(0, -0.3, 0).addScaledVector(_tmpV2.set(-fx, 0, -fz), 0.2);
+		} else {
+			const y = upper === "highfive" ? 1.72 : 1.08;
+			store[0].set((me3.x + pp.x) / 2, y, (me3.z + pp.z) / 2);
+			av.ik[0] = store[0];
+		}
+	} else if (upper === "tug" && fightRemote.visible) {
+		const r = fightRemote.position;
+		const me3 = av.root.position;
+		const dx = r.x - me3.x, dz = r.z - me3.z, l = Math.hypot(dx, dz) || 1;
+		const rx = dz / l, rz = -dx / l;
+		store[0].set(r.x - dx / l * 0.05 - rx * 0.035, r.y, r.z - dz / l * 0.05 - rz * 0.035);
+		store[1].set(r.x - dx / l * 0.05 + rx * 0.035, r.y, r.z - dz / l * 0.05 + rz * 0.035);
+		av.ik[0] = store[0]; av.ik[1] = store[1];
+	}
 }
 function updatePeers(dt) {
 	const t = now();
@@ -1523,6 +1935,8 @@ function updatePeers(dt) {
 		if (wasSleep !== (p.anim === "sleep")) refreshPeople();
 		const others = [{ x: me.x, z: me.z }].concat([...peers.values()].filter(q => q !== p));
 		p.avatar.lookYaw = p.sit ? null : lookYawFor(p.x, p.z, p.h, others);
+		p.ikStore = p.ikStore || [new THREE.Vector3(), new THREE.Vector3()];
+		assignIK(p.avatar, p.upper, p.sit, p.partner, p.ikStore);
 		p.avatar.update(dt);
 	});
 }
@@ -1584,11 +1998,29 @@ function updateCamera(dt, t) {
 	let px = cam.tx + Math.sin(cam.yaw) * cam.dist * cp;
 	let pz = cam.tz + Math.cos(cam.yaw) * cam.dist * cp;
 	let py = cam.ty + sp * cam.dist;
-	px = Math.max(ROOM.minX + 0.25, Math.min(ROOM.maxX - 0.25, px));
-	pz = Math.max(ROOM.minZ + 0.25, Math.min(ROOM.maxZ - 0.25, pz));
-	py = Math.max(0.3, Math.min(ROOM.H - 0.2, py));
-	camera.position.set(px, py, pz);
-	camera.lookAt(cam.tx, cam.ty, cam.tz);
+	if (areaOf(cam.tx, cam.tz) === "terrace") {
+		// open air: the camera can roam, but never through the building
+		px = Math.max(TERRACE.minX - 2, Math.min(TERRACE.maxX + 2, px));
+		pz = Math.max(TERRACE.minZ - 2.5, Math.min(TERRACE.maxZ - 0.15, pz));
+		py = Math.max(0.3, Math.min(6, py));
+	} else {
+		px = Math.max(ROOM.minX + 0.25, Math.min(ROOM.maxX - 0.25, px));
+		pz = Math.max(ROOM.minZ + 0.25, Math.min(ROOM.maxZ - 0.25, pz));
+		py = Math.max(0.3, Math.min(ROOM.H - 0.2, py));
+	}
+	let fov = 55;
+	if (scopeOn) {
+		// looking through the eyepiece at the moon
+		const tel = room.terrace.telescope;
+		// view from just past the end of the tube (your own head would otherwise fill the eyepiece)
+		tel.eyepiece.getWorldPosition(camera.position).addScaledVector(tel.dir, 3.4);
+		camera.lookAt(MOON_POINT);
+		fov = 16;
+	} else {
+		camera.position.set(px, py, pz);
+		camera.lookAt(cam.tx, cam.ty, cam.tz);
+	}
+	if (camera.fov !== fov) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 6); if (Math.abs(camera.fov - fov) < 0.1) camera.fov = fov; camera.updateProjectionMatrix(); }
 }
 
 // ============================================================ HUD prompt
@@ -1608,7 +2040,7 @@ function updatePrompt() {
 			if (canReach(id)) { best = id; break; }
 		}
 	}
-	if (modalKind || drawOpen || me.upper === "piano" || fightView) best = null;
+	if (modalKind || drawOpen || me.upper === "piano" || fightView || scopeOn) best = null;
 	nearId = best;
 	const pr = $("#prompt");
 	if (best) { $("#ptext").textContent = labelOf(best); pr.classList.remove("off"); }
@@ -1623,6 +2055,52 @@ const SND_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stro
 function renderSound() { $("#b-sound").innerHTML = muted ? SND_OFF : SND_ON; if (audio) audio.setMuted(muted); }
 $("#b-sound").onclick = () => { muted = !muted; lsSet("harmonyWorldMuted", muted); renderSound(); };
 $("#b-exit").onclick = leaveToPiano;
+
+// emote + mood menu
+const EMOTES = [
+	["wave", "Wave"], ["heart", "Hearts"], ["kiss", "Blow a kiss"], ["hug", "Hug"], ["highfive", "High five"],
+	["dance", "Dance"], ["clap", "Clap"], ["laugh", "Laugh"], ["cry", "Cry"], ["cheer", "Cheer"],
+	["jump", "Jump"], ["bow", "Bow"], ["think", "Think"], ["shrug", "Shrug"], ["facepalm", "Facepalm"],
+	["yawn", "Stretch"], ["floor", "Sit on floor"], ["dice", "Roll a die"]
+];
+// little line-drawn icons for the action menu
+const EI = {
+	wave: '<path d="M7 13V7a1.5 1.5 0 0 1 3 0v4M10 10V5a1.5 1.5 0 0 1 3 0v5M13 10V6a1.5 1.5 0 0 1 3 0v6M16 11a1.5 1.5 0 0 1 3 0v3a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-3l-2.5-4a1.5 1.5 0 0 1 2.5-1.5L7 14"/>',
+	heart: '<path d="M12 20s-7-4.3-8.8-8.6C1.8 8.2 3.8 5 7 5c2 0 3.4 1.1 5 3 1.6-1.9 3-3 5-3 3.2 0 5.2 3.2 3.8 6.4C19 15.7 12 20 12 20z"/>',
+	kiss: '<path d="M6 12c2-2 4-2 6 0 2-2 4-2 6 0-2 3-4 4-6 4s-4-1-6-4z"/><path d="M17 5l2-2M19 8h3M14 4l.5-2.5"/>',
+	hug: '<circle cx="8" cy="6" r="2.5"/><circle cx="16" cy="6" r="2.5"/><path d="M4 21v-5a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v5M8 12l4 4 4-4"/>',
+	highfive: '<path d="M8 21v-7l-3-4V5M8 14h3M16 21v-7l3-4V5M16 14h-3M12 3v3M9 4l1 2M15 4l-1 2"/>',
+	dance: '<circle cx="12" cy="4" r="2"/><path d="M12 7v6l-4 7M12 13l4 7M6 9l6-1 6-3"/>',
+	clap: '<path d="M8 12l4-6 2 1-3 6M11 14l4-6 2 1-4 7c-1.5 2.5-4.5 3-6.5 1.5S4 13 6 11l2-2"/><path d="M15 3l1-2M19 5l2-1"/>',
+	laugh: '<circle cx="12" cy="12" r="9"/><path d="M7 9l2 1-2 1M17 9l-2 1 2 1M7 14h10a5 5 0 0 1-10 0z"/>',
+	cry: '<circle cx="12" cy="12" r="9"/><path d="M8 10h2M14 10h2M9 17c2-1.5 4-1.5 6 0M8.5 12v3M15.5 12v3"/>',
+	cheer: '<circle cx="12" cy="9" r="2"/><path d="M12 12v4l-3 5M12 16l3 5M6 3l4 7M18 3l-4 7"/>',
+	jump: '<circle cx="12" cy="4" r="2"/><path d="M12 7v6M8 10l4-2 4 2M9 18l3-5 3 5M5 22h14"/>',
+	bow: '<circle cx="15" cy="7" r="2"/><path d="M14 10l-6 3v8M8 13l-2 5M14 10l2 4"/>',
+	think: '<circle cx="10" cy="12" r="7"/><path d="M8 15h4M13 10l2 3h-2"/><circle cx="19" cy="5" r="1.5"/><circle cx="21" cy="2" r="1"/>',
+	shrug: '<circle cx="12" cy="6" r="2.5"/><path d="M12 9v12M4 9l3 3h10l3-3M3 7l1 2M21 7l-1 2"/>',
+	facepalm: '<circle cx="12" cy="12" r="8"/><path d="M9 4c3 3 4 8 3 13M13 14h3"/>',
+	yawn: '<path d="M5 3l3 6M19 3l-3 6"/><circle cx="12" cy="12" r="3"/><path d="M12 15v6M9 21h6"/>',
+	floor: '<circle cx="12" cy="6" r="2.5"/><path d="M12 9v5M5 18c2-3 4-4 7-4s5 1 7 4M4 20h16"/>',
+	dice: '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="12" cy="12" r="1.2"/>'
+};
+function emoteIcon(id) { return `<svg viewBox="0 0 24 24" fill="none" stroke="#ffd9b0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${EI[id] || ""}</svg>`; }
+function renderEmoteMenu() {
+	$("#em-grid").innerHTML = EMOTES.map(([id, label]) => `<button class="emb" data-e="${id}"><span class="ei">${emoteIcon(id)}</span>${label}</button>`).join("");
+	$("#em-moods").innerHTML = MOODS.map(m => `<button class="moodb ${profile.mood === m.id ? "on" : ""}" data-m="${m.id}">${moodImg(m.id)}<span>${m.label}</span></button>`).join("");
+	$("#em-grid").querySelectorAll("[data-e]").forEach(b => b.onclick = () => { $("#emotemenu").classList.add("hidden"); emote(b.dataset.e); });
+	$("#em-moods").querySelectorAll("[data-m]").forEach(b => b.onclick = () => setMood(b.dataset.m));
+}
+function setMood(m) {
+	profile.mood = m;
+	lsSet(LS_PROFILE, profile);
+	myAvatar.setMood(m);
+	sendPose(true);
+	refreshPeople();
+	renderEmoteMenu();
+	addLog("Mood: " + esc(MOODS.find(x => x.id === m).label), true);
+}
+$("#b-more").onclick = () => { renderEmoteMenu(); $("#emotemenu").classList.toggle("hidden"); };
 $("#b-look").onclick = () => showLobby(true);
 
 // ============================================================ lobby / character select
@@ -1695,7 +2173,7 @@ setInterval(() => { if (entered) send(poseMsg()); }, 5000);
 
 // ============================================================ main loop
 const clock = new THREE.Clock();
-let tvAcc = 0, arcAcc = 0, ytAcc = 0;
+let tvAcc = 0, arcAcc = 0, ytAcc = 0, lastArea = null, frameNo = 0;
 function frame() {
 	const dt = Math.min(0.05, clock.getDelta());
 	const t = clock.elapsedTime;
@@ -1704,8 +2182,16 @@ function frame() {
 		placeAvatar(myAvatar, me.x, me.z, me.h + Math.sin(t * 0.4) * 0.3, null);
 		myAvatar.anim = "idle"; myAvatar.upper = null; myAvatar.speed = 0; myAvatar.lookYaw = null;
 	}
+	if (entered) assignIK(myAvatar, me.upper, me.sit, me.partner, _ik);
+	myAvatar.root.visible = !scopeOn;
 	myAvatar.update(dt);
+	// only light the area you're in (fewer lights = much cheaper shading)
+	const inTerrace = areaOf(cam.tx, cam.tz) === "terrace" || (entered && areaOf(me.x, me.z) === "terrace");
+	if (inTerrace !== lastArea) { lastArea = inTerrace; room.areaLights.room.forEach(l => { l.visible = !inTerrace; }); room.areaLights.terrace.forEach(l => { l.visible = inTerrace; }); }
+	room.terrace.swing.occupied = me.sit === "swing0" || me.sit === "swing1" || [...peers.values()].some(p => p.sit === "swing0" || p.sit === "swing1");
+	updateFightRemote(clock.elapsedTime);
 	updatePeers(dt);
+	updateStars(dt);
 	updateBall(dt);
 	updateFx(dt);
 	updateFight();
@@ -1733,6 +2219,7 @@ function frame() {
 		$("#netdot").title = conn ? "Connected - everyone sees you" : "Offline - reconnecting";
 		if (conn) send({ t: "hello", lk: lookPayload(), pose: poseMsg() });
 	}
+	if ((frameNo++ & 1) === 0) renderer.shadowMap.needsUpdate = true;
 	renderer.render(scene, camera);
 	if (yt) cssRenderer.render(cssScene, camera);
 	requestAnimationFrame(frame);
@@ -1753,4 +2240,4 @@ checkAuth().then(ok => {
 });
 setInterval(applyPlant, 5 * 60 * 1000);
 // handle for debugging from the console
-window.HarmonyWorld = { me, peers, interact, get, setShared, emote, walkTo, cam, standUp, playKey, tugTap, wakePeer, toggleNight, drinkCoffee };
+window.HarmonyWorld = { me, peers, interact, get, setShared, emote, walkTo, cam, standUp, playKey, tugTap, wakePeer, toggleNight, drinkCoffee, setMood, giveFlower, pickFlower, myAvatar, findPath, blocked, renderer, scene, camera };

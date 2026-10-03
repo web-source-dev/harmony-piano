@@ -201,6 +201,8 @@ export class WorldAudio {
 			case "tug": tone(220 + Math.random() * 80, 120, 0.06, "square", 0.05); break;
 			case "go": tone(523, 0, 0.15, "square", 0.08); tone(784, 0, 0.3, "square", 0.08, 0.15); break;
 			case "count": tone(440, 0, 0.12, "square", 0.07); break;
+			case "clap": noise(0.08, 1800, 0.8, 0.35); noise(0.08, 1500, 0.8, 0.25, 0.09); break;
+			case "laugh": for (let i = 0; i < 6; i++) tone(520 - i * 18, 380 - i * 18, 0.12, "triangle", 0.07, i * 0.16); break;
 			case "page": noise(0.25, 2500, 0.5, 0.08); break;
 		}
 	}

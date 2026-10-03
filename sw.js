@@ -15,7 +15,7 @@
  */
 "use strict";
 
-var CACHE_NAME = "harmony-piano-ui-v11";
+var CACHE_NAME = "harmony-piano-ui-v12";
 
 var SHELL = [
 	"./",
@@ -179,6 +179,13 @@ self.addEventListener("fetch", function (event) {
 		// overwrite it.
 		var isIndex = url.pathname === "/" || url.pathname === "/index.html";
 		event.respondWith(networkFirst(request, isIndex ? "./index.html" : url.pathname));
+		return;
+	}
+
+	// The 3D world's modules import each other: always fetch fresh copies so an
+	// update never mixes old and new files (the cache is only an offline fallback).
+	if (/^\/world[A-Za-z]*\.js$/.test(url.pathname)) {
+		event.respondWith(networkFirst(request));
 		return;
 	}
 

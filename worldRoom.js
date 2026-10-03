@@ -12,8 +12,26 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { roundRect } from "./worldAvatar.js";
+import { buildTerrace } from "./worldTerrace.js";
 
 export const ROOM = { minX: -7, maxX: 7, minZ: -6, maxZ: 6, H: 3.4 };
+// French doors in the back wall lead out to the rooftop terrace
+export const DOOR = { x0: -6.1, x1: -4.5, h: 2.3 };
+export const TERRACE = { minX: -7, maxX: 5.5, minZ: -12, maxZ: -6.2 };
+// Where can a body of radius r stand? (inside the room, in the doorway, or on the terrace)
+export function walkable(x, z, r) {
+	if (x > ROOM.minX + r && x < ROOM.maxX - r && z > ROOM.minZ + r && z < ROOM.maxZ - r) return true;
+	if (x > DOOR.x0 + r && x < DOOR.x1 - r && z > -6.6 && z < -5.5) return true;
+	if (x > TERRACE.minX + r && x < TERRACE.maxX - r && z > TERRACE.minZ + r && z < TERRACE.maxZ - r) return true;
+	return false;
+}
+export function areaOf(x, z) { return z < -6.1 ? "terrace" : "room"; }
+// moon position on the sky dome (matches the painted moon in skyTex)
+const MOON_U = 0.62, MOON_V = 0.24;
+export const MOON_DIR = (() => {
+	const phi = MOON_U * Math.PI * 2, theta = MOON_V * Math.PI;
+	return new THREE.Vector3(-Math.cos(phi) * Math.sin(theta), Math.cos(theta), Math.sin(phi) * Math.sin(theta)).normalize();
+})();
 
 // deterministic random so the room looks identical for everyone
 function rng(seed) {
@@ -134,36 +152,71 @@ function rugTex() {
 function diamond(g, x, y, s) { g.beginPath(); g.moveTo(x, y - s); g.lineTo(x + s, y); g.lineTo(x, y + s); g.lineTo(x - s, y); g.closePath(); g.fill(); }
 
 function skyTex() {
-	return canvasTex(2048, 1024, (g, w, h) => {
-		const grad = g.createLinearGradient(0, 0, 0, h);
-		grad.addColorStop(0, "#070b1f"); grad.addColorStop(0.55, "#1b1f4a"); grad.addColorStop(0.85, "#4b2d5e"); grad.addColorStop(1, "#8a4a6a");
-		g.fillStyle = grad; g.fillRect(0, 0, w, h);
+	return canvasTex(4096, 2048, (g, w, h) => {
+		const hz = h * 0.5;
+		const grad = g.createLinearGradient(0, 0, 0, hz);
+		grad.addColorStop(0, "#03050f"); grad.addColorStop(0.5, "#0d1233"); grad.addColorStop(0.82, "#2a2252"); grad.addColorStop(1, "#7a4468");
+		g.fillStyle = grad; g.fillRect(0, 0, w, hz);
+		const below = g.createLinearGradient(0, hz, 0, h);
+		below.addColorStop(0, "#3a2440"); below.addColorStop(0.15, "#140f22"); below.addColorStop(1, "#05040a");
+		g.fillStyle = below; g.fillRect(0, hz, w, h - hz);
 		const r = rng(11);
-		for (let i = 0; i < 900; i++) {
-			const s = r() * 1.8 + 0.3;
-			g.fillStyle = `rgba(255,255,${220 + r() * 35},${0.3 + r() * 0.7})`;
-			g.beginPath(); g.arc(r() * w, r() * h * 0.75, s, 0, Math.PI * 2); g.fill();
+		for (let i = 0; i < 2600; i++) {
+			const s = r() * 2.2 + 0.4;
+			const y = Math.pow(r(), 1.4) * hz * 0.92;
+			g.fillStyle = `rgba(255,255,${220 + r() * 35},${0.25 + r() * 0.75})`;
+			g.beginPath(); g.arc(r() * w, y, s, 0, Math.PI * 2); g.fill();
+		}
+		// milky way haze
+		for (let i = 0; i < 400; i++) {
+			const x = r() * w, y = hz * 0.15 + Math.sin(x / w * Math.PI * 2) * hz * 0.12 + (r() - 0.5) * 120;
+			g.fillStyle = `rgba(190,180,255,${r() * 0.05})`;
+			g.beginPath(); g.arc(x, y, 20 + r() * 50, 0, Math.PI * 2); g.fill();
 		}
 		// moon with glow and craters
-		const mx = w * 0.62, my = h * 0.26;
+		const mx = w * 0.62, my = h * 0.24;
 		const glow = g.createRadialGradient(mx, my, 40, mx, my, 260);
 		glow.addColorStop(0, "rgba(255,244,214,0.55)"); glow.addColorStop(1, "rgba(255,244,214,0)");
 		g.fillStyle = glow; g.fillRect(0, 0, w, h);
-		g.fillStyle = "#fff6dc"; g.beginPath(); g.arc(mx, my, 70, 0, Math.PI * 2); g.fill();
+		g.fillStyle = "#fff6dc"; g.beginPath(); g.arc(mx, my, 46, 0, Math.PI * 2); g.fill();
 		g.fillStyle = "rgba(200,190,160,0.45)";
-		[[-20, -15, 14], [22, 10, 10], [-5, 28, 8], [30, -25, 6]].forEach(c => { g.beginPath(); g.arc(mx + c[0], my + c[1], c[2], 0, Math.PI * 2); g.fill(); });
-		// distant city skyline with lit windows
-		let x = 0;
-		while (x < w) {
-			const bw = 50 + r() * 120, bh = 120 + r() * 260;
-			g.fillStyle = `rgb(${14 + r() * 10},${14 + r() * 10},${32 + r() * 16})`;
-			g.fillRect(x, h - bh, bw, bh);
-			for (let wy = h - bh + 12; wy < h - 10; wy += 18) for (let wx = x + 8; wx < x + bw - 8; wx += 14) {
-				if (r() < 0.32) { g.fillStyle = r() < 0.8 ? "rgba(255,210,130,0.85)" : "rgba(160,200,255,0.8)"; g.fillRect(wx, wy, 6, 9); }
+		[[-14, -10, 9], [15, 7, 7], [-3, 19, 5], [20, -17, 4]].forEach(c => { g.beginPath(); g.arc(mx + c[0], my + c[1], c[2], 0, Math.PI * 2); g.fill(); });
+		// city skyline sitting on the horizon, with lit windows
+		for (let layer = 0; layer < 2; layer++) {
+			let x = 0;
+			while (x < w) {
+				const bw = (layer ? 40 : 60) + r() * 110, bh = (layer ? 50 : 90) + r() * (layer ? 140 : 230);
+				const shade = layer ? 22 : 12;
+				g.fillStyle = `rgb(${shade + r() * 8},${shade + r() * 8},${shade + 20 + r() * 14})`;
+				g.fillRect(x, hz - bh, bw, bh + 6);
+				if (!layer && r() < 0.15) { g.fillStyle = "#ff4d4d"; g.fillRect(x + bw / 2 - 2, hz - bh - 8, 4, 4); }
+				for (let wy = hz - bh + 10; wy < hz - 6; wy += layer ? 12 : 16) for (let wx = x + 6; wx < x + bw - 6; wx += layer ? 9 : 12) {
+					if (r() < (layer ? 0.18 : 0.3)) { g.fillStyle = r() < 0.8 ? `rgba(255,210,130,${layer ? 0.5 : 0.85})` : `rgba(160,200,255,${layer ? 0.45 : 0.8})`; g.fillRect(wx, wy, layer ? 4 : 5, layer ? 5 : 8); }
+				}
+				x += bw + r() * 10;
 			}
-			x += bw + r() * 12;
 		}
+		// warm city glow under the horizon
+		const glow2 = g.createLinearGradient(0, hz - 80, 0, hz + 60);
+		glow2.addColorStop(0, "rgba(255,150,90,0)"); glow2.addColorStop(0.7, "rgba(255,150,90,0.12)"); glow2.addColorStop(1, "rgba(255,150,90,0)");
+		g.fillStyle = glow2; g.fillRect(0, hz - 80, w, 140);
 	});
+}
+
+// exterior brick for the outside of the building
+function brickTex(rx, ry) {
+	return canvasTex(512, 512, (g, w, h) => {
+		g.fillStyle = "#6e5a52"; g.fillRect(0, 0, w, h);
+		const r = rng(21);
+		const bh = 32, bw = 96;
+		for (let row = 0; row < h / bh; row++) for (let col = -1; col < w / bw + 1; col++) {
+			const x = col * bw + (row % 2) * bw / 2, y = row * bh;
+			const t = 120 + r() * 40;
+			g.fillStyle = `rgb(${t + 30},${t * 0.62},${t * 0.5})`;
+			g.fillRect(x + 3, y + 3, bw - 6, bh - 6);
+			g.fillStyle = "rgba(0,0,0,0.08)"; g.fillRect(x + 3, y + bh - 8, bw - 6, 5);
+		}
+	}, rx, ry);
 }
 
 function marbleTex() {
@@ -263,7 +316,9 @@ export function buildRoom(scene) {
 		return m;
 	};
 	const win = { x0: 1.7, x1: 4.3, y0: 0.9, y1: 2.7 };
-	wallSeg(win.x0 + 7, H, (-7 + win.x0) / 2, H / 2, -6.1, 0);
+	wallSeg(DOOR.x0 + 7, H, (-7 + DOOR.x0) / 2, H / 2, -6.1, 0);
+	wallSeg(win.x0 - DOOR.x1, H, (DOOR.x1 + win.x0) / 2, H / 2, -6.1, 0);
+	wallSeg(DOOR.x1 - DOOR.x0, H - DOOR.h, (DOOR.x0 + DOOR.x1) / 2, (H + DOOR.h) / 2, -6.1, 0);
 	wallSeg(7 - win.x1, H, (7 + win.x1) / 2, H / 2, -6.1, 0);
 	wallSeg(win.x1 - win.x0, win.y0, (win.x0 + win.x1) / 2, win.y0 / 2, -6.1, 0);
 	wallSeg(win.x1 - win.x0, H - win.y1, (win.x0 + win.x1) / 2, (H + win.y1) / 2, -6.1, 0);
@@ -277,10 +332,46 @@ export function buildRoom(scene) {
 		add(scene, new THREE.BoxGeometry(side ? 0.06 : len, 0.08, side ? len : 0.06), trim, x, H - 0.04, z);
 	});
 
-	// Night sky + window
-	const sky = new THREE.Mesh(new THREE.PlaneGeometry(16, 8), new THREE.MeshBasicMaterial({ map: skyTex(), toneMapped: false }));
-	sky.position.set(3, 1.8, -9);
+	// Night sky dome (seen through the window and from the terrace)
+	const sky = new THREE.Mesh(new THREE.SphereGeometry(50, 64, 32), new THREE.MeshBasicMaterial({ map: skyTex(), toneMapped: false, side: THREE.BackSide, depthWrite: false }));
+	sky.position.set(0, 0, -3);
+	sky.renderOrder = -1;
 	scene.add(sky);
+
+	// Outside of the building: brick facade on the back wall, a roof slab and parapet
+	const brickSeg = (w, h, x, y) => add(scene, new THREE.PlaneGeometry(w, h), mat("#ffffff", 0.95, 0, { map: brickTex(w / 2.4, h / 2.4) }), x, y, -6.205, { ry: Math.PI, cast: false });
+	brickSeg(DOOR.x0 + 7.2, H + 0.6, (-7.2 + DOOR.x0) / 2, (H + 0.6) / 2);
+	brickSeg(win.x0 - DOOR.x1, H + 0.6, (DOOR.x1 + win.x0) / 2, (H + 0.6) / 2);
+	brickSeg(DOOR.x1 - DOOR.x0, H + 0.6 - DOOR.h, (DOOR.x0 + DOOR.x1) / 2, (H + 0.6 + DOOR.h) / 2);
+	brickSeg(7.2 - win.x1, H + 0.6, (7.2 + win.x1) / 2, (H + 0.6) / 2);
+	brickSeg(win.x1 - win.x0, win.y0, (win.x0 + win.x1) / 2, win.y0 / 2);
+	brickSeg(win.x1 - win.x0, H + 0.6 - win.y1, (win.x0 + win.x1) / 2, (H + 0.6 + win.y1) / 2);
+	add(scene, new THREE.BoxGeometry(14.6, 0.25, 12.6), mat("#4a4048", 0.9), 0, H + 0.13, 0);
+	add(scene, new THREE.BoxGeometry(14.6, 0.35, 0.2), mat("#d8cfc4", 0.8), 0, H + 0.42, -6.25);
+	// French doors standing open onto the terrace
+	{
+		const dw = DOOR.x1 - DOOR.x0, dcx = (DOOR.x0 + DOOR.x1) / 2;
+		const fm = mat("#fbf8f2", 0.45);
+		add(scene, new THREE.BoxGeometry(dw + 0.16, 0.1, 0.28), fm, dcx, DOOR.h + 0.05, -6.1);
+		add(scene, new THREE.BoxGeometry(0.08, DOOR.h, 0.28), fm, DOOR.x0 - 0.04, DOOR.h / 2, -6.1);
+		add(scene, new THREE.BoxGeometry(0.08, DOOR.h, 0.28), fm, DOOR.x1 + 0.04, DOOR.h / 2, -6.1);
+		add(scene, new THREE.BoxGeometry(dw, 0.02, 0.3), mat("#b9a892", 0.6), dcx, 0.01, -6.1, { cast: false });
+		const glassM = new THREE.MeshPhysicalMaterial({ color: "#d8ecff", transparent: true, opacity: 0.18, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
+		for (const side of [-1, 1]) {
+			const hinge = group(scene, side < 0 ? DOOR.x0 : DOOR.x1, 0, -6.22, side < 0 ? -1.75 : 1.75);
+			const leaf = dw / 2;
+			const ox = side < 0 ? leaf / 2 : -leaf / 2;
+			add(hinge, new THREE.BoxGeometry(leaf, 0.08, 0.05), fm, ox, 0.04, 0);
+			add(hinge, new THREE.BoxGeometry(leaf, 0.08, 0.05), fm, ox, DOOR.h - 0.06, 0);
+			add(hinge, new THREE.BoxGeometry(0.07, DOOR.h, 0.05), fm, ox - leaf / 2 + 0.035, DOOR.h / 2, 0);
+			add(hinge, new THREE.BoxGeometry(0.07, DOOR.h, 0.05), fm, ox + leaf / 2 - 0.035, DOOR.h / 2, 0);
+			for (let k = 1; k < 4; k++) add(hinge, new THREE.BoxGeometry(leaf, 0.035, 0.04), fm, ox, k * DOOR.h / 4, 0);
+			const gl = new THREE.Mesh(new THREE.PlaneGeometry(leaf - 0.1, DOOR.h - 0.12), glassM);
+			gl.position.set(ox, DOOR.h / 2, 0);
+			hinge.add(gl);
+			add(hinge, new THREE.SphereGeometry(0.025, 10, 8), brass, ox + (side < 0 ? 1 : -1) * (leaf / 2 - 0.08), 1.05, 0.04);
+		}
+	}
 	const frameM = mat("#fbf8f2", 0.45);
 	const wcx = (win.x0 + win.x1) / 2, wcy = (win.y0 + win.y1) / 2, ww = win.x1 - win.x0, wh = win.y1 - win.y0;
 	add(scene, new THREE.BoxGeometry(ww + 0.16, 0.08, 0.26), frameM, wcx, win.y1 + 0.04, -6.05);
@@ -443,7 +534,7 @@ export function buildRoom(scene) {
 	flame.scale.y = 2;
 	const candleLight = new THREE.PointLight("#ffb45e", 0.6, 2.5, 2);
 	candleLight.position.set(-2.95, 0.7, -3.65);
-	scene.add(candleLight);
+	// (the candle glows through its emissive flame only; a light per tiny flame is too costly)
 	updaters.push((dt, t) => { const f = 0.85 + Math.sin(t * 13) * 0.08 + Math.sin(t * 7.3) * 0.07; flame.scale.set(1, 2 * f, 1); candleLight.intensity = 0.6 * f; });
 	box(-3.3, -1.9, -3.88, -3.12);
 	interact("notes", { label: "Open our shared notebook", stand: [-1.55, -3.5] }, book);
@@ -633,7 +724,6 @@ export function buildRoom(scene) {
 	add(arcade, new THREE.BoxGeometry(0.12, 0.08, 0.01), mat("#222", 0.5), 0, 0.5, 0.385);
 	const arcadeLight = new THREE.PointLight("#9a6bff", 2.5, 3, 2);
 	arcadeLight.position.set(5.8, 1.4, 1.9);
-	scene.add(arcadeLight);
 	box(6.0, 7, 1.45, 2.35);
 	interact("arcade", { label: "Play arcade games", stand: [5.45, 1.9], face: -Math.PI / 2 }, arcade);
 
@@ -818,7 +908,6 @@ export function buildRoom(scene) {
 	for (let i = 0; i < 4; i++) add(kitchen, new THREE.CylinderGeometry(0.008, 0.008, 0.12, 8), chrome, -0.9 + i * 0.6 + 0.2, 1.75, 0.06, { rz: Math.PI / 2 });
 	const ul = new THREE.PointLight("#ffe7c4", 1.4, 2.5, 2);
 	ul.position.set(-6.5, 1.55, 3.8);
-	scene.add(ul);
 	// jars + fruit bowl
 	const jarM = new THREE.MeshPhysicalMaterial({ color: "#ffffff", transmission: 0.85, roughness: 0.05, thickness: 0.03, transparent: true, opacity: 0.6 });
 	[[-1.0, "#6b4226"], [-0.85, "#f2e8d5"], [-0.7, "#c58940"]].forEach(([x, c]) => {
@@ -919,7 +1008,7 @@ export function buildRoom(scene) {
 	// lying spots: feet at the foot end, head on the pillow (toward +z)
 	sitSpots.push({ id: "bedL", x: -3.62, z: 4.1, h: Math.PI, y: 0.7, lie: true });
 	sitSpots.push({ id: "bedR", x: -2.78, z: 4.1, h: Math.PI, y: 0.7, lie: true });
-	interact("bed", { label: "Go to sleep", stand: [-3.2, 3.35], sit: ["bedL", "bedR"] }, bedG);
+	interact("bed", { label: "Go to sleep", stand: [-1.85, 4.1], sit: ["bedL", "bedR"] }, bedG);
 	// bedside table + night lamp
 	const bst = group(scene, -1.95, 0, 5.6, Math.PI);
 	add(bst, rbox(0.5, 0.55, 0.42, 0.02), lightWood, 0, 0.3, 0);
@@ -940,24 +1029,32 @@ export function buildRoom(scene) {
 	const nightLamp = { on: false };
 	const setNightLamp = on => { nightLamp.on = on; nightLight.intensity = on ? 3.2 : 0; nightShadeM.emissiveIntensity = on ? 1.1 : 0; };
 
-	// Drawing easel
-	const easelPos = new THREE.Vector3(-3.7, 0, 2.3);
-	const easelFace = Math.atan2(0.5 - easelPos.x, -0.8 - easelPos.z);
-	const easel = group(scene, easelPos.x, 0, easelPos.z, easelFace);
-	for (const sx of [-0.32, 0.32]) add(easel, new THREE.BoxGeometry(0.04, 1.75, 0.04), lightWood, sx, 0.86, 0.05, { rz: sx * -0.12, rx: -0.08 });
-	add(easel, new THREE.BoxGeometry(0.04, 1.7, 0.04), lightWood, 0, 0.82, -0.38, { rx: 0.32 });
-	add(easel, new THREE.BoxGeometry(0.9, 0.04, 0.1), lightWood, 0, 0.8, 0.1);
-	const easelCanvas = document.createElement("canvas");
-	easelCanvas.width = 640; easelCanvas.height = 480;
-	const easelTex = new THREE.CanvasTexture(easelCanvas);
-	easelTex.colorSpace = THREE.SRGBColorSpace;
-	add(easel, new THREE.BoxGeometry(0.86, 0.66, 0.03), mat("#f5f0e6", 0.9), 0, 1.16, 0.085, { rx: -0.08 });
-	add(easel, new THREE.PlaneGeometry(0.82, 0.615), new THREE.MeshStandardMaterial({ map: easelTex, roughness: 0.9 }), 0, 1.16, 0.102, { rx: -0.08, cast: false });
-	// paint palette + brushes jar on the ledge
-	add(easel, new THREE.CylinderGeometry(0.08, 0.08, 0.008, 20), lightWood, 0.3, 0.825, 0.12);
-	["#e63946", "#457b9d", "#f1c453", "#2a9d8f"].forEach((c, i) => add(easel, new THREE.SphereGeometry(0.012, 8, 6), mat(c, 0.3), 0.3 + Math.cos(i * 1.4) * 0.05, 0.832, 0.12 + Math.sin(i * 1.4) * 0.05, { cast: false }));
-	box(easelPos.x - 0.45, easelPos.x + 0.45, easelPos.z - 0.45, easelPos.z + 0.45);
-	interact("easel", { label: "Draw together", stand: [easelPos.x + Math.sin(easelFace) * 1.15, easelPos.z + Math.cos(easelFace) * 1.15], face: easelFace + Math.PI }, easel);
+	// bedroom touches: framed print above the bed, a tall plant, a soft pouf
+	const bedArt = canvasTex(512, 320, (g, w, h) => {
+		const gr = g.createLinearGradient(0, 0, w, h);
+		gr.addColorStop(0, "#f6e3d8"); gr.addColorStop(1, "#e8c7c9");
+		g.fillStyle = gr; g.fillRect(0, 0, w, h);
+		g.strokeStyle = "#b5677a"; g.lineWidth = 6; g.lineCap = "round";
+		g.beginPath(); g.moveTo(60, 230); g.bezierCurveTo(140, 80, 220, 80, 256, 170); g.bezierCurveTo(292, 80, 372, 80, 452, 230); g.stroke();
+		g.fillStyle = "#7a3b52"; g.font = "italic 600 34px Georgia, serif"; g.textAlign = "center";
+		g.fillText("you & me", w / 2, 290);
+	});
+	const bedFrameArt = group(scene, -3.2, 1.75, 5.97, Math.PI);
+	add(bedFrameArt, new THREE.BoxGeometry(1.24, 0.8, 0.04), mat("#3b2a22", 0.5), 0, 0, 0);
+	add(bedFrameArt, new THREE.PlaneGeometry(1.14, 0.7), mat("#fff", 0.85, 0, { map: bedArt }), 0, 0, 0.021, { cast: false });
+	const tallPot = group(scene, -4.55, 0, 5.55);
+	add(tallPot, new THREE.CylinderGeometry(0.2, 0.15, 0.42, 20), mat("#e9e2d8", 0.5), 0, 0.21, 0);
+	for (let i = 0; i < 9; i++) {
+		const a = i * 0.7;
+		const stalk = add(tallPot, new THREE.CylinderGeometry(0.01, 0.014, 1.0 + (i % 3) * 0.2, 6), mat("#47703f", 0.6), Math.cos(a) * 0.05, 0.9, Math.sin(a) * 0.05, { rz: Math.cos(a) * 0.18, rx: Math.sin(a) * 0.18 });
+		void stalk;
+		const lf = add(tallPot, new THREE.SphereGeometry(0.11, 10, 8), mat(i % 2 ? "#4f8a57" : "#3f7d4b", 0.6), Math.cos(a) * 0.22, 1.25 + (i % 3) * 0.18, Math.sin(a) * 0.22);
+		lf.scale.set(0.6, 1.6, 0.35); lf.rotation.y = -a;
+	}
+	box(-4.78, -4.32, 5.32, 5.8);
+	const pouf = add(scene, new THREE.CylinderGeometry(0.28, 0.3, 0.36, 24), mat("#c9a27e", 0.95), -3.2, 0.18, 3.3);
+	pouf.userData.floor = false;
+	box(-3.5, -2.9, 3.0, 3.6);
 
 	// ------------------------------------------------------------ the big plant
 	const plantG = group(scene, 5.5, 0, -5.25);
@@ -1111,6 +1208,9 @@ export function buildRoom(scene) {
 	}
 	drawTVOff();
 
+	// ------------------------------------------------------------ rooftop terrace
+	const terrace = buildTerrace(scene, { add, mat, group, rbox, canvasTex, interact, box, sitSpots, updaters, rng, heartMesh, lightWood, wood, darkWood, brass, white, moonDir: MOON_DIR });
+
 	// interactive light switch toggle visual
 	const setSwitch = on => { toggle.rotation.x = on ? -0.35 : 0.35; };
 	setSwitch(true);
@@ -1120,8 +1220,11 @@ export function buildRoom(scene) {
 		curtains, setLamp, setMain: on => { setMain(on); setSwitch(on); }, lampState, mainState,
 		tv: { canvas: tvCanvas, tex: tvTex, light: tvLight, screen: tvScreen, draw: drawTV, off: drawTVOff, channels: TV_CHANNELS },
 		arcade: { canvas: arcCanvas, tex: arcTex },
-		easel: { canvas: easelCanvas, tex: easelTex },
+		easel: terrace.easel,
+		terrace,
 		photos, setPlant, waterFx, record, coffee, ball, envs,
+		// lights that only matter in one area; the world hides the other area's lights (cheaper shading)
+		areaLights: { room: [tvLight, fairyLight, nightLight, lampLight], terrace: terrace.lights },
 		pianoKeys, pressKey, remote: { mesh: remote, parent: ct }, setNightLamp, nightLamp,
 		setFairy: k => { fairyLight.intensity = 1.5 * k; bulbs.forEach(b => { b.userData.k = k; }); },
 		update(dt, t) { updaters.forEach(u => u(dt, t)); }

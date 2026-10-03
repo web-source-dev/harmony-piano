@@ -299,6 +299,9 @@ function cacheControlFor(urlPath) {
 	if (/\.(png|jpg|jpeg|gif|ico|webp|woff2?|ttf|mp3|wav|ogg|m4a)$/i.test(urlPath)) {
 		return "public, max-age=31536000, immutable";
 	}
+	// 3D world modules import each other without ?v= — always revalidate so a
+	// deploy never mixes old and new files (ETag keeps it a cheap 304).
+	if (/^\/world[A-Za-z]*\.js$/i.test(urlPath)) return "no-cache";
 	// HTML: revalidate with ETag so deploys still show up (SW serves instantly).
 	if (/\.html$/i.test(urlPath)) return "no-cache";
 	// JS/CSS: short cache + ETag 304s. Query-string ?v= busts when we bump it.
