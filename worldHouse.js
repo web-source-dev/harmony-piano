@@ -33,15 +33,19 @@ import { createPets } from "./worldPets.js";
 // and which rooms you can see into from it through open doors
 // (ry turns a room round: the cinema is built facing +z and turned so its doors face the living room)
 export const ZONES = {
-	lounge:  { name: "Lounge",   ox: 15.2,   oy: 0,    oz: 1.0,   bounds: [7.1, 23.25, -6.05, 8.05],   see: ["main", "bedroom", "bath", "pool"], file: "./worldLounge.js" },
+	lounge:  { name: "Lounge",   ox: 15.2,   oy: 0,    oz: 1.0,   bounds: [7.1, 23.25, -6.05, 8.05],   see: ["main", "bedroom", "bath", "pool", "loft"], file: "./worldLounge.js" },
+	// upstairs, over the east half of the lounge: drawn there (vis), but on the floor plan it's 30 m further south,
+	// so the two floors never overlap (see shiftAt). The stairs carry you across (portals in worldLoft.js).
+	disco:   { name: "Disco",    ox: 15.2,   oy: 3.6,  oz: 31.0,  vis: [15.2, 1.0], bounds: [18.4, 23.15, 32.2, 37.95], see: ["loft"], file: "./worldDisco.js" },
+	loft:    { name: "Upstairs", ox: 15.2,   oy: 3.6,  oz: 31.0,  vis: [15.2, 1.0], bounds: [16.2, 23.15, 24.05, 37.95], see: ["lounge", "disco", "pool", "main"], borrow: "lounge", file: "./worldLoft.js" },
 	cinema:  { name: "Cinema",   ox: -13.25, oy: -1.8, oz: -3.5,  ry: Math.PI / 2, bounds: [-22.6, -7.05, -8.8, 1.8], see: ["main"], file: "./worldCinema.js" },
-	bedroom: { name: "Bedroom",  ox: 28.4,   oy: 0,    oz: -4,    bounds: [23.25, 33.6, -8.62, 0.75],  see: ["lounge", "pool"], file: "./worldBedroom.js" },
-	bath:    { name: "Bathroom", ox: 27.4,   oy: 0,    oz: 4.7,   bounds: [23.25, 31.6, 0.95, 8.4],    see: ["lounge"], file: "./worldBath.js" },
-	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.15],  see: ["main", "lounge", "bedroom"], outdoor: true, file: "./worldPool.js" }
+	bedroom: { name: "Bedroom",  ox: 28.4,   oy: 0,    oz: -4,    bounds: [23.25, 33.6, -8.62, 0.75],  see: ["lounge", "pool", "loft"], file: "./worldBedroom.js" },
+	bath:    { name: "Bathroom", ox: 27.4,   oy: 0,    oz: 4.7,   bounds: [23.25, 31.6, 0.95, 8.4],    see: ["lounge", "loft"], file: "./worldBath.js" },
+	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.15],  see: ["main", "lounge", "bedroom", "loft"], outdoor: true, file: "./worldPool.js" }
 };
 // what you can see from the living room / terrace
-const MAIN_SEES = ["lounge", "pool", "cinema"];
-const BUILD_ORDER = ["lounge", "pool", "bedroom", "bath", "cinema"];
+const MAIN_SEES = ["lounge", "pool", "cinema", "loft"];
+const BUILD_ORDER = ["lounge", "loft", "pool", "bedroom", "bath", "cinema", "disco"];
 
 export function createHouse(ctx) {
 	const { scene, room, renderer, camera } = ctx;
@@ -51,6 +55,7 @@ export function createHouse(ctx) {
 	for (const id in ZONES) {
 		const Z = ZONES[id], b = Z.bounds;
 		Z.area = registerArea({ id, bounds: { minX: b[0], maxX: b[1], minZ: b[2], maxZ: b[3] } });
+		if (Z.vis) Z.area.shift = [Z.ox - Z.vis[0], Z.oz - Z.vis[1]];
 	}
 
 	// the living room, the terrace and the sky go in one group, so they can be switched off in one go
@@ -83,8 +88,9 @@ export function createHouse(ctx) {
 	let nightK = 0;
 	function applyLights(Z) {
 		const n = nightK;
+		const list = Z.borrow && built[Z.borrow] ? Z.lights.concat(built[Z.borrow].lights) : Z.lights;
 		for (let i = 0; i < pool.length; i++) {
-			const l = pool[i], d = Z.lights[i];
+			const l = pool[i], d = list[i];
 			if (d) { l.position.copy(d.pos); l.color.copy(d.color); l.intensity = d.intensity * (1 + n * 0.15); l.distance = d.distance; l.decay = d.decay; }
 			else { l.intensity = 0; l.position.set(Z.ox, -50, 0); }
 		}
@@ -188,33 +194,53 @@ export function createHouse(ctx) {
 		doors.push({ fd, isOpen, curtOpen });
 		return door;
 	}
+	// ---------------------------------------------------------------- stairs between floors
+	// Stepping into a portal's box moves you across the floor plan by (dx, dz): from the top of the lounge's
+	// stairs onto the loft and back. It looks seamless because the loft is drawn right there (see ZONES.vis).
+	const portals = [];
 	// the living room's doors to the lounge
 	addDoor("living", room.livingDoor, { minX: 6.95, maxX: 7.3, minZ: 2.9, maxZ: 4.6 }, [[6.2, 3.75], [8.1, 3.75]]);
 	addDoor("cinema", room.cinemaDoor, { minX: -7.3, maxX: -6.95, minZ: -4.2, maxZ: -2.8 }, [[-6.2, -3.5], [-8.1, -3.5]]);
 
 	function makeKit(id) {
 		const Z = ZONES[id], ox = Z.ox, oy = Z.oy || 0, oz = Z.oz, ry = Z.ry || 0;
+		// where it's drawn (the same place, unless it's upstairs over another room)
+		const vx = Z.vis ? Z.vis[0] : ox, vz = Z.vis ? Z.vis[1] : oz, shift = Z.area.shift || null;
 		const g = new THREE.Group();
 		g.name = "zone:" + id;
-		g.position.set(ox, oy, oz);
+		g.position.set(vx, oy, vz);
 		g.rotation.y = ry;
 		g.visible = false;
 		scene.add(g);
 		// local (x, z) -> world, and back (the room may be turned round by ry)
 		const c = Math.round(Math.cos(ry) * 1e6) / 1e6, sn = Math.round(Math.sin(ry) * 1e6) / 1e6;
 		const W = p => [ox + p[0] * c + p[1] * sn, oz - p[0] * sn + p[1] * c];
+		const Wv = p => [vx + p[0] * c + p[1] * sn, vz - p[0] * sn + p[1] * c];
 		const toLocal = (x, z) => { const dx = x - ox, dz = z - oz; return [dx * c - dz * sn, dx * sn + dz * c]; };
 		const rect = (x0, x1, z0, z1) => { const a = W([x0, z0]), b = W([x1, z1]); return { minX: Math.min(a[0], b[0]), maxX: Math.max(a[0], b[0]), minZ: Math.min(a[1], b[1]), maxZ: Math.max(a[1], b[1]) }; };
 		const k = Object.assign({}, kit, {
 			THREE, g, ox, oy, oz, id, ctx, roundRect,
 			lights: [],
-			key: { pos: new THREE.Vector3(ox, oy + 3, oz), target: new THREE.Vector3(ox, oy, oz), color: new THREE.Color("#ffe2c0"), intensity: 22, angle: 1.2, penumbra: 0.7, distance: 18, decay: 1.6 },
-			fill: { pos: new THREE.Vector3(ox, oy + 2.6, oz), color: new THREE.Color("#ffe6c8"), intensity: 5, distance: 26, decay: 1.2 },
+			key: { pos: new THREE.Vector3(vx, oy + 3, vz), target: new THREE.Vector3(vx, oy, vz), color: new THREE.Color("#ffe2c0"), intensity: 22, angle: 1.2, penumbra: 0.7, distance: 18, decay: 1.6 },
+			fill: { pos: new THREE.Vector3(vx, oy + 2.6, vz), color: new THREE.Color("#ffe6c8"), intensity: 5, distance: 26, decay: 1.2 },
 			hemi: 0.45, env: 0.28, exposure: 1.05,
 			updaters: [],
 			cam: { minX: -5, maxX: 5, minZ: -5, maxZ: 5, maxY: 3 },
-			W, ry,
-			V: (x, y, z) => { const p = W([x, z]); return new THREE.Vector3(p[0], y + oy, p[1]); },
+			W, Wv, ry, shift,
+			// a point in the room as it's drawn (lights, the camera): the same as W unless the room is upstairs
+			V: (x, y, z) => { const p = Wv([x, z]); return new THREE.Vector3(p[0], y + oy, p[1]); },
+			// stairs: step into the box (local coords; below: on the room underneath) and you're moved across
+			// to the other floor, nudged on by jx along x. goal: where to walk to use it
+			portal(below, x0, x1, z0, z1, jx) {
+				const a = (below ? Wv : W)([x0, z0]), b = (below ? Wv : W)([x1, z1]);
+				const s = shift || [0, 0], dx = (below ? s[0] : -s[0]) + jx, dz = below ? s[1] : -s[1];
+				const r = { minX: Math.min(a[0], b[0]), maxX: Math.max(a[0], b[0]), minZ: Math.min(a[1], b[1]), maxZ: Math.max(a[1], b[1]), dx, dz };
+				r.goal = [(r.minX + r.maxX) / 2 + (jx > 0 ? 0.08 : -0.08), (r.minZ + r.maxZ) / 2];
+				portals.push(r);
+				return r;
+			},
+			// a framed photo on the wall: one of the shared photo slots (see world.js photoFrame)
+			photo(slot, x, y, z, rot, o) { return ctx.photoFrame(g, slot, x, y, z, rot, o || {}, shift); },
 			box(x0, x1, z0, z1) { room.colliders.push(rect(x0, x1, z0, z1)); },
 			walk(x0, x1, z0, z1) { Z.area.rects.push(rect(x0, x1, z0, z1)); },
 			floor(fn) { Z.area.floor = (x, z) => { const l = toLocal(x, z); return fn(l[0], l[1]) + oy; }; },
@@ -234,6 +260,7 @@ export function createHouse(ctx) {
 				if (sd && !sd.get && def.stand) def.stand = W(def.stand);
 				if (def.stands) def.stands = def.stands.map(W);
 				if (def.face !== undefined) def.face += ry;
+				if (shift) def.shift = shift;
 				objs.forEach(o => o.traverse(ch => { ch.userData.interact = iid; }));
 				room.interactables[iid] = def;
 				return def;
@@ -292,7 +319,7 @@ export function createHouse(ctx) {
 		const ca = k.W([cb.minX, cb.minZ]), cz = k.W([cb.maxX, cb.maxZ]);
 		const camRect = { minX: Math.min(ca[0], cz[0]), maxX: Math.max(ca[0], cz[0]), minZ: Math.min(ca[1], cz[1]), maxZ: Math.max(ca[1], cz[1]) };
 		return Object.assign({}, api, {
-			id, name: Z.name, ox: k.ox, group: k.g, outdoor: !!Z.outdoor,
+			id, name: Z.name, ox: k.ox, group: k.g, outdoor: !!Z.outdoor, borrow: Z.borrow || null,
 			lights: k.lights, key: k.key, fill: k.fill,
 			get hemi() { return k.hemi; }, get env() { return k.env; }, get exposure() { return k.exposure; },
 			cam: Object.assign(camRect, { maxY: cb.maxY + k.oy, minY: cb.minY === undefined ? -99 : cb.minY + k.oy }),
@@ -312,7 +339,7 @@ export function createHouse(ctx) {
 	}
 
 	const houseApi = {
-		ZONES, built, ensure, update, addDoor,
+		ZONES, built, ensure, update, addDoor, portals,
 		start: pump,
 		region: () => region,
 		regionOf,

@@ -14,7 +14,7 @@
  * so two screens always agree.
  */
 import * as THREE from "three";
-import { kit, floorAt, areaOf } from "./worldRoom.js";
+import { kit, floorAt, areaOf, shiftAt } from "./worldRoom.js";
 
 const DOG = "dog", CAT = "cat";
 const KEYS = { feed: "z:pets:feed", call: "z:pets:call", fetch: "z:pets:fetch", petdog: "z:pets:petdog", petcat: "z:pets:petcat", names: "z:pets:names" };
@@ -259,6 +259,8 @@ function openBoard(ctx) {
 }
 function callPets(ctx) {
 	const me = ctx.me();
+	// upstairs (the loft, the disco): they won't do the stairs
+	if (shiftAt(me.x, me.z)) { const n = names(ctx); ctx.notice(`${n.dog} and ${n.cat} don't do stairs - they're waiting for you downstairs.`); return; }
 	ctx.setShared(KEYS.call, { at: Date.now(), x: me.x, z: me.z, by: ctx.profile().name });
 	ctx.doUpper("wave", 1600);
 	const n = names(ctx);

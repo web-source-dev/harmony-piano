@@ -22,7 +22,7 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
 import { Avatar, SKIN_TONES, HAIR_COLORS, OUTFIT_COLORS, MOODS, drawMoodFace } from "./worldAvatar.js";
-import { buildRoom, ROOM, DOOR, TERRACE, MOON_DIR, walkable, areaOf, floorAt, heartMesh, makeMug } from "./worldRoom.js";
+import { buildRoom, ROOM, DOOR, TERRACE, MOON_DIR, walkable, areaOf, floorAt, heartMesh, makeMug, shiftAt, visXZ, makePhotoFrame } from "./worldRoom.js";
 import { WorldAudio, TRACKS } from "./worldAudio.js";
 import * as Games from "./worldGames.js";
 import { createHouse, ZONES } from "./worldHouse.js";
@@ -169,6 +169,7 @@ const house = createHouse({
 	whoSits: id => whoSits(id), freeSpot: ids => freeSpot(ids), spotById: id => spotById(id),
 	enterTV: () => enterTV(), tvMode: () => tvMode, openMusic: () => openMusic(), showLook: () => showLobby(true),
 	gfxTier: () => gfxTier(),
+	photoFrame: (...a) => photoFrame(...a), openPhotos: slot => openPhotos(slot),
 	restoreMainLights() { room.setMain(!!get("mainLight")); applyNight(null); },
 	onRegion() { refreshPeople(); },
 	onZoneBuilt() { gridDirty(); }
@@ -448,8 +449,8 @@ function applyKey(k, remote) {
 	else if (k === "cups") applyCups();
 	else if (k === "terraceDoor") { room.setTerraceDoor(v); if (audio && remote !== null) audio.sfx("door", 0.5); }
 	else if (k === "notes") { const ta = $("#notes-ta"); if (ta && remote) { const s = ta.selectionStart, e = ta.selectionEnd; ta.value = v || ""; if (document.activeElement === ta) ta.setSelectionRange(s, e); } }
-	else if (/^photo\d$/.test(k)) { const i = +k[5]; room.photos[i].setImage(v || null); if (modalKind === "photos") openPhotos(); }
-	else if (/^cap\d$/.test(k)) { if (modalKind === "photos" && remote) { const inp = document.querySelector(`[data-cap="${k[3]}"]`); if (inp && document.activeElement !== inp) inp.value = v || ""; } }
+	else if (PHOTO_KEY.test(k)) { const i = +k.slice(5); if (room.photos[i]) room.photos[i].setImage(v || null); if (modalKind === "photos" && !photoLibOpen) openPhotos(photoSel); }
+	else if (CAP_KEY.test(k)) { if (modalKind === "photos" && remote) { const inp = document.querySelector(`[data-cap="${k.slice(3)}"]`); if (inp && document.activeElement !== inp) inp.value = v || ""; } }
 	else if (k === "game" || k === "rps0" || k === "rps1") applyGame(k, remote);
 	else if (k === "drawClear") { for (const id in strokes) if (strokes[id].ts < v) delete strokes[id]; saveStrokes(); redrawEasel(); }
 	else if (k.indexOf("letter:") === 0) onLetter(k, v, remote);
@@ -553,7 +554,8 @@ function flushChat() {
 		.catch(() => { chatFlushing = false; clearTimeout(chatRetryT); chatRetryT = setTimeout(flushChat, 10000); });
 }
 // the wall photos + captions are saved on the server too, so they're there whenever anyone comes back
-const WORLD_SAVED = /^(photo|cap)[0-2]$/;
+const WORLD_SAVED = /^(photo|cap)([0-9]|[1-4][0-9])$/;
+const PHOTO_KEY = /^photo([0-9]|[1-4][0-9])$/, CAP_KEY = /^cap([0-9]|[1-4][0-9])$/;
 const worldSaveT = {};
 function saveWorldKey(k) {
 	if (!WORLD_SAVED.test(k) || !S[k] || !/^https?:$/.test(location.protocol)) return;
@@ -647,7 +649,7 @@ function interact(id) {
 		case "arcade": openArcade(); break;
 		case "door": leaveToPiano(); break;
 		case "desk": sitAtDesk(); break;
-		case "photos": openPhotos(); break;
+		case "photos": openPhotos(0); break;
 		case "coffee": if (coffeeReady()) takeCoffee(); else makeCoffee(); break;
 		case "terraceDoor": setShared("terraceDoor", !get("terraceDoor")); break;
 		case "easel": openDraw(); break;
@@ -708,6 +710,7 @@ function defCenter(def) {
 		const b = new THREE.Box3();
 		def.objects.forEach(o => b.expandByObject(o));
 		def._c = b.getCenter(new THREE.Vector3());
+		if (def.shift) { def._c.x += def.shift[0]; def._c.z += def.shift[1]; }
 	}
 	return def._c;
 }
@@ -1235,27 +1238,63 @@ function compressImage(file, maxChars) {
 		img.src = URL.createObjectURL(file);
 	});
 }
-function openPhotos() {
-	const html = `<div class="photos">${[0, 1, 2].map(i => {
-		const src = get("photo" + i);
-		return `<div class="ph" style="--r:${[-2, 1.5, -1][i]}deg"><div class="img" data-view="${i}" style="${src ? `background-image:url('${src}')` : "background:linear-gradient(135deg,#f3d9e3,#dfe8f5)"}"></div>
-			<input data-cap="${i}" maxlength="40" placeholder="caption..." value="${esc(get("cap" + i) || "")}">
-			<div class="row"><button class="btn" data-pick="${i}">Upload</button><button class="btn" data-lib="${i}">Library</button>${src ? `<button class="btn" data-del="${i}">Remove</button>` : ""}</div></div>`;
-	}).join("")}</div><input type="file" accept="image/*" id="phfile" class="hidden">
+// 50 frames around the house; which slots hang where (the rooms add their own frames: see k.photo in worldHouse.js)
+const PHOTO_COUNT = 50;
+const PHOTO_PLACES = [
+	{ name: "Living room", slots: [0, 1, 2, 47, 48, 49] },
+	{ name: "The photo wall (upstairs)", slots: range(3, 26) },
+	{ name: "Upstairs", slots: [32, 33, 34] },
+	{ name: "Lounge", slots: [27, 28, 29, 30, 31] },
+	{ name: "Bedroom", slots: [35, 36, 37, 38, 39] },
+	{ name: "Bathroom", slots: [40, 41] },
+	{ name: "Disco", slots: [42, 43, 44] },
+	{ name: "Cinema", slots: [45, 46] }
+];
+function range(a, b) { const o = []; for (let i = a; i <= b; i++) o.push(i); return o; }
+const placeOf = slot => (PHOTO_PLACES.find(p => p.slots.includes(slot)) || { name: "" }).name;
+// a frame hung by a room of the house (parent: that room's group, local coords)
+function photoFrame(parent, slot, x, y, z, ry, o) {
+	const f = makePhotoFrame(parent, slot, x, y, z, ry, o);
+	room.photos[slot] = f;
+	f.setImage(get("photo" + slot) || null);
+	return f;
+}
+let photoSel = 0, photoLibOpen = false;
+function openPhotos(sel) {
+	if (typeof sel === "number") photoSel = Math.max(0, Math.min(PHOTO_COUNT - 1, sel));
+	photoLibOpen = false;
+	const i = photoSel, src = get("photo" + i);
+	const filled = range(0, PHOTO_COUNT - 1).filter(n => get("photo" + n)).length;
+	const keepScroll = document.querySelector(".pm-list") ? document.querySelector(".pm-list").scrollTop : 0;
+	const html = `<div class="pm">
+		<div class="pm-edit">
+			<div class="ph" style="--r:-1.5deg"><div class="img" data-view="${i}" style="${src ? `background-image:url('${esc(src)}')` : "background:linear-gradient(135deg,#f3d9e3,#dfe8f5)"}"></div>
+				<input data-cap="${i}" maxlength="40" placeholder="caption..." value="${esc(get("cap" + i) || "")}">
+				<div class="row"><button class="btn" data-pick="${i}">Upload</button><button class="btn" data-lib="${i}">Library</button>${src ? `<button class="btn" data-del="${i}">Remove</button>` : ""}</div></div>
+			<div class="pm-where"><b>Frame ${i + 1}</b><span>${esc(placeOf(i))}</span><span class="muted">${filled} of ${PHOTO_COUNT} frames have a photo</span></div>
+		</div>
+		<div class="pm-list">${PHOTO_PLACES.map(pl => `<h4>${esc(pl.name)}</h4><div class="pm-grid">${pl.slots.map(n => {
+			const u = get("photo" + n);
+			return `<button class="pm-it${n === i ? " on" : ""}" data-sel="${n}" title="Frame ${n + 1}">${u ? `<img loading="lazy" src="${esc(u)}" alt="">` : `<span>+</span>`}<i>${n + 1}</i></button>`;
+		}).join("")}</div>`).join("")}</div>
+	</div><input type="file" accept="image/*" id="phfile" class="hidden">
 	<div id="phlib" class="phlib hidden"><div class="phlib-head"><b id="phlib-t">Choose a photo</b><button class="btn" id="phlib-x">Back</button></div><div class="phlib-grid" id="phlib-g"><p class="muted">Loading the media library...</p></div></div>
-	<p class="muted" style="margin:14px 0 0">Photos hang on the wall for everyone and stay saved in this room - upload one or pick from the media library.</p>`;
-	const body = openModal("photos", "Our Memories", html, 680);
-	let slot = 0;
+	<p class="muted" style="margin:14px 0 0">${PHOTO_COUNT} frames hang around the house, with a whole wall of them upstairs. Pick a frame, then upload a photo or choose one from the media library - everyone sees it, and it stays saved in this room.</p>`;
+	const body = openModal("photos", "Our Memories", html, 760);
+	const list = body.querySelector(".pm-list");
+	if (list) list.scrollTop = keepScroll;
+	const slot = i;
 	const file = body.querySelector("#phfile");
-	body.querySelectorAll("[data-pick]").forEach(b => b.onclick = () => { slot = +b.dataset.pick; file.click(); });
-	body.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { setShared("photo" + b.dataset.del, ""); openPhotos(); });
-	body.querySelectorAll("[data-lib]").forEach(b => b.onclick = () => openPhotoLibrary(body, +b.dataset.lib));
+	body.querySelectorAll("[data-sel]").forEach(b => b.onclick = () => openPhotos(+b.dataset.sel));
+	body.querySelectorAll("[data-pick]").forEach(b => b.onclick = () => file.click());
+	body.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { setShared("photo" + slot, ""); openPhotos(); });
+	body.querySelectorAll("[data-lib]").forEach(b => b.onclick = () => openPhotoLibrary(body, slot));
 	body.querySelectorAll("[data-cap]").forEach(inp => inp.oninput = () => { clearTimeout(inp._t); inp._t = setTimeout(() => setShared("cap" + inp.dataset.cap, inp.value.slice(0, 40)), 400); });
 	body.querySelectorAll("[data-view]").forEach(d => d.onclick = () => {
 		const src = get("photo" + d.dataset.view);
-		if (!src) { slot = +d.dataset.view; file.click(); return; }
+		if (!src) { file.click(); return; }
 		const v = document.createElement("div");
-		v.className = "bigphoto"; v.innerHTML = `<img src="${src}" alt="">`;
+		v.className = "bigphoto"; v.innerHTML = `<img src="${esc(src)}" alt="">`;
 		v.onclick = () => v.remove();
 		document.body.appendChild(v);
 	});
@@ -1274,7 +1313,8 @@ function openPhotos() {
 let libCache = null;
 function openPhotoLibrary(body, slot) {
 	const box = body.querySelector("#phlib"), grid = body.querySelector("#phlib-g");
-	body.querySelector(".photos").classList.add("hidden");
+	photoLibOpen = true;
+	body.querySelector(".pm").classList.add("hidden");
 	box.classList.remove("hidden");
 	body.querySelector("#phlib-t").textContent = "Choose a photo for frame " + (slot + 1);
 	body.querySelector("#phlib-x").onclick = () => openPhotos();
@@ -2728,6 +2768,8 @@ canvas.addEventListener("pointerup", e => {
 		return;
 	}
 	if (h.object.userData.cupId) { goPickCup(h.object.userData.cupId); return; }
+	// a photo frame anywhere in the house: straight to that frame's photo
+	if (h.object.userData.photoIndex !== undefined) { openPhotos(h.object.userData.photoIndex); return; }
 	const id = findInteract(h.object);
 	if (id) {
 		const def = room.interactables[id], st = standOf(id);
@@ -2736,9 +2778,18 @@ canvas.addEventListener("pointerup", e => {
 		else walkTo(st[0], st[1], id);
 		return;
 	}
-	walkTo(h.point.x, h.point.z, null);
-	clickMarker(h.point.x, h.point.z);
+	const lp = planXZ(h);
+	walkTo(lp[0], lp[1], null);
+	clickMarker(h.point.x, h.point.y, h.point.z);
 });
+// a click on something drawn upstairs: where that is on the floor plan
+function planXZ(h) {
+	for (let o = h.object; o; o = o.parent) {
+		const m = o.name && /^zone:(.+)$/.exec(o.name);
+		if (m) { const Z = ZONES[m[1]], s = Z && Z.area && Z.area.shift; return s ? [h.point.x + s[0], h.point.z + s[1]] : [h.point.x, h.point.z]; }
+	}
+	return [h.point.x, h.point.z];
+}
 canvas.addEventListener("wheel", e => { e.preventDefault(); if (tvMode) return; cam.dist = Math.max(1.2, Math.min(7.5, cam.dist * (1 + Math.sign(e.deltaY) * 0.1))); }, { passive: false });
 function findInteract(o) { while (o) { if (o.userData && o.userData.interact) return o.userData.interact; o = o.parent; } return null; }
 let hoverT = 0;
@@ -2753,6 +2804,7 @@ function hoverAt(x, y) {
 			const pid = findPeer(h.object);
 			if (pid) { const p = peers.get(pid); label = p ? (me.carrying === pid ? "Press Cuddle or click the bed / sofa" : me.carriedBy === pid ? null : isAsleep(p) ? "Wake " + p.look.name + " up" : me.holding === "flower" ? "Give " + p.look.name + " your flower" : me.holding === "mug" ? "Give " + p.look.name + " your coffee" : me.holding === "popcorn" ? "Share your popcorn with " + p.look.name : "Wave at " + p.look.name) : null; }
 			else if (h.object.userData.cupId) label = me.holding === "mug" ? null : "Pick up the coffee";
+			else if (h.object.userData.photoIndex !== undefined) label = get("photo" + h.object.userData.photoIndex) ? "Change this photo" : "Put a photo in this frame";
 			else { const id = findInteract(h.object); if (id) label = labelOf(id); }
 		}
 	}
@@ -2773,6 +2825,13 @@ function walkTo(x, z, act) {
 		const st = standOf("terraceDoor");
 		if (Math.hypot(st[0] - me.x, st[1] - me.z) > 0.3) { walkTo(st[0], st[1], () => { setShared("terraceDoor", true); walkTo(x, z, act); }); return; }
 		setShared("terraceDoor", true);
+	}
+	// the other floor (upstairs / down): walk to the stairs, and carry on from the top (see crossFloor)
+	me.cross = null;
+	const lvl = (a, b) => { const sh = shiftAt(a, b); return sh ? sh.join(",") : ""; };
+	if (lvl(x, z) !== lvl(me.x, me.z)) {
+		const P = house.portals.find(q => lvl(q.goal[0], q.goal[1]) === lvl(me.x, me.z) && lvl(q.goal[0] + q.dx, q.goal[1] + q.dz) === lvl(x, z));
+		if (P) { me.cross = { x, z, act }; x = P.goal[0]; z = P.goal[1]; act = null; }
 	}
 	// route around furniture (and through the French doors between room and terrace)
 	const pts = findPath(me.x, me.z, x, z) || [{ x, z }];
@@ -2795,9 +2854,13 @@ function makeGrid(x0, z0, w, h) {
 	return G;
 }
 // the whole home is one floor plan (the cinema upstairs doesn't sit over anything), so one grid covers it
-function gridFor() { return grids.home || (grids.home = makeGrid(-7.1, -21.6, 205, 150)); }
+// (upstairs is its own floor plan, 30 m south: see ZONES.loft)
+function gridFor(x, z) {
+	if (shiftAt(x, z)) return grids.up || (grids.up = makeGrid(16.0, 23.85, 37, 72));
+	return grids.home || (grids.home = makeGrid(-7.1, -21.6, 205, 150));
+}
 // a room was just built (its furniture is now solid): the grid gets made fresh on the next walk
-function gridDirty() { delete grids.home; }
+function gridDirty() { delete grids.home; delete grids.up; }
 function cellOf(x, z) { return [Math.floor((x - GRID.x0) / GRID.s), Math.floor((z - GRID.z0) / GRID.s)]; }
 function cellFree(i, j) { return i >= 0 && j >= 0 && i < GRID.w && j < GRID.h && !GRID.blocked[j * GRID.w + i]; }
 function nearestFree(i, j) {
@@ -2815,7 +2878,7 @@ function lineClear(ax, az, bx, bz) {
 }
 function findPath(sx, sz, tx, tz) {
 	if (lineClear(sx, sz, tx, tz)) return [{ x: tx, z: tz }];
-	GRID = gridFor();
+	GRID = gridFor(sx, sz);
 	if (!GRID) return null;
 	const s0 = nearestFree(...cellOf(sx, sz)), t0 = nearestFree(...cellOf(tx, tz));
 	if (!s0 || !t0) return null;
@@ -2883,11 +2946,21 @@ function findPath(sx, sz, tx, tz) {
 	}
 	return out;
 }
+// up / down the stairs: the floor plan jumps, what you see doesn't (the camera jumps with you)
+function crossFloor(P) {
+	me.x += P.dx; me.z += P.dz;
+	cam.tx += P.dx; cam.tz += P.dz;
+	me.target = null; me.path = []; me.stuck = 0; me.targetAct = null;
+	sendPose(true);
+	const c = me.cross;
+	me.cross = null;
+	if (c) walkTo(c.x, c.z, c.act);
+}
 function runAct(a) { if (typeof a === "function") a(); else if (a) interact(a); }
 const marker = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.17, 28), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0, depthWrite: false }));
 marker.rotation.x = -Math.PI / 2;
 scene.add(marker);
-function clickMarker(x, z) { marker.position.set(x, 0.02, z); marker.material.opacity = 0.8; marker.scale.setScalar(1); }
+function clickMarker(x, y, z) { marker.position.set(x, y + 0.02, z); marker.material.opacity = 0.8; marker.scale.setScalar(1); }
 
 // touch joystick
 const joy = { id: null, x: 0, y: 0, dx: 0, dy: 0 };
@@ -2964,7 +3037,8 @@ function placeAvatar(av, x, z, h, sitId) {
 		y = av._fy;
 	} else av._fy = y;
 	av.water = spot ? 0 : Math.max(0, -floorAt(x, z));
-	av.root.position.set(x, y, z);
+	const vp = visXZ(x, z);
+	av.root.position.set(vp[0], y, vp[1]);
 	if (spot && spot.lie) { av.root.rotation.order = "YXZ"; av.root.rotation.set(-Math.PI / 2, spot.h, 0); }
 	else if (spot && spot.swing) {
 		// ride along with the swing seat
@@ -3015,7 +3089,7 @@ function updateMe(dt) {
 	const run = keys.has("shift");
 	let mx = 0, mz = 0, want = 0;
 	if (Math.abs(ix) + Math.abs(iz) > 0.08) {
-		me.target = null; me.path = [];
+		me.target = null; me.path = []; me.cross = null;
 		if (me.sit) standUp();
 		if (drawOpen) closeDraw();
 		stopScope();
@@ -3065,6 +3139,8 @@ function updateMe(dt) {
 		if (me.upper === "carry" || me.upper === "cuddle" || me.upper === "handhold") { /* still holding / snuggling */ }
 		else if (me.upper && !["paint", "piano", "tug", "telescope", "carry"].includes(me.upper)) { me.upper = null; me.partner = null; updateProps(); sendPose(true); }
 	}
+	// the stairs between floors: step into one end and you're on the other floor
+	if (!me.sit && !me.carriedBy) for (const P of house.portals) if (me.x > P.minX && me.x < P.maxX && me.z > P.minZ && me.z < P.maxZ) { crossFloor(P); break; }
 	// keep facing whoever we're hugging / fighting / kissing / dancing with
 	if (me.partner && (["tug", "hug", "highfive", "give"].includes(me.upper) || (!me.sit && ["smooch", "cheekkiss", "slowdance", "propose"].includes(me.upper)))) {
 		const q = peers.get(me.partner);
@@ -3414,8 +3490,9 @@ function updateCamera(dt, t) {
 		camera.lookAt(MOON_POINT);
 		fov = 16;
 	} else {
-		camera.position.set(px, py, pz);
-		camera.lookAt(cam.tx, cam.ty + Math.tan(lookUp * 1.8) * Math.hypot(px - cam.tx, pz - cam.tz), cam.tz);
+		const sh = shiftAt(cam.tx, cam.tz) || [0, 0];
+		camera.position.set(px - sh[0], py, pz - sh[1]);
+		camera.lookAt(cam.tx - sh[0], cam.ty + Math.tan(lookUp * 1.8) * Math.hypot(px - cam.tx, pz - cam.tz), cam.tz - sh[1]);
 	}
 	if (camera.fov !== fov) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 6); if (Math.abs(camera.fov - fov) < 0.1) camera.fov = fov; camera.updateProjectionMatrix(); }
 }

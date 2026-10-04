@@ -4,8 +4,8 @@
  * A tall two-storey room. Local coordinates: x -7.95..7.95, z -6.95..6.95,
  * ceiling at 7 m. The living-room doors are in the west wall.
  *
- *   north   stairs along the wall up to a balcony, and the cinema's doors up there
- *   middle  a big sofa facing a double-sided stone fireplace; aquarium on the east
+ *   north   stairs along the wall up to the loft (upstairs, over the east half: worldLoft.js)
+ *   middle  an L-shaped sofa facing a double-sided stone fireplace; aquarium on the east
  *           wall, jukebox in the corner, bookshelves and a reading chair by the doors
  *   south   (past the fireplace and a low shelf, on tiles) the open kitchen with an
  *           island, and the dining table; the pets' corner by the dining window
@@ -26,12 +26,13 @@ const DISHES = [
 	{ id: "steak", name: "Steak dinner", desc: "With potatoes and greens", pot: "#7a3b2e", dur: 24 }
 ];
 const BITES = 5;
-// stairs: 24 steps of 15 cm along the north wall, up to the balcony at 3.6 m
+// stairs: 24 steps of 15 cm along the north wall, up to the loft floor at 3.6 m. The loft (x > 1.8, the whole
+// east half) is its own room upstairs (worldLoft.js); the top step hands you over to it.
 const ST = { x0: -6.2, x1: 1.8, z0: -6.95, z1: -5.55, n: 24, rise: 0.15 };
 const LAND = { x0: 1.8, x1: 5.4, z1: -5.2, y: 3.6 };
+const SLAB = 3.3;   // the underside of the loft floor (the ceiling over the east half)
 function floorY(x, z) {
-	if (x >= LAND.x0 && x <= LAND.x1 && z < LAND.z1) return LAND.y;
-	if (z < ST.z1 && x > ST.x0 && x < ST.x1) return Math.min(ST.n, Math.floor((x - ST.x0) / ((ST.x1 - ST.x0) / ST.n)) + 1) * ST.rise;
+	if (z < ST.z1 && x > ST.x0 && x < ST.x1 + 0.3) return Math.min(ST.n, Math.floor((x - ST.x0) / ((ST.x1 - ST.x0) / ST.n)) + 1) * ST.rise;
 	return 0;
 }
 
@@ -119,11 +120,11 @@ export function build(k) {
 		const x0 = ST.x0 + (i - 1) * run, hgt = i * ST.rise;
 		add(g, new THREE.BoxGeometry(run, hgt, ST.z1 - ST.z0), stepMats, x0 + run / 2, hgt / 2, (ST.z0 + ST.z1) / 2, { cast: false });
 	}
-	// the balcony, with panelled cupboards under it
-	add(g, new THREE.BoxGeometry(LAND.x1 - LAND.x0, LAND.y, LAND.z1 - ST.z0), [riser, riser, tread, riser, riser, riser], (LAND.x0 + LAND.x1) / 2, LAND.y / 2, (ST.z0 + LAND.z1) / 2, { cast: false });
+	// panelled cupboards under the top of the stairs (the loft floor is over them)
+	add(g, new THREE.BoxGeometry(LAND.x1 - LAND.x0, SLAB, LAND.z1 - ST.z0), [riser, riser, tread, riser, riser, riser], (LAND.x0 + LAND.x1) / 2, SLAB / 2, (ST.z0 + LAND.z1) / 2, { cast: false });
 	for (let i = 0; i < 3; i++) {
-		add(g, rbox(1.05, 3.0, 0.04, 0.02), mat("#ebe3d6", 0.6), LAND.x0 + 0.65 + i * 1.18, 1.6, LAND.z1 + 0.02, { cast: false });
-		add(g, new THREE.SphereGeometry(0.03, 8, 6), brass, LAND.x0 + 1.05 + i * 1.18, 1.5, LAND.z1 + 0.06, { cast: false });
+		add(g, rbox(1.05, 2.8, 0.04, 0.02), mat("#ebe3d6", 0.6), LAND.x0 + 0.65 + i * 1.18, 1.5, LAND.z1 + 0.02, { cast: false });
+		add(g, new THREE.SphereGeometry(0.03, 8, 6), brass, LAND.x0 + 1.05 + i * 1.18, 1.4, LAND.z1 + 0.06, { cast: false });
 	}
 	// glass balustrade + brass handrail: up the stairs and along the balcony
 	const glassM = new THREE.MeshPhysicalMaterial({ color: "#cfe7ff", transparent: true, opacity: 0.14, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
@@ -136,34 +137,24 @@ export function build(k) {
 		add(rail, new THREE.BoxGeometry(len, 0.05, 0.07), brass, 0, 0, 0, { cast: false });
 		add(rail, new THREE.PlaneGeometry(len, 0.85), glassM, 0, -0.45, 0, { cast: false, receive: false });
 		for (let x = ax; x <= bx + 0.01; x += 1.4) { const y = ay + (by - ay) * (x - ax) / (bx - ax); add(g, new THREE.CylinderGeometry(0.02, 0.02, 0.92, 8), brass, x, y + 0.46, zr, { cast: false }); }
-		add(g, new THREE.BoxGeometry(LAND.x1 - LAND.x0, 0.05, 0.07), brass, (LAND.x0 + LAND.x1) / 2, LAND.y + 0.95, LAND.z1 + 0.03, { cast: false });
-		add(g, new THREE.PlaneGeometry(LAND.x1 - LAND.x0, 0.9), glassM, (LAND.x0 + LAND.x1) / 2, LAND.y + 0.5, LAND.z1 + 0.03, { cast: false, receive: false });
-		add(g, new THREE.BoxGeometry(0.07, 0.05, LAND.z1 - ST.z0), brass, LAND.x1 + 0.03, LAND.y + 0.95, (ST.z0 + LAND.z1) / 2, { cast: false });
-		add(g, new THREE.PlaneGeometry(LAND.z1 - ST.z0, 0.9), glassM, LAND.x1 + 0.03, LAND.y + 0.5, (ST.z0 + LAND.z1) / 2, { ry: Math.PI / 2, cast: false, receive: false });
 	}
 	k.box(ST.x0 + 1.0, ST.x1, ST.z1 - 0.05, ST.z1 + 0.1);
-	k.box(LAND.x0, LAND.x1, LAND.z1 - 0.05, LAND.z1 + 0.1);
-	k.box(LAND.x1, LAND.x1 + 0.12, ST.z0, LAND.z1 + 0.1);
-	// the loft up on the balcony: a daybed for two under the window, cushions, a little bookcase
-	const loft = group(g, 3.6, LAND.y, -6.45);
-	add(loft, rbox(2.4, 0.38, 0.85, 0.05), mat("#e9dccb", 0.7), 0, 0.19, 0);
-	add(loft, rbox(2.3, 0.14, 0.8, 0.07), mat("#9fb4d8", 0.85), 0, 0.45, 0);
-	add(loft, rbox(2.4, 0.55, 0.16, 0.06), mat("#e9dccb", 0.7), 0, 0.62, -0.36);
-	for (const [x, c] of [[-0.75, "#f2cc8f"], [0.0, "#ffffff"], [0.75, "#e9b4c8"]]) add(loft, rbox(0.45, 0.38, 0.13, 0.06), mat(c, 0.85), x, 0.7, -0.22, { rx: -0.25 });
-	add(loft, rbox(0.8, 0.05, 0.75, 0.03), mat("#d8c7e8", 0.95), 0.6, 0.53, 0.05, { rz: 0.15 });
-	k.box(2.35, 4.85, -HD, -5.98);
-	k.spot({ id: "loft0", x: 3.15, z: -6.25, h: 0, y: LAND.y + 0.04 });
-	k.spot({ id: "loft1", x: 4.05, z: -6.25, h: 0, y: LAND.y + 0.04 });
-	k.interact("lounge:loft", { label: "Curl up on the daybed", stand: [3.6, -5.6], sit: ["loft0", "loft1"] }, loft);
-	const lb = group(g, 2.05, LAND.y, -6.55);
-	add(lb, rbox(0.45, 1.3, 0.7, 0.02), mat("#3b2519", 0.55), 0, 0.65, 0);
-	for (let s2 = 0; s2 < 3; s2++) for (let i = 0; i < 5; i++) add(lb, new THREE.BoxGeometry(0.04, 0.24 + (i % 3) * 0.04, 0.2), mat(["#7b2d3b", "#2f3e5c", "#e9c46a", "#2a9d8f", "#e76f51"][(i + s2) % 5], 0.7), 0.24, 0.3 + s2 * 0.4, -0.2 + i * 0.09, { cast: false });
-	k.box(1.8, 2.3, -HD, -6.15);
-	// a wall light on the balcony
-	const landShade = new THREE.MeshStandardMaterial({ color: "#fff1d6", emissive: "#ffcf8a", emissiveIntensity: 1.3, side: THREE.DoubleSide });
-	const landLamp = group(g, 1.95, LAND.y + 2.0, -HD + 0.05);
-	add(landLamp, new THREE.CylinderGeometry(0.06, 0.06, 0.02, 14), brass, 0, 0, 0.01, { rx: Math.PI / 2, cast: false });
-	add(landLamp, new THREE.CylinderGeometry(0.1, 0.14, 0.2, 18, 1, true), landShade, 0, 0.05, 0.14, { cast: false });
+	// (the cupboards' box starts a body's width in, so the top step stays clear for walking up onto the loft)
+	k.box(LAND.x0 + 0.3, LAND.x1, ST.z0, LAND.z1);
+	// the loft floor seen from below: a white ceiling with downlights
+	{
+		const under = add(g, new THREE.PlaneGeometry(HW - LAND.x0, HD * 2), mat("#f4eee5", 0.9), (HW + LAND.x0) / 2, SLAB, 0, { rx: Math.PI / 2, cast: false });
+		under.userData.floor = false;
+		add(g, new THREE.BoxGeometry(0.12, 0.32, HD * 2), mat("#ffffff", 0.6), LAND.x0 + 0.06, SLAB + 0.15, 0, { cast: false });
+		const dlM = new THREE.MeshBasicMaterial({ color: "#fff2d6", toneMapped: false });
+		for (const x of [3.2, 5.6]) for (const z of [-3.6, -1.2, 1.2, 3.6]) add(g, new THREE.CircleGeometry(0.07, 18), dlM, x, SLAB - 0.005, z, { rx: Math.PI / 2, cast: false, receive: false });
+	}
+
+	// ---------------------------------------------------------------- photos up the stairs, and around the room
+	for (const [slot, x, y, z, ry, w, h] of [
+		[27, -4.5, 2.5, -HD + 0.03, 0, 0.6, 0.48], [28, -2.5, 3.4, -HD + 0.03, 0, 0.6, 0.48], [29, 0.4, 4.6, -HD + 0.03, 0, 0.6, 0.48],
+		[30, -HW + 0.03, 1.85, -0.1, Math.PI / 2, 0.6, 0.48], [31, -1.8, 1.7, HD - 0.03, Math.PI, 0.6, 0.48]
+	]) k.photo(slot, x, y, z, ry, { w, h, frame: slot % 2 ? "#3b2519" : "#c9a05a", metal: slot % 2 ? 0 : 0.7 });
 
 	// ---------------------------------------------------------------- double-sided fireplace (between the sofa and the kitchen)
 	const stoneTex = canvasTex(512, 512, (c, w, h) => {
@@ -232,42 +223,53 @@ export function build(k) {
 	}
 	k.box(1.6, 4.6, FZ - 0.22, FZ + 0.22);
 
-	// ---------------------------------------------------------------- sofa, coffee table, rug (facing the fire)
+	// ---------------------------------------------------------------- an L-shaped sofa, coffee table, rug (facing the fire)
+	// The long side runs x -2.8..0.4 (back at z -2.95); the short side x 0.4..1.4, z -2.95..-0.35 (back along x 1.4),
+	// meeting flush in a corner seat. In front: 0.9 m to the coffee table, 1.15 m beside it, 0.8 m to the hearth.
 	const sofaM = mat("#c9b79c", 0.9), sofaD = mat("#b3a084", 0.9);
-	const sofa = group(g, -1.5, 0, -2.35);
-	add(sofa, rbox(3.1, 0.3, 1.0, 0.06), sofaD, 0, 0.27, 0);
-	for (let i = -1; i <= 1; i++) add(sofa, rbox(0.98, 0.18, 0.84, 0.08), sofaM, i * 1.0, 0.5, 0.05);
-	add(sofa, rbox(3.1, 0.6, 0.26, 0.08), sofaD, 0, 0.64, -0.4, { rx: -0.06 });
-	for (let i = -1; i <= 1; i++) add(sofa, rbox(0.94, 0.45, 0.18, 0.08), sofaM, i * 1.0, 0.78, -0.26, { rx: -0.12 });
-	add(sofa, rbox(0.24, 0.5, 1.0, 0.08), sofaD, -1.66, 0.45, 0);
-	const ch = group(g, 1.05, 0, -1.75);
-	add(ch, rbox(1.0, 0.3, 2.3, 0.06), sofaD, 0, 0.27, 0);
-	add(ch, rbox(0.84, 0.18, 2.2, 0.08), sofaM, -0.05, 0.5, 0);
-	add(ch, rbox(0.26, 0.6, 2.3, 0.08), sofaD, 0.4, 0.64, 0, { rz: -0.06 });
-	for (const z of [-0.5, 0.5]) add(ch, rbox(0.18, 0.45, 0.94, 0.08), sofaM, 0.26, 0.78, z, { rz: -0.12 });
-	for (const [x, z, c, ry] of [[-2.9, -2.6, "#e07a5f", 0.3], [-1.6, -2.62, "#3d405b", 0], [1.35, -2.6, "#f2cc8f", -0.8], [1.35, -0.9, "#81b29a", -1.2]]) add(g, rbox(0.42, 0.4, 0.13, 0.06), mat(c, 0.9), x, 0.78, z, { ry, rx: -0.2 });
-	add(g, rbox(0.7, 0.05, 0.9, 0.03), mat("#d8c7e8", 0.95), -2.4, 0.62, -2.3, { rz: 0.2 });
-	k.box(-3.1, 0.1, -2.9, -1.85);
-	k.box(0.5, 1.6, -2.9, -0.55);
+	const sofa = group(g, 0, 0, 0), ch = group(g, 0, 0, 0);
+	add(sofa, rbox(3.2, 0.3, 1.0, 0.06), sofaD, -1.2, 0.27, -2.45);                       // base, long side
+	add(ch, rbox(1.0, 0.3, 2.6, 0.06), sofaD, 0.9, 0.27, -1.65);                          // base, short side (and the corner)
+	add(sofa, rbox(4.2, 0.6, 0.26, 0.08), sofaD, -0.7, 0.64, -2.82, { rx: -0.06 });       // back, the whole long side into the corner
+	add(ch, rbox(0.26, 0.6, 2.34, 0.08), sofaD, 1.27, 0.64, -1.52, { rz: 0.06 });         // back, short side
+	add(sofa, rbox(0.22, 0.5, 1.0, 0.08), sofaD, -2.69, 0.45, -2.45);                     // arms
+	add(ch, rbox(1.0, 0.5, 0.22, 0.08), sofaD, 0.9, 0.45, -0.46);
+	const seatXs = [-2.085, -1.095, -0.105];
+	for (const x of seatXs) {
+		add(sofa, rbox(0.97, 0.18, 0.74, 0.08), sofaM, x, 0.5, -2.32);
+		add(sofa, rbox(0.94, 0.45, 0.18, 0.08), sofaM, x, 0.78, -2.61, { rx: -0.12 });
+	}
+	add(ch, rbox(0.74, 0.18, 0.74, 0.08), sofaM, 0.77, 0.5, -2.32);                       // the corner seat
+	add(ch, rbox(0.72, 0.45, 0.18, 0.08), sofaM, 0.77, 0.78, -2.61, { rx: -0.12 });
+	for (const z of [-1.605, -0.915]) {
+		add(ch, rbox(0.74, 0.18, 0.68, 0.08), sofaM, 0.77, 0.5, z);
+		add(ch, rbox(0.18, 0.45, 0.66, 0.08), sofaM, 1.05, 0.78, z, { rz: -0.12 });
+	}
+	add(ch, rbox(0.18, 0.45, 0.6, 0.08), sofaM, 1.05, 0.78, -2.25, { rz: -0.12 });
+	for (const [x, z, c, ry] of [[-2.42, -2.5, "#e07a5f", 0.35], [-1.1, -2.55, "#3d405b", 0], [0.95, -2.45, "#f2cc8f", -0.8], [0.98, -0.72, "#81b29a", -1.2]]) add(g, rbox(0.42, 0.4, 0.13, 0.06), mat(c, 0.9), x, 0.78, z, { ry, rx: -0.2 });
+	k.box(-2.8, 0.4, -2.95, -1.95);
+	k.box(0.4, 1.4, -2.95, -0.35);
+	// seats: hips just in front of the back cushions, on top of the seat cushions (like the living room's sofa)
 	const seats = [
-		{ id: "lng0", x: -2.5, z: -2.2, h: 0 }, { id: "lng1", x: -1.5, z: -2.2, h: 0 }, { id: "lng2", x: -0.5, z: -2.2, h: 0 },
-		{ id: "lng3", x: 0.92, z: -1.4, h: -Math.PI / 2 }, { id: "lng4", x: 0.92, z: -0.45, h: -Math.PI / 2 }
+		{ id: "lng0", x: seatXs[0], z: -2.3, h: 0 }, { id: "lng1", x: seatXs[1], z: -2.3, h: 0 }, { id: "lng2", x: seatXs[2], z: -2.3, h: 0 },
+		{ id: "lng5", x: 0.74, z: -2.27, h: -Math.PI / 4 },
+		{ id: "lng3", x: 0.75, z: -1.6, h: -Math.PI / 2 }, { id: "lng4", x: 0.75, z: -0.92, h: -Math.PI / 2 }
 	];
-	seats.forEach(s => k.spot({ id: s.id, x: s.x, z: s.z, h: s.h, y: 0.08 }));
-	k.interact("lounge:sofa", { label: "Sit on the sofa", stand: [-1.5, -1.25], sit: ["lng0", "lng1", "lng2"] }, sofa);
-	k.interact("lounge:chaise", { label: "Sit on the chaise", stand: [0.15, -0.9], sit: ["lng3", "lng4"] }, ch);
-	const ct = group(g, -1.0, 0, -0.7);
-	add(ct, new THREE.CylinderGeometry(0.58, 0.58, 0.06, 40), mat("#5a3826", 0.4), 0, 0.42, 0);
-	add(ct, new THREE.CylinderGeometry(0.46, 0.4, 0.36, 32), mat("#3b2519", 0.5), 0, 0.2, 0);
+	seats.forEach(s => k.spot({ id: s.id, x: s.x, z: s.z, h: s.h, y: 0.15 }));
+	k.interact("lounge:sofa", { label: "Sit on the sofa", stand: [-1.2, -1.45], sit: ["lng0", "lng1", "lng2", "lng5"] }, sofa);
+	k.interact("lounge:chaise", { label: "Sit on the sofa", stand: [-0.2, -1.3], sit: ["lng3", "lng4", "lng5"] }, ch);
+	const ct = group(g, -1.3, 0, -0.5);
+	add(ct, new THREE.CylinderGeometry(0.52, 0.52, 0.06, 40), mat("#5a3826", 0.4), 0, 0.42, 0);
+	add(ct, new THREE.CylinderGeometry(0.4, 0.35, 0.36, 32), mat("#3b2519", 0.5), 0, 0.2, 0);
 	const boardTex = canvasTex(256, 256, (c, w, h) => { for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { c.fillStyle = (i + j) % 2 ? "#3b2519" : "#e9d7b9"; c.fillRect(i * 32, j * 32, 32, 32); } });
-	add(ct, new THREE.BoxGeometry(0.38, 0.02, 0.38), mat("#ffffff", 0.5, 0, { map: boardTex }), -0.1, 0.46, 0.05, { ry: 0.3 });
-	for (let i = 0; i < 6; i++) add(ct, new THREE.CylinderGeometry(0.018, 0.022, 0.05, 10), mat(i % 2 ? "#f8f1e3" : "#1d1d22", 0.4), -0.25 + R() * 0.26, 0.495, -0.08 + R() * 0.26, { cast: false });
-	for (const [x, z, hh] of [[0.28, -0.2, 0.18], [0.34, 0.0, 0.12]]) {
+	add(ct, new THREE.BoxGeometry(0.36, 0.02, 0.36), mat("#ffffff", 0.5, 0, { map: boardTex }), -0.08, 0.46, 0.04, { ry: 0.3 });
+	for (let i = 0; i < 6; i++) add(ct, new THREE.CylinderGeometry(0.018, 0.022, 0.05, 10), mat(i % 2 ? "#f8f1e3" : "#1d1d22", 0.4), -0.22 + R() * 0.24, 0.495, -0.08 + R() * 0.24, { cast: false });
+	for (const [x, z, hh] of [[0.26, -0.18, 0.18], [0.3, 0.0, 0.12]]) {
 		add(ct, new THREE.CylinderGeometry(0.04, 0.04, hh, 14), mat("#fff8ec", 0.5), x, 0.45 + hh / 2, z);
 		candleFl.push(add(ct, new THREE.SphereGeometry(0.013, 8, 6), new THREE.MeshBasicMaterial({ color: "#ffd27a", toneMapped: false }), x, 0.47 + hh, z, { cast: false }));
 	}
-	k.box(-1.6, -0.4, -1.3, -0.1);
-	const rug = add(g, new THREE.PlaneGeometry(5.4, 3.8), mat("#ffffff", 1, 0, { map: tex.carpet("#8a6f5a", "#e9d7b9") }), -0.9, 0.006, -1.3, { rx: -Math.PI / 2, cast: false });
+	k.box(-1.85, -0.75, -1.05, 0.05);
+	const rug = add(g, new THREE.PlaneGeometry(5.4, 3.8), mat("#ffffff", 1, 0, { map: tex.carpet("#8a6f5a", "#e9d7b9") }), -0.8, 0.006, -1.2, { rx: -Math.PI / 2, cast: false });
 	rug.userData.floor = true;
 	// a big drum pendant hanging over the sitting area
 	const drumM = new THREE.MeshStandardMaterial({ color: "#f3e3c8", roughness: 0.8, side: THREE.DoubleSide, emissive: "#ffd9a0", emissiveIntensity: 0.9 });
@@ -440,7 +442,7 @@ export function build(k) {
 	const lid = add(stove, new THREE.CylinderGeometry(0.155, 0.155, 0.02, 24), mat("#c6ccd3", 0.2, 0.9), 0.2, 0.9, 0.17, { cast: false });
 	const hood = group(g, OX, 0, HD - 0.2);
 	add(hood, new THREE.CylinderGeometry(0.16, 0.5, 0.45, 4, 1), steel, 0, 2.05, 0, { ry: Math.PI / 4 });
-	add(hood, new THREE.BoxGeometry(0.28, 1.2, 0.28), steel, 0, 2.85, 0);
+	add(hood, new THREE.BoxGeometry(0.28, SLAB - 2.25, 0.28), steel, 0, (SLAB + 2.25) / 2, 0);
 	// fridge in the corner: a real inside (shelves of food, bottles in the door) that lights up when you open it
 	const fr = group(g, 7.5, 0, 6.5, Math.PI);
 	const frM = mat("#e8ecef", 0.25, 0.4), frIn = mat("#f6fafc", 0.6);
@@ -525,7 +527,7 @@ export function build(k) {
 	const islPend = [];
 	for (const dx of [-0.8, 0.8]) {
 		const pg = group(g, IX + dx, 0, IZ);
-		add(pg, new THREE.CylinderGeometry(0.005, 0.005, H - 2.5, 6), mat("#222"), 0, (H + 2.5) / 2, 0, { cast: false });
+		add(pg, new THREE.CylinderGeometry(0.005, 0.005, SLAB - 2.5, 6), mat("#222"), 0, (SLAB + 2.5) / 2, 0, { cast: false });
 		add(pg, new THREE.SphereGeometry(0.2, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), pendShade, 0, 2.48, 0, { cast: false });
 		add(pg, new THREE.SphereGeometry(0.06, 12, 10), islandBulbs, 0, 2.4, 0, { cast: false });
 		islPend.push(pg);
@@ -593,13 +595,12 @@ export function build(k) {
 		island: k.light(IX, 2.2, IZ, "#ffd9a8", 3.6, 6),
 		dining: k.light(TX, 1.95, TZ, "#ffcf8a", 3.2, 5.5),
 		reading: k.light(-7.4, 1.65, 0.95, "#ffcf8a", 2.4, 5),
-		landing: k.light(4.6, LAND.y + 1.7, -6.3, "#ffd9a8", 2.6, 7)
+		loft: k.light(4.8, LAND.y + 2.6, -1.5, "#ffd9a8", 2.6, 9)
 	};
-	k.lamp("living", L.living, [drumM], [drum], [-1.0, -0.2], "big lamp");
+	k.lamp("living", L.living, [drumM], [drum], [-0.2, -0.3], "big lamp");
 	k.lamp("island", L.island, [islandBulbs, pendShade], islPend, [IX, IZ - 1.6], "kitchen lights");
 	k.lamp("dining", L.dining, [dineBulb], [dp], [TX, TZ - 1.4], "dining lamp");
 	k.lamp("reading", L.reading, [readShade], [fl], [-6.6, 1.4], "reading lamp");
-	k.lamp("landing", L.landing, [landShade], [landLamp], [4.4, -5.6], "balcony light");
 	k.key.pos.copy(k.V(0, H - 0.2, -0.5)); k.key.target.copy(k.V(-0.5, 0, 0.6));
 	k.key.angle = 1.2; k.key.intensity = 30; k.key.distance = 18; k.key.color.set("#ffe2c0");
 	k.fill.pos.copy(k.V(0, 4.5, 1)); k.fill.intensity = 6; k.fill.distance = 32; k.fill.decay = 1.1;

@@ -51,6 +51,9 @@ export function build(k) {
 		]
 	});
 	k.walk(-4, 4, -3.5, 3.5);
+	// photo frames (2 of the house's 50)
+	k.photo(40, 0.5, 1.7, -3.46, 0, { w: 0.6, h: 0.45, frame: "#fbf8f2" });
+	k.photo(41, 3.96, 1.65, 2.55, -Math.PI / 2, { w: 0.5, h: 0.4, frame: "#c9a05a", metal: 0.7 });
 	k.walk(-4.6, -3.0, -0.75, 0.75);   // through the doors to the lounge
 	k.cam = { minX: -3.75, maxX: 3.75, minZ: -3.25, maxZ: 3.25, maxY: H - 0.15 };
 	const chrome = mat("#e3e7ea", 0.12, 1);

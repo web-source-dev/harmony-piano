@@ -283,6 +283,21 @@ body.touch #help { display: none; }
 .ph input { border: none; outline: none; font: 600 20px "Caveat", cursive; text-align: center; color: var(--ink); background: transparent; width: 100%; }
 .ph .row { justify-content: center; }
 .ph .btn { padding: 6px 10px; font-size: 12px; color: var(--ink); background: #f1ebf5; border-color: #e0d6e8; }
+/* all the frames in the house: the chosen one big on the left, every frame (by room) on the right */
+.pm { display: grid; grid-template-columns: 250px 1fr; gap: 18px; align-items: start; }
+.pm-edit { display: flex; flex-direction: column; gap: 12px; }
+.pm-where { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.pm-where b { font-size: 15px; }
+.pm-list { max-height: min(58vh, 480px); overflow-y: auto; padding-right: 4px; }
+.pm-list h4 { margin: 10px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; opacity: .75; }
+.pm-list h4:first-child { margin-top: 0; }
+.pm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; }
+.pm-it { position: relative; padding: 0; aspect-ratio: 4 / 3; border: 2px solid transparent; border-radius: 8px; overflow: hidden; background: rgba(255,255,255,.07); color: inherit; cursor: pointer; display: grid; place-items: center; }
+.pm-it img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pm-it span { font-size: 20px; opacity: .45; }
+.pm-it i { position: absolute; left: 3px; bottom: 2px; font: 700 10px/1 "Nunito", sans-serif; font-style: normal; padding: 2px 4px; border-radius: 5px; background: rgba(0,0,0,.55); color: #fff; }
+.pm-it:hover, .pm-it.on { border-color: var(--accent); }
+@media (max-width: 640px) { .pm { grid-template-columns: 1fr; } .pm-list { max-height: 34vh; } }
 .bigphoto { position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.85); display: grid; place-items: center; cursor: zoom-out; }
 .bigphoto img { max-width: 92vw; max-height: 88vh; border: 10px solid #fff; border-radius: 4px; box-shadow: 0 30px 80px #000; }
 

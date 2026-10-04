@@ -47,6 +47,11 @@ export function walkable(x, z, r) {
 	if (a) for (const q of a.rects) if (x > q.minX + r && x < q.maxX - r && z > q.minZ + r && z < q.maxZ - r) return true;
 	return false;
 }
+// rooms upstairs over another room (the loft over the lounge) live somewhere else on the floor plan, so walking,
+// bumping and seats never mix up the two floors; shift is how far from where they're drawn ([dx, dz]), or null
+export function shiftAt(x, z) { const a = areaAt(x, z); return a && a.shift ? a.shift : null; }
+// where something standing at (x, z) on the floor plan is drawn
+export function visXZ(x, z) { const s = shiftAt(x, z); return s ? [x - s[0], z - s[1]] : [x, z]; }
 export function areaOf(x, z) { const a = areaAt(x, z); return a ? a.id : z < -6.1 ? "terrace" : "room"; }
 // height of the floor under (x, z): 0 everywhere in the flat rooms
 export function floorAt(x, z) { const a = areaAt(x, z); return a && a.floor ? a.floor(x, z) : 0; }
@@ -270,19 +275,72 @@ function tileTex(rx, ry) {
 	}, rx, ry);
 }
 
+// A framed photo on a wall: frame (o.frame: a material, or a colour), a white mat, and the picture itself,
+// cover-cropped to fit. setImage(url) swaps the picture (null: the "Add a memory" placeholder).
+const _phCache = {};
+export function makePhotoFrame(parent, slot, x, y, z, ry, o = {}) {
+	const w = o.w || 0.6, h = o.h || 0.48, border = o.border === undefined ? Math.min(w, h) * 0.08 : o.border;
+	const f = group(parent, x, y, z, ry);
+	const fm = o.frame && o.frame.isMaterial ? o.frame : mat(o.frame || "#3b2519", 0.45, o.metal || 0);
+	add(f, new THREE.BoxGeometry(w, h, 0.035), fm, 0, 0, 0, { cast: false });
+	add(f, new THREE.PlaneGeometry(w - border * 0.9, h - border * 0.9), mat(o.mat || "#fbf8f1", 0.9), 0, 0, 0.0185, { cast: false });
+	const pw = w - border * 2, phH = h - border * 2;
+	const ph = add(f, new THREE.PlaneGeometry(pw, phH), new THREE.MeshStandardMaterial({ map: placeholderPhoto(slot), roughness: 0.5 }), 0, 0, 0.02, { cast: false });
+	const MAX = o.max || (w < 0.5 ? 384 : 512);
+	function setImage(url) {
+		const token = ph.userData.imgToken = (ph.userData.imgToken || 0) + 1;
+		const swap = t => {
+			const old = ph.material.map;
+			ph.material.map = t; ph.material.needsUpdate = true;
+			if (old && old.userData.photo) old.dispose();
+		};
+		if (!url) { swap(placeholderPhoto(slot)); return; }
+		const img = new Image();
+		img.decoding = "async";
+		img.onload = () => {
+			if (token !== ph.userData.imgToken) return;   // a newer photo was chosen meanwhile
+			// big library pictures are shrunk to frame size first (saves memory on phones)
+			let src = img;
+			const s = Math.min(1, MAX / Math.max(img.width, img.height));
+			if (s < 1) {
+				src = document.createElement("canvas");
+				src.width = Math.round(img.width * s); src.height = Math.round(img.height * s);
+				src.getContext("2d").drawImage(img, 0, 0, src.width, src.height);
+			}
+			const t = src === img ? new THREE.Texture(img) : new THREE.CanvasTexture(src);
+			t.colorSpace = THREE.SRGBColorSpace;
+			t.userData.photo = true;
+			const a = src.width / src.height, target = pw / phH;
+			// cover-crop so any photo fills the frame without stretching
+			if (a > target) { t.repeat.set(target / a, 1); t.offset.set((1 - target / a) / 2, 0); }
+			else { t.repeat.set(1, a / target); t.offset.set(0, (1 - a / target) / 2); }
+			t.needsUpdate = true;
+			swap(t);
+		};
+		img.src = url;
+	}
+	f.traverse(c => { c.userData.photoIndex = slot; });
+	return { group: f, mesh: ph, slot, setImage };
+}
+// (one shared placeholder per colour: there can be 50 empty frames)
 export function placeholderPhoto(i) {
+	const key = i < 3 ? i : "s" + (i % 3);
+	if (_phCache[key]) return _phCache[key];
+	return (_phCache[key] = makePlaceholder(i, i < 3 ? 512 : 256));
+}
+function makePlaceholder(i, W) {
 	const hues = [[255, 179, 167], [167, 199, 231], [193, 225, 193]];
 	const [r, gg, b] = hues[i % 3];
-	return canvasTex(512, 400, (g, w, h) => {
+	return canvasTex(W, Math.round(W * 0.78), (g, w, h) => {
 		const grad = g.createLinearGradient(0, 0, w, h);
 		grad.addColorStop(0, `rgb(${r},${gg},${b})`); grad.addColorStop(1, "#fdf6ec");
 		g.fillStyle = grad; g.fillRect(0, 0, w, h);
 		// hills + sun scene
-		g.fillStyle = "rgba(255,255,255,0.7)"; g.beginPath(); g.arc(w * 0.72, h * 0.32, 42, 0, Math.PI * 2); g.fill();
+		g.fillStyle = "rgba(255,255,255,0.7)"; g.beginPath(); g.arc(w * 0.72, h * 0.32, w * 0.082, 0, Math.PI * 2); g.fill();
 		g.fillStyle = "rgba(90,120,100,0.35)";
 		g.beginPath(); g.moveTo(0, h * 0.75); g.quadraticCurveTo(w * 0.3, h * 0.45, w * 0.6, h * 0.72); g.quadraticCurveTo(w * 0.8, h * 0.6, w, h * 0.7); g.lineTo(w, h); g.lineTo(0, h); g.fill();
 		g.fillStyle = "rgba(60,50,70,0.75)";
-		g.font = "700 30px 'Nunito', 'Segoe UI', sans-serif"; g.textAlign = "center";
+		g.font = `700 ${Math.round(w * 0.06)}px 'Nunito', 'Segoe UI', sans-serif`; g.textAlign = "center";
 		g.fillText("Add a memory", w / 2, h * 0.9);
 	});
 }
@@ -923,50 +981,16 @@ export function buildRoom(scene) {
 
 	// ------------------------------------------------------------ left wall
 	// Memory photo frames + console table
+	// (the house adds more frames: 50 photo slots in all, see world.js PHOTO_PLACES)
 	const photos = [];
 	for (let i = 0; i < 3; i++) {
-		const z = -0.95 + i * 0.95;
-		const f = group(scene, -6.97, 1.75 + (i === 1 ? 0.12 : 0), z, Math.PI / 2);
-		add(f, new THREE.BoxGeometry(0.78, 0.64, 0.04), [darkWood, wood, brass][i] === brass ? mat("#b08d57", 0.35, 0.7) : [darkWood, wood][i], 0, 0, 0);
-		add(f, new THREE.PlaneGeometry(0.68, 0.54), mat("#fbf8f1", 0.9), 0, 0, 0.021, { cast: false });
-		const ph = add(f, new THREE.PlaneGeometry(0.58, 0.44), new THREE.MeshStandardMaterial({ map: placeholderPhoto(i), roughness: 0.5 }), 0, 0, 0.023, { cast: false });
-		photos.push({
-			mesh: ph,
-			setImage(url) {
-				const token = ph.userData.imgToken = (ph.userData.imgToken || 0) + 1;
-				const swap = t => {
-					const old = ph.material.map;
-					ph.material.map = t; ph.material.needsUpdate = true;
-					if (old && old.userData.photo) old.dispose();
-				};
-				if (!url) { swap(placeholderPhoto(i)); return; }
-				const img = new Image();
-				img.decoding = "async";
-				img.onload = () => {
-					if (token !== ph.userData.imgToken) return;   // a newer photo was chosen meanwhile
-					// big library pictures are shrunk to frame size first (saves memory on phones)
-					let src = img;
-					const MAX = 768, s = Math.min(1, MAX / Math.max(img.width, img.height));
-					if (s < 1) {
-						src = document.createElement("canvas");
-						src.width = Math.round(img.width * s); src.height = Math.round(img.height * s);
-						src.getContext("2d").drawImage(img, 0, 0, src.width, src.height);
-					}
-					const t = src === img ? new THREE.Texture(img) : new THREE.CanvasTexture(src);
-					t.colorSpace = THREE.SRGBColorSpace;
-					t.userData.photo = true;
-					const a = src.width / src.height, target = 0.58 / 0.44;
-					// cover-crop so any photo fills the frame without stretching
-					if (a > target) { t.repeat.set(target / a, 1); t.offset.set((1 - target / a) / 2, 0); }
-					else { t.repeat.set(1, a / target); t.offset.set(0, (1 - a / target) / 2); }
-					t.needsUpdate = true;
-					swap(t);
-				};
-				img.src = url;
-			}
-		});
-		f.traverse(c => { c.userData.photoIndex = i; });
+		const f = makePhotoFrame(scene, i, -6.97, 1.75 + (i === 1 ? 0.12 : 0), -0.95 + i * 0.95, Math.PI / 2,
+			{ w: 0.78, h: 0.64, frame: i === 2 ? mat("#b08d57", 0.35, 0.7) : [darkWood, wood][i], max: 768 });
+		photos[i] = f;
 	}
+	// three more: either end of the memory row, and one over the piano
+	for (const [slot, x, y, z, ry, w, h] of [[47, -6.97, 1.75, -1.9, Math.PI / 2, 0.78, 0.64], [48, -6.97, 1.75, 1.9, Math.PI / 2, 0.78, 0.64], [49, 0.2, 1.95, 5.97, Math.PI, 0.7, 0.5]])
+		photos[slot] = makePhotoFrame(scene, slot, x, y, z, ry, { w, h, frame: slot === 49 ? mat("#b08d57", 0.35, 0.7) : darkWood });
 	const cons = group(scene, -6.78, 0, 0, Math.PI / 2);
 	add(cons, rbox(1.5, 0.04, 0.34, 0.01), darkWood, 0, 0.8, 0);
 	for (const sx of [-0.7, 0.7]) add(cons, new THREE.BoxGeometry(0.04, 0.8, 0.3), darkWood, sx, 0.4, 0);
@@ -974,7 +998,7 @@ export function buildRoom(scene) {
 	for (let i = 0; i < 5; i++) add(cons, new THREE.CylinderGeometry(0.003, 0.003, 0.4, 5), mat("#7a6a50"), -0.45 + (i - 2) * 0.012, 1.2, 0, { rz: (i - 2) * 0.15, cast: false });
 	add(cons, rbox(0.18, 0.24, 0.02, 0.005), mat("#d4b483", 0.4, 0.6), 0.45, 0.94, -0.05, { rx: -0.15 });
 	box(-7, -6.55, -0.78, 0.78);
-	interact("photos", { label: "Look at our memories", stand: [-5.8, 0], face: -Math.PI / 2 }, ...scene.children.filter(c => c.userData.photoIndex !== undefined), cons);
+	interact("photos", { label: "Look at our memories", stand: [-5.8, 0], face: -Math.PI / 2 }, ...[0, 1, 2, 47, 48].map(i => photos[i].group), cons);
 
 	// Kitchen corner: counter, coffee machine, fridge
 	const counterTop = mat("#ffffff", 0.25, 0, { map: marbleTex() });

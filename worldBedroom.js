@@ -27,6 +27,9 @@ export function build(k) {
 		]
 	});
 	k.walk(-5, 5, -4.5, 4.5);
+	// photo frames (5 of the house's 50: see world.js PHOTO_PLACES)
+	for (const [slot, x, y, z, ry, w, h] of [[35, 1.6, 1.85, 4.46, Math.PI, 0.5, 0.62], [36, 2.4, 1.85, 4.46, Math.PI, 0.5, 0.62], [37, 4.96, 1.8, 3.2, -Math.PI / 2, 0.6, 0.45], [38, -4.96, 1.6, 0.5, Math.PI / 2, 0.55, 0.45], [39, -4.15, 1.75, -4.46, 0, 0.55, 0.45]])
+		k.photo(slot, x, y, z, ry, { w, h, frame: slot % 2 ? "#fbf8f2" : "#c9a05a", metal: slot % 2 ? 0 : 0.7 });
 	k.walk(-5.6, -4.0, 1.65, 3.35);   // through the doors to the lounge
 	k.walk(-1.05, 2.85, -5.4, -3.6);  // through the glass wall to the pool deck
 	k.cam = { minX: -4.75, maxX: 4.75, minZ: -4.25, maxZ: 4.25, maxY: H - 0.15 };

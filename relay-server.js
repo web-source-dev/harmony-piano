@@ -295,7 +295,7 @@ function saveChatLog(body, cb) {
 // Chat lines also go to chat-logs/<room>_<date>_world.txt so /manage shows them like piano chat.
 var WORLD_DIR = path.join(ROOT, "world-data");
 var WORLD_CHAT_MAX = 500;
-var WORLD_STATE_KEYS = /^(photo|cap)[0-2]$/;
+var WORLD_STATE_KEYS = /^(photo|cap)([0-9]|[1-4][0-9])$/;   // 50 frames around the house
 var gWorld = Object.create(null);   // room -> { chat: [], state: {}, timer }
 function worldFile(room) { return path.join(WORLD_DIR, sanitizeRoom(room) + ".json"); }
 function worldRoom(room) {

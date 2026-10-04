@@ -82,6 +82,9 @@ export function build(k) {
 
 	k.floor(floorY);
 	k.walk(-5, 5, -7.5, 6);
+	// photo frames on the landing as you come in (2 of the house's 50)
+	k.photo(45, -4.96, 3.4, 4.1, Math.PI / 2, { w: 0.6, h: 0.45, frame: "#c9a05a", metal: 0.7 });
+	k.photo(46, 4.96, 3.4, 4.1, -Math.PI / 2, { w: 0.6, h: 0.45, frame: "#c9a05a", metal: 0.7 });
 	k.cam = { minX: -4.75, maxX: 4.75, minZ: -7.3, maxZ: 5.78, maxY: H - 0.25 };
 
 	// ---------------------------------------------------------------- tiers + stairs
