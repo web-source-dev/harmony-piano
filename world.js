@@ -163,6 +163,7 @@ const house = createHouse({
 	audio: () => audio, muted: () => muted, me: () => me, myAvatar: () => myAvatar, peers: () => peers, MY_ID,
 	profile: () => profile,
 	doUpper: (u, ms, p) => doUpper(u, ms, p), sitOn: ids => sitOn(ids), standUp: q => standUp(q), walkTo: (x, z, a) => walkTo(x, z, a),
+	loveAct: e => loveAct(e), holdHands: id => holdHands(id), seatNeighbor: () => seatNeighbor(),
 	openModal: (...a) => openModal(...a), closeModal: () => closeModal(), modalKind: () => modalKind,
 	updateProps: () => updateProps(), sendPose: f => sendPose(f), heartsFx: (...a) => heartsFx(...a),
 	whoSits: id => whoSits(id), freeSpot: ids => freeSpot(ids), spotById: id => spotById(id),
@@ -370,7 +371,7 @@ function upsertPeer(id, lk) {
 }
 const BASE_ANIMS = ["idle", "sit", "sleep", "floor"];
 const UPPER_ANIMS = ["wave", "dance", "clap", "heart", "drink", "paint", "write", "tug", "piano", "laugh", "cry", "kiss", "hug", "highfive", "jump", "bow", "cheer", "think", "shrug", "facepalm", "yawn", "warm", "telescope", "shake", "give", "stumble",
-	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash"];
+	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash", "handhold"];
 const PROPS = ["mug", "brush", "remote", "flower", "ring", "popcorn", "fork", "spoon", "sponge"];
 function applyPose(p, d, snap) {
 	if (typeof d.x !== "number") return;
@@ -754,7 +755,7 @@ function sitOn(ids) {
 	me.target = null;
 	// look over your shoulder from behind the seat
 	// (lying down: the body runs toward spot.h, so watch from the foot of the bed)
-	cam.yaw = spot.lie || spot.bedsit ? spot.h : spot.h + Math.PI; cam.pitch = spot.lie ? 0.75 : spot.bedsit ? 0.5 : 0.42; cam.dist = spot.lie ? 3.0 : 2.6;
+	cam.yaw = spot.lie || spot.bedsit || spot.recline ? spot.h : spot.h + Math.PI; cam.pitch = spot.lie ? 0.75 : spot.bedsit || spot.recline ? 0.5 : 0.42; cam.dist = spot.lie ? 3.0 : 2.6;
 	cam.yaw = roomyYaw(cam.yaw, cam.pitch, cam.dist);
 	sendPose(true);
 	const nb = spot.id !== "bench" && seatNeighbor();
@@ -762,7 +763,7 @@ function sitOn(ids) {
 	if (nb) {
 		const q = peers.get(nb);
 		if (isAsleep(q) && !spot.lie) toast(`<b>${esc(q.look.name)}</b> is fast asleep next to you`, "Goodnight kiss", () => goodnightKiss(nb), 9000);
-		else toast(spot.lap ? `You're sitting on <b>${esc(q.look.name)}</b>'s lap` : `<b>${esc(q.look.name)}</b> is right next to you`, spot.lie ? "Snuggle" : "Cuddle up", () => { if (me.upper !== "cuddle") loveAct("cuddle"); }, 9000);
+		else toast(spot.lap ? `You're sitting on <b>${esc(q.look.name)}</b>'s lap` : `<b>${esc(q.look.name)}</b> is right next to you`, spot.lie ? "Snuggle" : spot.hands ? "Hold hands" : "Cuddle up", () => { if (me.upper !== "cuddle") loveAct("cuddle"); }, 9000);
 	}
 	return spot;
 }
@@ -1949,6 +1950,7 @@ function onPartnerAct(d, p) {
 	if (d.to !== MY_ID || !p) return;
 	if (d.kind === "yes") { onYes(p); return; }
 	if (onCarryAct(d, p)) return;
+	if (d.kind === "handhold" || d.kind === "letgo") { onHandAct(d, p); return; }
 	// cuddles and kisses from the seat right next to you keep you sitting (or lying) there
 	const together = SEATED_LOVE.includes(d.kind) && me.sit && p.sit && seatDist(me, p) < NEAR_SEAT;
 	// kissed while asleep: stay asleep, just dream sweeter
@@ -1992,6 +1994,8 @@ const LONELY = { smooch: "Who wants a kiss?", cheekkiss: "No cheeks to kiss arou
 function heartY(anim) { return anim === "sleep" ? 0.95 : anim === "sit" ? 1.3 : 1.75; }
 function posOf(id) { return id === MY_ID ? me : peers.get(id) || null; }
 // the person in the seat right next to yours
+// seats too far apart to snuggle (the pool loungers): a cuddle there is holding hands across the gap
+function handsSeat() { const s = spotById(me.sit); return !!(s && s.hands); }
 function seatNeighbor() {
 	if (!me.sit || me.sit === "bench") return null;
 	let best = null, bd = NEAR_SEAT;
@@ -2011,7 +2015,7 @@ function loveAct(e) {
 		doUpper(e, LOVE_MS[e], nb);
 		send({ t: "act", kind: e, to: nb });
 		loveFx(e, q);
-		if (e === "cuddle") addLog((me.anim === "sleep" ? "You snuggled up to " : "You cuddled up with ") + esc(q.look.name), true);
+		if (e === "cuddle") addLog(handsSeat() ? "You reached over and took " + esc(q.look.name) + "'s hand" : (me.anim === "sleep" ? "You snuggled up to " : "You cuddled up with ") + esc(q.look.name), true);
 		return;
 	}
 	if (e === "cuddle") {
@@ -2101,7 +2105,7 @@ function onLoveAct(d, p) {
 			if (me.upper === "cuddle" && me.partner === d.id) return true;
 			doUpper("cuddle", LOVE_MS.cuddle, d.id);
 			heartsFx(myAvatar.root, 4, null, heartY(me.anim));
-			addLog(`<b>${n}</b> cuddled up with you`, true);
+			addLog(handsSeat() ? `<b>${n}</b> reached over and took your hand` : `<b>${n}</b> cuddled up with you`, true);
 			if (audio) audio.sfx("love", 0.4);
 			return true;
 		case "smooch":
@@ -2153,7 +2157,7 @@ function onYes(p) {
 }
 // which side of you is your partner on (-1 right, 1 left, 0 in front)?
 function coupleSide(x, z, h, sit, partnerId, upper) {
-	if (!partnerId || !(COUPLE_POSES.includes(upper) || upper === "shake")) return 0;
+	if (!partnerId || !(COUPLE_POSES.includes(upper) || upper === "shake" || upper === "handhold")) return 0;
 	const po = posOf(partnerId);
 	if (!po) return 0;
 	const pp = bodyXZ(po), mp = bodyXZ({ x, z, sit });
@@ -2186,7 +2190,7 @@ function snuggle(av, x, z, sit, partnerId, upper, dt) {
 	const po = partnerId && posOf(partnerId), pav = partnerId && avatarOf(partnerId);
 	const lean = upper === "nightkiss" || upper === "shake";
 	av._slide = false;
-	if (spot && !spot.lap && po && po.sit && pav && av.coupleSide && (SEATED_LOVE.includes(upper) || lean)) {
+	if (spot && !spot.lap && !spot.hands && po && po.sit && pav && av.coupleSide && (SEATED_LOVE.includes(upper) || lean)) {
 		const pp = bodyXZ(po), mp = bodyXZ({ x, z, sit });
 		// only sideways (along the seat), never forward off it
 		const sx = Math.cos(spot.h), sz = -Math.sin(spot.h);
@@ -2226,11 +2230,47 @@ function kissReach(av, upper, partnerId, dt) {
 }
 // little hearts keep floating up from cuddling / dancing couples
 function loveAura(av, upper, anim, dt) {
-	if (upper !== "cuddle" && upper !== "slowdance") return;
+	if (upper !== "cuddle" && upper !== "slowdance" && upper !== "handhold") return;
 	av._auraT = (av._auraT || 0) + dt;
 	if (av._auraT < 1.7) return;
 	av._auraT = 0;
 	heartsFx(av.root, 1, null, heartY(anim));
+}
+
+// ---------- holding hands: side by side, walking or swimming together
+// Take their hand -> they hold yours -> each of you stays at the other's side; whoever moves leads.
+const HAND_GAP = 0.62;
+function holdHands(id) {
+	if (me.upper === "handhold") { letGo(); return; }
+	id = id && peers.get(id) ? id : nearestPeer(3);
+	const q = id && peers.get(id);
+	if (!q) { myAvatar.say("Anyone want to hold hands?"); return; }
+	if (q.sit || q.carriedBy) { addLog(esc(q.look.name) + " is busy right now.", true); return; }
+	if (me.sit) standUp(true);
+	if (me.carriedBy) hopDown();
+	doUpper("handhold", 1e9, id);
+	me.hand = { id, t: performance.now() };
+	send({ t: "act", kind: "handhold", to: id });
+	heartsFx(myAvatar.root, 3, null, heartY(me.anim));
+	if (audio) audio.sfx("love", 0.4);
+	addLog("You took " + esc(q.look.name) + "'s hand", true);
+}
+function letGo() {
+	if (me.upper !== "handhold") return;
+	const id = me.partner;
+	me.upper = null; me.partner = null; me.upperUntil = 0; me.hand = null;
+	if (id) send({ t: "act", kind: "letgo", to: id });
+	sendPose(true);
+}
+function onHandAct(d, p) {
+	if (d.kind === "letgo") { if (me.upper === "handhold" && me.partner === d.id) { me.upper = null; me.partner = null; me.upperUntil = 0; me.hand = null; sendPose(true); } return; }
+	if (me.sit || me.carriedBy || me.carrying || me.anim === "sleep" || ["piano", "telescope", "tug"].includes(me.upper)) return;
+	me.target = null; me.path = [];
+	doUpper("handhold", 1e9, d.id);
+	me.hand = { id: d.id, t: performance.now() };
+	heartsFx(myAvatar.root, 3, null, heartY(me.anim));
+	if (audio) audio.sfx("love", 0.4);
+	addLog(`<b>${esc(p.look.name)}</b> took your hand`, true);
 }
 
 // ---------- carrying someone in your arms (to the bed or the sofa, for a lying-down cuddle)
@@ -2911,6 +2951,7 @@ function sendPose(force) {
 function avatarAnim(anim, sit, carriedBy) {
 	if (carriedBy && avatarOf(carriedBy)) return "carried";
 	if (anim === "sit" && sit && (sit.indexOf("bedSit") === 0 || (spotById(sit) || {}).bedsit)) return "bedsit";
+	if (anim === "sit" && sit && (spotById(sit) || {}).recline) return "lounge";
 	return anim;
 }
 function placeAvatar(av, x, z, h, sitId) {
@@ -3013,7 +3054,7 @@ function updateMe(dt) {
 			if (moved < v * 0.25) { me.stuck += dt; if (me.stuck > 0.6) { const a = me.targetAct, fin = me.final || me.target; me.target = null; me.targetAct = null; me.path = []; if (a && fin && Math.hypot(fin.x - me.x, fin.z - me.z) < 2.0) runAct(a); } }
 			else me.stuck = 0;
 		}
-		if (me.upper && !["drink", "tug", "carry", "carrykiss"].includes(me.upper)) { me.upper = null; me.partner = null; updateProps(); }
+		if (me.upper && !["drink", "tug", "carry", "carrykiss", "handhold"].includes(me.upper)) { me.upper = null; me.partner = null; updateProps(); }
 	}
 	if (me.upperUntil && performance.now() > me.upperUntil) {
 		me.upperUntil = 0;
@@ -3021,7 +3062,7 @@ function updateMe(dt) {
 		if (me.upper === "carrykiss" && me.carrying) { me.upper = "carry"; me.upperUntil = performance.now() + 1e9; sendPose(true); }
 		else if (back && me.sit && back.sit && seatDist(me, back) < NEAR_SEAT) { me.upper = "cuddle"; me.partner = me.resume; me.upperUntil = performance.now() + LOVE_MS.cuddle; sendPose(true); }
 		me.resume = null;
-		if (me.upper === "carry" || me.upper === "cuddle") { /* still holding / snuggling */ }
+		if (me.upper === "carry" || me.upper === "cuddle" || me.upper === "handhold") { /* still holding / snuggling */ }
 		else if (me.upper && !["paint", "piano", "tug", "telescope", "carry"].includes(me.upper)) { me.upper = null; me.partner = null; updateProps(); sendPose(true); }
 	}
 	// keep facing whoever we're hugging / fighting / kissing / dancing with
@@ -3050,6 +3091,21 @@ function updateMe(dt) {
 			const k = Math.min(1, dt * 5);
 			const nx = me.x + (q.x + dx / l * gap - me.x) * k, nz = me.z + (q.z + dz / l * gap - me.z) * k;
 			if (!blocked(nx, nz, true)) { me.x = nx; me.z = nz; }
+		}
+	}
+	// holding hands: stay at their side. Whoever steers leads, the other drifts along beside them
+	if (me.upper === "handhold") {
+		const q = peers.get(me.partner), fresh = me.hand && performance.now() - me.hand.t < 3000;
+		if (!q || me.sit || q.sit || me.carrying || me.carriedBy || (!fresh && (q.upper !== "handhold" || q.partner !== MY_ID)) || Math.hypot(q.x - me.x, q.z - me.z) > 2.6) letGo();
+		else if (Math.abs(ix) + Math.abs(iz) <= 0.08 && !me.target) {
+			const lx = Math.cos(q.h), lz = -Math.sin(q.h);
+			const sd = (me.x - q.x) * lx + (me.z - q.z) * lz < 0 ? -1 : 1;
+			const k = Math.min(1, dt * 4), ox = me.x, oz = me.z;
+			const nx = me.x + (q.x + lx * sd * HAND_GAP - me.x) * k, nz = me.z + (q.z + lz * sd * HAND_GAP - me.z) * k;
+			if (!blocked(nx, nz, true)) { me.x = nx; me.z = nz; }
+			me.h = angleLerp(me.h, q.h, Math.min(1, dt * 6));
+			// drifting along with them: swim / walk, don't glide
+			me.speed = Math.max(me.speed, Math.min(1.2, Math.hypot(me.x - ox, me.z - oz) / Math.max(dt, 0.001) / 2.6));
 		}
 	}
 	// they got up: the cuddle is over
@@ -3145,6 +3201,24 @@ function assignIK(av, upper, sit, partnerId, store) {
 		store[0].set(top.x - rx, top.y, top.z - rz);
 		store[1].set(top.x + rx, top.y, top.z + rz);
 		av.ik[0] = store[0]; av.ik[1] = store[1];
+	} else if (upper === "handhold" && partnerId) {
+		// near hand meets theirs halfway between your shoulders, down by your sides (out to the side, swimming flat)
+		const pav = avatarOf(partnerId);
+		if (!pav || !av.coupleSide) return;
+		const i = av.coupleSide < 0 ? 0 : 1;
+		av.arms[i].sh.getWorldPosition(_tmpV);
+		// (their shoulder nearest to yours)
+		pav.arms[0].sh.getWorldPosition(_tmpV2); pav.arms[1].sh.getWorldPosition(store[i]);
+		if (store[i].distanceTo(_tmpV) < _tmpV2.distanceTo(_tmpV)) _tmpV2.copy(store[i]);
+		const pr = ((av.swimProne || 0) + (pav.swimProne || 0)) / 2;
+		const h = av.root.rotation.y;
+		store[i].copy(_tmpV).add(_tmpV2).multiplyScalar(0.5);
+		// palm to palm: each hand stays a touch on its own side
+		_tmpV2.subVectors(_tmpV, store[i]).setY(0);
+		if (_tmpV2.lengthSq() > 1e-6) store[i].addScaledVector(_tmpV2.normalize(), 0.03);
+		store[i].y -= 0.42 * (1 - pr) + 0.04;
+		store[i].x += Math.sin(h) * 0.12 * (1 - pr); store[i].z += Math.cos(h) * 0.12 * (1 - pr);
+		av.ik[i] = store[i];
 	} else if (COUPLE_POSES.includes(upper) && partnerId) {
 		const pav = avatarOf(partnerId);
 		if (!pav) return;
@@ -3154,7 +3228,12 @@ function assignIK(av, upper, sit, partnerId, store) {
 		const side = av.coupleSide;
 		const mySpot = sit && room.sitSpots.find(s => s.id === sit);
 		const ps = posOf(partnerId), pSpot = ps && ps.sit && room.sitSpots.find(s => s.id === ps.sit);
-		if (side) {
+		if (side && mySpot && mySpot.hands) {
+			// on the next lounger over: reach across the gap and hold hands between you
+			const i = side < 0 ? 0 : 1;
+			store[i].set((me3.x + pp.x) / 2 - fx * 0.03, me3.y + 0.55, (me3.z + pp.z) / 2 - fz * 0.03);
+			av.ik[i] = store[i];
+		} else if (side) {
 			// arm around them: hand on their far shoulder (or their back, lying down)
 			const i = side < 0 ? 0 : 1;
 			if (mySpot && mySpot.lie) { pav.torso.getWorldPosition(store[i]); store[i].y += 0.12; }
@@ -3800,4 +3879,4 @@ checkAuth().then(ok => {
 });
 setInterval(applyPlant, 5 * 60 * 1000);
 // handle for debugging from the console
-window.HarmonyWorld = { _net: d => onNet(d), MY_ID, room, house, floorAt, areaOf, doUpper, me, peers, interact, get, setShared, emote, loveAct, walkTo, cam, standUp, sitOn, goToBed, sitUpInBed, goodnightKiss, openWheel, closeWheel, playKey, tugTap, wakePeer, toggleNight, drinkCoffee, takeCoffee, putDownMug, enterTV, exitTV, setMood, giveFlower: giveHeld, pickFlower, myAvatar, findPath, blocked, renderer, scene, camera };
+window.HarmonyWorld = { _net: d => onNet(d), MY_ID, room, house, floorAt, areaOf, doUpper, me, peers, interact, get, setShared, emote, loveAct, holdHands, walkTo, cam, standUp, sitOn, goToBed, sitUpInBed, goodnightKiss, openWheel, closeWheel, playKey, tugTap, wakePeer, toggleNight, drinkCoffee, takeCoffee, putDownMug, enterTV, exitTV, setMood, giveFlower: giveHeld, pickFlower, myAvatar, findPath, blocked, renderer, scene, camera };

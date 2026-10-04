@@ -14,7 +14,9 @@
  * palms, floating rings, ripples and splashes, string lights.
  *
  * Swim: walk in (or dive) and you float with your head above the water, arms
- * doing breaststroke; moving, you stretch out flat and swim.
+ * doing breaststroke; moving, you stretch out flat and swim. Together in the
+ * water you can kiss, or take each other's hand and swim side by side.
+ * The loungers come in pairs: lie back, and hold hands with whoever's next to you.
  */
 const P = { x0: -6.0, x1: 2.0, z0: -2.9, z1: 2.0, depth: 1.3, surf: -0.12 };
 
@@ -190,12 +192,15 @@ export function build(k) {
 		const along = Math.abs(Math.sin(h)) > 0.5;
 		k.box(x - (along ? 1.05 : 0.4), x + (along ? 1.05 : 0.4), z - (along ? 0.4 : 1.05), z + (along ? 0.4 : 1.05));
 		const fwd = [Math.sin(h), Math.cos(h)];
-		k.spot({ id: "lounger" + i, x: x - fwd[0] * 0.15, z: z - fwd[1] * 0.15, h, y: -0.06 });
+		// hips well back on the seat so you lie back against the backrest, legs stretched out along it
+		// (recline: its own pose; hands: next to someone, a cuddle is holding hands across the gap)
+		k.spot({ id: "lounger" + i, x: x - fwd[0] * 0.42, z: z - fwd[1] * 0.42, h, y: 0.0, recline: true, hands: true });
 		k.interact("pool:lounger" + i, { label: "Relax on the lounger", stand: [x + fwd[0] * 1.45, z + fwd[1] * 1.45], sit: ["lounger" + i] }, lg);
 	};
-	[-5.05, -3.05, -1.05, 0.95].forEach((lx, i) => lounger(i, lx, -4.85, 0));
-	lounger(4, -11.0, -1.6, Math.PI / 2);
-	lounger(5, -8.3, -1.6, Math.PI / 2);
+	// in pairs, side by side and close enough to hold hands
+	[-4.4, -3.4, -1.1, -0.1].forEach((lx, i) => lounger(i, lx, -4.85, 0));
+	lounger(4, -10.0, -2.25, Math.PI / 2);
+	lounger(5, -10.0, -1.25, Math.PI / 2);
 	const umb = group(g, -9.55, 0, -3.2);
 	add(umb, new THREE.CylinderGeometry(0.03, 0.03, 2.4, 8), chrome, 0, 1.2, 0);
 	add(umb, new THREE.ConeGeometry(1.4, 0.5, 12, 1, true), mat("#e76f51", 0.8, 0, { side: THREE.DoubleSide }), 0, 2.35, 0);
@@ -362,12 +367,29 @@ export function build(k) {
 		},
 		promptOpts(opts) {
 			const me = ctx.me();
-			if (me.sit || dive) return;
+			if (dive) return;
 			const free = key => !opts.some(o => o.k === key);
+			// side by side on the loungers: hold hands across the gap, or lean over for a kiss
+			if (me.sit && /^lounger/.test(me.sit)) {
+				const nb = ctx.seatNeighbor(), q = nb && ctx.peers().get(nb);
+				if (!q) return;
+				const holding = me.upper === "cuddle" && me.partner === nb;
+				if (free("R")) opts.push({ k: "R", label: holding ? "Let go of " + q.look.name + "'s hand" : "Hold " + q.look.name + "'s hand", fn: () => ctx.loveAct("cuddle") });
+				if (free("G")) opts.push({ k: "G", label: "Kiss " + q.look.name, fn: () => ctx.loveAct("smooch") });
+				return;
+			}
+			if (me.sit) return;
 			const lx = me.x - k.ox, lz = me.z - k.oz;
 			if (!inPool(lx, lz)) return;
 			let near = null, nd = 3;
 			ctx.peers().forEach((p, id) => { const dd = Math.hypot(p.x - me.x, p.z - me.z); if (dd < nd && inPool(p.x - k.ox, p.z - k.oz)) { nd = dd; near = id; } });
+			// in the water together: kiss, swim hand in hand
+			if (near) {
+				const q = ctx.peers().get(near);
+				if (free("E")) opts.push({ k: "E", label: "Kiss " + q.look.name, fn: () => ctx.loveAct("smooch") });
+				const holding = me.upper === "handhold" && me.partner === near;
+				if (free("R")) opts.push({ k: "R", label: holding ? "Let go of " + q.look.name + "'s hand" : "Swim hand in hand with " + q.look.name, fn: () => ctx.holdHands(near) });
+			}
 			if (near && free("F")) {
 				const q = ctx.peers().get(near);
 				opts.push({ k: "F", label: "Splash " + q.look.name, fn: () => {

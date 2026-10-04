@@ -31,7 +31,9 @@ export const MOODS = [
 ];
 const MOOD_COLOR = Object.fromEntries(MOODS.map(m => [m.id, m.color]));
 // arm-layer animations that make the cheeks go pink
-const LOVE_UPPERS = new Set(["blush", "lovestruck", "heartarms", "smooch", "cheekkiss", "cuddle", "slowdance", "propose", "kiss", "hug", "nightkiss", "carry", "carrykiss"]);
+const LOVE_UPPERS = new Set(["blush", "lovestruck", "heartarms", "smooch", "cheekkiss", "cuddle", "slowdance", "propose", "kiss", "hug", "nightkiss", "carry", "carrykiss", "handhold"]);
+// love you can still do while treading water (your legs keep kicking underneath)
+const WATER_UPPERS = new Set(["handhold", "smooch", "cheekkiss", "kiss", "hug", "highfive", "blush", "lovestruck", "heart", "heartarms", "wink", "cuddle", "slowdance"]);
 // solo ones also float little hearts
 const HEART_UPPERS = new Set(["blush", "lovestruck", "heartarms"]);
 
@@ -724,8 +726,10 @@ export class Avatar {
 		this.t += dt;
 		const k = 1 - Math.pow(0.0004, dt);
 		const t = this.t;
-		// "bedsit" (sitting up in bed) is a sit with the legs stretched out along the mattress
-		const bedsit = this.anim === "bedsit";
+		// "bedsit" (sitting up in bed) is a sit with the legs stretched out along the mattress;
+		// "lounge" (a pool lounger) the same, lying right back against the backrest
+		const lounge = this.anim === "lounge";
+		const bedsit = this.anim === "bedsit" || lounge;
 		const base = bedsit ? "sit" : this.anim, up = this.upper;
 		if (up !== this._lastUp) { this._lastUp = up; this.upperT = 0; }
 		this.upperT += dt;
@@ -759,6 +763,16 @@ export class Avatar {
 				P.torsoX = -0.16 + breathe;
 				P.arm[0].x = P.arm[1].x = -0.35; P.arm[0].e = P.arm[1].e = -0.55;
 				P.arm[0].z = -0.18; P.arm[1].z = 0.18;
+			}
+			if (lounge) {
+				// back flat on the backrest, head up to look out at the pool, one knee lazily raised,
+				// arms resting along the sides
+				P.torsoX = -0.72 + breathe;
+				P.headX = 0.42;
+				P.leg[1].x = -1.95; P.leg[1].k = 0.85; P.foot[1] = 0.2;
+				P.leg[0].x = -1.55; P.leg[0].k = 0.06; P.foot[0] = -0.3;
+				P.arm[0].x = P.arm[1].x = -0.15; P.arm[0].e = P.arm[1].e = -0.3;
+				P.arm[0].z = -0.3; P.arm[1].z = 0.3;
 			}
 		} else if (base === "floor") {
 			// sitting cross-legged on the floor
@@ -830,9 +844,10 @@ export class Avatar {
 		if ((this.propKind === "mug" || this.propKind === "popcorn") && !up && base !== "sleep" && base !== "carried") { P.arm[0].x = -0.2; P.arm[0].z = -0.15; P.arm[0].e = -1.35; }
 
 		// in deep water: breaststroke when moving, treading water when still
-		if (this.water > 0.55 && base === "idle" && (!up || up === "wave" || up === "laugh")) {
+		if (this.water > 0.55 && base === "idle" && (!up || up === "wave" || up === "laugh" || WATER_UPPERS.has(up))) {
 			const s = t * (moving ? 4.4 : 2.4), pull = Math.max(0, Math.cos(s)), reach = Math.max(0, -Math.cos(s));
-			if (!up) {
+			// (holding hands: the free arm keeps stroking, the other one is in theirs)
+			if (!up || up === "handhold") {
 				P.arm[0].x = P.arm[1].x = -1.25 - reach * 0.35 + Math.sin(s) * 0.12;
 				P.arm[0].z = -0.25 - pull * 0.95; P.arm[1].z = 0.25 + pull * 0.95;
 				P.arm[0].e = P.arm[1].e = -0.35 - reach * 1.0;
@@ -1086,6 +1101,12 @@ export class Avatar {
 				P.bodyRY = side * (kiss ? 1.0 : 0.85);
 				P.headY = side * (kiss ? 0.45 : 0.3);
 				P.arm[0].e = P.arm[1].e = -0.6;
+			} else if (lounge && side) {
+				// on the next lounger over: hand in theirs (IK), turned to look at them; a kiss leans across the gap
+				P.torsoZ = kiss ? -side * 0.24 : -side * 0.05;
+				P.headY = side * (kiss ? 0.9 : 0.55);
+				P.headZ = -side * (kiss ? 0.15 : 0.08);
+				P.headX = kiss ? 0.2 : 0.3;
 			} else if (side) {
 				// side by side (sofa, swing, bean bags, a lap): lean in, head on their shoulder
 				P.torsoZ = -side * (kiss ? 0.24 : 0.17);
@@ -1128,6 +1149,10 @@ export class Avatar {
 				P.arm[sd < 0 ? 1 : 0].z = sd * 0.9 * k; P.arm[sd < 0 ? 1 : 0].e = -0.2;
 			}
 			if (ut > 0.6) P.eyes = 0.05;
+		} else if (up === "handhold") {
+			// hand in hand (the hand itself is placed by IK): every so often a happy glance at them
+			const glance = Math.max(0, Math.sin(t * 0.7));
+			if (side) { P.headY = side * (0.12 + glance * 0.5); P.headZ = -side * 0.06 * glance; }
 		} else if (up === "slowdance") {
 			const b = t * 1.3;
 			P.bodyRY = Math.sin(b) * 0.12;
