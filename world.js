@@ -2933,7 +2933,21 @@ function placeAvatar(av, x, z, h, sitId) {
 		av.root.position.y += (1 - Math.cos(a)) * sw.L;
 		av.root.rotation.order = "YXZ"; av.root.rotation.set(a, spot.h, 0);
 	}
-	else { av.root.rotation.order = "XYZ"; av.root.rotation.set(0, h, 0); }
+	else if (av.water > 0.55) {
+		// swimming: stretched out flat at the surface when you move, treading water upright when you stop
+		const moving = (av.speed || 0) > 0.12;
+		av._prone = (av._prone || 0) + ((moving ? 1 : 0) - (av._prone || 0)) * 0.08;
+		const k = av._prone, lean = 0.12 + k * 1.1, surf = -0.12;
+		const bob = Math.sin(performance.now() / 1000 * 2.2 + x) * 0.035;
+		const yUp = surf - 1.4 + bob, yFlat = surf + 0.05 - 1.6 * Math.cos(lean) + bob * 0.5;
+		av.root.position.y = yUp + (yFlat - yUp) * k;
+		// (the feet trail behind, so the body sits where you are)
+		av.root.position.x -= Math.sin(h) * 0.75 * k;
+		av.root.position.z -= Math.cos(h) * 0.75 * k;
+		av.swimProne = k;
+		av.root.rotation.order = "YXZ"; av.root.rotation.set(lean, h, 0);
+	}
+	else { av._prone = 0; av.swimProne = 0; av.root.rotation.order = "XYZ"; av.root.rotation.set(0, h, 0); }
 }
 // turn the head toward the nearest other person who's close by
 function lookYawFor(x, z, h, others) {
@@ -2969,7 +2983,7 @@ function updateMe(dt) {
 		const rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
 		mx = fx * iz + rx * ix; mz = fz * iz + rz * ix;
 		const l = Math.hypot(mx, mz);
-		want = Math.min(1, l) * (run ? 1.75 : 1) * (me.carrying ? 0.75 : 1);
+		want = Math.min(1, l) * (run ? 1.75 : 1) * (me.carrying ? 0.75 : 1) * (floorAt(me.x, me.z) < -0.55 ? 0.6 : 1);
 		mx /= l; mz /= l;
 	} else if (me.target) {
 		const dx = me.target.x - me.x, dz = me.target.z - me.z, l = Math.hypot(dx, dz);
@@ -3718,7 +3732,7 @@ function frameBody() {
 	house.update(dt, t, me.x, me.z);
 	// only light the area you're in (fewer lights = much cheaper shading)
 	const inTerrace = areaOf(cam.tx, cam.tz) === "terrace" || (entered && areaOf(me.x, me.z) === "terrace");
-	const lightArea = house.inHouse() ? "house" : inTerrace ? "terrace" : "room";
+	const lightArea = house.indoorsAway() ? "house" : inTerrace || house.region() === "pool" ? "terrace" : "room";
 	if (lightArea !== lastArea) {
 		lastArea = lightArea;
 		room.areaLights.room.concat(room.minorLights.room).forEach(l => { l.visible = lightArea === "room"; });

@@ -840,7 +840,10 @@ export class Avatar {
 			P.leg[0].x = Math.sin(s * 2) * 0.35 - 0.2; P.leg[1].x = -Math.sin(s * 2) * 0.35 - 0.2;
 			P.leg[0].k = P.leg[1].k = 0.35 + pull * 0.4;
 			P.foot[0] = P.foot[1] = 0.4;
-			P.torsoX = moving ? 0.22 : 0.04; P.headX = moving ? -0.18 : -0.02;
+			// lying flat when swimming: look ahead, not down at the bottom of the pool
+			const pr = this.swimProne || 0;
+			P.torsoX = 0.04 * (1 - pr); P.headX = -0.02 - pr * 0.75;
+			if (pr > 0.3) { P.leg[0].k = P.leg[1].k = 0.15 + pull * 0.5; P.foot[0] = P.foot[1] = 0.7; }
 			P.bodyY = Math.sin(t * 2) * 0.025;
 		}
 

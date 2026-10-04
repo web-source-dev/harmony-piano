@@ -71,6 +71,14 @@ export function build(k) {
 	});
 	// the shell is centred on z = 0; this room runs from z = -9 to +6, so slide everything built so far
 	g.children.forEach(o => { o.position.z -= 1.5; });
+	// outside walls in brick (the cinema stands beside the living room; you see it from the terrace)
+	{
+		const bm = (w, h) => mat("#ffffff", 0.95, 0, { map: k.brickTex(w / 2.4, h / 2.4) });
+		const EH = H + 0.15;
+		add(g, new THREE.PlaneGeometry(15.4, EH), bm(15.4, EH), 5.23, EH / 2, -1.5, { ry: Math.PI / 2, cast: false });
+		add(g, new THREE.PlaneGeometry(10.4, EH), bm(10.4, EH), 0, EH / 2, -9.23, { ry: Math.PI, cast: false });
+		for (const [x0, x1, y0, y1] of [[-5.2, -0.72, 0, EH], [0.72, 5.2, 0, EH], [-0.72, 0.72, LANDING_Y + 2.32, EH]]) add(g, new THREE.PlaneGeometry(x1 - x0, y1 - y0), bm(x1 - x0, y1 - y0), (x0 + x1) / 2, (y0 + y1) / 2, 6.23, { cast: false });
+	}
 
 	k.floor(floorY);
 	k.walk(-5, 5, -7.5, 6);
