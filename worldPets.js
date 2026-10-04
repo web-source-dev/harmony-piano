@@ -54,6 +54,8 @@ EDGES.forEach(e => { const [a, b] = e.split("-"); ADJ[a].push(b); ADJ[b].push(a)
 // where wandering takes them (not the doorway points)
 const WANDER = NAMES.filter(n => !["LD", "G0", "G6", "B0", "G10", "BA0", "TP", "P0", "LT", "T0", "GN", "BG", "PN"].includes(n));
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+// the heading that points a pet standing at a towards b (the models look down their local +z, and rotation.y = heading)
+const toward = (a, b) => Math.atan2(b[0] - a[0], b[1] - a[1]);
 function nearestNode(p) {
 	const a = areaOf(p[0], p[1]);
 	let best = null, bd = 1e9;
@@ -160,6 +162,9 @@ export function buildPetCorner(k, L) {
 	add(ct, new T.CylinderGeometry(0.003, 0.003, 0.3, 4), mat("#eee"), 0.3, 0.9, 0.3, { cast: false });
 	add(ct, new T.SphereGeometry(0.035, 10, 8), mat("#ff4d6d", 0.6), 0.3, 0.74, 0.3, { cast: false });
 	k.box(L.tree[0] - 0.45, L.tree[0] + 0.45, L.tree[1] - 0.45, L.tree[1] + 0.45);
+	// the way up, a hop at a time ([x, z, y] on the tree, matching the tops above): the floor in front (the room side), the base,
+	// the low shelf (top 0.65), the high shelf (top 1.11, on its outer corner, clear of the bed's rim), the bed on top
+	const hops = [[-0.15, -0.75, 0], [-0.15, -0.32, 0.08], [-0.22, 0.14, 0.65], [0.3, 0.28, 1.11], [0, 0, 1.6]];
 	// bowls on a mat (in a row along x), and a bag of kibble
 	add(g, rbox(1.7, 0.01, 0.45, 0.005), mat("#3d5a80", 0.8), L.bowls[0], 0.006, L.bowls[1], { cast: false });
 	const bowl = (x, color, r) => {
@@ -234,9 +239,11 @@ export function buildPetCorner(k, L) {
 	return {
 		dogBed: W(L.bed[0], L.bed[1]),
 		catTree: W(L.tree[0], L.tree[1]),
-		dogBowl: W(L.bowls[0] - 0.55, L.bowls[1] - 0.42),
-		catBowl: W(L.bowls[0], L.bowls[1] - 0.36),
-		water: W(L.bowls[0] + 0.55, L.bowls[1] - 0.4),
+		catHops: hops.map(([x, z, y]) => W(L.tree[0] + x, L.tree[1] + z).concat(y)),
+		// where they stand to eat / drink, and the bowl itself (to face it)
+		dogBowl: W(L.bowls[0] - 0.55, L.bowls[1] - 0.42), dogBowlAt: W(L.bowls[0] - 0.55, L.bowls[1]),
+		catBowl: W(L.bowls[0], L.bowls[1] - 0.36), catBowlAt: W(L.bowls[0], L.bowls[1]),
+		water: W(L.bowls[0] + 0.55, L.bowls[1] - 0.4), waterAt: W(L.bowls[0] + 0.55, L.bowls[1]),
 		ball: W(L.ball[0], L.ball[1])
 	};
 }
@@ -312,22 +319,43 @@ export function createPets(ctx, SP, house) {
 
 	// ---------------------------------------------------------------- where is each pet, and what is it doing? (pure function of time)
 	const PETS = {
-		dog: { id: DOG, slot: 10, speed: 1.4, run: 3.0, seed: 11, bowl: SP.dogBowl },
-		cat: { id: CAT, slot: 14, speed: 0.9, run: 2.2, seed: 29, bowl: SP.catBowl }
+		dog: { id: DOG, slot: 10, speed: 1.4, run: 3.0, seed: 11, bowl: SP.dogBowl, bowlAt: SP.dogBowlAt },
+		cat: { id: CAT, slot: 14, speed: 0.9, run: 2.2, seed: 29, bowl: SP.catBowl, bowlAt: SP.catBowlAt }
 	};
+	// ---- the cat tree: Mochi hops up (and down) it a level at a time; lvl = which of SP.catHops she's on (0 = the floor in front)
+	const H = SP.catHops, TOP = H.length - 1, HOP = 1.0, HOP_AIR = 0.45;
+	const range = (a, b) => { const o = []; for (let i = a; ; i += a < b ? 1 : -1) { o.push(i); if (i === b) break; } return o; };
+	// s seconds into hopping through the levels idx (each hop: a beat to gather herself, then the jump)
+	function hopAt(idx, s) {
+		const n = idx.length - 1;
+		if (s >= n * HOP) { const a = H[idx[n - 1]], b = H[idx[n]]; return { pos: [b[0], b[1]], y: b[2], heading: toward(a, b), act: "stand", hop: true, lvl: idx[n] }; }
+		const i = Math.max(0, Math.floor(s / HOP)), a = H[idx[i]], b = H[idx[i + 1]], up = b[2] > a[2], heading = toward(a, b);
+		const u = (s - i * HOP - (HOP - HOP_AIR)) / HOP_AIR;
+		if (u <= 0) return { pos: [a[0], a[1]], y: a[2], heading, act: "crouch", hop: true, lvl: idx[i] };
+		// going up she rises first and reaches over the edge late; going down she pushes off the edge first, then drops
+		const w = up ? u * u : 1 - (1 - u) * (1 - u);
+		const y = a[2] + (b[2] - a[2]) * u + Math.sin(u * Math.PI) * (0.22 + Math.max(0, b[2] - a[2]) * 0.4);
+		return { pos: [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w], y, heading, act: "leap", pitch: up ? -0.35 : 0.3, hop: true, lvl: idx[u < 0.5 ? i : i + 1] };
+	}
+	const perched = face => ({ pos: [H[TOP][0], H[TOP][1]], y: H[TOP][2], heading: face, act: "perch", lvl: TOP });
+	// how far up she's got by `until`, making for the tree from `from` at dep (or already lvl0 up it)
+	function levelBy(P, from, dep, lvl0, until) {
+		const s = lvl0 ? until - dep : until - dep - polyLen(route(from, H[0])) / P.speed;
+		return s < 0 ? lvl0 : Math.min(TOP, lvl0 + Math.floor(s / HOP));
+	}
 	function wanderTarget(P, k2) {
 		const r = hash(k2, P.seed), hungry = hungerOf(ctx) > 0.75;
 		const face = hash(k2, P.seed + 3) * Math.PI * 2;
 		const node = NODES[WANDER[Math.floor(hash(k2, P.seed + 1) * WANDER.length)]];
 		const a = hash(k2, P.seed + 2);
 		if (P.id === DOG) {
-			if (hungry && r < 0.3) return { pos: P.bowl, act: "beg", face: Math.PI };
+			if (hungry && r < 0.3) return { pos: P.bowl, act: "beg", face: toward(P.bowl, P.bowlAt) };
 			if (r < 0.14) return { pos: SP.dogBed, act: "sleep", face: 0.6, y: 0.1 };
-			if (r < 0.2) return { pos: SP.water, act: "eat", face: Math.PI };
+			if (r < 0.2) return { pos: SP.water, act: "eat", face: toward(SP.water, SP.waterAt) };
 			return { pos: node, act: a < 0.35 ? "sit" : a < 0.62 ? "lie" : a < 0.82 ? "sniff" : "stand", face };
 		}
-		if (hungry && r < 0.3) return { pos: P.bowl, act: "sit", face: Math.PI };
-		if (r < 0.24) return { pos: SP.catTree, act: "perch", face: 2.4, y: 1.6 };
+		if (hungry && r < 0.3) return { pos: P.bowl, act: "sit", face: toward(P.bowl, P.bowlAt) };
+		if (r < 0.24) return { pos: H[0], act: "perch", face: 2.4, climb: true };   // (pos: the floor in front; she hops up from there)
 		if (r < 0.32) return { pos: SP.dogBed, act: "sleep", face: -0.8, y: 0.1 };
 		return { pos: [node[0] + 0.3, node[1] - 0.3], act: a < 0.3 ? "sit" : a < 0.6 ? "lie" : a < 0.8 ? "groom" : "stand", face };
 	}
@@ -355,14 +383,30 @@ export function createPets(ctx, SP, house) {
 		}
 		return wander(P, t, null);
 	}
+	// how slot k starts: from where, when, and how far up the cat tree
+	function slotStart(P, k, after) {
+		const L = P.slot, s0 = k * L;
+		if (after && after.end > s0) return { from: after.final, dep: after.end, lvl: after.lvl || 0 };
+		const pv = wanderTarget(P, k - 1);
+		let lvl = 0;
+		if (pv.climb) {
+			if (after && after.end > s0 - L) lvl = levelBy(P, after.final, after.end, after.lvl || 0, s0);
+			else { const pp = wanderTarget(P, k - 2); lvl = pp.climb ? TOP : levelBy(P, pp.pos, s0 - L, 0, s0); }
+		}
+		return { from: pv.pos, dep: s0, lvl };
+	}
 	function wander(P, t, after) {
-		const L = P.slot, k2 = Math.floor(t / L), s0 = k2 * L;
+		const k2 = Math.floor(t / P.slot);
 		const tg = wanderTarget(P, k2);
-		let from, dep;
-		if (after && after.end > s0) { from = after.final; dep = after.end; }
-		else { from = wanderTarget(P, k2 - 1).pos; dep = s0; }
-		const m = walk(route(from, tg.pos), dep, t, P.speed);
-		if (m.moving) return { pos: m.pos, y: 0, heading: m.heading, act: "walk" };
+		let { from, dep, lvl } = slotStart(P, k2, after);
+		if (lvl && tg.climb) return lvl < TOP && t < dep + (TOP - lvl) * HOP ? hopAt(range(lvl, TOP), t - dep) : perched(tg.face);
+		if (lvl) {   // down the tree first, a level at a time
+			if (t < dep + lvl * HOP) return hopAt(range(lvl, 0), t - dep);
+			from = H[0]; dep += lvl * HOP;
+		}
+		const pts = route(from, tg.pos), arrive = dep + polyLen(pts) / P.speed;
+		if (t < arrive) { const m = walk(pts, dep, t, P.speed); return { pos: m.pos, y: 0, heading: m.heading, act: "walk" }; }
+		if (tg.climb) return t < arrive + TOP * HOP ? hopAt(range(0, TOP), t - arrive) : perched(tg.face);
 		return { pos: tg.pos, y: tg.y || 0, heading: tg.face, act: tg.act };
 	}
 	const planCache = new Map();
@@ -370,18 +414,21 @@ export function createPets(ctx, SP, house) {
 		const ck = P.id + e.kind + e.at;
 		if (planCache.has(ck)) return planCache.get(ck);
 		const start = stateAt(P, e.at, older);
-		const from = start.pos;
+		// up the cat tree: she hops down before going anywhere (and gets a pat where she is)
+		const lvl = start.lvl || 0, down = lvl * HOP;
+		const from = lvl ? H[0] : start.pos;
 		let plan = null;
 		if (e.kind === "feed") {
-			const pts = route(from, P.bowl), arrive = e.at + polyLen(pts) / P.run;
-			plan = { pts, dep: e.at, speed: P.run, arrive, end: Math.max(arrive + 6, e.at + 12), final: P.bowl, act: "eat", face: Math.PI };
+			const pts = route(from, P.bowl), arrive = e.at + down + polyLen(pts) / P.run;
+			plan = { pts, dep: e.at + down, speed: P.run, arrive, end: Math.max(arrive + 6, e.at + 12), final: P.bowl, act: "eat", face: toward(P.bowl, P.bowlAt), down: lvl };
 		} else if (e.kind === "call") {
 			const caller = [e.d.x, e.d.z];
 			const pts = trim(route(from, caller), P.id === DOG ? 0.75 : 1.1);
-			const final = pts[pts.length - 1], arrive = e.at + 0.3 + polyLen(pts) / P.run;
-			plan = { pts, dep: e.at + 0.3, speed: P.run, arrive, end: arrive + 6, final, act: "sit", face: Math.atan2(caller[0] - final[0], caller[1] - final[1]) };
+			const final = pts[pts.length - 1], arrive = e.at + 0.3 + down + polyLen(pts) / P.run;
+			plan = { pts, dep: e.at + 0.3 + down, speed: P.run, arrive, end: arrive + 6, final, act: "sit", face: toward(final, caller), down: lvl };
 		} else if (e.kind === "pet") {
-			plan = { pts: [from, from], dep: e.at, speed: 1, arrive: e.at, end: e.at + 5, final: from, act: "happy", face: Math.atan2(e.d.x - from[0], e.d.z - from[1]), y: start.y || 0, keepAct: ["sleep", "lie", "perch"].includes(start.act) ? start.act : null };
+			const at = lvl ? [H[lvl][0], H[lvl][1]] : start.pos;
+			plan = { pts: [at, at], dep: e.at, speed: 1, arrive: e.at, end: e.at + 5, final: at, act: "happy", face: toward(at, [e.d.x, e.d.z]), y: lvl ? H[lvl][2] : start.y || 0, lvl, keepAct: ["sleep", "lie", "perch"].includes(start.act) ? start.act : null };
 		} else if (e.kind === "fetch") {
 			const land = e.d.to, thrower = e.d.from;
 			const go = e.at + 0.45, out = route(from, land);
@@ -389,7 +436,7 @@ export function createPets(ctx, SP, house) {
 			const back = trim(route(land, thrower), 0.7);
 			const t2 = t1 + 0.45 + polyLen(back) / P.run;
 			const drop = back[back.length - 1];
-			plan = { pts: out, dep: go, speed: P.run, arrive: t1, back: { pts: back, dep: t1 + 0.45, arrive: t2 }, end: t2 + 3, final: drop, act: "happy", face: Math.atan2(thrower[0] - drop[0], thrower[1] - drop[1]), fetch: true };
+			plan = { pts: out, dep: go, speed: P.run, arrive: t1, back: { pts: back, dep: t1 + 0.45, arrive: t2 }, end: t2 + 3, final: drop, act: "happy", face: toward(drop, thrower), fetch: true };
 		}
 		if (planCache.size > 40) planCache.clear();
 		planCache.set(ck, plan);
@@ -398,7 +445,8 @@ export function createPets(ctx, SP, house) {
 	function eventState(P, e, t, older) {
 		const p = eventPlan(P, e, older);
 		if (!p || t >= p.end) return null;
-		if (e.kind === "pet") return { pos: p.final, y: p.y, heading: p.face, act: p.keepAct || "happy", petted: true };
+		if (e.kind === "pet") return { pos: p.final, y: p.y, heading: p.face, act: p.keepAct || "happy", petted: true, lvl: p.lvl };
+		if (p.down && t < e.at + p.down * HOP) return hopAt(range(p.down, 0), t - e.at);
 		if (t < p.dep) return { pos: p.pts[0], y: 0, heading: along(p.pts, 0.01).heading, act: "stand" };
 		if (p.fetch) {
 			if (t < p.arrive) { const m = walk(p.pts, p.dep, t, P.run); return { pos: m.pos, y: 0, heading: m.heading, act: "run" }; }
@@ -589,13 +637,14 @@ function makeCat() {
 // pose a pet for a state { pos, y, heading, act, petted } (eased, so changes blend); pos is in world space
 function petRig(P) {
 	const pos = new THREE.Vector3();
-	let heading = 0, phase = 0, first = true, sitK = 0, lieK = 0, headDown = 0, lastX = 0, lastZ = 0;
+	let heading = 0, phase = 0, first = true, sitK = 0, lieK = 0, headDown = 0, lastX = 0, lastZ = 0, crouchK = 0, leapK = 0, pitch = 0;
 	P.pos = pos;
 	P.act = "stand";
 	P.setState = (st, dt, t) => {
 		const fy = floorAt(st.pos[0], st.pos[1]);
 		pos.set(st.pos[0], fy + (st.y || 0), st.pos[1]);
-		if (first || Math.hypot(pos.x - P.root.position.x, pos.z - P.root.position.z) > 3) { P.root.position.copy(pos); first = false; }
+		// (hopping about the cat tree is followed exactly, or the easing would flatten the jumps)
+		if (first || st.hop || Math.hypot(pos.x - P.root.position.x, pos.z - P.root.position.z) > 3) { P.root.position.copy(pos); first = false; }
 		const e = Math.min(1, dt * 10);
 		P.root.position.x += (pos.x - P.root.position.x) * e;
 		P.root.position.z += (pos.z - P.root.position.z) * e;
@@ -615,6 +664,9 @@ function petRig(P) {
 		sitK += (wantSit - sitK) * Math.min(1, dt * 6);
 		lieK += (wantLie - lieK) * Math.min(1, dt * 5);
 		headDown += (((a === "eat" || a === "sniff") ? 1 : 0) - headDown) * Math.min(1, dt * 6);
+		crouchK += ((a === "crouch" ? 1 : 0) - crouchK) * Math.min(1, dt * 10);
+		leapK += ((a === "leap" ? 1 : 0) - leapK) * Math.min(1, dt * 14);
+		pitch += ((a === "leap" ? st.pitch || 0 : 0) - pitch) * Math.min(1, dt * 10);
 		const isDog = P.kind === "dog";
 		P.legs.forEach((leg, i) => {
 			const diag = (i === 0 || i === 3) ? 0 : Math.PI;
@@ -622,10 +674,11 @@ function petRig(P) {
 			if (!leg.userData.front) rx += sitK * -1.25;
 			else rx += sitK * 0.45;
 			rx += lieK * (leg.userData.front ? -1.35 : 1.2);
+			rx += leapK * (leg.userData.front ? -0.8 : 0.8) + crouchK * (leg.userData.front ? 0.25 : -0.35);
 			leg.rotation.x = rx;
 		});
-		P.rig.rotation.x = -sitK * (isDog ? 0.55 : 0.75);
-		P.rig.position.y = -lieK * P.hipY * 0.78 - sitK * P.hipY * 0.3 + (moving ? Math.abs(Math.sin(phase)) * 0.025 : 0);
+		P.rig.rotation.x = -sitK * (isDog ? 0.55 : 0.75) + pitch;
+		P.rig.position.y = -lieK * P.hipY * 0.78 - sitK * P.hipY * 0.3 - crouchK * P.hipY * 0.25 + (moving ? Math.abs(Math.sin(phase)) * 0.025 : 0);
 		P.rig.position.z = -sitK * 0.08;
 		const sniff = a === "sniff" ? Math.sin(t * 9) * 0.15 : 0;
 		P.neck.rotation.x = headDown * (a === "eat" ? 0.9 + Math.sin(t * 7) * 0.12 : 0.6) + sitK * 0.4 + lieK * (a === "sleep" ? 0.5 : 0.15) + (a === "beg" ? -0.3 : 0);

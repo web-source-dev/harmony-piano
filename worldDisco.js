@@ -54,6 +54,9 @@ export function build(k) {
 		strip(ix0, iz0, ix0, iz1, y, c2); strip(ix1, iz0, ix1, iz1, y, c2);
 	}
 
+	// the main light switch, inside by the doorway (the neon and the floor keep glowing)
+	k.lightSwitch(4.45, 1.25, Z0 + 0.1, 0);
+
 	// ---------------------------------------------------------------- the mirror ball
 	const facets = canvasTex(256, 128, (c, w, h) => {
 		const r = rng(5);

@@ -89,17 +89,20 @@ export function createHouse(ctx) {
 	function applyLights(Z) {
 		const n = nightK;
 		const list = Z.borrow && built[Z.borrow] ? Z.lights.concat(built[Z.borrow].lights) : Z.lights;
+		// a room's main switch (k.lightSwitch) dims everything in it
+		const sw = id => { const B = built[id]; return B && B.litOn ? 0.04 + 0.96 * B.litK : 1; };
+		const own = Z.litOn ? 0.18 + 0.82 * Z.litK : 1;
 		for (let i = 0; i < pool.length; i++) {
 			const l = pool[i], d = list[i];
-			if (d) { l.position.copy(d.pos); l.color.copy(d.color); l.intensity = d.intensity * (1 + n * 0.15); l.distance = d.distance; l.decay = d.decay; }
+			if (d) { l.position.copy(d.pos); l.color.copy(d.color); l.intensity = d.intensity * (1 + n * 0.15) * sw(d.zone); l.distance = d.distance; l.decay = d.decay; }
 			else { l.intensity = 0; l.position.set(Z.ox, -50, 0); }
 		}
 		const key = Z.key;
 		ML.position.copy(key.pos); ML.target.position.copy(key.target); ML.target.updateMatrixWorld();
-		ML.color.copy(key.color); ML.intensity = key.intensity * (1 - n * 0.85); ML.angle = key.angle; ML.penumbra = key.penumbra; ML.distance = key.distance; ML.decay = key.decay;
+		ML.color.copy(key.color); ML.intensity = key.intensity * (1 - n * 0.85) * own; ML.angle = key.angle; ML.penumbra = key.penumbra; ML.distance = key.distance; ML.decay = key.decay;
 		const f = Z.fill;
-		FL.position.copy(f.pos); FL.color.copy(f.color); FL.intensity = f.intensity * (1 - n * 0.7); FL.distance = f.distance; FL.decay = f.decay;
-		ctx.hemi.intensity = Z.hemi * (1 - n * 0.7);
+		FL.position.copy(f.pos); FL.color.copy(f.color); FL.intensity = f.intensity * (1 - n * 0.7) * own; FL.distance = f.distance; FL.decay = f.decay;
+		ctx.hemi.intensity = Z.hemi * (1 - n * 0.7) * (0.35 + 0.65 * own);
 		ctx.moon.intensity = 0;
 		scene.environmentIntensity = Z.env * (1 - n * 0.7);
 		renderer.toneMappingExposure = Z.exposure * (1 - n * 0.05);
@@ -239,6 +242,17 @@ export function createHouse(ctx) {
 				portals.push(r);
 				return r;
 			},
+			// the room's main light switch on the wall (local position, facing rot): everything in the room dims (shared)
+			lightSwitch(x, y, z, rot) {
+				const key = "z:" + id + ":lights";
+				const on = () => ctx.get(key) !== false;
+				k.litOn = on;
+				const sw = kit.group(g, x, y, z, rot);
+				kit.add(sw, kit.rbox(0.09, 0.13, 0.015, 0.005), kit.mat("#f5f1ea", 0.6), 0, 0, 0, { cast: false });
+				const toggle = kit.add(sw, new THREE.BoxGeometry(0.025, 0.045, 0.015), kit.mat("#ece6dc", 0.4), 0, 0, 0.012, { cast: false });
+				k.updaters.push(() => { toggle.rotation.x = on() ? -0.35 : 0.35; });
+				return k.interact(id + ":switch", { label: () => on() ? "Turn the lights off" : "Turn the lights on", stand: [x + Math.sin(rot) * 0.7, z + Math.cos(rot) * 0.7], reach: 2.6, use: () => { ctx.setShared(key, !on()); ctx.sfx("switch"); } }, sw);
+			},
 			// a framed photo on the wall: one of the shared photo slots (see world.js photoFrame)
 			photo(slot, x, y, z, rot, o) { return ctx.photoFrame(g, slot, x, y, z, rot, o || {}, shift); },
 			box(x0, x1, z0, z1) { room.colliders.push(rect(x0, x1, z0, z1)); },
@@ -267,7 +281,7 @@ export function createHouse(ctx) {
 			},
 			// one of this room's lights (the house moves the shared light pool here while you're in it)
 			light(x, y, z, color, intensity, distance = 6, decay = 2) {
-				const d = { pos: k.V(x, y, z), color: new THREE.Color(color), intensity, base: intensity, distance, decay };
+				const d = { pos: k.V(x, y, z), color: new THREE.Color(color), intensity, base: intensity, distance, decay, zone: id };
 				k.lights.push(d);
 				return d;
 			},
@@ -320,6 +334,7 @@ export function createHouse(ctx) {
 		const camRect = { minX: Math.min(ca[0], cz[0]), maxX: Math.max(ca[0], cz[0]), minZ: Math.min(ca[1], cz[1]), maxZ: Math.max(ca[1], cz[1]) };
 		return Object.assign({}, api, {
 			id, name: Z.name, ox: k.ox, group: k.g, outdoor: !!Z.outdoor, borrow: Z.borrow || null,
+			litOn: k.litOn || null, litK: k.litOn && !k.litOn() ? 0 : 1,
 			lights: k.lights, key: k.key, fill: k.fill,
 			get hemi() { return k.hemi; }, get env() { return k.env; }, get exposure() { return k.exposure; },
 			cam: Object.assign(camRect, { maxY: cb.maxY + k.oy, minY: cb.minY === undefined ? -99 : cb.minY + k.oy }),
@@ -330,6 +345,7 @@ export function createHouse(ctx) {
 	// ---------------------------------------------------------------- every frame
 	function update(dt, t, x, z) {
 		nightK += ((ctx.get("night") ? 1 : 0) - nightK) * Math.min(1, dt * 3);
+		for (const id in built) { const B = built[id]; if (B.litOn) B.litK += ((B.litOn() ? 1 : 0) - B.litK) * Math.min(1, dt * 6); }
 		setRegion(regionOf(areaOf(x, z)));
 		// the room you're in, and the rooms you can see into, keep moving
 		for (const id in built) if (visibleSet.has(id)) built[id].update(dt, t);

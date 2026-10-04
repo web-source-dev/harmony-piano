@@ -963,7 +963,7 @@ export function buildRoom(scene) {
 		envs.push(e);
 	}
 	// rose in a bud vase
-	add(desk, new THREE.CylinderGeometry(0.03, 0.04, 0.16, 16), new THREE.MeshPhysicalMaterial({ color: "#bfe3e0", transmission: 0.6, roughness: 0.1, thickness: 0.02 }), 0.52, 0.86, -0.15);
+	add(desk, new THREE.CylinderGeometry(0.03, 0.04, 0.16, 16), new THREE.MeshPhysicalMaterial({ color: "#bfe3e0", transparent: true, opacity: 0.45, roughness: 0.08, depthWrite: false }), 0.52, 0.86, -0.15);
 	add(desk, new THREE.CylinderGeometry(0.004, 0.004, 0.22, 6), mat("#3d6b35"), 0.52, 1.0, -0.15);
 	for (let i = 0; i < 7; i++) {
 		const pe = add(desk, new THREE.SphereGeometry(0.03, 10, 8), mat("#c1121f", 0.5), 0.52 + Math.cos(i) * 0.012, 1.12 + (i % 3) * 0.008, -0.15 + Math.sin(i) * 0.012);
@@ -1016,7 +1016,8 @@ export function buildRoom(scene) {
 	const ul = new THREE.PointLight("#ffe7c4", 1.4, 2.5, 2);
 	ul.position.set(-6.5, 1.55, 3.8);
 	// jars + fruit bowl
-	const jarM = new THREE.MeshPhysicalMaterial({ color: "#ffffff", transmission: 0.85, roughness: 0.05, thickness: 0.03, transparent: true, opacity: 0.6 });
+	// (plain see-through glass: "transmission" glass blurs whatever is behind it and re-renders the room every frame)
+	const jarM = new THREE.MeshPhysicalMaterial({ color: "#ffffff", roughness: 0.05, transparent: true, opacity: 0.28, depthWrite: false });
 	[[-1.0, "#6b4226"], [-0.85, "#f2e8d5"], [-0.7, "#c58940"]].forEach(([x, c]) => {
 		add(kitchen, new THREE.CylinderGeometry(0.055, 0.055, 0.12, 18), mat(c, 0.9), x, 0.97, -0.15);
 		add(kitchen, new THREE.CylinderGeometry(0.06, 0.06, 0.18, 18), jarM, x, 1.0, -0.15, { cast: false });
@@ -1040,14 +1041,45 @@ export function buildRoom(scene) {
 	brewCup.position.set(0, 0.04, 0.16);
 	brewCup.visible = false;
 	cm.add(brewCup);
-	// fridge
+	// fridge: open it and there's food inside (world.js: take something out, eat it)
 	const fr = group(scene, -6.6, 0, 5.5, Math.PI / 2);
-	add(fr, rbox(0.8, 1.95, 0.7, 0.05), mat("#e8ecef", 0.25, 0.4), 0, 0.975, 0);
-	add(fr, new THREE.BoxGeometry(0.8, 0.008, 0.002), mat("#999"), 0, 1.3, 0.351, { cast: false });
-	for (const y of [1.0, 1.6]) add(fr, rbox(0.03, 0.4, 0.04, 0.01), chrome, 0.32, y, 0.37);
-	// fridge magnets
-	const fm = [["#ff6b6b", 0.1], ["#ffd93d", -0.15], ["#6bcbef", 0.2]];
-	fm.forEach(([c, x], i) => add(fr, new THREE.CylinderGeometry(0.025, 0.025, 0.01, 12), mat(c, 0.4), x, 1.5 + i * 0.1, 0.355, { rx: Math.PI / 2 }));
+	const frM = mat("#e8ecef", 0.25, 0.4), frIn = mat("#f6fafc", 0.6);
+	add(fr, new THREE.BoxGeometry(0.8, 1.95, 0.04), frM, 0, 0.975, -0.33);
+	for (const sx of [-1, 1]) add(fr, new THREE.BoxGeometry(0.04, 1.95, 0.7), frM, sx * 0.38, 0.975, 0);
+	add(fr, new THREE.BoxGeometry(0.8, 0.04, 0.7), frM, 0, 1.93, 0);
+	add(fr, rbox(0.8, 0.55, 0.7, 0.03), frM, 0, 0.275, 0);
+	add(fr, new THREE.PlaneGeometry(0.72, 1.3), frIn, 0, 1.25, -0.305, { cast: false });
+	const frGlass = new THREE.MeshPhysicalMaterial({ color: "#e8f6ff", transparent: true, opacity: 0.45, roughness: 0.1 });
+	for (const y of [0.95, 1.3, 1.62]) add(fr, new THREE.BoxGeometry(0.72, 0.012, 0.6), frGlass, 0, y, -0.02, { cast: false });
+	// what's inside: milk, juice, eggs, a cake, fruit, a sandwich
+	add(fr, new THREE.BoxGeometry(0.08, 0.2, 0.08), mat("#ffffff", 0.5), -0.25, 0.66, -0.12, { cast: false });
+	add(fr, new THREE.CylinderGeometry(0.045, 0.05, 0.22, 14), new THREE.MeshPhysicalMaterial({ color: "#ffa62b", transparent: true, opacity: 0.85, roughness: 0.15 }), -0.1, 0.67, -0.15, { cast: false });
+	for (let i = 0; i < 6; i++) add(fr, new THREE.SphereGeometry(0.024, 10, 8), mat("#fff3e0", 0.5), 0.1 + (i % 3) * 0.08, 0.6, -0.05 + Math.floor(i / 3) * 0.07, { cast: false }).scale.set(1, 1.25, 1);
+	add(fr, new THREE.CylinderGeometry(0.11, 0.11, 0.09, 24, 1, false, 0, Math.PI * 1.6), mat("#ffb3c6", 0.6), -0.12, 1.01, -0.08, { cast: false });
+	add(fr, new THREE.BoxGeometry(0.16, 0.05, 0.12), mat("#e9c46a", 0.8), 0.17, 1.0, 0.0, { cast: false });
+	for (let i = 0; i < 5; i++) add(fr, new THREE.SphereGeometry(0.04, 12, 10), mat(["#d62839", "#8ac926", "#ffd166", "#f4a261", "#e5383b"][i], 0.45), -0.26 + i * 0.12, 1.35, -0.1 + (i % 2) * 0.06, { cast: false });
+	add(fr, new THREE.CylinderGeometry(0.035, 0.04, 0.26, 14), mat("#3b1e2b", 0.2), 0.22, 1.76, -0.12, { cast: false });
+	const frLight = new THREE.MeshBasicMaterial({ color: "#eaf6ff", toneMapped: false });
+	add(fr, new THREE.BoxGeometry(0.25, 0.02, 0.04), frLight, 0, 1.89, -0.1, { cast: false });
+	// the door (hinged on the left) with its handle and magnets; the freezer drawer below
+	const frDoor = group(fr, -0.4, 0, 0.35);
+	add(frDoor, rbox(0.8, 1.38, 0.05, 0.03), mat("#eef1f3", 0.25, 0.4), 0.4, 1.25, 0.025);
+	add(frDoor, rbox(0.03, 0.4, 0.04, 0.01), chrome, 0.72, 1.2, 0.07);
+	[["#ff6b6b", 0.5], ["#ffd93d", 0.25], ["#6bcbef", 0.6]].forEach(([c, x], i) => add(frDoor, new THREE.CylinderGeometry(0.025, 0.025, 0.01, 12), mat(c, 0.4), x, 1.5 + i * 0.1, 0.055, { rx: Math.PI / 2 }));
+	add(frDoor, new THREE.PlaneGeometry(0.16, 0.22), mat("#fff8ec", 0.8), 0.32, 1.25, 0.051, { cast: false });
+	for (const y of [0.8, 1.15, 1.5]) {
+		add(frDoor, new THREE.BoxGeometry(0.66, 0.015, 0.09), frGlass, 0.4, y, -0.05, { cast: false });
+		for (let i = 0; i < 3; i++) add(frDoor, new THREE.CylinderGeometry(0.028, 0.028, 0.16, 12), mat(["#06d6a0", "#ef476f", "#ffd166"][(i + Math.round(y * 10)) % 3], 0.3), 0.2 + i * 0.2, y + 0.09, -0.05, { cast: false });
+	}
+	add(fr, rbox(0.03, 0.25, 0.04, 0.01), chrome, 0.32, 0.3, 0.37);
+	const fridge = { open: false, stand: [-5.7, 5.5], k: 0 };
+	updaters.push(dt => {
+		fridge.k += ((fridge.open ? 1 : 0) - fridge.k) * Math.min(1, dt * 6);
+		frDoor.rotation.y = -fridge.k * 1.75;
+		frLight.color.setScalar(0.3 + fridge.k * 0.7);
+		frIn.emissive.set("#cfe8ff"); frIn.emissiveIntensity = fridge.k * 0.35;
+	});
+	interact("fridge", { label: "Open the fridge", stand: fridge.stand, face: -Math.PI / 2 }, fr);
 	box(-7, -6.3, 2.55, 6);
 	interact("coffee", { label: "Make coffee", stand: [-5.75, 3.75], face: -Math.PI / 2 }, cm);
 
@@ -1324,7 +1356,7 @@ export function buildRoom(scene) {
 		arcade: { canvas: arcCanvas, tex: arcTex },
 		easel: terrace.easel,
 		terrace,
-		photos, setPlant, waterFx, record, coffee, ball, envs,
+		photos, fridge, setPlant, waterFx, record, coffee, ball, envs,
 		terraceDoor, setTerraceDoor: on => { terraceDoor.open = !!on; },
 		// lights that only matter in one area; the world hides the other area's lights (cheaper shading)
 		areaLights: { room: [tvLight, fairyLight, nightLight, lampLight], terrace: terrace.lights },

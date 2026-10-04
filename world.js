@@ -21,7 +21,7 @@
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
-import { Avatar, SKIN_TONES, HAIR_COLORS, OUTFIT_COLORS, MOODS, drawMoodFace } from "./worldAvatar.js";
+import { Avatar, SKIN_TONES, HAIR_COLORS, OUTFIT_COLORS, MOODS, drawMoodFace, FOOD_PROPS } from "./worldAvatar.js";
 import { buildRoom, ROOM, DOOR, TERRACE, MOON_DIR, walkable, areaOf, floorAt, heartMesh, makeMug, shiftAt, visXZ, makePhotoFrame } from "./worldRoom.js";
 import { WorldAudio, TRACKS } from "./worldAudio.js";
 import * as Games from "./worldGames.js";
@@ -170,6 +170,7 @@ const house = createHouse({
 	enterTV: () => enterTV(), tvMode: () => tvMode, openMusic: () => openMusic(), showLook: () => showLobby(true),
 	gfxTier: () => gfxTier(),
 	photoFrame: (...a) => photoFrame(...a), openPhotos: slot => openPhotos(slot),
+	foodMenu: (title, ids, extra) => foodMenu(title, ids, extra), takeFood: (id, from) => takeFood(id, from),
 	restoreMainLights() { room.setMain(!!get("mainLight")); applyNight(null); },
 	onRegion() { refreshPeople(); },
 	onZoneBuilt() { gridDirty(); }
@@ -373,7 +374,7 @@ function upsertPeer(id, lk) {
 const BASE_ANIMS = ["idle", "sit", "sleep", "floor"];
 const UPPER_ANIMS = ["wave", "dance", "clap", "heart", "drink", "paint", "write", "tug", "piano", "laugh", "cry", "kiss", "hug", "highfive", "jump", "bow", "cheer", "think", "shrug", "facepalm", "yawn", "warm", "telescope", "shake", "give", "stumble",
 	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash", "handhold"];
-const PROPS = ["mug", "brush", "remote", "flower", "ring", "popcorn", "fork", "spoon", "sponge"];
+const PROPS = ["mug", "brush", "remote", "flower", "ring", "popcorn", "fork", "spoon", "sponge"].concat(FOOD_PROPS);
 function applyPose(p, d, snap) {
 	if (typeof d.x !== "number") return;
 	const wasIn = p.fresh ? null : house.regionOf(areaOf(p.tx, p.tz));
@@ -1912,6 +1913,11 @@ function updateFx(dt) {
 }
 function onFx(d, p) {
 	const name = p ? p.look.name : "Someone";
+	// someone handed us a snack
+	if (FOODS[d.kind]) {
+		if (d.to === MY_ID) { me.holding = d.kind; me.sips = Math.max(1, Math.min(6, d.s | 0)); updateProps(); sendPose(true); heartsFx(myAvatar.root, 4); toast(`<b>${esc(name)}</b> gave you ${FOODS[d.kind].a}`, FOODS[d.kind].drink ? "Take a sip" : "Have a bite", eatFood, 7000); }
+		return;
+	}
 	switch (d.kind) {
 		case "coffee": startBrew(false); addLog(esc(name) + " is making coffee", true); break;
 		case "water": room.waterFx(); if (audio) audio.sfx("water", 0.6); addLog(esc(name) + " watered the plant", true); break;
@@ -2559,10 +2565,69 @@ function giveHeld(id) {
 			me.holding = null; me.sips = 0;
 			updateProps(); sendPose(true);
 			send({ t: "fx", kind: what, to: id, s });
-			addLog("You gave " + esc(q.look.name) + (what === "mug" ? " a coffee" : what === "popcorn" ? " your popcorn" : " a flower"), true);
+			addLog("You gave " + esc(q.look.name) + (what === "mug" ? " a coffee" : what === "popcorn" ? " your popcorn" : FOODS[what] ? " your " + FOODS[what].name : " a flower"), true);
 		}, 1100);
 	};
 	if (l < 1.0) hand(); else walkTo(p.x + dx / l * 0.7, p.z + dz / l * 0.7, hand);
+}
+
+// ---------- snacks: from the fridges (and the fire pit and smoothie bar out on the pool deck)
+// Take one -> it's in your hand (everyone sees it) -> eat it bite by bite (G), or hand it to someone (F).
+const FOODS = {
+	apple: { name: "apple", a: "an apple", bites: 3, icon: "\u{1F34E}" },
+	cake: { name: "cake", a: "a slice of cake", bites: 3, icon: "\u{1F370}" },
+	icecream: { name: "ice cream", a: "an ice cream", bites: 4, icon: "\u{1F366}" },
+	juice: { name: "juice", a: "a glass of juice", bites: 3, icon: "\u{1F9C3}", drink: true },
+	sandwich: { name: "sandwich", a: "a sandwich", bites: 4, icon: "\u{1F96A}" },
+	strawberry: { name: "strawberries", a: "some strawberries", bites: 3, icon: "\u{1F353}" },
+	cookie: { name: "cookie", a: "a cookie", bites: 2, icon: "\u{1F36A}" },
+	marshmallow: { name: "marshmallow", a: "a toasted marshmallow", bites: 2, icon: "\u{1F361}" },
+	smoothie: { name: "smoothie", a: "a smoothie", bites: 3, icon: "\u{1F964}", drink: true }
+};
+const FRIDGE_FOODS = ["apple", "cake", "icecream", "juice", "sandwich", "strawberry", "cookie"];
+// pick something: a little menu of what's there (extra: { label, fn } for a second button, e.g. close the fridge)
+function foodMenu(title, ids, extra) {
+	const html = `<div class="foods">${ids.filter(id => FOODS[id]).map(id => `<button class="food" data-food="${id}"><span>${FOODS[id].icon}</span>${esc(FOODS[id].name)}</button>`).join("")}</div>
+		${extra ? `<div class="row" style="margin-top:14px"><button class="btn" id="food-x">${esc(extra.label)}</button></div>` : ""}`;
+	const body = openModal("food", title, html, 460);
+	body.querySelectorAll("[data-food]").forEach(b => b.onclick = () => { closeModal(); takeFood(b.dataset.food); });
+	if (extra) body.querySelector("#food-x").onclick = () => { closeModal(); extra.fn(); };
+}
+function takeFood(id, from) {
+	const f = FOODS[id];
+	if (!f) return;
+	if (me.holding && !FOODS[me.holding]) { addLog("Your hands are full - put down what you're holding first.", true); return; }
+	if (me.upper === "drink") return;
+	me.holding = id; me.sips = f.bites;
+	doUpper("give", 700);
+	updateProps(); sendPose(true);
+	if (audio) audio.sfx("pop", 0.4);
+	addLog(`You took ${f.a}${from ? " from the " + esc(from) : ""}. <b>G</b> to ${f.drink ? "drink" : "eat"} it, or hand it to someone.`, true);
+}
+function eatFood() {
+	const f = FOODS[me.holding];
+	if (!f || me.upper === "drink") return;
+	const id = me.holding;
+	me.sips = (me.sips || 1) - 1;
+	doUpper("drink", 2000);
+	if (audio) audio.sfx(f.drink ? "pop" : "pop", 0.25);
+	setTimeout(() => {
+		if (me.holding !== id || me.sips > 0) return;
+		me.holding = null; me.sips = 0;
+		updateProps(); sendPose(true);
+		heartsFx(myAvatar.root, 3);
+		myAvatar.say(f.drink ? "Mmm, refreshing!" : "Yum!");
+		addLog(`You finished your ${f.name}.`, true);
+	}, 2000);
+}
+// the living room's fridge: open it, take something out (it stays open until you close it)
+if (room.fridge) {
+	const def = room.interactables.fridge;
+	def.label = () => room.fridge.open ? "Take something to eat" : "Open the fridge";
+	def.use = () => {
+		if (!room.fridge.open) { room.fridge.open = true; if (audio) audio.sfx("pop", 0.5); return; }
+		foodMenu("What's in the fridge", FRIDGE_FOODS, { label: "Close the fridge", fn: () => { room.fridge.open = false; if (audio) audio.sfx("click", 0.5); } });
+	};
 }
 
 // ---------- telescope
@@ -2643,9 +2708,9 @@ function inviteFor(p) {
 }
 // what's in your hand: a mug while drinking, the brush while painting, else the remote if you hold it
 function updateProps() {
-	const kind = me.upper === "drink" ? (me.holding === "popcorn" ? "popcorn" : "mug") : me.upper === "paint" || me.upper === "write" ? "brush" : me.upper === "propose" ? "ring" : me.upper === "tug" ? null
+	const kind = me.upper === "drink" ? (me.holding === "popcorn" ? "popcorn" : FOODS[me.holding] ? me.holding : "mug") : me.upper === "paint" || me.upper === "write" ? "brush" : me.upper === "propose" ? "ring" : me.upper === "tug" ? null
 		: me.upper === "eat" ? "fork" : me.upper === "cook" ? "spoon" : me.upper === "wash" ? "sponge"
-		: me.holding === "mug" ? "mug" : me.holding === "flower" ? "flower" : me.holding === "popcorn" ? "popcorn" : get("remote").by === MY_ID ? "remote" : null;
+		: me.holding === "mug" ? "mug" : me.holding === "flower" ? "flower" : me.holding === "popcorn" ? "popcorn" : FOODS[me.holding] ? me.holding : get("remote").by === MY_ID ? "remote" : null;
 	myAvatar.setProp(kind);
 }
 
@@ -2802,7 +2867,7 @@ function hoverAt(x, y) {
 		if (h.object.userData.note !== undefined) { pointer = true; label = me.upper === "piano" ? null : "Play the piano"; }
 		else {
 			const pid = findPeer(h.object);
-			if (pid) { const p = peers.get(pid); label = p ? (me.carrying === pid ? "Press Cuddle or click the bed / sofa" : me.carriedBy === pid ? null : isAsleep(p) ? "Wake " + p.look.name + " up" : me.holding === "flower" ? "Give " + p.look.name + " your flower" : me.holding === "mug" ? "Give " + p.look.name + " your coffee" : me.holding === "popcorn" ? "Share your popcorn with " + p.look.name : "Wave at " + p.look.name) : null; }
+			if (pid) { const p = peers.get(pid); label = p ? (me.carrying === pid ? "Press Cuddle or click the bed / sofa" : me.carriedBy === pid ? null : isAsleep(p) ? "Wake " + p.look.name + " up" : me.holding === "flower" ? "Give " + p.look.name + " your flower" : me.holding === "mug" ? "Give " + p.look.name + " your coffee" : me.holding === "popcorn" ? "Share your popcorn with " + p.look.name : FOODS[me.holding] ? "Give " + p.look.name + " your " + FOODS[me.holding].name : "Wave at " + p.look.name) : null; }
 			else if (h.object.userData.cupId) label = me.holding === "mug" ? null : "Pick up the coffee";
 			else if (h.object.userData.photoIndex !== undefined) label = get("photo" + h.object.userData.photoIndex) ? "Change this photo" : "Put a photo in this frame";
 			else { const id = findInteract(h.object); if (id) label = labelOf(id); }
@@ -3562,11 +3627,22 @@ function updatePrompt() {
 			let near = null, nd = 1.6;
 			peers.forEach((p, id) => { const d = Math.hypot(p.x - me.x, p.z - me.z); if (d < nd && !isAsleep(p) && !p.carriedBy) { nd = d; near = id; } });
 			if (near && !tvMode && free("F")) opts.push({ k: "F", label: "Give " + peers.get(near).look.name + " your coffee", fn: () => giveHeld(near) });
+		} else if (FOODS[me.holding]) {
+			const f = FOODS[me.holding];
+			if (me.upper !== "drink" && free("G")) opts.push({ k: "G", label: (f.drink ? "Drink your " : "Eat your ") + f.name, fn: eatFood });
+			let near = null, nd = 1.6;
+			peers.forEach((p, id) => { const d = Math.hypot(p.x - me.x, p.z - me.z); if (d < nd && !isAsleep(p) && !p.carriedBy) { nd = d; near = id; } });
+			if (near && free("F")) opts.push({ k: "F", label: "Give " + peers.get(near).look.name + " your " + f.name, fn: () => giveHeld(near) });
 		} else {
 			const c = nearestCup();
 			const k = free("E") ? "E" : free("F") ? "F" : null;
 			if (c && k) opts.push({ k, label: "Pick up the coffee", fn: () => pickCup(c.id) });
 		}
+	}
+	// the living room's fridge, left open
+	if (!busyNow && room.fridge && room.fridge.open && !me.sit && Math.hypot(me.x - room.fridge.stand[0], me.z - room.fridge.stand[1]) < 2.0) {
+		const k = ["R", "G", "F"].find(x => !opts.some(o => o.k === x));
+		if (k) opts.push({ k, label: "Close the fridge", fn: () => { room.fridge.open = false; if (audio) audio.sfx("click", 0.5); } });
 	}
 	// seated / lying down: always offer a way back up
 	if (!busyNow && me.sit) {

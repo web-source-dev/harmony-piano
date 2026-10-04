@@ -219,11 +219,15 @@ export function build(k) {
 	k.box(-5, -4.35, -2.25, -0.15);
 	let wdOpen = false, wdK = 0;
 	k.updaters.push(dt => { wdK += ((wdOpen ? 1 : 0) - wdK) * Math.min(1, dt * 5); leaves.forEach(l => { l.rotation.y = l.userData.side * wdK * 1.75; }); });
+	const closeWardrobe = () => { wdOpen = false; ctx.sfx("click", 0.4); };
 	k.interact("bedroom:wardrobe", {
 		label: () => wdOpen ? "Change your outfit" : "Open the wardrobe",
 		stand: [-3.85, -1.2], face: -Math.PI / 2,
 		use: () => { if (!wdOpen) { wdOpen = true; ctx.sfx("whoosh", 0.4); return; } ctx.showLook(); }
 	}, wd);
+	// clicking a door that's open closes it (the clothes inside still change your outfit)
+	leaves.forEach(l => l.traverse(c => { c.userData.interact = "bedroom:wardrobeDoor"; }));
+	k.interact("bedroom:wardrobeDoor", { label: () => wdOpen ? "Close the wardrobe" : "Open the wardrobe", stand: [-3.85, -1.2], face: -Math.PI / 2, nearest: true, use: () => { if (wdOpen) closeWardrobe(); else { wdOpen = true; ctx.sfx("whoosh", 0.4); } } });
 
 	// ---------------------------------------------------------------- vanity with a round mirror (east wall)
 	const vn = group(g, 4.72, 0, -2.6, -Math.PI / 2);
@@ -387,7 +391,11 @@ export function build(k) {
 		update,
 		promptOpts(opts) {
 			const me = ctx.me();
-			if (wdOpen && !me.sit && Math.hypot(me.x - (-3.85 + k.ox), me.z - (-1.2 + k.oz)) < 1.6 && !opts.some(o => o.k === "R")) opts.push({ k: "R", label: "Close the wardrobe", fn: () => { wdOpen = false; ctx.sfx("click", 0.4); } });
+			// left open: always offer to close it again (on whichever key is free)
+			if (wdOpen && !me.sit && Math.hypot(me.x - (-3.85 + k.ox), me.z - (-1.2 + k.oz)) < 2.6) {
+				const key = ["R", "F", "G"].find(x => !opts.some(o => o.k === x));
+				if (key) opts.push({ k: key, label: "Close the wardrobe", fn: closeWardrobe });
+			}
 		}
 	};
 }

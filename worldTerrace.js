@@ -142,7 +142,7 @@ export function buildTerrace(scene, h) {
 	const lanFlame = add(bis, new THREE.SphereGeometry(0.02, 8, 6), new THREE.MeshBasicMaterial({ color: "#ffcf6b", toneMapped: false }), 0, 0.84, 0, { cast: false });
 	const lanLight = new THREE.PointLight("#ffb45e", 1.2, 3, 2); lanLight.position.set(-2.6, 1.0, -10.8);
 	updaters.push((dt, t) => { const f = 0.85 + Math.sin(t * 11) * 0.1 + Math.sin(t * 6.1) * 0.06; lanFlame.scale.set(1, 1.6 * f, 1); lanLight.intensity = 1.2 * f; });
-	const wineM = new THREE.MeshPhysicalMaterial({ color: "#ffffff", transmission: 0.9, roughness: 0.05, thickness: 0.01, transparent: true, opacity: 0.5 });
+	const wineM = new THREE.MeshPhysicalMaterial({ color: "#ffffff", roughness: 0.05, transparent: true, opacity: 0.3, depthWrite: false });
 	for (const sx of [-0.18, 0.18]) {
 		add(bis, new THREE.CylinderGeometry(0.035, 0.02, 0.07, 14, 1, true), wineM, sx, 0.88, 0.12, { cast: false });
 		add(bis, new THREE.CylinderGeometry(0.004, 0.004, 0.08, 6), wineM, sx, 0.8, 0.12, { cast: false });

@@ -4,7 +4,7 @@
  * Up the lounge stairs you step out onto a gallery floor at 3.6 m that covers the
  * lounge's east half, open to the room below behind a glass railing (lean on it and
  * look down at the sofa and the fire). Under the north window: the daybed for two.
- * By the railing: a loveseat that looks out over the lounge. The whole east wall is
+ * By the railing: a loveseat facing the photo wall. The whole east wall is
  * the photo wall (24 of the house's 50 photo frames). In the south part, behind
  * its own walls: the disco (worldDisco.js), with a glass strip so its lights glow
  * out over the lounge.
@@ -76,10 +76,10 @@ export function build(k) {
 	for (let s = 0; s < 3; s++) for (let i = 0; i < 7; i++) add(bc, new THREE.BoxGeometry(0.06, 0.24 + (i % 3) * 0.04, 0.2), mat(bookCols[(i + s) % 5], 0.7), -0.26 + i * 0.085, 0.3 + s * 0.4, 0.2, { cast: false });
 	k.box(5.85, 6.55, -HD, -6.3);
 
-	// ---------------------------------------------------------------- a loveseat by the railing, looking down over the lounge
+	// ---------------------------------------------------------------- a loveseat with its back to the railing, facing the photo wall
 	const sofaM = mat("#b56576", 0.85), sofaD = mat("#9c4f60", 0.85);
-	const LS = { x: 2.55, z: -2.6 };
-	const ls = group(g, LS.x, 0, LS.z, -Math.PI / 2);
+	const LS = { x: 2.75, z: -2.6 };
+	const ls = group(g, LS.x, 0, LS.z, Math.PI / 2);
 	add(ls, rbox(1.8, 0.3, 0.9, 0.06), sofaD, 0, 0.27, 0);
 	for (const sx of [-0.44, 0.44]) {
 		add(ls, rbox(0.86, 0.18, 0.66, 0.08), sofaM, sx, 0.5, 0.06);
@@ -89,9 +89,9 @@ export function build(k) {
 	for (const sx of [-0.99, 0.99]) add(ls, rbox(0.18, 0.5, 0.9, 0.08), sofaD, sx, 0.45, 0);
 	add(ls, rbox(0.4, 0.38, 0.12, 0.06), mat("#f2cc8f", 0.9), -0.7, 0.76, -0.1, { rx: -0.25, rz: 0.15 });
 	k.box(LS.x - 0.45, LS.x + 0.45, LS.z - 1.0, LS.z + 1.0);
-	k.spot({ id: "loftSeat0", x: LS.x - 0.09, z: LS.z - 0.44, h: -Math.PI / 2, y: 0.15 });
-	k.spot({ id: "loftSeat1", x: LS.x - 0.09, z: LS.z + 0.44, h: -Math.PI / 2, y: 0.15 });
-	k.interact("loft:loveseat", { label: "Sit and look down at the lounge", stand: [LS.x + 1.0, LS.z], sit: ["loftSeat0", "loftSeat1"] }, ls);
+	k.spot({ id: "loftSeat0", x: LS.x + 0.09, z: LS.z - 0.44, h: Math.PI / 2, y: 0.15 });
+	k.spot({ id: "loftSeat1", x: LS.x + 0.09, z: LS.z + 0.44, h: Math.PI / 2, y: 0.15 });
+	k.interact("loft:loveseat", { label: "Sit and look at the photos", stand: [LS.x + 1.0, LS.z], sit: ["loftSeat0", "loftSeat1"] }, ls);
 	// a floor lamp beside it (with its own switch)
 	const lampShade = new THREE.MeshStandardMaterial({ color: "#f6e7cf", roughness: 0.9, side: THREE.DoubleSide, emissive: "#ffcf8a", emissiveIntensity: 1 });
 	const fLamp = group(g, LS.x + 0.15, 0, LS.z - 1.35);
@@ -151,6 +151,9 @@ export function build(k) {
 	}
 	// three more on the north wall, either side of the window
 	for (const [slot, x, y] of [[32, 1.4, 1.6], [33, 6.0, 1.75], [34, 7.0, 1.55]]) k.photo(slot, x, y, -HD + 0.03, 0, { w: 0.55, h: 0.44, frame: slot === 33 ? "#c9a05a" : "#fbf8f2", metal: slot === 33 ? 0.7 : 0 });
+
+	// the main light switch at the top of the stairs
+	k.lightSwitch(1.4, 1.0, -HD + 0.02, 0);
 
 	// ---------------------------------------------------------------- the disco's walls (its inside is worldDisco.js)
 	let neonM, spillM, glowM;

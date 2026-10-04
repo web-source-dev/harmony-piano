@@ -153,6 +153,8 @@ function zzzTexture() {
 const ZZZ_TEX = zzzTexture();
 
 // ---------- hand-held props ----------
+// snacks you can carry (world.js FOODS: what they're called, how many bites)
+export const FOOD_PROPS = ["apple", "cake", "icecream", "juice", "sandwich", "strawberry", "cookie", "marshmallow", "smoothie"];
 function makeProp(kind) {
 	const g = new THREE.Group();
 	if (kind === "mug") {
@@ -232,6 +234,43 @@ function makeProp(kind) {
 		}
 		g.position.set(0, -0.07, 0.03);
 		g.rotation.x = Math.PI / 2.4;
+	} else if (FOOD_PROPS.includes(kind)) {
+		// snacks (from the fridge, the fire pit, the smoothie bar): built upright, held like the mug
+		const M = (c, r = 0.6, extra) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: r }, extra || {}));
+		if (kind === "apple") {
+			g.add(mesh(new THREE.SphereGeometry(0.04, 16, 12), M("#d62839", 0.35)));
+			const st = mesh(new THREE.CylinderGeometry(0.003, 0.004, 0.025, 6), M("#5b3a1e")); st.position.y = 0.045; g.add(st);
+			const lf = mesh(new THREE.SphereGeometry(0.012, 8, 6), M("#4f8a57")); lf.scale.set(1, 0.3, 0.6); lf.position.set(0.012, 0.05, 0); g.add(lf);
+		} else if (kind === "cake") {
+			const sl = mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.05, 12, 1, false, 0, Math.PI / 4), M("#ffd6e0", 0.7)); sl.position.set(-0.04, 0, -0.04); g.add(sl);
+			const top = mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.012, 12, 1, false, 0, Math.PI / 4), M("#fff8f0", 0.5)); top.position.set(-0.04, 0.03, -0.04); g.add(top);
+			const ch = mesh(new THREE.SphereGeometry(0.011, 8, 6), M("#d62839", 0.3)); ch.position.set(0.0, 0.045, 0.0); g.add(ch);
+		} else if (kind === "icecream") {
+			const cone = mesh(new THREE.ConeGeometry(0.03, 0.1, 14), M("#e0a96d", 0.8)); cone.rotation.x = Math.PI; g.add(cone);
+			[["#ffc8dd", 0.06], ["#fdf0d5", 0.095]].forEach(([c, y]) => { const s = mesh(new THREE.SphereGeometry(0.032, 14, 10), M(c, 0.5)); s.position.y = y; g.add(s); });
+		} else if (kind === "juice" || kind === "smoothie") {
+			const glass = mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.11, 16, 1, true), new THREE.MeshPhysicalMaterial({ color: "#ffffff", transparent: true, opacity: 0.35, roughness: 0.05, side: THREE.DoubleSide }), false);
+			g.add(glass);
+			const liq = mesh(new THREE.CylinderGeometry(0.032, 0.028, 0.085, 16), M(kind === "juice" ? "#ffa62b" : "#ff8fab", 0.3), false); liq.position.y = -0.01; g.add(liq);
+			const straw = mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.14, 6), M(kind === "juice" ? "#ffffff" : "#3ff0ff", 0.4)); straw.position.set(0.012, 0.05, 0); straw.rotation.z = -0.2; g.add(straw);
+		} else if (kind === "sandwich") {
+			for (const y of [-0.018, 0.018]) { const b = mesh(new THREE.BoxGeometry(0.1, 0.014, 0.08), M("#e9c46a", 0.9)); b.position.y = y; g.add(b); }
+			const let_ = mesh(new THREE.BoxGeometry(0.105, 0.01, 0.085), M("#8ac926", 0.7)); let_.position.y = -0.004; g.add(let_);
+			const tom = mesh(new THREE.BoxGeometry(0.09, 0.01, 0.07), M("#e63946", 0.5)); tom.position.y = 0.007; g.add(tom);
+		} else if (kind === "strawberry") {
+			for (let i = 0; i < 3; i++) {
+				const s = mesh(new THREE.ConeGeometry(0.018, 0.035, 10), M("#e5383b", 0.4)); s.rotation.x = Math.PI; s.position.set(Math.cos(i * 2.1) * 0.022, 0.005 + i * 0.01, Math.sin(i * 2.1) * 0.022); g.add(s);
+				const l = mesh(new THREE.CylinderGeometry(0.014, 0.008, 0.006, 6), M("#4f8a57")); l.position.set(s.position.x, s.position.y + 0.02, s.position.z); g.add(l);
+			}
+		} else if (kind === "cookie") {
+			g.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.012, 18), M("#c68b59", 0.9)));
+			for (let i = 0; i < 5; i++) { const c = mesh(new THREE.SphereGeometry(0.007, 6, 4), M("#4a2c1c"), false); c.position.set(Math.cos(i * 1.3) * 0.022, 0.007, Math.sin(i * 1.3) * 0.022); g.add(c); }
+		} else if (kind === "marshmallow") {
+			const stick = mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.3, 6), M("#8a5a3c")); stick.position.y = 0.1; g.add(stick);
+			const mm = mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.04, 12), M("#e9b872", 0.8)); mm.position.y = 0.24; g.add(mm);
+		}
+		g.position.set(0, -0.07, 0.055);
+		g.rotation.x = Math.PI / 2;
 	} else if (kind === "ring") {
 		// open velvet box with a sparkly ring, held out on the palm
 		const velvet = new THREE.MeshStandardMaterial({ color: "#a3123a", roughness: 0.85 });

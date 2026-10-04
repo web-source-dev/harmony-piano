@@ -82,6 +82,8 @@ export function build(k) {
 
 	k.floor(floorY);
 	k.walk(-5, 5, -7.5, 6);
+	// the main light switch beside the doors
+	k.lightSwitch(1.05, LANDING_Y + 1.25, 5.97, Math.PI);
 	// photo frames on the landing as you come in (2 of the house's 50)
 	k.photo(45, -4.96, 3.4, 4.1, Math.PI / 2, { w: 0.6, h: 0.45, frame: "#c9a05a", metal: 0.7 });
 	k.photo(46, 4.96, 3.4, 4.1, -Math.PI / 2, { w: 0.6, h: 0.45, frame: "#c9a05a", metal: 0.7 });

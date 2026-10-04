@@ -6,7 +6,7 @@
  *
  *   north   stairs along the wall up to the loft (upstairs, over the east half: worldLoft.js)
  *   middle  an L-shaped sofa facing a double-sided stone fireplace; aquarium on the east
- *           wall, jukebox in the corner, bookshelves and a reading chair by the doors
+ *           wall with the jukebox beside it, bookshelves and a reading chair by the doors
  *   south   (past the fireplace and a low shelf, on tiles) the open kitchen with an
  *           island, and the dining table; the pets' corner by the dining window
  *   east    French doors to the bedroom and to the bathroom
@@ -149,6 +149,9 @@ export function build(k) {
 		const dlM = new THREE.MeshBasicMaterial({ color: "#fff2d6", toneMapped: false });
 		for (const x of [3.2, 5.6]) for (const z of [-3.6, -1.2, 1.2, 3.6]) add(g, new THREE.CircleGeometry(0.07, 18), dlM, x, SLAB - 0.005, z, { rx: Math.PI / 2, cast: false, receive: false });
 	}
+
+	// the main light switch, by the doors from the living room
+	k.lightSwitch(-HW + 0.02, 1.25, 1.55, Math.PI / 2);
 
 	// ---------------------------------------------------------------- photos up the stairs, and around the room
 	for (const [slot, x, y, z, ry, w, h] of [
@@ -360,8 +363,9 @@ export function build(k) {
 	}
 	k.interact("lounge:aquarium", { label: "Feed the fish", stand: [6.4, AQ.z], face: Math.PI / 2, use: () => { feedFish(); ctx.send({ t: "fx", kind: "zfx", zone: "lounge", what: "fish" }); ctx.doUpper("give", 1200); } }, aq);
 
-	// ---------------------------------------------------------------- jukebox (north-east corner)
-	const jb = group(g, -7.2, 0, -6.25, Math.PI / 4);
+	// ---------------------------------------------------------------- jukebox (east wall, under the loft: out of the way of the stairs)
+	const JB = { x: 7.5, z: -4.4 };
+	const jb = group(g, JB.x, 0, JB.z, -Math.PI / 2);
 	add(jb, rbox(0.95, 1.05, 0.6, 0.06), mat("#7a1f2b", 0.4), 0, 0.53, 0);
 	const archM = new THREE.MeshStandardMaterial({ color: "#ffb3c6", emissive: "#ff4d8a", emissiveIntensity: 1.6 });
 	add(jb, new THREE.TorusGeometry(0.42, 0.06, 12, 32, Math.PI), archM, 0, 1.05, 0.25, { cast: false });
@@ -369,8 +373,8 @@ export function build(k) {
 	add(jb, new THREE.CylinderGeometry(0.42, 0.42, 0.55, 32, 1, false, -Math.PI / 2, Math.PI), mat("#7a1f2b", 0.4), 0, 1.05, 0, { rx: Math.PI / 2 });
 	const jbStripes = [];
 	for (let i = 0; i < 5; i++) jbStripes.push(add(jb, new THREE.BoxGeometry(0.05, 0.8, 0.02), new THREE.MeshStandardMaterial({ color: "#ffd166", emissive: "#ffd166", emissiveIntensity: 1.2 }), -0.3 + i * 0.15, 0.55, 0.31, { cast: false }));
-	k.box(-HW, -6.65, -HD, -5.7);
-	k.interact("lounge:jukebox", { label: "Pick a song on the jukebox", stand: [-6.6, -4.9], face: Math.PI * 0.8, use: () => ctx.openMusic() }, jb);
+	k.box(JB.x - 0.35, HW, JB.z - 0.5, JB.z + 0.5);
+	k.interact("lounge:jukebox", { label: "Pick a song on the jukebox", stand: [JB.x - 1.0, JB.z], face: Math.PI / 2, use: () => ctx.openMusic() }, jb);
 
 	// ---------------------------------------------------------------- plants
 	function plant(x, z, s = 1) {
@@ -385,7 +389,6 @@ export function build(k) {
 	}
 	plant(5.0, -4.6);
 	plant(7.5, 2.35, 0.9);
-	plant(7.5, -4.4, 1.0);
 
 	// ---------------------------------------------------------------- the kitchen (south wall), on tiles
 	const tileTex = tex.tiles("#efe9df", "#e3dccf", "#cfc6b8", 9 / 1.2, 4.6 / 1.2, 4);
@@ -493,7 +496,12 @@ export function build(k) {
 	add(fr, rbox(0.3, 0.03, 0.04, 0.01), steel, 0, 0.55, FD / 2 + 0.06);
 	k.box(7.05, HW, 6.05, HD);
 	let fridgeOpen = false, frK = 0;
-	k.interact("lounge:fridge", { label: () => fridgeOpen ? "Close the fridge" : "Open the fridge", stand: [7.4, 5.3], face: 0, use: () => { fridgeOpen = !fridgeOpen; ctx.sfx(fridgeOpen ? "pop" : "click", 0.5); } }, fr);
+	// open it, then take something out to eat (it stays open till someone closes it)
+	const closeFridge = () => { fridgeOpen = false; ctx.sfx("click", 0.5); };
+	k.interact("lounge:fridge", { label: () => fridgeOpen ? "Take something to eat" : "Open the fridge", stand: [7.4, 5.3], face: 0, use: () => {
+		if (!fridgeOpen) { fridgeOpen = true; ctx.sfx("pop", 0.5); return; }
+		ctx.foodMenu("What's in the fridge", ["apple", "cake", "icecream", "juice", "sandwich", "strawberry", "cookie"], { label: "Close the fridge", fn: closeFridge });
+	} }, fr);
 	k.updaters.push(dt => {
 		frK += ((fridgeOpen ? 1 : 0) - frK) * Math.min(1, dt * 6);
 		frDoor.rotation.y = -frK * 1.75;
@@ -821,6 +829,8 @@ export function build(k) {
 			const me = ctx.me();
 			const free = key => !opts.some(o => o.k === key);
 			const m = mealState(), s = mySeat();
+			// the fridge, left open
+			if (fridgeOpen && !me.sit && Math.hypot(me.x - (7.4 + k.ox), me.z - (5.3 + k.oz)) < 2.0) { const fk = ["R", "G", "F"].find(free); if (fk) opts.push({ k: fk, label: "Close the fridge", fn: closeFridge }); }
 			if (s && m && !m.dirty) {
 				if (m.plates[s] > 0) {
 					if (free("G") && me.upper !== "eat") opts.unshift({ k: "G", label: "Eat a bite", fn: eatBite });
@@ -832,7 +842,7 @@ export function build(k) {
 			if (!me.sit && m && !m.dirty && Object.values(m.plates).every(n => n <= 0) && Math.hypot(me.x - (TX + k.ox), me.z - (TZ + k.oz)) < 1.8 && free("R")) opts.push({ k: "R", label: "Clear the table", fn: clearTable });
 		},
 		// the jukebox plays whatever's on the record player: loud near it, softer across the room
-		musicAt(x, z) { const d = Math.hypot(x - (-7.2 + k.ox), z - (-6.25 + k.oz)); return Math.max(0.25, Math.min(1, 1.3 - d / 12)); }
+		musicAt(x, z) { const d = Math.hypot(x - (JB.x + k.ox), z - (JB.z + k.oz)); return Math.max(0.25, Math.min(1, 1.3 - d / 12)); }
 	};
 }
 
