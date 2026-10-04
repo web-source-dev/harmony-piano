@@ -164,6 +164,38 @@ function makeProp(kind) {
 		// mug axis along the palm normal: upright with the forearm level, tipped to the lips when raised
 		g.position.set(0, -0.07, 0.055);
 		g.rotation.x = Math.PI / 2;
+	} else if (kind === "popcorn") {
+		// red and white striped bucket, overflowing
+		const red = new THREE.MeshStandardMaterial({ color: "#d62839", roughness: 0.5, side: THREE.DoubleSide });
+		const wht = new THREE.MeshStandardMaterial({ color: "#fdf6ec", roughness: 0.5, side: THREE.DoubleSide });
+		for (let i = 0; i < 8; i++) {
+			const seg = mesh(new THREE.CylinderGeometry(0.07, 0.052, 0.15, 3, 1, true, i * Math.PI / 4, Math.PI / 4), i % 2 ? red : wht);
+			g.add(seg);
+		}
+		const pc = new THREE.MeshStandardMaterial({ color: "#fff1c2", roughness: 0.8 });
+		for (let i = 0; i < 16; i++) {
+			const k = mesh(new THREE.IcosahedronGeometry(0.018, 0), pc, false);
+			const a = i * 2.4, r = (i % 4) * 0.016;
+			k.position.set(Math.cos(a) * r, 0.075 + (i % 3) * 0.012, Math.sin(a) * r);
+			g.add(k);
+		}
+		g.position.set(0, -0.08, 0.075);
+		g.rotation.x = Math.PI / 2;
+	} else if (kind === "fork" || kind === "spoon" || kind === "sponge") {
+		if (kind === "sponge") {
+			g.add(mesh(new THREE.BoxGeometry(0.09, 0.035, 0.06), new THREE.MeshStandardMaterial({ color: "#ffd166", roughness: 0.9 })));
+			const top = mesh(new THREE.BoxGeometry(0.09, 0.012, 0.06), new THREE.MeshStandardMaterial({ color: "#2a9d8f", roughness: 0.9 }));
+			top.position.y = 0.023; g.add(top);
+			g.position.set(0, -0.07, 0.03);
+		} else {
+			const steel = new THREE.MeshStandardMaterial({ color: kind === "spoon" ? "#b07a4a" : "#d9dde2", roughness: kind === "spoon" ? 0.6 : 0.25, metalness: kind === "spoon" ? 0 : 0.9 });
+			g.add(mesh(new THREE.CylinderGeometry(0.006, 0.005, 0.17, 8), steel));
+			const head = mesh(kind === "spoon" ? new THREE.SphereGeometry(0.022, 10, 8) : new THREE.BoxGeometry(0.026, 0.05, 0.004), steel);
+			if (kind === "spoon") head.scale.set(1, 1.4, 0.4);
+			head.position.y = 0.105; g.add(head);
+			g.position.set(0, -0.1, 0.02);
+			g.rotation.x = Math.PI;
+		}
 	} else if (kind === "brush") {
 		g.add(mesh(new THREE.CylinderGeometry(0.008, 0.006, 0.2, 8), new THREE.MeshStandardMaterial({ color: "#c58940", roughness: 0.5 })));
 		const ferrule = mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.03, 8), new THREE.MeshStandardMaterial({ color: "#c0c4c8", metalness: 0.9, roughness: 0.3 }));
@@ -795,7 +827,22 @@ export class Avatar {
 		}
 
 		// carrying a mug: forearm held level out in front so it stays upright
-		if (this.propKind === "mug" && !up && base !== "sleep" && base !== "carried") { P.arm[0].x = -0.2; P.arm[0].z = -0.15; P.arm[0].e = -1.35; }
+		if ((this.propKind === "mug" || this.propKind === "popcorn") && !up && base !== "sleep" && base !== "carried") { P.arm[0].x = -0.2; P.arm[0].z = -0.15; P.arm[0].e = -1.35; }
+
+		// in deep water: breaststroke when moving, treading water when still
+		if (this.water > 0.55 && base === "idle" && (!up || up === "wave" || up === "laugh")) {
+			const s = t * (moving ? 4.4 : 2.4), pull = Math.max(0, Math.cos(s)), reach = Math.max(0, -Math.cos(s));
+			if (!up) {
+				P.arm[0].x = P.arm[1].x = -1.25 - reach * 0.35 + Math.sin(s) * 0.12;
+				P.arm[0].z = -0.25 - pull * 0.95; P.arm[1].z = 0.25 + pull * 0.95;
+				P.arm[0].e = P.arm[1].e = -0.35 - reach * 1.0;
+			}
+			P.leg[0].x = Math.sin(s * 2) * 0.35 - 0.2; P.leg[1].x = -Math.sin(s * 2) * 0.35 - 0.2;
+			P.leg[0].k = P.leg[1].k = 0.35 + pull * 0.4;
+			P.foot[0] = P.foot[1] = 0.4;
+			P.torsoX = moving ? 0.22 : 0.04; P.headX = moving ? -0.18 : -0.02;
+			P.bodyY = Math.sin(t * 2) * 0.025;
+		}
 
 		// ---- upper layer
 		if (up === "wave") {
@@ -825,6 +872,35 @@ export class Avatar {
 			const s = (Math.sin(t * 2.2) + 1) / 2;
 			P.arm[0].x = -1.25 - s * 0.35; P.arm[0].z = -0.35; P.arm[0].e = -1.7 - s * 0.25; P.arm[0].y = 0.3;
 			P.headX = -0.12 - s * 0.18;
+		} else if (up === "eat") {
+			// fork from the plate to the mouth, chew, back down
+			const s = (Math.sin(t * 2.6) + 1) / 2;
+			P.arm[0].x = -1.0 - s * 0.55; P.arm[0].z = -0.28; P.arm[0].e = -1.35 - s * 0.6; P.arm[0].y = 0.3;
+			P.arm[1].x = -0.62; P.arm[1].z = 0.18; P.arm[1].e = -1.05;
+			P.headX = 0.12 - s * 0.16;
+		} else if (up === "cook") {
+			// stirring the pot, the other hand on the handle
+			const c = t * 5;
+			P.arm[0].x = -1.0 + Math.sin(c) * 0.12; P.arm[0].z = -0.1 + Math.cos(c) * 0.16; P.arm[0].e = -0.85;
+			P.arm[1].x = -0.75; P.arm[1].z = 0.22; P.arm[1].e = -1.05;
+			P.headX = 0.28; P.torsoX += 0.08;
+		} else if (up === "wash") {
+			// scrubbing a plate in the sink
+			const c = t * 7;
+			P.arm[0].x = -0.95 + Math.sin(c) * 0.1; P.arm[0].z = -0.12 + Math.cos(c) * 0.12; P.arm[0].e = -0.9;
+			P.arm[1].x = -0.85; P.arm[1].z = 0.12 + Math.sin(c * 0.5) * 0.05; P.arm[1].e = -0.95;
+			P.headX = 0.32; P.torsoX += 0.1;
+		} else if (up === "pet" && base === "idle") {
+			// crouch down and stroke the pet in front of you
+			const c = Math.sin(t * 3.2);
+			P.bodyY = -0.42;
+			P.leg[0].x = P.leg[1].x = -1.25; P.leg[0].k = P.leg[1].k = 2.15;
+			P.leg[0].z = -0.08; P.leg[1].z = 0.08;
+			P.foot[0] = P.foot[1] = -0.6;
+			P.torsoX = 0.4;
+			P.arm[0].x = -1.05 + c * 0.12; P.arm[0].z = -0.1; P.arm[0].e = -0.25;
+			P.arm[1].x = -0.4; P.arm[1].z = 0.25; P.arm[1].e = -0.9;
+			P.headX = 0.25;
 		} else if (up === "write") {
 			// bent over the desk, pen scribbling, other hand holding the paper
 			const w = Math.sin(t * 14) * 0.03;

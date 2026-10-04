@@ -18,14 +18,38 @@ export const ROOM = { minX: -7, maxX: 7, minZ: -6, maxZ: 6, H: 3.4 };
 // French doors in the back wall lead out to the rooftop terrace
 export const DOOR = { x0: -6.1, x1: -4.5, h: 2.3 };
 export const TERRACE = { minX: -7, maxX: 5.5, minZ: -12, maxZ: -6.2 };
-// Where can a body of radius r stand? (inside the room, in the doorway, or on the terrace)
+// the French doors in the right wall, through to the lounge
+export const LDOOR = { z0: 2.9, z1: 4.6, h: 2.3 };
+// the gap in the terrace's east railing, out to the pool deck
+export const POOLGAP = { z0: -10.3, z1: -8.3 };
+// the French doors in the left wall, into the cinema
+export const CDOOR = { z0: -4.21, z1: -2.79, h: 2.3 };
+// The other rooms of the house (lounge, bedroom, bathroom, cinema, pool) sit around the living room
+// and register here: where they are, where you can stand in them, and how high the floor is
+// (the lounge has stairs, the cinema is upstairs with tiers, the pool is deep).
+const AREAS = [];   // { id, bounds: {minX,maxX,minZ,maxZ}, rects: [...], floor?: (x, z) => y }
+export function registerArea(a) { a.rects = a.rects || []; AREAS.push(a); return a; }
+function areaAt(x, z) {
+	for (const a of AREAS) { const b = a.bounds; if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) return a; }
+	return null;
+}
+// Where can a body of radius r stand? (inside the room, in the doorway, on the terrace, or in another room of the house)
 export function walkable(x, z, r) {
 	if (x > ROOM.minX + r && x < ROOM.maxX - r && z > ROOM.minZ + r && z < ROOM.maxZ - r) return true;
 	if (x > DOOR.x0 + r && x < DOOR.x1 - r && z > -6.6 && z < -5.5) return true;
 	if (x > TERRACE.minX + r && x < TERRACE.maxX - r && z > TERRACE.minZ + r && z < TERRACE.maxZ - r) return true;
+	// through the French doors to the lounge, and through the railing gap to the pool deck
+	// (each doorway reaches well into the rooms on both sides, so there's no seam to get stuck on)
+	if (x > 6.0 && x < 8.2 && z > LDOOR.z0 + r && z < LDOOR.z1 - r) return true;
+	if (x > 4.4 && x < 6.6 && z > POOLGAP.z0 + r && z < POOLGAP.z1 - r) return true;
+	if (x > -7.8 && x < -6.0 && z > CDOOR.z0 + r && z < CDOOR.z1 - r) return true;
+	const a = areaAt(x, z);
+	if (a) for (const q of a.rects) if (x > q.minX + r && x < q.maxX - r && z > q.minZ + r && z < q.maxZ - r) return true;
 	return false;
 }
-export function areaOf(x, z) { return z < -6.1 ? "terrace" : "room"; }
+export function areaOf(x, z) { const a = areaAt(x, z); return a ? a.id : z < -6.1 ? "terrace" : "room"; }
+// height of the floor under (x, z): 0 everywhere in the flat rooms
+export function floorAt(x, z) { const a = areaAt(x, z); return a && a.floor ? a.floor(x, z) : 0; }
 // moon position on the sky dome (matches the painted moon in skyTex)
 const MOON_U = 0.62, MOON_V = 0.24;
 export const MOON_DIR = (() => {
@@ -323,14 +347,26 @@ export function buildRoom(scene) {
 	wallSeg(win.x1 - win.x0, win.y0, (win.x0 + win.x1) / 2, win.y0 / 2, -6.1, 0);
 	wallSeg(win.x1 - win.x0, H - win.y1, (win.x0 + win.x1) / 2, (H + win.y1) / 2, -6.1, 0);
 	wallSeg(14, H, 0, H / 2, 6.1, Math.PI);
-	wallSeg(12.4, H, -7.1, H / 2, 0, Math.PI / 2);
-	wallSeg(12.4, H, 7.1, H / 2, 0, -Math.PI / 2);
+	// left wall: an opening for the French doors into the cinema
+	wallSeg(CDOOR.z0 + 6.2, H, -7.1, H / 2, (CDOOR.z0 - 6.2) / 2, Math.PI / 2);
+	wallSeg(6.2 - CDOOR.z1, H, -7.1, H / 2, (CDOOR.z1 + 6.2) / 2, Math.PI / 2);
+	wallSeg(CDOOR.z1 - CDOOR.z0, H - CDOOR.h, -7.1, (H + CDOOR.h) / 2, (CDOOR.z0 + CDOOR.z1) / 2, Math.PI / 2);
+	// right wall: an opening for the French doors to the lounge
+	wallSeg(LDOOR.z0 + 6.2, H, 7.1, H / 2, (LDOOR.z0 - 6.2) / 2, -Math.PI / 2);
+	wallSeg(6.2 - LDOOR.z1, H, 7.1, H / 2, (LDOOR.z1 + 6.2) / 2, -Math.PI / 2);
+	wallSeg(LDOOR.z1 - LDOOR.z0, H - LDOOR.h, 7.1, (H + LDOOR.h) / 2, (LDOOR.z0 + LDOOR.z1) / 2, -Math.PI / 2);
 	// skirting + crown moulding
 	const trim = mat("#fbf7f0", 0.5);
-	[[0, -5.99, 14, 0], [0, 5.99, 14, 0], [-6.99, 0, 12, 1], [6.99, 0, 12, 1]].forEach(([x, z, len, side]) => {
+	[[0, -5.99, 14, 0], [0, 5.99, 14, 0]].forEach(([x, z, len, side]) => {
 		add(scene, new THREE.BoxGeometry(side ? 0.03 : len, 0.12, side ? len : 0.03), trim, x, 0.06, z);
 		add(scene, new THREE.BoxGeometry(side ? 0.06 : len, 0.08, side ? len : 0.06), trim, x, H - 0.04, z);
 	});
+	add(scene, new THREE.BoxGeometry(0.03, 0.12, CDOOR.z0 + 6), trim, -6.99, 0.06, (CDOOR.z0 - 6) / 2);
+	add(scene, new THREE.BoxGeometry(0.03, 0.12, 6 - CDOOR.z1), trim, -6.99, 0.06, (CDOOR.z1 + 6) / 2);
+	add(scene, new THREE.BoxGeometry(0.06, 0.08, 12), trim, -6.99, H - 0.04, 0);
+	add(scene, new THREE.BoxGeometry(0.03, 0.12, LDOOR.z0 + 6), trim, 6.99, 0.06, (LDOOR.z0 - 6) / 2);
+	add(scene, new THREE.BoxGeometry(0.03, 0.12, 6 - LDOOR.z1), trim, 6.99, 0.06, (LDOOR.z1 + 6) / 2);
+	add(scene, new THREE.BoxGeometry(0.06, 0.08, 12), trim, 6.99, H - 0.04, 0);
 
 	// Night sky dome (seen through the window and from the terrace)
 	const sky = new THREE.Mesh(new THREE.SphereGeometry(50, 64, 32), new THREE.MeshBasicMaterial({ map: skyTex(), toneMapped: false, side: THREE.BackSide, depthWrite: false }));
@@ -842,6 +878,11 @@ export function buildRoom(scene) {
 	const toggle = add(sw0, new THREE.BoxGeometry(0.025, 0.045, 0.015), mat("#ece6dc", 0.4), 0, 0, 0.012);
 	interact("switch", { label: () => mainState.on ? "Turn the ceiling light off" : "Turn the ceiling light on", stand: [2.75, 5.0], face: 0 }, sw0);
 
+	// French doors to the lounge (right wall, between the arcade and the desk), curtains on the living-room side
+	// and the cinema's French doors in the left wall (curtains on the cinema side, to keep it dark)
+	const cinemaDoor = frenchDoor(scene, { x: -7.12, z: (CDOOR.z0 + CDOOR.z1) / 2, ry: Math.PI / 2, w: CDOOR.z1 - CDOOR.z0 - 0.04, h: CDOOR.h, depth: 0.5, side: -1, curtain: "#7d1d2c", frame: "#c9a05a" });
+	const livingDoor = frenchDoor(scene, { x: 7.1, z: (LDOOR.z0 + LDOOR.z1) / 2, ry: -Math.PI / 2, w: LDOOR.z1 - LDOOR.z0 - 0.04, h: LDOOR.h, depth: 0.5, side: 1, curtain: "#b5677a" });
+
 	// Writing desk with the love-letter box
 	const desk = group(scene, 5.6, 0, 5.55, Math.PI);
 	add(desk, rbox(1.3, 0.05, 0.62, 0.01), wood, 0, 0.76, 0);
@@ -1266,11 +1307,78 @@ export function buildRoom(scene) {
 		// small accent lights: area-only too, and switched off entirely on the low graphics setting
 		minorLights: { room: [candleLight, arcadeLight, ul], terrace: terrace.minorLights },
 		shadowLights: [mainLight],
+		mainLight, fillLight: fill, livingDoor, cinemaDoor,
 		pianoKeys, pressKey, remote: { mesh: remote, parent: ct }, setNightLamp, nightLamp,
 		setFairy: k => { fairyLight.intensity = 1.5 * k; bulbs.forEach(b => { b.userData.k = k; }); },
 		update(dt, t) { updaters.forEach(u => u(dt, t)); }
 	};
 }
+
+// French doors in a wall opening: a frame deep enough to cover both walls, two glass leaves
+// (open by default, like the terrace doors), and curtains on a rod on one side (o.side: +1 = the
+// group's +z side) that can be drawn across for privacy. update(dt, open, curtainsOpen) animates them.
+export function frenchDoor(parent, o) {
+	const w = o.w || 1.7, h = o.h || 2.3, depth = o.depth || 0.45, side = o.side || 1;
+	const g = group(parent, o.x, o.y || 0, o.z, o.ry || 0);
+	const fm = mat(o.frame || "#fbf8f2", 0.45);
+	add(g, new THREE.BoxGeometry(w + 0.2, 0.1, depth), fm, 0, h + 0.05, 0);
+	for (const sx of [-1, 1]) add(g, new THREE.BoxGeometry(0.1, h, depth), fm, sx * (w / 2 + 0.05), h / 2, 0);
+	add(g, new THREE.BoxGeometry(w, 0.02, depth), mat("#b9a892", 0.6), 0, 0.01, 0, { cast: false });
+	const glassM = new THREE.MeshPhysicalMaterial({ color: "#d8ecff", transparent: true, opacity: 0.18, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
+	const brassM = mat("#c9a05a", 0.3, 0.9);
+	const leaves = [], leaf = w / 2;
+	for (const s of [-1, 1]) {
+		const hinge = group(g, s * w / 2, 0, 0);
+		hinge.userData.openRot = s * 1.75 * side;
+		hinge.rotation.y = hinge.userData.openRot;
+		const ox = -s * leaf / 2;
+		add(hinge, new THREE.BoxGeometry(leaf, 0.08, 0.05), fm, ox, 0.04, 0);
+		add(hinge, new THREE.BoxGeometry(leaf, 0.08, 0.05), fm, ox, h - 0.06, 0);
+		add(hinge, new THREE.BoxGeometry(0.07, h, 0.05), fm, ox - leaf / 2 + 0.035, h / 2, 0);
+		add(hinge, new THREE.BoxGeometry(0.07, h, 0.05), fm, ox + leaf / 2 - 0.035, h / 2, 0);
+		for (let k = 1; k < 4; k++) add(hinge, new THREE.BoxGeometry(leaf, 0.035, 0.04), fm, ox, k * h / 4, 0);
+		const gl = new THREE.Mesh(new THREE.PlaneGeometry(leaf - 0.1, h - 0.12), glassM);
+		gl.position.set(ox, h / 2, 0);
+		hinge.add(gl);
+		add(hinge, new THREE.SphereGeometry(0.025, 10, 8), brassM, ox - s * (leaf / 2 - 0.08), 1.05, 0.04);
+		leaves.push(hinge);
+	}
+	// curtains: tied back beside the opening, or drawn across it
+	const cz = side * (depth / 2 + 0.1);
+	add(g, new THREE.CylinderGeometry(0.016, 0.016, w + 1.3, 8), brassM, 0, h + 0.28, cz, { rz: Math.PI / 2, cast: false });
+	const cg = new THREE.PlaneGeometry(1, h + 0.2, 32, 1);
+	{
+		const p = cg.attributes.position;
+		for (let i = 0; i < p.count; i++) p.setZ(i, Math.sin(p.getX(i) * Math.PI * 10) * 0.035);
+		cg.translate(0.5, 0, 0);
+		cg.computeVertexNormals();
+	}
+	const cm = mat(o.curtain || "#b5677a", 0.95, 0, { side: THREE.DoubleSide });
+	const curtains = [];
+	for (const s of [-1, 1]) {
+		const c = new THREE.Mesh(cg, cm);
+		c.position.set(s * (w / 2 + 0.55), (h + 0.2) / 2 + 0.05, cz);
+		c.scale.x = -s * 0.5;
+		c.castShadow = true;
+		g.add(c);
+		curtains.push(c);
+	}
+	let openK = 1, curtK = 1;
+	return {
+		group: g, leaves, curtains, w, h,
+		update(dt, open, curtainsOpen) {
+			openK += ((open ? 1 : 0) - openK) * Math.min(1, dt * 5);
+			curtK += ((curtainsOpen ? 1 : 0) - curtK) * Math.min(1, dt * 3);
+			leaves.forEach(l => { l.rotation.y = l.userData.openRot * openK; });
+			// tied back: a narrow bunch beside the opening; drawn: each covers half of it
+			const sc = 0.5 + (1 - curtK) * (w / 2 + 0.05);
+			curtains.forEach((c, i) => { const s = i ? 1 : -1; c.scale.x = -s * sc; });
+		}
+	};
+}
+
+// the building blocks the other rooms of the house are made with
+export const kit = { mat, canvasTex, rbox, add, group, rng, heartShape, heartMesh, brickTex, marbleTex, tileTex, wallpaperTex, diamond, frenchDoor };
 
 export function makeMug(color) {
 	const g = new THREE.Group();

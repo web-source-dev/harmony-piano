@@ -45,6 +45,7 @@ button { font: inherit; color: inherit; }
 #loading .ld { text-align: center; }
 #loading .ring { width: 54px; height: 54px; border-radius: 50%; border: 4px solid rgba(255,255,255,.12); border-top-color: var(--accent); animation: spin 1s linear infinite; margin: 0 auto 16px; }
 #loading p { color: var(--muted); font-weight: 700; margin: 0; }
+#tl .where { font-size: 11px; color: #ffd9a8; font-weight: 700; margin-left: 4px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------- lobby / character select ---------- */
@@ -135,6 +136,27 @@ button { font: inherit; color: inherit; }
 .rm-yt { display: flex; gap: 6px; margin-top: 4px; }
 .rm-yt .input { padding: 9px 10px; font-size: 13px; }
 .input.bad { border-color: #ff6b6b !important; }
+/* the rooms of the house: cinema projector, cooking menu, pet care... */
+.cin-now { display: flex; gap: 12px; align-items: center; padding: 10px; border-radius: 14px; background: rgba(255,255,255,.05); border: 1px solid var(--line); min-height: 78px; }
+.cin-now img { width: 124px; height: 70px; object-fit: cover; border-radius: 10px; flex: none; }
+.cin-now b { display: block; font-size: 15px; }
+.cin-now span { color: var(--muted); font-size: 13px; }
+.cin-off { padding: 4px 6px; }
+.hs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.hs-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 10px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,.06); color: var(--text); font: inherit; cursor: pointer; text-align: center; transition: background .15s, transform .1s, border-color .15s; }
+.hs-card:hover { background: rgba(255,255,255,.11); border-color: rgba(255,255,255,.25); }
+.hs-card:active { transform: scale(.97); }
+.hs-card .ic { font-size: 0; width: 64px; height: 64px; }
+.hs-card .ic svg { width: 64px; height: 64px; }
+.hs-card b { font-size: 14px; }
+.hs-card span { font-size: 12px; color: var(--muted); }
+.hs-meter { height: 10px; border-radius: 6px; background: rgba(255,255,255,.1); overflow: hidden; margin-top: 4px; }
+.hs-meter i { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, #ff7aa2, #ffd166); transition: width .4s; }
+.hs-pet { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.hs-pet > div { padding: 12px; border-radius: 14px; background: rgba(255,255,255,.05); border: 1px solid var(--line); }
+.hs-pet .lbl { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.hs-pet input { margin-top: 6px; }
+@media (max-width: 520px) { .hs-pet { grid-template-columns: 1fr; } .cin-now img { width: 96px; height: 54px; } }
 #pianobar { align-self: center; padding: 10px 14px; display: flex; align-items: center; gap: 14px; max-width: calc(100% - 28px); font-size: 13px; }
 #pianobar .keys { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; }
 #pianobar kbd { display: inline-grid; place-items: center; min-width: 20px; height: 22px; border-radius: 5px; background: #fff; color: #2a1f33; font: 900 11px "Nunito", sans-serif; padding: 0 4px; box-shadow: 0 2px 0 #b8a9c9; }
@@ -460,7 +482,7 @@ body.touch #help { display: none; }
 		<button class="chip ib" id="b-exit" title="Back to the piano"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span class="lbl">Piano</span></button>
 	</div>
 	<div id="toasts"></div>
-	<div id="help" class="chip"><b>WASD</b> / arrows to walk, <b>Shift</b> to run<br><b>Drag</b> to look around, <b>scroll</b> to zoom<br><b>Click</b> anything to walk there and use it<br><b>E</b> / <b>F</b> to use things, <b>Esc</b> to stand up<br><b>1</b> blow a kiss, <b>2</b> kiss, <b>3</b> pick up<br><b>Z</b> actions, <b>X</b> love, <b>C</b> mood<br><b>Enter</b> to chat</div>
+	<div id="help" class="chip"><b>WASD</b> / arrows to walk, <b>Shift</b> to run<br><b>Drag</b> to look around, <b>scroll</b> to zoom<br><b>Click</b> anything to walk there and use it<br><b>E</b> / <b>F</b> to use things, <b>Esc</b> to stand up<br><b>1</b> blow a kiss, <b>2</b> kiss, <b>3</b> pick up<br><b>Z</b> actions, <b>X</b> love, <b>C</b> mood<br><b>Enter</b> to chat<br>Glass doors by the arcade: the <b>lounge</b> and the rest of the house</div>
 	<div id="joy"><i></i></div>
 	<div id="bottom">
 		<div id="log" class="empty" aria-live="polite"></div>

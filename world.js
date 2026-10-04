@@ -13,14 +13,19 @@
  * The YouTube video is a real <iframe> placed on the TV with CSS3DRenderer;
  * the WebGL TV screen becomes a transparent "hole" so the video shows through
  * while furniture and people in front of the TV still cover it.
+ *
+ * French doors by the arcade open into the rest of the house (the lounge with its
+ * kitchen, the bedroom, the bathroom, the cinema upstairs) and the pool is out past
+ * the terrace: see worldHouse.js.
  */
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
 import { Avatar, SKIN_TONES, HAIR_COLORS, OUTFIT_COLORS, MOODS, drawMoodFace } from "./worldAvatar.js";
-import { buildRoom, ROOM, DOOR, TERRACE, MOON_DIR, walkable, areaOf, heartMesh, makeMug } from "./worldRoom.js";
+import { buildRoom, ROOM, DOOR, TERRACE, MOON_DIR, walkable, areaOf, floorAt, heartMesh, makeMug } from "./worldRoom.js";
 import { WorldAudio, TRACKS } from "./worldAudio.js";
 import * as Games from "./worldGames.js";
+import { createHouse, ZONES } from "./worldHouse.js";
 
 const esc = Games.esc;
 const $ = s => document.querySelector(s);
@@ -146,6 +151,27 @@ let audio = null;
 	renderer.shadowMap.autoUpdate = false;
 	renderer.shadowMap.needsUpdate = true;
 }
+
+// ============================================================ the rest of the house
+// The lounge (with the kitchen), bedroom, bathroom, cinema and pool: built in the background,
+// drawn only while you're in them or can see into them (see worldHouse.js).
+const house = createHouse({
+	scene, room, renderer, camera, hemi, moon, cssScene, debug: params.has("debug"),
+	get: k => get(k), setShared: (k, v) => setShared(k, v), send: o => send(o),
+	toast: (...a) => toast(...a), notice: h => addLog(h, true), esc,
+	sfx: (n, v) => { if (audio) audio.sfx(n, v); },
+	audio: () => audio, muted: () => muted, me: () => me, myAvatar: () => myAvatar, peers: () => peers, MY_ID,
+	profile: () => profile,
+	doUpper: (u, ms, p) => doUpper(u, ms, p), sitOn: ids => sitOn(ids), standUp: q => standUp(q), walkTo: (x, z, a) => walkTo(x, z, a),
+	openModal: (...a) => openModal(...a), closeModal: () => closeModal(), modalKind: () => modalKind,
+	updateProps: () => updateProps(), sendPose: f => sendPose(f), heartsFx: (...a) => heartsFx(...a),
+	whoSits: id => whoSits(id), freeSpot: ids => freeSpot(ids), spotById: id => spotById(id),
+	enterTV: () => enterTV(), tvMode: () => tvMode, openMusic: () => openMusic(), showLook: () => showLobby(true),
+	gfxTier: () => gfxTier(),
+	restoreMainLights() { room.setMain(!!get("mainLight")); applyNight(null); },
+	onRegion() { refreshPeople(); },
+	onZoneBuilt() { gridDirty(); }
+});
 
 let gfxApplied = null;
 function applyGfx() {
@@ -344,11 +370,16 @@ function upsertPeer(id, lk) {
 }
 const BASE_ANIMS = ["idle", "sit", "sleep", "floor"];
 const UPPER_ANIMS = ["wave", "dance", "clap", "heart", "drink", "paint", "write", "tug", "piano", "laugh", "cry", "kiss", "hug", "highfive", "jump", "bow", "cheer", "think", "shrug", "facepalm", "yawn", "warm", "telescope", "shake", "give", "stumble",
-	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss"];
-const PROPS = ["mug", "brush", "remote", "flower", "ring"];
+	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash"];
+const PROPS = ["mug", "brush", "remote", "flower", "ring", "popcorn", "fork", "spoon", "sponge"];
 function applyPose(p, d, snap) {
 	if (typeof d.x !== "number") return;
+	const wasIn = p.fresh ? null : house.regionOf(areaOf(p.tx, p.tz));
 	p.tx = d.x; p.tz = d.z; p.th = d.h; p.sit = d.s || null;
+	// went through a door: jump straight there (no gliding through walls), and say where they went
+	if (Math.hypot(p.tx - p.x, p.tz - p.z) > 6) snap = true;
+	const nowIn = house.regionOf(areaOf(p.tx, p.tz));
+	if (wasIn && wasIn !== nowIn) peerMoved(p, nowIn);
 	p.anim = BASE_ANIMS.includes(d.a) ? d.a : "idle";
 	const prevUpper = p.upper;
 	p.upper = UPPER_ANIMS.includes(d.u) ? d.u : (UPPER_ANIMS.includes(d.a) ? d.a : null);
@@ -372,14 +403,30 @@ function removePeer(id) {
 	// they took the remote with them: put it back on the table
 	if (get("remote").by === id) setShared("remote", { by: "", name: "" });
 }
+// someone went into another room of the house: tell everyone, and offer to follow them into a room
+const regionName = r => r === "main" ? "living room" : ZONES[r] ? ZONES[r].name : r;
+function peerMoved(p, to) {
+	refreshPeople();
+	if (!entered) return;
+	const n = esc(p.look.name);
+	const t = now();
+	if (p._movedT && t - p._movedT < 6000) return;
+	p._movedT = t;
+	if (to === house.region()) { addLog(`<b>${n}</b> came in`, true); return; }
+	if (to === "main") { addLog(`<b>${n}</b> went back to the living room`, true); return; }
+	toast(`<b>${n}</b> went into the ${esc(regionName(to))}`, "Follow", () => { if ([...peers.values()].includes(p)) walkTo(p.tx, p.tz, null); }, 8000);
+}
 const moodImgs = {};
 function moodImg(m) {
 	if (!moodImgs[m]) { const c = document.createElement("canvas"); c.width = c.height = 40; drawMoodFace(c.getContext("2d"), 20, 20, 18, m); moodImgs[m] = c.toDataURL(); }
 	return `<img class="mf" src="${moodImgs[m]}" alt="${m}" title="${(MOODS.find(x => x.id === m) || {}).label || ""}">`;
 }
 function refreshPeople() {
-	const rows = [`<div>${moodImg(profile.mood)}${esc(profile.name || "You")} (you)</div>`];
-	peers.forEach(p => rows.push(`<div>${moodImg(p.avatar.mood)}${esc(p.look.name)}${isAsleep(p) ? " <span class='zz'>sleeping</span>" : ""}</div>`));
+	// where everyone is in the house (only shown once someone's in another room)
+	const mine = house.region();
+	const where = (x, z) => { const r = house.regionOf(areaOf(x, z)); return r === mine && mine === "main" ? "" : ` <span class='where'>${esc(regionName(r))}</span>`; };
+	const rows = [`<div>${moodImg(profile.mood)}${esc(profile.name || "You")} (you)${entered && mine !== "main" ? where(me.x, me.z) : ""}</div>`];
+	peers.forEach(p => rows.push(`<div>${moodImg(p.avatar.mood)}${esc(p.look.name)}${isAsleep(p) ? " <span class='zz'>sleeping</span>" : ""}${where(p.tx, p.tz)}</div>`));
 	$("#ppl").innerHTML = rows.join("");
 }
 
@@ -406,6 +453,7 @@ function applyKey(k, remote) {
 	else if (k === "drawClear") { for (const id in strokes) if (strokes[id].ts < v) delete strokes[id]; saveStrokes(); redrawEasel(); }
 	else if (k.indexOf("letter:") === 0) onLetter(k, v, remote);
 	else if (k.indexOf("opened:") === 0) onOpened(k, v, remote);
+	else if (k.indexOf("z:") === 0) house.applyKey(k, remote);   // the other rooms of the house
 }
 function applyAll() { Object.keys(Object.assign({}, DEFAULTS, S)).forEach(k => applyKey(k, null)); }
 
@@ -579,13 +627,15 @@ function interact(id) {
 	// carrying someone: the bed / sofa is where you lay them down to cuddle
 	if (me.carrying && CARRY_FURNITURE[id]) { carryToCuddle(id); return; }
 	if (def.face !== undefined && !def.sit && !me.sit) me.h = def.face;
+	// things in the other rooms of the house bring their own action
+	if (def.use) { def.use(); return; }
+	if (def.lie && def.sit) { sitOnBed(id); return; }
 	switch (id) {
 		case "tv": case "remote": useRemote(); break;
 		case "piano": { const who = whoSits("bench"); if (who) busy(who, "Can I play after you, {n}?", "{n} is playing the piano - let {pr} finish first"); else startPiano(); break; }
 		case "telescope": { const who = whoDoes("telescope"); if (who) busy(who, "My turn next, {n}!", "{n} is looking at the stars - wait for {pr} to finish"); else startScope(); break; }
 		case "fire": me.h = def.face; doUpper("warm", 7000); if (audio) audio.sfx("whoosh", 0.3); break;
 		case "flowers": pickFlower(); break;
-		case "bed": sitOnBed(); break;
 		case "notes": openNotes(); break;
 		case "lamp": setShared("lamp", !get("lamp")); break;
 		case "nightlamp": setShared("nightlamp", !get("nightlamp")); break;
@@ -637,7 +687,7 @@ function labelOf(id) {
 		if (r.by) return "Fight " + (r.name || "them") + " for the remote!";
 		return "Pick up the TV remote";
 	}
-	if (id === "bed") return freeSpot(room.interactables.bed.sit) ? "Sit on the bed" : "The bed is full";
+	if (room.interactables[id].lie && room.interactables[id].sit) return freeSpot(room.interactables[id].sit) ? "Sit on the bed" : "The bed is full";
 	if (id === "piano" && whoSits("bench")) return whoSits("bench").look.name + " is playing - wait your turn";
 	if (id === "telescope" && whoDoes("telescope")) return whoDoes("telescope").look.name + " is stargazing";
 	if (id === "terraceDoor") return get("terraceDoor") ? "Close the terrace door" : "Open the terrace door";
@@ -664,7 +714,7 @@ const REACH = { remote: 2.3, notes: 2.3, tv: 7, lamp: 2.2, nightlamp: 2.2, recor
 // the TV can only be worked from a seat that actually faces it
 const TV_SEATS = ["sofa0", "sofa1", "sofa2", "armchair", "armchairLap"];
 function canReach(id) {
-	const r = REACH[id];
+	const r = REACH[id] || room.interactables[id].reach;
 	if (!r) return false;
 	if (id === "tv" && !(me.sit && TV_SEATS.includes(me.sit))) return false;
 	const c = defCenter(room.interactables[id]);
@@ -705,6 +755,7 @@ function sitOn(ids) {
 	// look over your shoulder from behind the seat
 	// (lying down: the body runs toward spot.h, so watch from the foot of the bed)
 	cam.yaw = spot.lie || spot.bedsit ? spot.h : spot.h + Math.PI; cam.pitch = spot.lie ? 0.75 : spot.bedsit ? 0.5 : 0.42; cam.dist = spot.lie ? 3.0 : 2.6;
+	cam.yaw = roomyYaw(cam.yaw, cam.pitch, cam.dist);
 	sendPose(true);
 	const nb = spot.id !== "bench" && seatNeighbor();
 	if (!nb && TV_SEATS.includes(spot.id) && get("tv").on) toast("Watch through your own eyes, with nothing in the way", "TV mode", enterTV, 7000);
@@ -739,17 +790,21 @@ function freeFloorNear(x, z, h) {
 		const a = h + d, nx = x + Math.sin(a) * r, nz = z + Math.cos(a) * r;
 		if (!blocked(nx, nz, true)) return { x: nx, z: nz };
 	}
-	return { x: 0.5, z: 1.5 };
+	return areaOf(x, z) === "room" ? { x: 0.5, z: 1.5 } : { x, z };
 }
 
 // ---------- the bed: sit on it, lie down, sit up, wake / kiss whoever is asleep
+// (there's the bed in the living room, "bed", and the big one in the bedroom; each spot knows its bed)
 const onBed = () => { const s = spotById(me.sit); return !!(s && s.bed); };
-function sitOnBed() {
-	if (!freeSpot(room.interactables.bed.sit)) { addLog("There's no room left on the bed.", true); return; }
-	sitOn(room.interactables.bed.sit);
+const bedOf = spot => room.interactables[(spot && spot.bedId) || "bed"];
+function myBedId() { const s = spotById(me.sit); return s && s.bed ? (s.bedId || "bed") : null; }
+function sitOnBed(bid) {
+	const bed = room.interactables[bid || "bed"];
+	if (!freeSpot(bed.sit)) { addLog("There's no room left on the bed.", true); return; }
+	sitOn(bed.sit);
 }
-function goToBed() {
-	const spot = freeSpot(room.interactables.bed.lie);
+function goToBed(bid) {
+	const spot = freeSpot(room.interactables[bid || myBedId() || "bed"].lie);
 	if (!spot) { addLog("Both sides of the bed are taken.", true); return; }
 	closeRemote(); closeDraw();
 	sitOn([spot.id]);
@@ -765,9 +820,9 @@ function sitUpInBed(quiet) {
 	// lying on the sofa: "sitting up" just means getting up off it (never jumping into the bed)
 	if (!cur.bed) { standUp(quiet); return; }
 	// sit up right where you are lying (the other side if that's somehow taken)
-	const mine = cur.id === "bedL" ? "bedSitL" : "bedSitR";
+	const mine = cur.up || (cur.id === "bedL" ? "bedSitL" : "bedSitR");
 	const taken = takenSpots();
-	const next = [mine].concat(room.interactables.bed.sit).find(id => !taken.has(id));
+	const next = [mine].concat(bedOf(cur).sit).find(id => !taken.has(id));
 	if (!next) { standUp(quiet); return; }
 	sitOn([next]);
 	if (!quiet && audio) audio.sfx("yawn");
@@ -791,15 +846,18 @@ function sitBeside(id, fn) {
 	// already in bed right next to them (sitting up or lying down): just lean over
 	if (me.sit && onBed() && seatDist(me, p) < NEAR_SEAT) { fn(); return; }
 	const taken = takenSpots();
-	const spot = room.sitSpots.find(s => s.bedsit && !taken.has(s.id) && s.excl.indexOf(p.sit) < 0 && s.id !== { bedL: "bedSitL", bedR: "bedSitR" }[p.sit]);
+	const ps = spotById(p.sit) || {};
+	const bid = ps.bedId || "bed";
+	const spot = room.sitSpots.find(s => s.bedsit && (s.bedId || "bed") === bid && !taken.has(s.id) && s.excl.indexOf(p.sit) < 0 && s.id !== (ps.up || { bedL: "bedSitL", bedR: "bedSitR" }[p.sit]));
 	if (!spot) {
 		// no room in the bed: lean over from the floor instead
-		const side = p.sit === "bedR" ? [-1.95, 4.95] : [-4.45, 4.95];
-		walkTo(side[0], side[1], () => { const q = peers.get(id); if (!q) return; me.h = Math.atan2(q.x - me.x, (q.z + 0.9) - me.z); fn(); });
+		const body = bodyXZ(p);
+		const side = ps.side || (p.sit === "bedR" ? [-1.95, 4.95] : [-4.45, 4.95]);
+		walkTo(side[0], side[1], () => { const q = peers.get(id); if (!q) return; me.h = Math.atan2(body.x - me.x, body.z - me.z); fn(); });
 		return;
 	}
 	const go = () => { if (sitOn([spot.id])) setTimeout(fn, 450); };
-	const st = spot.stand || room.interactables.bed.stand;
+	const st = spot.stand || room.interactables[bid].stand;
 	if (Math.hypot(st[0] - me.x, st[1] - me.z) < 0.6 || (me.sit && onBed())) go(); else walkTo(st[0], st[1], go);
 }
 // lean over and gently shake them awake, from your side of the bed
@@ -1446,6 +1504,7 @@ function putDownMug() {
 	if (me.holding !== "mug") return;
 	if (me.upper === "drink") { addLog("Finish your sip first.", true); return; }
 	const area = areaOf(me.x, me.z);
+	if (house.inHouse()) { addLog("There's nowhere to put it down in here - drink up or hand it to someone.", true); return; }
 	const cost = s => Math.hypot(s[0] - me.x, s[2] - me.z) + (areaOf(s[0], s[2]) === area ? 0 : 6);
 	const spot = CUP_SPOTS.filter(spotFree).sort((a, b) => cost(a) - cost(b))[0];
 	if (!spot) { addLog("Every table is full - drink up or hand it to someone.", true); return; }
@@ -1719,6 +1778,7 @@ function applyGame(k, remote) {
 // ============================================================ effects
 const fxObjs = [];
 function heartsFx(root, n, color, y = 1.7) {
+	y += floorAt(root.position.x, root.position.z);   // up on a cinema tier / down in the pool
 	for (let i = 0; i < n; i++) {
 		const h = heartMesh(0.16 + Math.random() * 0.08, color || ["#ff4d6d", "#ff8fab", "#ff6b81"][i % 3]);
 		h.position.set(root.position.x + (Math.random() - 0.5) * 0.5, y + Math.random() * 0.3, root.position.z + (Math.random() - 0.5) * 0.5);
@@ -1819,10 +1879,12 @@ function onFx(d, p) {
 		case "fightend": fightResult(String(d.w || "Someone").slice(0, 24), +d.sa || 0, +d.sb || 0, d.wid, d.a, d.b); break;
 		case "flower": if (d.to === MY_ID) { me.holding = "flower"; updateProps(); sendPose(true); heartsFx(myAvatar.root, 6); if (audio) audio.sfx("love"); toast(`<b>${esc(name)}</b> gave you a flower`, null, null, 6000); } break;
 		case "mug": if (d.to === MY_ID) { holdMug(Math.max(1, Math.min(SIPS, d.s | 0))); toast(`<b>${esc(name)}</b> gave you a coffee`, "Take a sip", drinkCoffee, 7000); } break;
+		case "popcorn": if (d.to === MY_ID) { me.holding = "popcorn"; me.sips = Math.max(1, Math.min(6, d.s | 0)); updateProps(); sendPose(true); heartsFx(myAvatar.root, 4); toast(`<b>${esc(name)}</b> shared their popcorn with you`, null, null, 5000); } break;
 		case "star": shootingStar(); break;
 		case "yes": if (p) { heartsFx(p.avatar.root, 14); addLog(`<b>${esc(name)}</b> said YES!`, true); } if (audio) audio.sfx("yes"); break;
 		case "smooch": if (p) heartsFx(p.avatar.root, 3, "#ff2d55", heartY(p.anim)); break;
 		case "sys": if (d.text) addLog(esc(String(d.text).slice(0, 120)), true); break;
+		case "zfx": house.onFx(d, p); break;   // something in another room of the house
 	}
 }
 function emote(e) {
@@ -1833,6 +1895,7 @@ function emote(e) {
 		return;
 	}
 	if (e === "goodnight") { goodnightKiss(); return; }
+	if (e === "callpets") { const pt = house.pets(); if (pt) pt.call(); else myAvatar.say("Biscuit? Mochi?"); return; }
 	if (e === "wakeup") { wakeNearest(); return; }
 	if (e === "carry") { carryAct(); return; }
 	// being carried: anything but a sweet little reaction means hopping down first
@@ -2173,7 +2236,7 @@ function loveAura(av, upper, anim, dt) {
 // ---------- carrying someone in your arms (to the bed or the sofa, for a lying-down cuddle)
 // Ask -> they accept -> you carry them (they ride in your arms on every screen) -> press Cuddle
 // (or click the bed / sofa) -> you walk over, lay them down and lie down beside them.
-const CARRY_FURNITURE = { bed: { carried: "bedL", carrier: "bedR" }, sofa: { carried: "sofaLieB", carrier: "sofaLieA" } };
+const CARRY_FURNITURE = { bed: { carried: "bedL", carrier: "bedR" }, sofa: { carried: "sofaLieB", carrier: "sofaLieA" }, bigBed: { carried: "bigBedL", carrier: "bigBedR" } };
 const CARRY_GRACE = 5000;
 function offerCarry(id) {
 	const p = peers.get(id);
@@ -2261,9 +2324,11 @@ function carrySpots(id) {
 function carryToCuddle(furn) {
 	const id = me.carrying, p = id && peers.get(id);
 	if (!p) return;
-	const opts = (furn ? [furn] : Object.keys(CARRY_FURNITURE)).filter(carrySpots);
+	// only a bed / sofa in the room you're in (the bedroom's big bed when you're in the bedroom)
+	const here = house.regionOf(areaOf(me.x, me.z));
+	const opts = (furn ? [furn] : Object.keys(CARRY_FURNITURE)).filter(k => room.interactables[k] && house.regionOf(areaOf(...room.interactables[k].stand)) === here).filter(carrySpots);
 	if (!opts.length) {
-		myAvatar.say(furn ? "No room to lie down there..." : "The bed and the sofa are both taken...");
+		myAvatar.say(furn ? "No room to lie down there..." : here === "main" ? "The bed and the sofa are both taken..." : "Let's find a bed...");
 		return;
 	}
 	const dist = k => { const s = room.interactables[k].stand; return Math.hypot(s[0] - me.x, s[1] - me.z); };
@@ -2414,7 +2479,7 @@ function giveHeld(id) {
 			me.holding = null; me.sips = 0;
 			updateProps(); sendPose(true);
 			send({ t: "fx", kind: what, to: id, s });
-			addLog("You gave " + esc(q.look.name) + (what === "mug" ? " a coffee" : " a flower"), true);
+			addLog("You gave " + esc(q.look.name) + (what === "mug" ? " a coffee" : what === "popcorn" ? " your popcorn" : " a flower"), true);
 		}, 1100);
 	};
 	if (l < 1.0) hand(); else walkTo(p.x + dx / l * 0.7, p.z + dz / l * 0.7, hand);
@@ -2442,12 +2507,12 @@ function stopScope() {
 // ---------- TV mode: watch from your own eyes on the sofa / armchair, no head or name tag in the way
 let tvMode = false;
 const _tvAt = new THREE.Vector3(), _tvEye = new THREE.Vector3();
-function canTVMode() { return me.anim === "sit" && TV_SEATS.includes(me.sit); }
+function canTVMode() { return me.anim === "sit" && (TV_SEATS.includes(me.sit) || !!house.screenFor(me.sit)); }
 function enterTV() {
 	if (!canTVMode() || tvMode) return;
 	tvMode = true;
 	document.body.classList.add("tvmode");
-	addLog("TV mode - <b>F</b> or <b>Esc</b> to leave", true);
+	addLog((house.screenFor(me.sit) ? "Movie view" : "TV mode") + " - <b>F</b> or <b>Esc</b> to leave", true);
 }
 function exitTV() {
 	if (!tvMode) return;
@@ -2498,8 +2563,9 @@ function inviteFor(p) {
 }
 // what's in your hand: a mug while drinking, the brush while painting, else the remote if you hold it
 function updateProps() {
-	const kind = me.upper === "drink" ? "mug" : me.upper === "paint" || me.upper === "write" ? "brush" : me.upper === "propose" ? "ring" : me.upper === "tug" ? null
-		: me.holding === "mug" ? "mug" : me.holding === "flower" ? "flower" : get("remote").by === MY_ID ? "remote" : null;
+	const kind = me.upper === "drink" ? (me.holding === "popcorn" ? "popcorn" : "mug") : me.upper === "paint" || me.upper === "write" ? "brush" : me.upper === "propose" ? "ring" : me.upper === "tug" ? null
+		: me.upper === "eat" ? "fork" : me.upper === "cook" ? "spoon" : me.upper === "wash" ? "sponge"
+		: me.holding === "mug" ? "mug" : me.holding === "flower" ? "flower" : me.holding === "popcorn" ? "popcorn" : get("remote").by === MY_ID ? "remote" : null;
 	myAvatar.setProp(kind);
 }
 
@@ -2593,7 +2659,7 @@ canvas.addEventListener("pointermove", e => {
 		drag.moved = Math.max(drag.moved, Math.abs(dx) + Math.abs(dy));
 		if (drag.moved > 5) {
 			cam.yaw = drag.yaw - dx * 0.006;
-			cam.pitch = Math.max(0.05, Math.min(1.35, drag.pitch + dy * 0.004));
+			cam.pitch = Math.max(-0.6, Math.min(1.35, drag.pitch + dy * 0.004));   // (below zero: looking up)
 		}
 		return;
 	}
@@ -2645,7 +2711,7 @@ function hoverAt(x, y) {
 		if (h.object.userData.note !== undefined) { pointer = true; label = me.upper === "piano" ? null : "Play the piano"; }
 		else {
 			const pid = findPeer(h.object);
-			if (pid) { const p = peers.get(pid); label = p ? (me.carrying === pid ? "Press Cuddle or click the bed / sofa" : me.carriedBy === pid ? null : isAsleep(p) ? "Wake " + p.look.name + " up" : me.holding === "flower" ? "Give " + p.look.name + " your flower" : me.holding === "mug" ? "Give " + p.look.name + " your coffee" : "Wave at " + p.look.name) : null; }
+			if (pid) { const p = peers.get(pid); label = p ? (me.carrying === pid ? "Press Cuddle or click the bed / sofa" : me.carriedBy === pid ? null : isAsleep(p) ? "Wake " + p.look.name + " up" : me.holding === "flower" ? "Give " + p.look.name + " your flower" : me.holding === "mug" ? "Give " + p.look.name + " your coffee" : me.holding === "popcorn" ? "Share your popcorn with " + p.look.name : "Wave at " + p.look.name) : null; }
 			else if (h.object.userData.cupId) label = me.holding === "mug" ? null : "Pick up the coffee";
 			else { const id = findInteract(h.object); if (id) label = labelOf(id); }
 		}
@@ -2661,7 +2727,9 @@ function walkTo(x, z, act) {
 	if (drawOpen) closeDraw();
 	stopScope();
 	if (me.anim === "floor") me.anim = "idle";
-	if (!get("terraceDoor") && areaOf(x, z) !== areaOf(me.x, me.z)) {
+	// going between indoors and outdoors (terrace, pool) with the terrace door shut: open it on the way
+	const outdoors = a => a === "terrace" || a === "pool";
+	if (!get("terraceDoor") && outdoors(areaOf(x, z)) !== outdoors(areaOf(me.x, me.z))) {
 		const st = standOf("terraceDoor");
 		if (Math.hypot(st[0] - me.x, st[1] - me.z) > 0.3) { walkTo(st[0], st[1], () => { setShared("terraceDoor", true); walkTo(x, z, act); }); return; }
 		setShared("terraceDoor", true);
@@ -2675,17 +2743,23 @@ function walkTo(x, z, act) {
 	me.stuck = 0;
 }
 // ---------- grid A* pathfinding over everything you can walk on
-const GRID = { x0: -7.1, z0: -12.1, s: 0.2, w: 72, h: 92 };
-let gridBlocked = null;
-function buildGrid() {
-	gridBlocked = new Uint8Array(GRID.w * GRID.h);
-	for (let j = 0; j < GRID.h; j++) for (let i = 0; i < GRID.w; i++) {
-		const x = GRID.x0 + (i + 0.5) * GRID.s, z = GRID.z0 + (j + 0.5) * GRID.s;
-		gridBlocked[j * GRID.w + i] = blocked(x, z, true) ? 1 : 0;
+// one grid for the living room + terrace, and one per room of the house (built the first time you walk there)
+const grids = {};
+let GRID = null;   // the grid in use for the current search
+function makeGrid(x0, z0, w, h) {
+	const G = { x0, z0, s: 0.2, w, h, blocked: new Uint8Array(w * h) };
+	for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+		const x = x0 + (i + 0.5) * G.s, z = z0 + (j + 0.5) * G.s;
+		G.blocked[j * w + i] = blocked(x, z, true, true) ? 1 : 0;
 	}
+	return G;
 }
+// the whole home is one floor plan (the cinema upstairs doesn't sit over anything), so one grid covers it
+function gridFor() { return grids.home || (grids.home = makeGrid(-7.1, -21.6, 205, 150)); }
+// a room was just built (its furniture is now solid): the grid gets made fresh on the next walk
+function gridDirty() { delete grids.home; }
 function cellOf(x, z) { return [Math.floor((x - GRID.x0) / GRID.s), Math.floor((z - GRID.z0) / GRID.s)]; }
-function cellFree(i, j) { return i >= 0 && j >= 0 && i < GRID.w && j < GRID.h && !gridBlocked[j * GRID.w + i]; }
+function cellFree(i, j) { return i >= 0 && j >= 0 && i < GRID.w && j < GRID.h && !GRID.blocked[j * GRID.w + i]; }
 function nearestFree(i, j) {
 	if (cellFree(i, j)) return [i, j];
 	for (let r = 1; r < 12; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
@@ -2696,12 +2770,13 @@ function nearestFree(i, j) {
 }
 function lineClear(ax, az, bx, bz) {
 	const d = Math.hypot(bx - ax, bz - az), n = Math.ceil(d / 0.08);
-	for (let k = 1; k <= n; k++) { const u = k / n; if (blocked(ax + (bx - ax) * u, az + (bz - az) * u, true)) return false; }
+	for (let k = 1; k <= n; k++) { const u = k / n; if (blocked(ax + (bx - ax) * u, az + (bz - az) * u, true, true)) return false; }
 	return true;
 }
 function findPath(sx, sz, tx, tz) {
-	if (!gridBlocked) buildGrid();
 	if (lineClear(sx, sz, tx, tz)) return [{ x: tx, z: tz }];
+	GRID = gridFor();
+	if (!GRID) return null;
 	const s0 = nearestFree(...cellOf(sx, sz)), t0 = nearestFree(...cellOf(tx, tz));
 	if (!s0 || !t0) return null;
 	const W = GRID.w, N = W * GRID.h;
@@ -2734,7 +2809,7 @@ function findPath(sx, sz, tx, tz) {
 		return top;
 	};
 	let found = false, iter = 0;
-	while (heap.length && iter++ < 20000) {
+	while (heap.length && iter++ < 60000) {
 		const c = pop();
 		if (c === goal) { found = true; break; }
 		if (closed[c]) continue;
@@ -2792,9 +2867,13 @@ function joyMove(e) {
 }
 
 // ============================================================ movement + collision
-function blocked(x, z, ignorePeers) {
+let bumpDoor = null;   // a shut door you just walked into (it opens for you)
+function blocked(x, z, ignorePeers, ignoreDoors) {
 	if (!walkable(x, z, RADIUS)) return true;
-	for (const c of room.colliders) if (x > c.minX - RADIUS && x < c.maxX + RADIUS && z > c.minZ - RADIUS && z < c.maxZ + RADIUS) return true;
+	for (const c of room.colliders) {
+		if (c.door && (ignoreDoors || c.door.isOpen())) continue;
+		if (x > c.minX - RADIUS && x < c.maxX + RADIUS && z > c.minZ - RADIUS && z < c.maxZ + RADIUS) { if (c.door) bumpDoor = c.door; return true; }
+	}
 	if (ignorePeers) return false;
 	// other people are solid too (only blocks moving closer, so you can never get stuck inside someone)
 	for (const p of peers.values()) {
@@ -2814,6 +2893,7 @@ function doorShut(x, z) {
 // where to stand to use something (the terrace door works from either side)
 function standOf(id) {
 	const def = room.interactables[id];
+	if (def.nearest && def.stands) return def.stands.slice().sort((a, b) => Math.hypot(a[0] - me.x, a[1] - me.z) - Math.hypot(b[0] - me.x, b[1] - me.z))[0];
 	return def.standOut && areaOf(me.x, me.z) === "terrace" ? def.standOut : def.stand;
 }
 function angleLerp(a, b, k) { return a + angleDiff(a, b) * k; }
@@ -2830,12 +2910,20 @@ function sendPose(force) {
 // sitting up in bed is its own pose (legs stretched out on the mattress)
 function avatarAnim(anim, sit, carriedBy) {
 	if (carriedBy && avatarOf(carriedBy)) return "carried";
-	if (anim === "sit" && sit && sit.indexOf("bedSit") === 0) return "bedsit";
+	if (anim === "sit" && sit && (sit.indexOf("bedSit") === 0 || (spotById(sit) || {}).bedsit)) return "bedsit";
 	return anim;
 }
 function placeAvatar(av, x, z, h, sitId) {
 	const spot = sitId && room.sitSpots.find(s => s.id === sitId);
-	av.root.position.set(x, spot ? spot.y : 0, z);
+	// standing: on whatever the floor is there (cinema tiers, the bottom of the pool), eased so steps don't jolt
+	let y = spot ? spot.y : floorAt(x, z);
+	if (!spot) {
+		if (av._fy === undefined || Math.abs(av._fy - y) > 2.5) av._fy = y;
+		else av._fy += (y - av._fy) * 0.22;
+		y = av._fy;
+	} else av._fy = y;
+	av.water = spot ? 0 : Math.max(0, -floorAt(x, z));
+	av.root.position.set(x, y, z);
 	if (spot && spot.lie) { av.root.rotation.order = "YXZ"; av.root.rotation.set(-Math.PI / 2, spot.h, 0); }
 	else if (spot && spot.swing) {
 		// ride along with the swing seat
@@ -2901,8 +2989,10 @@ function updateMe(dt) {
 		const ox = me.x, oz = me.z;
 		// if we somehow ended up inside furniture, let us walk straight out of it
 		const trapped = blocked(me.x, me.z, true) && walkable(me.x, me.z, 0.05);
+		bumpDoor = null;
 		if (((trapped && walkable(nx, me.z, 0.05)) || !blocked(nx, me.z)) && !doorShut(nx, me.z)) me.x = nx;
 		if (((trapped && walkable(me.x, nz, 0.05)) || !blocked(me.x, nz)) && !doorShut(me.x, nz)) me.z = nz;
+		if (bumpDoor) { bumpDoor.open(); bumpDoor = null; }
 		me.h = angleLerp(me.h, Math.atan2(mx, mz), Math.min(1, dt * 12));
 		if (me.target) {
 			const moved = Math.hypot(me.x - ox, me.z - oz);
@@ -3093,6 +3183,8 @@ function updatePeers(dt) {
 	const t = now();
 	peers.forEach((p, id) => {
 		if (t - p.last > 25000) { removePeer(id); return; }
+		// people are drawn in the room you're in and the rooms you can see into through open doors
+		p.avatar.root.visible = house.visible(house.regionOf(areaOf(p.x, p.z)));
 		const k = Math.min(1, dt * 10);
 		const ox = p.x, oz = p.z;
 		p.x += (p.tx - p.x) * k; p.z += (p.tz - p.z) * k;
@@ -3155,6 +3247,33 @@ function updateBall(dt) {
 }
 
 // ============================================================ camera
+// where the camera may be for the room at (x, z): inside its walls, above its floor, under its ceiling
+function camBox(x, z) {
+	const a = areaOf(x, z);
+	if (house.built[a]) return house.built[a].cam;
+	if (a === "terrace") return { minX: TERRACE.minX - 2, maxX: TERRACE.maxX + 2, minZ: TERRACE.minZ - 2.5, maxZ: TERRACE.maxZ - 0.15, minY: 0.3, maxY: 6 };
+	return { minX: ROOM.minX + 0.25, maxX: ROOM.maxX - 0.25, minZ: ROOM.minZ + 0.25, maxZ: ROOM.maxZ - 0.25, minY: 0.3, maxY: ROOM.H - 0.2 };
+}
+function camOK(b, x, y, z) { return x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ && y <= b.maxY && y >= Math.max(b.minY === undefined ? -99 : b.minY, floorAt(x, z) + 0.25); }
+// how far out along the line from the target to the wanted camera spot stays inside the room (0..1)
+function camReach(b, tx, ty, tz, px, py, pz) {
+	if (camOK(b, px, py, pz)) return 1;
+	let lo = 0, hi = 1;
+	for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2; if (camOK(b, tx + (px - tx) * m, ty + (py - ty) * m, tz + (pz - tz) * m)) lo = m; else hi = m; }
+	return lo;
+}
+// sitting down with your back to a wall: turn the view round to where there's room to see you
+function roomyYaw(base, pitch, dist) {
+	const b = camBox(me.x, me.z), ty = floorAt(me.x, me.z) + (me.anim === "sleep" ? 0.75 : 1.0);
+	let best = base, bf = -1;
+	for (const off of [0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5, 2.2, -2.2, Math.PI]) {
+		const y = base + off;
+		const f = camReach(b, me.x, ty, me.z, me.x + Math.sin(y) * dist * Math.cos(pitch), ty + Math.sin(pitch) * dist, me.z + Math.cos(y) * dist * Math.cos(pitch));
+		if (f >= 0.9) return y;
+		if (f > bf) { bf = f; best = y; }
+	}
+	return best;
+}
 function updateCamera(dt, t) {
 	if (!entered) {
 		const a = t * 0.12;
@@ -3170,30 +3289,30 @@ function updateCamera(dt, t) {
 	if (spot && spot.lie) { fx = me.x - Math.sin(spot.h) * 0.9; fz = me.z - Math.cos(spot.h) * 0.9; ty = 0.75; }
 	if (me.upper === "piano") { ty = 1.05; fz = me.z + 0.35; }
 	if (drawOpen) { const d = room.interactables.easel; fx = (me.x + d.stand[0] + Math.sin(d.face) * 1.1) / 2; fz = (me.z + d.stand[1] + Math.cos(d.face) * 1.1) / 2; ty = 1.2; }
+	ty += floorAt(me.x, me.z);   // up the cinema tiers, down in the pool
 	cam.tx += (fx - cam.tx) * k; cam.tz += (fz - cam.tz) * k;
 	cam.ty += (ty - cam.ty) * k;
-	const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+	// dragging below level means looking up: the camera stays at its lowest orbit and the view tilts up
+	// (dropping the camera to the floor would put it inside the furniture)
+	const lookUp = Math.max(0, -cam.pitch), pitch = Math.max(cam.pitch, 0.06);
+	const cp = Math.cos(pitch), sp = Math.sin(pitch);
 	let px = cam.tx + Math.sin(cam.yaw) * cam.dist * cp;
 	let pz = cam.tz + Math.cos(cam.yaw) * cam.dist * cp;
 	let py = cam.ty + sp * cam.dist;
-	if (areaOf(cam.tx, cam.tz) === "terrace") {
-		// open air: the camera can roam, but never through the building
-		px = Math.max(TERRACE.minX - 2, Math.min(TERRACE.maxX + 2, px));
-		pz = Math.max(TERRACE.minZ - 2.5, Math.min(TERRACE.maxZ - 0.15, pz));
-		py = Math.max(0.3, Math.min(6, py));
-	} else {
-		px = Math.max(ROOM.minX + 0.25, Math.min(ROOM.maxX - 0.25, px));
-		pz = Math.max(ROOM.minZ + 0.25, Math.min(ROOM.maxZ - 0.25, pz));
-		py = Math.max(0.3, Math.min(ROOM.H - 0.2, py));
-	}
+	// never through a wall, the floor or the ceiling: slide in along the line toward you instead
+	// (so the view keeps its angle - it just comes closer), and ease back out when there's room again
+	const f = camReach(camBox(cam.tx, cam.tz), cam.tx, cam.ty, cam.tz, px, py, pz);
+	cam.pull = cam.pull === undefined || f < cam.pull ? f : cam.pull + (f - cam.pull) * Math.min(1, dt * 3);
+	px = cam.tx + (px - cam.tx) * cam.pull; py = cam.ty + (py - cam.ty) * cam.pull; pz = cam.tz + (pz - cam.tz) * cam.pull;
 	let fov = 55;
 	if (tvMode) {
 		// your own eyes, looking at the screen (your avatar is hidden so nothing's in the way)
 		myAvatar.head.localToWorld(_tvEye.set(0, 0.14, 0.12));
-		room.tv.screen.getWorldPosition(_tvAt);
+		const scr = house.screenFor(me.sit);
+		(scr || room.tv.screen).getWorldPosition(_tvAt);
 		camera.position.copy(_tvEye);
 		camera.lookAt(_tvAt);
-		fov = 48;
+		fov = scr ? 58 : 48;
 	} else if (scopeOn) {
 		// looking through the eyepiece at the moon
 		const tel = room.terrace.telescope;
@@ -3203,7 +3322,7 @@ function updateCamera(dt, t) {
 		fov = 16;
 	} else {
 		camera.position.set(px, py, pz);
-		camera.lookAt(cam.tx, cam.ty, cam.tz);
+		camera.lookAt(cam.tx, cam.ty + Math.tan(lookUp * 1.8) * Math.hypot(px - cam.tx, pz - cam.tz), cam.tz);
 	}
 	if (camera.fov !== fov) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 6); if (Math.abs(camera.fov - fov) < 0.1) camera.fov = fov; camera.updateProjectionMatrix(); }
 }
@@ -3238,15 +3357,17 @@ function updatePrompt() {
 	if (busyNow) { /* nothing */ }
 	else if (!me.sit) {
 		best = nearestUsable();
-		if (best === "bed") {
-			if (freeSpot(room.interactables.bed.sit)) opts.push({ k: "E", label: "Sit on the bed", fn: sitOnBed });
-			if (freeSpot(room.interactables.bed.lie)) opts.push({ k: "F", label: "Lie down and sleep", fn: goToBed });
+		const bed = best && room.interactables[best].lie && room.interactables[best].sit ? room.interactables[best] : null;
+		if (bed) {
+			const bid = best;
+			if (freeSpot(bed.sit)) opts.push({ k: "E", label: "Sit on the bed", fn: () => sitOnBed(bid) });
+			if (freeSpot(bed.lie)) opts.push({ k: "F", label: "Lie down and sleep", fn: () => goToBed(bid) });
 			const z = nearestSleeper();
 			if (z) sleeperOpts(z, opts);
 		} else if (best) opts.push({ k: "E", label: labelOf(best), fn: () => interact(best) });
 	} else if (me.anim === "sit") {
 		if (onBed()) {
-			if (freeSpot(room.interactables.bed.lie)) opts.push({ k: "F", label: "Lie down", fn: goToBed });
+			if (freeSpot(room.interactables[myBedId()].lie)) opts.push({ k: "F", label: "Lie down", fn: () => goToBed() });
 			const nb = seatNeighbor();
 			if (nb && isAsleep(peers.get(nb))) sleeperOpts(nb, opts);
 		}
@@ -3255,8 +3376,13 @@ function updatePrompt() {
 			if (canReach(id)) { best = id; opts.unshift({ k: "E", label: labelOf(id), fn: () => interact(id) }); break; }
 		}
 		if (me.sit === "deskChair" && !loveOpen) opts.unshift({ k: "E", label: "Write a love note", fn: sitAtDesk });
-		if (canTVMode()) opts.push(tvMode ? { k: "F", label: "Leave TV mode", fn: exitTV } : { k: "F", label: "TV mode", fn: enterTV });
+		if (canTVMode()) {
+			const mv = !!house.screenFor(me.sit);
+			opts.push(tvMode ? { k: "F", label: mv ? "Leave movie view" : "Leave TV mode", fn: exitTV } : { k: "F", label: mv ? "Movie view" : "TV mode", fn: enterTV });
+		}
 	}
+	// whatever the room of the house you're in offers right here (feed the pets, cook, popcorn...)
+	if (!busyNow) house.promptOpts(opts);
 	// coffee: pick up a mug someone set down, or sip / hand over / put down the one you hold
 	if (!busyNow && !me.carriedBy && me.anim !== "sleep") {
 		const free = k => !opts.some(o => o.k === k);
@@ -3320,7 +3446,7 @@ const EMOTES = [
 	["wave", "Wave"], ["highfive", "High five"],
 	["dance", "Dance"], ["clap", "Clap"], ["laugh", "Laugh"], ["cry", "Cry"], ["cheer", "Cheer"],
 	["jump", "Jump"], ["bow", "Bow"], ["think", "Think"], ["shrug", "Shrug"], ["facepalm", "Facepalm"],
-	["yawn", "Stretch"], ["floor", "Sit on floor"], ["wakeup", "Wake someone"], ["dice", "Roll a die"]
+	["yawn", "Stretch"], ["floor", "Sit on floor"], ["wakeup", "Wake someone"], ["dice", "Roll a die"], ["callpets", "Call the pets"]
 ];
 const LOVE_EMOTES = [
 	["smooch", "Kiss"], ["cheekkiss", "Cheek kiss"], ["cuddle", "Cuddle"], ["carry", "Pick up"], ["slowdance", "Slow dance"],
@@ -3358,6 +3484,7 @@ const EI = {
 	wink: '<circle cx="12" cy="12" r="9"/><path d="M7.5 10h3M15.5 9.5v1M8 14.5c2.2 2.2 5.8 2.2 8 0"/>',
 	goodnight: '<path d="M14 3a7 7 0 1 0 7 9 5.5 5.5 0 0 1-7-9z"/><path d="M6.5 17.5c-.8-1-2.4-.5-2.2.8.1.8 1.2 1.4 2.2 2.1 1-.7 2.1-1.3 2.2-2.1.2-1.3-1.4-1.8-2.2-.8z"/>',
 	wakeup: '<circle cx="12" cy="13" r="7"/><path d="M12 9.5V13l2.5 1.5M5 4L2.5 6.5M19 4l2.5 2.5"/>',
+	callpets: '<ellipse cx="12" cy="15" rx="4.5" ry="3.8"/><ellipse cx="6.5" cy="9.5" rx="1.8" ry="2.3"/><ellipse cx="10" cy="6.5" rx="1.8" ry="2.3"/><ellipse cx="14" cy="6.5" rx="1.8" ry="2.3"/><ellipse cx="17.5" cy="9.5" rx="1.8" ry="2.3"/>',
 	dice: '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="12" cy="12" r="1.2"/>'
 };
 function emoteIcon(id) { return `<svg viewBox="0 0 24 24" fill="none" stroke="#ffd9b0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${EI[id] || ""}</svg>`; }
@@ -3368,7 +3495,7 @@ const WHEEL_SUB = {
 	cuddle: "Sit next to someone, or pick them up and carry them to the bed or sofa", hug: "Walks you over to the nearest person",
 	carry: "Asks the nearest person if you can carry them - then lie down together on the bed or sofa",
 	goodnight: "Sit by someone asleep in bed and kiss them - they stay asleep", wakeup: "Sit on the bed and gently shake them awake",
-	floor: "Sit right down where you stand", dice: "Everyone sees the roll", highfive: "Walks you over to the nearest person"
+	floor: "Sit right down where you stand", dice: "Everyone sees the roll", callpets: "Biscuit and Mochi come running, wherever you are in the house", highfive: "Walks you over to the nearest person"
 };
 let wheelKind = null, wheelSel = -1, wheelItems = [];
 function wheelList(kind) {
@@ -3531,6 +3658,11 @@ $("#enter").onclick = async () => {
 	startNetwork();
 	loadWorld();
 	addLog("Welcome to your little world, " + esc(profile.name) + ". Click anything to use it.", true);
+	// once per browser: point out the door to the rest of the house
+	if (!lsGet("harmonyWorldHouseTip", false)) {
+		lsSet("harmonyWorldHouseTip", true);
+		setTimeout(() => toast("New: the glass doors by the arcade open into the lounge (kitchen, cinema upstairs, bedroom, bathroom), and the pool is out past the terrace. The pets roam everywhere.", "Take me there", () => walkTo(8.6, 3.75, null), 14000), 2500);
+	}
 	pendingLetters.splice(0).forEach(v => onLetter("letter:" + v.id, v, false));
 	setTimeout(() => $("#help").classList.add("gone"), 45000);
 };
@@ -3560,7 +3692,14 @@ function watchPerf(raw) {
 		if (++perf.good >= 3) { perf.good = 0; gfx.scale = Math.min(1, gfx.scale + 0.1); applyGfx(); perf.cool = 1; }
 	} else perf.good = 0;
 }
+// one bad frame must never freeze the world: log it (once per message) and keep going
+const frameErrs = new Set();
 function frame() {
+	try { frameBody(); }
+	catch (e) { const m = String(e && e.message); if (!frameErrs.has(m)) { frameErrs.add(m); console.error("[world] frame error:", e); } }
+	requestAnimationFrame(frame);
+}
+function frameBody() {
 	const raw = clock.getDelta();
 	const dt = Math.min(0.05, raw);
 	watchPerf(raw);
@@ -3575,12 +3714,15 @@ function frame() {
 	if (tvMode && !canTVMode()) exitTV();
 	myAvatar.root.visible = !scopeOn && !tvMode;
 	myAvatar.update(dt);
+	// the rest of the house: which room you're in, its lights, its moving parts
+	house.update(dt, t, me.x, me.z);
 	// only light the area you're in (fewer lights = much cheaper shading)
 	const inTerrace = areaOf(cam.tx, cam.tz) === "terrace" || (entered && areaOf(me.x, me.z) === "terrace");
-	if (inTerrace !== lastArea) {
-		lastArea = inTerrace;
-		room.areaLights.room.concat(room.minorLights.room).forEach(l => { l.visible = !inTerrace; });
-		room.areaLights.terrace.concat(room.minorLights.terrace).forEach(l => { l.visible = inTerrace; });
+	const lightArea = house.inHouse() ? "house" : inTerrace ? "terrace" : "room";
+	if (lightArea !== lastArea) {
+		lastArea = lightArea;
+		room.areaLights.room.concat(room.minorLights.room).forEach(l => { l.visible = lightArea === "room"; });
+		room.areaLights.terrace.concat(room.minorLights.terrace).forEach(l => { l.visible = lightArea === "terrace"; });
 		// build every shader up front (terrace objects included) instead of stalling the first time they come into view
 		if (!precompiled) { precompiled = true; renderer.compile(scene, camera); }
 	}
@@ -3599,15 +3741,20 @@ function frame() {
 	if (tvAcc > 1 / G.tvFps) { tvAcc = 0; drawTVFrame(t); }
 	if (arcAcc > 1 / G.arcFps) { arcAcc = 0; Games.drawArcade(room.arcade.canvas, get("game"), rpsLists(), t); room.arcade.tex.needsUpdate = true; }
 	if (marker.material.opacity > 0) { marker.material.opacity = Math.max(0, marker.material.opacity - dt * 1.5); marker.scale.multiplyScalar(1 + dt); }
+	const away = house.inHouse();
 	if (audio && get("music").on) {
-		const d = Math.hypot(me.x - 6.4, me.z + 0.9);
-		audio.setMusicVolume(muted ? 0 : Math.max(0.18, Math.min(1, 1.3 - d / 9)) * 0.9 * (yt ? 0.35 : 1));
+		// the record player is in the living room; elsewhere in the house only the lounge's jukebox plays it
+		let vol;
+		if (away) vol = house.musicAt(me.x, me.z);
+		else { const d = Math.hypot(me.x - 6.4, me.z + 0.9); vol = Math.max(0.18, Math.min(1, 1.3 - d / 9)) * (yt ? 0.35 : 1); }
+		audio.setMusicVolume(muted ? 0 : vol * 0.9);
 	}
-	// the TV's video gets louder the closer you are
+	// the TV's video gets louder the closer you are (and isn't heard in the other rooms)
+	if (yt) yt.obj.visible = house.visible("main");
 	if (yt && ytAcc > 0.5) {
 		ytAcc = 0;
 		const d = Math.hypot(me.x + 2.6, me.z + 5.6);
-		ytCmd("setVolume", [muted ? 0 : Math.round(Math.max(15, Math.min(100, 115 - d * 9)))]);
+		ytCmd("setVolume", [muted || !house.visible("main") ? 0 : Math.round(Math.max(away ? 5 : 15, Math.min(100, 115 - d * 9)))]);
 	}
 	const conn = !!(sync && sync.isConnected());
 	if (conn !== wasConnected) {
@@ -3618,12 +3765,12 @@ function frame() {
 	}
 	if (G.shadows && frameNo++ % G.every === 0) renderer.shadowMap.needsUpdate = true;
 	renderer.render(scene, camera);
-	if (yt) cssRenderer.render(cssScene, camera);
-	requestAnimationFrame(frame);
+	if (yt || house.cssActive()) cssRenderer.render(cssScene, camera);
 }
 
 // ============================================================ boot
-(window.requestIdleCallback || (fn => setTimeout(fn, 1500)))(() => { if (!gridBlocked) buildGrid(); });
+(window.requestIdleCallback || (fn => setTimeout(fn, 1500)))(() => gridFor());
+house.start();   // build the rest of the house in the background
 applyGfx();
 $("#rname").textContent = ROOM_NAME === "lobby" ? "Lobby World" : ROOM_NAME;
 redrawEasel();
@@ -3639,4 +3786,4 @@ checkAuth().then(ok => {
 });
 setInterval(applyPlant, 5 * 60 * 1000);
 // handle for debugging from the console
-window.HarmonyWorld = { _net: d => onNet(d), MY_ID, room, doUpper, me, peers, interact, get, setShared, emote, loveAct, walkTo, cam, standUp, sitOn, goToBed, sitUpInBed, goodnightKiss, openWheel, closeWheel, playKey, tugTap, wakePeer, toggleNight, drinkCoffee, takeCoffee, putDownMug, enterTV, exitTV, setMood, giveFlower: giveHeld, pickFlower, myAvatar, findPath, blocked, renderer, scene, camera };
+window.HarmonyWorld = { _net: d => onNet(d), MY_ID, room, house, floorAt, areaOf, doUpper, me, peers, interact, get, setShared, emote, loveAct, walkTo, cam, standUp, sitOn, goToBed, sitUpInBed, goodnightKiss, openWheel, closeWheel, playKey, tugTap, wakePeer, toggleNight, drinkCoffee, takeCoffee, putDownMug, enterTV, exitTV, setMood, giveFlower: giveHeld, pickFlower, myAvatar, findPath, blocked, renderer, scene, camera };

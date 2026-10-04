@@ -52,7 +52,9 @@ export function buildTerrace(scene, h) {
 	};
 	railRun(-6.95, -11.95, 5.45, -11.95);
 	railRun(-6.95, -6.25, -6.95, -11.95);
-	railRun(5.45, -6.25, 5.45, -11.95);
+	// (a gap in the east railing leads out to the pool deck)
+	railRun(5.45, -6.25, 5.45, -8.3);
+	railRun(5.45, -10.3, 5.45, -11.95);
 
 	// ---------- string lights overhead
 	const bulbs = [];
