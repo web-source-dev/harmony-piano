@@ -12,12 +12,14 @@
  *   cherry trees in blossom, little lanterns along the paths, and fireflies;
  *   in the west wing: a rose arch at the top of the steps from the terrace, a fountain (toss a coin, make a wish)
  *   with benches round it;
- *   in the east, under the hot tub: the Box of Shame (its own room: worldShame.js), with a red carpet up to its door.
+ *   in the east, under the hot tub: the Box of Shame (its own room: worldShame.js), with a red carpet up to its door;
+ *   in the south railing, past the gazebo: the gate out to the Fun Park (worldPark.js).
  */
 const HW0 = -21.3, HW1 = 19.3, HD0 = -6.0, HD1 = 6.0;
 const WING = { x1: -8.85, z1: 12.0 };              // the west wing reaches up to the terrace
 const TGAP = { x0: -19.8, x1: -18.3 };              // the terrace's railing gap (TGAP in worldRoom.js, in local x)
 const GAP = { x0: -3.7, x1: -2.3 };
+const PGATE = { x0: 4.8, x1: 6.6 };               // the gate in the south railing, out to the Fun Park (worldPark.js)
 const BOX = { x0: 10.6, x1: 18.0, z0: -3.5, z1: 2.5, door: -0.5 };   // the Box of Shame's footprint (worldShame.js)
 const FTN = { x: -15.0, z: 3.0, r: 1.35 };         // the fountain
 const GZ = { x: 3.0, z: -2.0, r: 1.9 };          // the gazebo
@@ -31,6 +33,7 @@ export function build(k) {
 	k.walk(HW0 + 0.15, WING.x1, HD1 - 1.2, WING.z1 + 0.05);   // the west wing (its east side is the pool deck's railing)
 	k.walk(GAP.x0, GAP.x1, HD1 - 1.2, HD1 + 0.6);   // through the gap from the pool deck
 	k.walk(TGAP.x0, TGAP.x1, WING.z1 - 0.6, WING.z1 + 0.8);   // up to the terrace
+	k.walk(PGATE.x0, PGATE.x1, HD0 - 0.9, HD0 + 1.2);   // out through the gate to the Fun Park
 	k.cam = { minX: HW0 - 1.5, maxX: HW1 + 1.5, minZ: HD0 - 1.5, maxZ: WING.z1, maxY: 8, minY: 0.2 };
 
 	// ---------------------------------------------------------------- the lawn and the path
@@ -95,10 +98,22 @@ export function build(k) {
 		const n = Math.max(1, Math.round(len / 1.25));
 		for (let i = 0; i <= n; i++) add(rg, new THREE.BoxGeometry(0.06, 1.05, 0.06), postM, 0, 0.525, -len / 2 + (len * i) / n);
 	};
-	railRun(HW0 + 0.05, HD0 + 0.05, HW1 - 0.05, HD0 + 0.05);
+	// (the south side has the gate out to the Fun Park in it)
+	railRun(HW0 + 0.05, HD0 + 0.05, PGATE.x0, HD0 + 0.05);
+	railRun(PGATE.x1, HD0 + 0.05, HW1 - 0.05, HD0 + 0.05);
 	railRun(HW0 + 0.05, HD0 + 0.05, HW0 + 0.05, WING.z1 - 0.05);
 	railRun(HW1 - 0.05, HD0 + 0.05, HW1 - 0.05, HD1 - 0.05);
-	k.box(HW0, HW1, HD0, HD0 + 0.15);
+	k.box(HW0, PGATE.x0, HD0, HD0 + 0.15);
+	k.box(PGATE.x1, HW1, HD0, HD0 + 0.15);
+	// a signpost by the gate
+	{
+		const sg = group(g, PGATE.x0 - 0.35, 0, HD0 + 0.35);
+		add(sg, new THREE.CylinderGeometry(0.03, 0.03, 1.2, 8), mat("#5b4636", 0.7), 0, 0.6, 0);
+		add(sg, rbox(0.82, 0.24, 0.04, 0.02), mat("#c2366b", 0.6), 0, 1.22, 0);
+		add(sg, new THREE.PlaneGeometry(0.76, 0.18), new THREE.MeshBasicMaterial({ map: k.tex.text("Garden", { w: 512, h: 128, color: "#fff4d6", font: "800 80px 'Caveat', 'Nunito', cursive" }), transparent: true, depthWrite: false }), 0, 1.22, 0.025, { ry: Math.PI, cast: false, receive: false });
+		add(sg, new THREE.PlaneGeometry(0.76, 0.18), new THREE.MeshBasicMaterial({ map: k.tex.text("Fun Park", { w: 512, h: 128, color: "#fff4d6", font: "800 80px 'Caveat', 'Nunito', cursive" }), transparent: true, depthWrite: false }), 0, 1.22, -0.025, { cast: false, receive: false });
+		k.box(PGATE.x0 - 0.42, PGATE.x0 - 0.28, HD0 + 0.28, HD0 + 0.42);
+	}
 	k.box(HW0, HW0 + 0.15, HD0, WING.z1);
 	k.box(HW1 - 0.15, HW1, HD0, HD1);
 

@@ -1395,7 +1395,7 @@ export function buildRoom(scene) {
 	setSwitch(true);
 
 	return {
-		colliders, interactables, sitSpots, updaters,
+		colliders, interactables, sitSpots, updaters, sky,
 		curtains, setLamp, setMain: on => { setMain(on); setSwitch(on); }, lampState, mainState,
 		tv: { canvas: tvCanvas, tex: tvTex, light: tvLight, screen: tvScreen, draw: drawTV, off: drawTVOff, channels: TV_CHANNELS },
 		arcade: { canvas: arcCanvas, tex: arcTex },

@@ -782,6 +782,7 @@ function sitOn(ids) {
 	// (lying down: the body runs toward spot.h, so watch from the foot of the bed)
 	cam.yaw = spot.lie || spot.bedsit || spot.recline ? spot.h : spot.h + Math.PI; cam.pitch = spot.lie ? 0.75 : spot.bedsit || spot.recline ? 0.5 : 0.42; cam.dist = spot.lie ? 3.0 : 2.6;
 	cam.yaw = roomyYaw(cam.yaw, cam.pitch, cam.dist);
+	if (spot.ride) { rideView = spot.pov ? "pov" : "chase"; cam.dist = 4.6; cam.pitch = 0.3; rideLook.yaw = 0; rideLook.pitch = 0; rideLook.fov = 72; }
 	sendPose(true);
 	const nb = spot.id !== "bench" && seatNeighbor();
 	if (!nb && TV_SEATS.includes(spot.id) && get("tv").on) toast("Watch through your own eyes, with nothing in the way", "TV mode", enterTV, 7000);
@@ -2893,6 +2894,15 @@ function stopScope() {
 	$("#scope").classList.add("hidden");
 	if (me.upper === "telescope") { me.upper = null; me.upperUntil = 0; sendPose(true); }
 }
+// ---------- on a ride in the Fun Park (worldPark.js): through your own eyes (coaster, drop tower) or from behind
+let rideView = "pov";
+const _rideUp = new THREE.Vector3(), _rideTurn = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+// (through your own eyes you can still look all round: drag, or the arrow keys / WASD / the joystick; C looks ahead
+// again, the mouse wheel zooms)
+const rideLook = { yaw: 0, pitch: 0, fov: 72 };
+function rideSpot() { const s = me.sit && spotById(me.sit); return s && s.ride ? s : null; }
+const ridePOV = () => rideView === "pov" && !!rideSpot();
+const wrapAngle = a => Math.atan2(Math.sin(a), Math.cos(a));
 // ---------- TV mode: watch from your own eyes on the sofa / armchair, no head or name tag in the way
 let tvMode = false;
 const _tvAt = new THREE.Vector3(), _tvEye = new THREE.Vector3();
@@ -3022,6 +3032,7 @@ addEventListener("keydown", e => {
 	if (k === "e" || k === " ") { e.preventDefault(); const o = promptOpts.find(x => x.k === "E"); if (o) o.fn(); return; }
 	if (k === "1") emote("kiss"); else if (k === "2") emote("smooch"); else if (k === "3") emote("carry");
 	else if (k === "p") { callPetsNow(); return; }
+	else if (k === "c" && rideSpot()) { rideLook.yaw = 0; rideLook.pitch = 0; rideLook.fov = 72; cam.yaw = me.h + Math.PI; cam.pitch = 0.3; return; }
 	else if (k === "f" || k === "g" || k === "r") { const o = promptOpts.find(x => x.k === k.toUpperCase()); if (o) { e.preventDefault(); o.fn(); return; } }
 	keys.add(k);
 	if (k.startsWith("arrow")) e.preventDefault();
@@ -3066,14 +3077,17 @@ function findPeer(o) { while (o) { if (o.userData && o.userData.peerId) return o
 canvas.addEventListener("pointerdown", e => {
 	if (!entered) return;
 	canvas.focus();
-	drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, yaw: cam.yaw, pitch: cam.pitch };
+	drag = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: 0, yaw: cam.yaw, pitch: cam.pitch, ly: rideLook.yaw, lp: rideLook.pitch };
 	canvas.setPointerCapture(e.pointerId);
 });
 canvas.addEventListener("pointermove", e => {
 	if (drag && drag.id === e.pointerId) {
 		const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
 		drag.moved = Math.max(drag.moved, Math.abs(dx) + Math.abs(dy));
-		if (drag.moved > 5) {
+		if (drag.moved > 5 && ridePOV()) {
+			rideLook.yaw = wrapAngle(drag.ly - dx * 0.006);
+			rideLook.pitch = Math.max(-1.35, Math.min(1.35, drag.lp + dy * 0.004));
+		} else if (drag.moved > 5) {
 			cam.yaw = drag.yaw - dx * 0.006;
 			cam.pitch = Math.max(-0.6, Math.min(1.35, drag.pitch + dy * 0.004));   // (below zero: looking up)
 		}
@@ -3126,7 +3140,7 @@ function planXZ(h) {
 	}
 	return [h.point.x, h.point.z];
 }
-canvas.addEventListener("wheel", e => { e.preventDefault(); if (tvMode) return; cam.dist = Math.max(1.2, Math.min(7.5, cam.dist * (1 + Math.sign(e.deltaY) * 0.1))); }, { passive: false });
+canvas.addEventListener("wheel", e => { e.preventDefault(); if (tvMode) return; if (ridePOV()) { rideLook.fov = Math.max(35, Math.min(100, rideLook.fov * (1 + Math.sign(e.deltaY) * 0.08))); return; } cam.dist = Math.max(1.2, Math.min(7.5, cam.dist * (1 + Math.sign(e.deltaY) * 0.1))); }, { passive: false });
 function findInteract(o) { while (o) { if (o.userData && o.userData.interact) return o.userData.interact; o = o.parent; } return null; }
 let hoverT = 0;
 function hoverAt(x, y) {
@@ -3193,8 +3207,8 @@ function makeGrid(x0, z0, w, h) {
 // (upstairs is its own floor plan, 30 m south: see ZONES.loft)
 function gridFor(x, z) {
 	if (shiftAt(x, z)) return grids.up || (grids.up = makeGrid(16.0, 23.85, 37, 72));
-	// (from the cinema in the west to the bedroom in the east, the garden in the south to the lounge in the north)
-	return grids.home || (grids.home = makeGrid(-23.0, -30.6, 285, 276));
+	// (from the cinema in the west to the bedroom in the east, the Fun Park in the south to the lounge in the north)
+	return grids.home || (grids.home = makeGrid(-23.0, -66.6, 285, 456));
 }
 // a room was just built (its furniture is now solid): the grid gets made fresh on the next walk
 function gridDirty() { delete grids.home; delete grids.up; }
@@ -3379,8 +3393,10 @@ function placeAvatar(av, x, z, h, sitId) {
 	av.water = spot ? 0 : waterAt(x, z);
 	const vp = visXZ(x, z);
 	av.root.position.set(vp[0], y, vp[1]);
+	// on a ride in the Fun Park (worldPark.js): the seat moves, and carries you along with it
+	if (spot && spot.ride) spot.ride(av.root.position, av.root.quaternion);
 	// (face down on a massage table: spot.prone; the body still runs the same way, feet at the spot, head away from h)
-	if (spot && spot.lie) { av.root.rotation.order = "YXZ"; if (spot.prone) av.root.rotation.set(Math.PI / 2, spot.h + Math.PI, 0); else av.root.rotation.set(-Math.PI / 2, spot.h, 0); }
+	else if (spot && spot.lie) { av.root.rotation.order = "YXZ"; if (spot.prone) av.root.rotation.set(Math.PI / 2, spot.h + Math.PI, 0); else av.root.rotation.set(-Math.PI / 2, spot.h, 0); }
 	else if (spot && spot.swing) {
 		// ride along with the swing seat (the terrace's, or the one by the hot tub: spot.swingRef)
 		const sw = spot.swingRef || room.terrace.swing, a = sw.angle;
@@ -3423,6 +3439,12 @@ function updateMe(dt) {
 	}
 	if (joy.id !== null) { ix += joy.dx; iz -= joy.dy; }
 	if (me.upper === "tug") { ix = 0; iz = 0; }
+	// on a ride the keys / joystick look around instead of getting you off (Esc gets off)
+	if (rideSpot()) {
+		if (ridePOV()) { rideLook.yaw = wrapAngle(rideLook.yaw - ix * dt * 2.2); rideLook.pitch = Math.max(-1.35, Math.min(1.35, rideLook.pitch - iz * dt * 1.6)); }
+		else { cam.yaw -= ix * dt * 2.2; cam.pitch = Math.max(-0.6, Math.min(1.35, cam.pitch - iz * dt * 1.2)); }
+		ix = 0; iz = 0;
+	}
 	// being carried: walking means hopping down, otherwise ride along in their arms
 	if (me.carriedBy && Math.abs(ix) + Math.abs(iz) > 0.08) hopDown();
 	carryTick(dt);
@@ -3795,13 +3817,16 @@ function updateCamera(dt, t) {
 		camera.lookAt(me.x - Math.cos(a) * side, 1.05, me.z + Math.sin(a) * side);
 		return;
 	}
-	const k = 1 - Math.pow(0.001, dt);
-	let fx = me.x, fz = me.z, ty = me.sit ? 1.0 : 1.35;
 	const spot = me.sit && room.sitSpots.find(s => s.id === me.sit);
+	// on a ride the camera stays locked on you (a lagging camera falls metres behind a roller coaster)
+	const ride = !!(spot && spot.ride);
+	const k = ride ? 1 : 1 - Math.pow(0.001, dt);
+	let fx = me.x, fz = me.z, ty = me.sit ? 1.0 : 1.35;
 	if (spot && spot.lie) { fx = me.x - Math.sin(spot.h) * 0.9; fz = me.z - Math.cos(spot.h) * 0.9; ty = 0.75; }
 	if (me.upper === "piano") { ty = 1.05; fz = me.z + 0.35; }
 	if (drawOpen) { const d = room.interactables.easel; fx = (me.x + d.stand[0] + Math.sin(d.face) * 1.1) / 2; fz = (me.z + d.stand[1] + Math.cos(d.face) * 1.1) / 2; ty = 1.2; }
-	ty += floorAt(me.x, me.z);   // up the cinema tiers, down in the pool
+	if (ride) { const rp = myAvatar.root.position; fx = rp.x; fz = rp.z; ty = rp.y + 1.0; }
+	else ty += floorAt(me.x, me.z);   // up the cinema tiers, down in the pool
 	cam.tx += (fx - cam.tx) * k; cam.tz += (fz - cam.tz) * k;
 	cam.ty += (ty - cam.ty) * k;
 	// dragging below level means looking up: the camera stays at its lowest orbit and the view tilts up
@@ -3813,7 +3838,8 @@ function updateCamera(dt, t) {
 	let py = cam.ty + sp * cam.dist;
 	// never through a wall, the floor or the ceiling: slide in along the line toward you instead
 	// (so the view keeps its angle - it just comes closer), and ease back out when there's room again
-	const f = camReach(camBox(cam.tx, cam.tz), cam.tx, cam.ty, cam.tz, px, py, pz);
+	// (up on a ride you're out in the open air: nothing to bump into)
+	const f = ride ? 1 : camReach(camBox(cam.tx, cam.tz), cam.tx, cam.ty, cam.tz, px, py, pz);
 	cam.pull = cam.pull === undefined || f < cam.pull ? f : cam.pull + (f - cam.pull) * Math.min(1, dt * 3);
 	px = cam.tx + (px - cam.tx) * cam.pull; py = cam.ty + (py - cam.ty) * cam.pull; pz = cam.tz + (pz - cam.tz) * cam.pull;
 	let fov = 55;
@@ -3845,12 +3871,31 @@ function updateCamera(dt, t) {
 		tel.eyepiece.getWorldPosition(camera.position).addScaledVector(tel.dir, 3.4);
 		camera.lookAt(MOON_POINT);
 		fov = 16;
+	} else if (ride && rideView === "pov") {
+		// through your own eyes, tilting with the seat (loops, drops, banked turns); the avatar is hidden meanwhile
+		const q = myAvatar.root.quaternion;
+		_rideUp.set(0, 1, 0).applyQuaternion(q);
+		camera.position.copy(myAvatar.root.position).addScaledVector(_rideUp, 1.22);
+		_tvEye.set(0, 0, 1).applyQuaternion(q);
+		camera.position.addScaledVector(_tvEye, 0.12);
+		camera.quaternion.copy(q).multiply(_rideTurn);
+		// turn your head (round the seat's up) then look up / down
+		camera.rotateY(rideLook.yaw);
+		camera.rotateX(-0.12 - rideLook.pitch);
+		fov = rideLook.fov;
 	} else {
 		const sh = shiftAt(cam.tx, cam.tz) || [0, 0];
 		camera.position.set(px - sh[0], py, pz - sh[1]);
 		camera.lookAt(cam.tx - sh[0], cam.ty + Math.tan(lookUp * 1.8) * Math.hypot(px - cam.tx, pz - cam.tz), cam.tz - sh[1]);
 	}
 	if (camera.fov !== fov) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 6); if (Math.abs(camera.fov - fov) < 0.1) camera.fov = fov; camera.updateProjectionMatrix(); }
+	// outdoors you can see a long way (the Fun Park, the roller coaster all round the house); indoors 60 m is plenty
+	const far = house.indoorsAway() ? 60 : 260;
+	if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
+	// the sky dome is centred on the living room; far out from it (the park, up on the coaster) it comes along with
+	// the camera, so you never fly out through the sky (close in it stays put: the telescope aims at its painted moon)
+	const cpos = camera.position, off = Math.hypot(cpos.x, cpos.z + 3), sf = Math.min(1, Math.max(0, (off - 20) / 20));
+	room.sky.position.set(cpos.x * sf, 0, -3 + (cpos.z + 3) * sf);
 }
 
 // ============================================================ HUD prompt
@@ -3907,6 +3952,7 @@ function updatePrompt() {
 			opts.push(tvMode ? { k: "F", label: mv ? "Leave movie view" : "Leave TV mode", fn: exitTV } : { k: "F", label: mv ? "Movie view" : "TV mode", fn: enterTV });
 			opts.push(fullVid ? { k: "G", label: "Leave full screen", fn: exitFull } : { k: "G", label: "Full screen", fn: enterFull });
 		}
+		if (rideSpot()) opts.push({ k: "F", label: rideView === "pov" ? "Watch from behind" : "Ride view (your own eyes)", fn: () => { rideView = rideView === "pov" ? "chase" : "pov"; } });
 	}
 	// whatever the room of the house you're in offers right here (feed the pets, cook, popcorn...)
 	if (!busyNow) house.promptOpts(opts);
@@ -4251,13 +4297,13 @@ function frameBody() {
 	}
 	if (entered) assignIK(myAvatar, me.upper, me.sit, me.partner, _ik);
 	if (tvMode && !canTVMode()) exitTV();
-	myAvatar.root.visible = !scopeOn && !tvMode;
+	myAvatar.root.visible = !scopeOn && !tvMode && !ridePOV();
 	myAvatar.update(dt);
 	// the rest of the house: which room you're in, its lights, its moving parts
 	house.update(dt, t, me.x, me.z);
 	// only light the area you're in (fewer lights = much cheaper shading)
 	const inTerrace = areaOf(cam.tx, cam.tz) === "terrace" || (entered && areaOf(me.x, me.z) === "terrace");
-	const lightArea = house.indoorsAway() ? "house" : inTerrace || house.region() === "pool" || house.region() === "garden" ? "terrace" : "room";
+	const lightArea = house.indoorsAway() ? "house" : inTerrace || (house.current() && house.current().outdoor) ? "terrace" : "room";
 	if (lightArea !== lastArea) {
 		lastArea = lightArea;
 		room.areaLights.room.concat(room.minorLights.room).forEach(l => { l.visible = lightArea === "room"; });

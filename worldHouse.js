@@ -8,6 +8,7 @@
  * and the bathroom. Out through the gap in the terrace railing: the pool, under
  * the sky, and past the pool deck (or straight out from the terrace) the garden, with the Box of Shame in it.
  * Behind the lounge, a short hallway to the game room and the spa. Biscuit and Mochi wander the whole house (worldPets.js).
+ * South of the garden, the Fun Park (worldPark.js): rides, and a roller coaster that runs right round the house.
  *
  * Each room is its own module and its own group. They're all built in the
  * background shortly after you arrive (a tenth of a second each), but a room is
@@ -44,13 +45,16 @@ export const ZONES = {
 	bath:    { name: "Bathroom", ox: 27.4,   oy: 0,    oz: 4.7,   bounds: [23.25, 31.6, 0.95, 8.4],    see: ["lounge", "loft"], file: "./worldBath.js" },
 	// (the deck reaches right up to the lounge's back wall: with a gap between the two areas, the doorway between
 	// the lounge and the pool deck had a strip that belonged to no room, and nobody could walk through it)
-	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.05],  see: ["main", "lounge", "bedroom", "loft", "garden", "shame"], outdoor: true, file: "./worldPool.js" },
+	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.05],  see: ["main", "lounge", "bedroom", "loft", "garden", "shame", "park"], outdoor: true, file: "./worldPool.js" },
 	// in the garden, south of the hot tub: the Box of Shame (a cardboard box you can go into: a bed of roses, the Cute Corner)
 	// (before the garden: it sits inside the garden's area, and the first area that holds a point wins)
 	shame:   { name: "Box of Shame", ox: 28.6, oy: 0,   oz: -24.6, bounds: [24.9, 32.3, -27.6, -21.6], see: ["garden"], file: "./worldShame.js" },   // (inside, only the garden shows through the door: keeps it light)
 	// past the pool deck, through the gap in its south railing (or the gap in the terrace's south railing): a rooftop
 	// garden (outdoors too). It wraps round the pool deck: from in front of the terrace in the west to under the hot tub in the east
-	garden:  { name: "Garden",   ox: 14.3,   oy: 0,    oz: -24.1, bounds: [-7.6, 33.6, -30.1, -12.1], see: ["pool", "main", "shame"], outdoor: true, file: "./worldGarden.js" },
+	garden:  { name: "Garden",   ox: 14.3,   oy: 0,    oz: -24.1, bounds: [-7.6, 33.6, -30.1, -12.1], see: ["pool", "main", "shame", "park"], outdoor: true, file: "./worldGarden.js" },
+	// south of the garden, through the gate in its south railing: the Fun Park (a carousel, a Ferris wheel, a drop tower,
+	// a swing ride, and the station of a roller coaster that runs all the way round the house)
+	park:    { name: "Fun Park", ox: 13.0,   oy: 0,    oz: -48.0, bounds: [-7.6, 33.6, -66.0, -30.1], see: ["garden", "pool", "main", "shame"], outdoor: true, file: "./worldPark.js" },
 	// the wing behind the lounge (through the door by the dining table): a short hallway, with the game room off
 	// its west side and the spa off its east side
 	hall:    { name: "Hallway",  ox: 13.35,  oy: 0,    oz: 10.35, bounds: [12.05, 14.65, 8.05, 12.55], see: ["lounge", "games", "spa"], file: "./worldHall.js" },
@@ -58,8 +62,8 @@ export const ZONES = {
 	spa:     { name: "Spa",      ox: 18.75,  oy: 0,    oz: 11.15, bounds: [14.65, 22.95, 8.15, 14.05], see: ["hall", "games"], file: "./worldSpa.js" }
 };
 // what you can see from the living room / terrace
-const MAIN_SEES = ["lounge", "pool", "cinema", "loft", "garden", "shame"];
-const BUILD_ORDER = ["lounge", "loft", "pool", "garden", "shame", "bedroom", "bath", "cinema", "disco", "hall", "games", "spa"];
+const MAIN_SEES = ["lounge", "pool", "cinema", "loft", "garden", "shame", "park"];
+const BUILD_ORDER = ["lounge", "loft", "pool", "garden", "shame", "park", "bedroom", "bath", "cinema", "disco", "hall", "games", "spa"];
 
 export function createHouse(ctx) {
 	const { scene, room, renderer, camera } = ctx;
@@ -130,8 +134,11 @@ export function createHouse(ctx) {
 	}
 	// which rooms get drawn: the one you're in and the ones you can see into
 	// (while the camera is up under the loft from the lounge, the loft and the disco are cut away)
+	// (up on a ride - the coaster round the house, the top of the Ferris wheel - you can see everything: wide)
+	let wide = false;
 	function applyVisibility() {
 		visibleSet = new Set([region].concat(region === "main" ? MAIN_SEES : ZONES[region].see));
+		if (wide) { visibleSet.add("main"); for (const id in built) visibleSet.add(id); }
 		if (cut.low) { visibleSet.delete("loft"); visibleSet.delete("disco"); }
 		for (const id in built) built[id].group.visible = visibleSet.has(id);
 		mainGroup.visible = visibleSet.has("main");
@@ -396,6 +403,8 @@ export function createHouse(ctx) {
 		nightK += ((ctx.get("night") ? 1 : 0) - nightK) * Math.min(1, dt * 3);
 		for (const id in built) { const B = built[id]; if (B.litOn) B.litK += ((B.litOn() ? 1 : 0) - B.litK) * Math.min(1, dt * 6); }
 		setRegion(regionOf(areaOf(x, z)));
+		const w = !!(built[region] && built[region].wide && built[region].wide());
+		if (w !== wide) { wide = w; applyVisibility(); renderer.shadowMap.needsUpdate = true; }
 		// the room you're in, and the rooms you can see into, keep moving
 		for (const id in built) if (visibleSet.has(id)) built[id].update(dt, t);
 		if (lit !== "main" && built[lit]) applyLights(built[lit]);
