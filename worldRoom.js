@@ -286,6 +286,15 @@ export function makePhotoFrame(parent, slot, x, y, z, ry, o = {}) {
 	add(f, new THREE.PlaneGeometry(w - border * 0.9, h - border * 0.9), mat(o.mat || "#fbf8f1", 0.9), 0, 0, 0.0185, { cast: false });
 	const pw = w - border * 2, phH = h - border * 2;
 	const ph = add(f, new THREE.PlaneGeometry(pw, phH), new THREE.MeshStandardMaterial({ map: placeholderPhoto(slot), roughness: 0.5 }), 0, 0, 0.02, { cast: false });
+	// a soft drop shadow on the wall and a coloured glow round the border (every frame its own colour)
+	// (both sit just inside the frame's depth, so they show round its edge and never behind the wall)
+	if (o.glow !== false) {
+		const tex = glowTex(), gw = w / (1 - 2 * GLOW_M), gh = h / (1 - 2 * GLOW_M);
+		const sh = add(f, new THREE.PlaneGeometry(gw * 0.97, gh * 0.97), new THREE.MeshBasicMaterial({ map: tex, color: "#000000", transparent: true, opacity: 0.5, depthWrite: false, toneMapped: false }), 0.02, -0.035, -0.0165, { cast: false, receive: false });
+		sh.renderOrder = 1;
+		const gl = add(f, new THREE.PlaneGeometry(gw, gh), glowMat(slot), 0, 0, -0.015, { cast: false, receive: false });
+		gl.renderOrder = 2;
+	}
 	const MAX = o.max || (w < 0.5 ? 384 : 512);
 	function setImage(url) {
 		const token = ph.userData.imgToken = (ph.userData.imgToken || 0) + 1;
@@ -321,6 +330,39 @@ export function makePhotoFrame(parent, slot, x, y, z, ry, o = {}) {
 	}
 	f.traverse(c => { c.userData.photoIndex = slot; });
 	return { group: f, mesh: ph, slot, setImage };
+}
+// the glow round a frame: a white rounded-rectangle halo that fades out from the frame's edge
+// (GLOW_M: the margin of the texture outside the frame, on each side)
+const GLOW_M = 0.17;
+let _glowTex = null;
+function glowTex() {
+	if (_glowTex) return _glowTex;
+	const S = 128, c = document.createElement("canvas");
+	c.width = c.height = S;
+	const g = c.getContext("2d"), img = g.createImageData(S, S), m = GLOW_M * S;
+	for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+		// distance outside the frame's rectangle (0 inside it), as a share of the margin
+		const dx = Math.max(m - x - 0.5, x + 0.5 - (S - m), 0), dy = Math.max(m - y - 0.5, y + 0.5 - (S - m), 0);
+		const d = Math.hypot(dx, dy) / m;
+		const a = d >= 1 ? 0 : Math.pow(1 - d, 2.2);
+		const i = (y * S + x) * 4;
+		img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+		img.data[i + 3] = Math.round(a * 255);
+	}
+	g.putImageData(img, 0, 0);
+	_glowTex = new THREE.CanvasTexture(c);
+	return _glowTex;
+}
+// one colour per frame, spread round the colour wheel (golden angle), breathing gently (tickPhotoGlow)
+const _glowMats = [];
+function glowMat(slot) {
+	const m = new THREE.MeshBasicMaterial({ map: glowTex(), color: new THREE.Color().setHSL((slot * 0.618034 + 0.05) % 1, 0.95, 0.62), transparent: true, opacity: 0.85, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
+	m.userData.ph = slot * 1.7;
+	_glowMats.push(m);
+	return m;
+}
+export function tickPhotoGlow(t) {
+	for (const m of _glowMats) m.opacity = 0.62 + 0.28 * Math.sin(t * 1.3 + m.userData.ph);
 }
 // (one shared placeholder per colour: there can be 50 empty frames)
 export function placeholderPhoto(i) {

@@ -10,7 +10,8 @@
  *   the long part   x -14.05..3.65,  z -5.9..5.85   (world x 5.5..23.2, z -18..-6.25)
  *   by the bedroom  x  3.65..14.05,  z -5.9..3.4    (world x 23.2..33.6, z -18..-8.7)
  * The pool is 8 m by 4.9 m, 1.3 m deep, steps at the terrace end, a diving
- * board at the other. A hot tub for two by the bedroom. Loungers, an umbrella,
+ * board at the other. A hot tub for two by the bedroom, and beside it a canopy
+ * swing, a flower arch (kiss under it) and a little smoothie bar. Loungers, an umbrella,
  * palms, floating rings, ripples and splashes, string lights.
  *
  * Swim: walk in (or dive) and you float with your head above the water, arms
@@ -85,10 +86,23 @@ export function build(k) {
 		const n = Math.max(1, Math.round(len / 1.25));
 		for (let i = 0; i <= n; i++) add(rg, new THREE.BoxGeometry(0.06, 1.05, 0.06), postM, 0, 0.525, -len / 2 + (len * i) / n);
 	};
-	railRun(XA0 + 0.05, ZN + 0.05, XB1 - 0.05, ZN + 0.05);
+	// (with a gap in the south side: the way through to the garden, worldGarden.js)
+	const GG0 = -8.95, GG1 = -7.55;
+	railRun(XA0 + 0.05, ZN + 0.05, GG0, ZN + 0.05);
+	railRun(GG1, ZN + 0.05, XB1 - 0.05, ZN + 0.05);
 	railRun(XB1 - 0.05, ZN + 0.05, XB1 - 0.05, ZB1 - 0.05);
 	railRun(XA0 + 0.05, ZN + 0.05, XA0 + 0.05, 0.1);
-	k.box(XA0, XB1, ZN, ZN + 0.12);
+	k.box(XA0, GG0, ZN, ZN + 0.12);
+	k.box(GG1, XB1, ZN, ZN + 0.12);
+	k.walk(GG0, GG1, ZN - 0.6, ZN + 0.5);
+	// a little sign by the gap
+	{
+		const sg = group(g, GG0 - 0.35, 0, ZN + 0.3);
+		add(sg, new THREE.CylinderGeometry(0.03, 0.03, 1.1, 8), mat("#5b4636", 0.7), 0, 0.55, 0);
+		add(sg, rbox(0.62, 0.22, 0.04, 0.02), mat("#8a5a3c", 0.6), 0, 1.15, 0);
+		add(sg, new THREE.PlaneGeometry(0.56, 0.16), new THREE.MeshBasicMaterial({ map: k.tex.text("Garden", { w: 512, h: 128, color: "#f6ecd2", font: "800 84px 'Caveat', 'Nunito', cursive" }), transparent: true, depthWrite: false }), 0, 1.15, 0.025, { cast: false, receive: false });
+		k.box(GG0 - 0.42, GG0 - 0.28, ZN + 0.23, ZN + 0.37);
+	}
 	k.box(XB1 - 0.12, XB1, ZN, ZB1);
 	k.box(XA0, XA0 + 0.12, ZN, 0.1);
 
@@ -179,6 +193,194 @@ export function build(k) {
 	k.spot({ id: "hottub0", x: HT.x - 0.55, z: HT.z, h: Math.PI / 2, y: -0.05 });
 	k.spot({ id: "hottub1", x: HT.x + 0.55, z: HT.z, h: -Math.PI / 2, y: -0.05 });
 	k.interact("pool:hottub", { label: "Get in the hot tub", stand: [HT.x, HT.z + 1.75], sit: ["hottub0", "hottub1"] }, tub);
+
+	// ---------------------------------------------------------------- beside the hot tub: a canopy swing, a flower arch, a smoothie bar
+	// a swing for two under a striped canopy, looking back over the hot tub to the pool (it rocks while someone's on it)
+	const SW = { x: 10.75, z: -0.6 };
+	const swingG = group(g, SW.x, 0, SW.z, -Math.PI / 2);   // its front (local +z) faces -x
+	const swFrame = mat("#f4efe8", 0.55);
+	for (const sx of [-1.15, 1.15]) {
+		add(swingG, new THREE.BoxGeometry(0.08, 2.2, 0.08), swFrame, sx, 1.05, -0.45, { rx: 0.2 });
+		add(swingG, new THREE.BoxGeometry(0.08, 2.2, 0.08), swFrame, sx, 1.05, 0.45, { rx: -0.2 });
+	}
+	add(swingG, new THREE.BoxGeometry(2.45, 0.1, 0.1), swFrame, 0, 2.08, 0);
+	// the canopy: a striped awning over the top bar
+	const awning = canvasTex(256, 64, (c, w, h) => { for (let i = 0; i < 8; i++) { c.fillStyle = i % 2 ? "#fff6ea" : "#ff9eb5"; c.fillRect(i * w / 8, 0, w / 8 + 1, h); } c.fillStyle = "rgba(0,0,0,0.08)"; c.fillRect(0, h - 6, w, 6); });
+	const awnM = mat("#ffffff", 0.9, 0, { map: awning, side: THREE.DoubleSide });
+	// (two sloping halves meeting in a ridge over the bar)
+	for (const sz of [-1, 1]) add(swingG, new THREE.PlaneGeometry(2.6, 0.6), awnM, 0, 2.25, sz * 0.25, { rx: -Math.PI / 2 + sz * 0.56, cast: false });
+	const fringe = canvasTex(256, 32, (c, w, h) => { c.clearRect(0, 0, w, h); for (let x = 0; x < w; x += 16) { c.fillStyle = (x / 16) % 2 ? "#ff9eb5" : "#fff6ea"; c.beginPath(); c.moveTo(x, 0); c.lineTo(x + 16, 0); c.lineTo(x + 8, h); c.closePath(); c.fill(); } });
+	for (const sz of [-1, 1]) add(swingG, new THREE.PlaneGeometry(2.6, 0.12), mat("#ffffff", 0.9, 0, { map: fringe, transparent: true, side: THREE.DoubleSide, alphaTest: 0.4 }), 0, 2.03, sz * 0.52, { cast: false });
+	const swHang = group(swingG, 0, 2.05, 0);
+	const SW_L = 1.55;
+	for (const sx of [-0.62, 0.62]) for (const sz of [-0.18, 0.18]) add(swHang, new THREE.CylinderGeometry(0.008, 0.008, SW_L, 6), mat("#d8c39a", 0.6), sx, -SW_L / 2, sz, { cast: false });
+	const swSeat = group(swHang, 0, -SW_L, 0);
+	const rattan = mat("#c89a6a", 0.7);
+	add(swSeat, rbox(1.35, 0.06, 0.5, 0.02), rattan, 0, -0.02, 0);
+	add(swSeat, rbox(1.35, 0.44, 0.05, 0.02), rattan, 0, 0.22, -0.23, { rx: -0.12 });
+	for (const sx of [-0.7, 0.7]) add(swSeat, rbox(0.05, 0.22, 0.48, 0.02), rattan, sx, 0.1, 0);
+	add(swSeat, rbox(1.26, 0.1, 0.44, 0.04), mat("#fff1e6", 0.95), 0, 0.05, 0.01);
+	add(swSeat, rbox(0.4, 0.34, 0.1, 0.04), mat("#ffc8d6", 0.95), -0.42, 0.26, -0.15, { rx: -0.2 });
+	add(swSeat, rbox(0.38, 0.32, 0.1, 0.04), mat("#bde0fe", 0.95), 0.44, 0.26, -0.15, { rx: -0.2, rz: 0.08 });
+	// fairy lights along the top bar
+	const swBulbs = [];
+	for (let i = 0; i <= 12; i++) {
+		const u = i / 12, x = -1.2 + u * 2.4;
+		swBulbs.push(add(swingG, new THREE.SphereGeometry(0.028, 10, 8), new THREE.MeshStandardMaterial({ color: "#fff1d0", emissive: i % 2 ? "#ffd59a" : "#ffb3c6", emissiveIntensity: 2 }), x, 2.0 - Math.sin(u * Math.PI) * 0.06, 0.07, { cast: false }));
+	}
+	k.box(SW.x - 0.45, SW.x + 0.7, SW.z - 1.25, SW.z + 1.25);
+	const poolSwing = { angle: 0, occupied: false, L: SW_L };
+	const SWING_IDS = ["poolSwing0", "poolSwing1"];
+	// (the seat is half a metre off the deck; its local x runs along world +z)
+	k.spot({ id: "poolSwing0", x: SW.x - 0.03, z: SW.z + 0.32, h: -Math.PI / 2, y: 0.02, swing: true, swingRef: poolSwing });
+	k.spot({ id: "poolSwing1", x: SW.x - 0.03, z: SW.z - 0.32, h: -Math.PI / 2, y: 0.02, swing: true, swingRef: poolSwing });
+	k.interact("pool:swing", { label: "Sit on the swing", stand: [SW.x - 1.05, SW.z], sit: SWING_IDS }, swingG);
+
+	// a flower arch by the railing, roses and fairy lights all over it, petals drifting down (kiss under it)
+	const AR = { x: 13.3, z: -0.6, r: 0.9, post: 1.45 };
+	const arch = group(g, AR.x, 0, AR.z);
+	const archM = mat("#f7f3ec", 0.5);
+	for (const dx of [-0.22, 0.22]) {
+		for (const sz of [-1, 1]) add(arch, new THREE.CylinderGeometry(0.045, 0.05, AR.post, 10), archM, dx, AR.post / 2, sz * AR.r);
+		add(arch, new THREE.TorusGeometry(AR.r, 0.045, 8, 40, Math.PI), archM, dx, AR.post, 0, { ry: Math.PI / 2, cast: false });
+	}
+	for (let i = 0; i <= 10; i++) {
+		const a = i / 10 * Math.PI;
+		add(arch, new THREE.BoxGeometry(0.5, 0.03, 0.05), archM, 0, AR.post + Math.sin(a) * AR.r, Math.cos(a) * AR.r, { rx: a, cast: false });
+	}
+	for (const sz of [-1, 1]) for (let y = 0.3; y < AR.post; y += 0.35) add(arch, new THREE.BoxGeometry(0.5, 0.03, 0.04), archM, 0, y, sz * AR.r, { cast: false });
+	// the flowers and leaves: one instanced mesh each, a few hundred of them wound round the arch
+	const along = [];   // points on the arch: up one post, over, down the other
+	for (let i = 0; i <= 60; i++) {
+		const u = i / 60;
+		let y, z;
+		if (u < 0.25) { y = u / 0.25 * AR.post; z = -AR.r; }
+		else if (u > 0.75) { y = (1 - u) / 0.25 * AR.post; z = AR.r; }
+		else { const a = Math.PI - (u - 0.25) / 0.5 * Math.PI; y = AR.post + Math.sin(a) * AR.r; z = Math.cos(a) * AR.r; }
+		along.push([y, z]);
+	}
+	const dummy = new THREE.Object3D(), tint = new THREE.Color();
+	const blooms = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.07, 1), mat("#ffffff", 0.6), along.length * 3);
+	const leaves = new THREE.InstancedMesh(new THREE.SphereGeometry(0.08, 8, 6), mat("#ffffff", 0.7), along.length * 3);
+	const bloomCols = ["#ff5d8f", "#ff9ebb", "#ffffff", "#ffc2d1", "#e0aaff", "#ff7096"];
+	let nb = 0, nl = 0;
+	along.forEach(([y, z], i) => {
+		for (let j = 0; j < 3; j++) {
+			const dx = (R() - 0.5) * 0.55, dy = (R() - 0.5) * 0.12, dz = (R() - 0.5) * 0.12;
+			if ((i + j) % 2 === 0 || R() < 0.35) {
+				dummy.position.set(dx, y + dy, z + dz); dummy.rotation.set(R() * 3, R() * 3, R() * 3); dummy.scale.setScalar(0.7 + R() * 0.7); dummy.updateMatrix();
+				blooms.setMatrixAt(nb, dummy.matrix); blooms.setColorAt(nb, tint.set(bloomCols[Math.floor(R() * bloomCols.length)])); nb++;
+			}
+			dummy.position.set(dx * 1.1, y + dy * 1.4, z + dz * 1.4); dummy.rotation.set(R() * 3, R() * 3, R() * 3); dummy.scale.set(1, 0.35, 0.7); dummy.updateMatrix();
+			leaves.setMatrixAt(nl, dummy.matrix); leaves.setColorAt(nl, tint.set(R() < 0.5 ? "#3f8a4a" : "#5aa864")); nl++;
+		}
+	});
+	blooms.count = nb; leaves.count = nl;
+	for (const im of [blooms, leaves]) { im.castShadow = false; im.receiveShadow = true; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; arch.add(im); }
+	// twinkling fairy lights (two sets, out of step with each other)
+	const twinkle = [0, 1].map(i => new THREE.MeshStandardMaterial({ color: "#fff4d6", emissive: i ? "#ffd59a" : "#ffe9f0", emissiveIntensity: 2 }));
+	for (let i = 0; i < along.length; i += 2) {
+		const [y, z] = along[i];
+		for (const dx of [-0.27, 0.27]) add(arch, new THREE.SphereGeometry(0.022, 8, 6), twinkle[(i / 2 + (dx > 0 ? 1 : 0)) % 2], dx, y + 0.04, z, { cast: false });
+	}
+	// a heart lantern hanging from the top
+	const heartLamp = add(arch, new THREE.ExtrudeGeometry(k.heartShape(0.11), { depth: 0.04, bevelEnabled: false }), new THREE.MeshStandardMaterial({ color: "#ff8fab", emissive: "#ff4d6d", emissiveIntensity: 1.6 }), 0, AR.post + AR.r - 0.42, -0.02, { cast: false });
+	heartLamp.geometry.center();
+	heartLamp.rotation.y = Math.PI / 2;
+	add(arch, new THREE.CylinderGeometry(0.004, 0.004, 0.28, 4), mat("#bbb"), 0, AR.post + AR.r - 0.2, 0, { cast: false });
+	for (const sz of [-1, 1]) {
+		k.box(AR.x - 0.3, AR.x + 0.3, AR.z + sz * AR.r - 0.12, AR.z + sz * AR.r + 0.12);
+		// a pot of flowers at the foot of each side
+		const pot = group(g, AR.x + 0.55, 0, AR.z + sz * (AR.r + 0.1));
+		add(pot, new THREE.CylinderGeometry(0.2, 0.15, 0.32, 16), mat("#c86b4a", 0.7), 0, 0.16, 0);
+		for (let i = 0; i < 9; i++) add(pot, new THREE.SphereGeometry(0.06, 8, 6), mat(bloomCols[i % bloomCols.length], 0.6), Math.cos(i * 0.7) * 0.11, 0.36 + (i % 3) * 0.04, Math.sin(i * 0.7) * 0.11, { cast: false });
+		k.box(AR.x + 0.33, AR.x + 0.77, AR.z + sz * (AR.r + 0.1) - 0.22, AR.z + sz * (AR.r + 0.1) + 0.22);
+	}
+	// petals drifting down under it, all the time (and a shower of them for a kiss)
+	const petalGeo = new THREE.PlaneGeometry(0.045, 0.035);
+	const petalM = new THREE.MeshStandardMaterial({ color: "#ff9ebb", side: THREE.DoubleSide, roughness: 0.8 });
+	const petals = [];
+	for (let i = 0; i < 16; i++) { const p = add(arch, petalGeo, petalM, 0, -5, 0, { cast: false, receive: false }); p.userData = { ph: R(), x: (R() - 0.5) * 0.7, z: (R() - 0.5) * 1.6, sp: 0.18 + R() * 0.12 }; petals.push(p); }
+	const shower = [];
+	function petalShower() {
+		for (let i = 0; i < 26; i++) {
+			const p = add(arch, petalGeo, petalM, (R() - 0.5) * 0.4, AR.post + AR.r - 0.1, (R() - 0.5) * 1.2, { cast: false, receive: false });
+			p.userData = { vx: (R() - 0.5) * 0.9, vz: (R() - 0.5) * 1.4, vy: 0.4 + R() * 0.8, life: 0, spin: R() * 6 };
+			shower.push(p);
+		}
+		ctx.sfx("love", 0.35);
+	}
+	const nearPeer = () => {
+		const me = ctx.me();
+		let near = null, nd = 2.2;
+		ctx.peers().forEach((p, id) => { const d = Math.hypot(p.x - me.x, p.z - me.z); if (d < nd && !p.sit) { nd = d; near = id; } });
+		return near;
+	};
+	k.interact("pool:arch", {
+		label: () => { const id = nearPeer(), q = id && ctx.peers().get(id); return q ? "Kiss " + q.look.name + " under the flower arch" : "Stand under the flower arch"; },
+		stand: [AR.x, AR.z], face: -Math.PI / 2,
+		use: () => {
+			petalShower();
+			ctx.send({ t: "fx", kind: "zfx", zone: "pool", what: "petals" });
+			if (nearPeer()) ctx.loveAct("smooch"); else ctx.doUpper("heartarms", 1800);
+		}
+	}, arch);
+
+	// a little tiki smoothie bar against the railing, with two stools: take a smoothie, a juice, strawberries...
+	const BAR = { x: 8.3, z: -5.05 };
+	const bar = group(g, BAR.x, 0, BAR.z);
+	const bamboo = canvasTex(512, 128, (c, w, h) => {
+		c.fillStyle = "#c9a26b"; c.fillRect(0, 0, w, h);
+		for (let x = 0; x < w; x += 22) {
+			const gr = c.createLinearGradient(x, 0, x + 20, 0); gr.addColorStop(0, "#a8834f"); gr.addColorStop(0.5, "#e2c48f"); gr.addColorStop(1, "#a8834f");
+			c.fillStyle = gr; c.fillRect(x + 1, 0, 20, h);
+			c.fillStyle = "rgba(90,60,30,0.5)"; for (let y = 18 + (x % 3) * 9; y < h; y += 46) c.fillRect(x + 1, y, 20, 3);
+		}
+	});
+	add(bar, rbox(2.2, 0.98, 0.62, 0.02), mat("#ffffff", 0.75, 0, { map: bamboo }), 0, 0.49, 0);
+	add(bar, rbox(2.36, 0.06, 0.78, 0.015), mat("#7a4e34", 0.4), 0, 1.0, 0.04);
+	// the roof: four bamboo posts and a straw thatch, a glowing sign on the front
+	const bambooM = mat("#b88b55", 0.7);
+	for (const sx of [-1.08, 1.08]) for (const sz of [-0.3, 0.3]) add(bar, new THREE.CylinderGeometry(0.045, 0.05, 2.25, 8), bambooM, sx, 1.125, sz);
+	const straw = canvasTex(256, 256, (c, w, h) => { c.fillStyle = "#d8b56a"; c.fillRect(0, 0, w, h); const r = rng(17); for (let i = 0; i < 900; i++) { c.strokeStyle = `rgba(${120 + r() * 80},${90 + r() * 60},${30 + r() * 30},0.6)`; c.lineWidth = 1 + r() * 1.5; const x = r() * w, y = r() * h; c.beginPath(); c.moveTo(x, y); c.lineTo(x + (r() - 0.5) * 6, y + 18 + r() * 14); c.stroke(); } }, 3, 1);
+	const thatch = add(bar, new THREE.ConeGeometry(1.75, 0.62, 4, 1, true), mat("#ffffff", 0.95, 0, { map: straw, side: THREE.DoubleSide }), 0, 2.53, 0, { ry: Math.PI / 4 });
+	thatch.scale.set(1, 1, 0.55);
+	const signTex = k.tex.text("Smoothies", { w: 512, h: 128, color: "#fff4d6", glow: "#ff7aa2", font: "800 76px 'Caveat', 'Nunito', cursive" });
+	add(bar, new THREE.PlaneGeometry(1.1, 0.28), new THREE.MeshBasicMaterial({ map: signTex, transparent: true, toneMapped: false, depthWrite: false }), 0, 2.08, 0.36, { cast: false, receive: false });
+	// party bulbs round the edge of the roof
+	const barBulbs = [];
+	const bulbCols = ["#ff5d8f", "#ffd166", "#06d6a0", "#4cc9f0", "#c77dff"];
+	for (let i = 0; i < 14; i++) {
+		const x = -1.15 + i / 13 * 2.3;
+		barBulbs.push(add(bar, new THREE.SphereGeometry(0.03, 10, 8), new THREE.MeshStandardMaterial({ color: bulbCols[i % 5], emissive: bulbCols[i % 5], emissiveIntensity: 1.6 }), x, 2.22 - Math.sin(i / 13 * Math.PI) * 0.06, 0.4, { cast: false }));
+	}
+	// on the counter: a blender, a bowl of fruit, three smoothies with straws
+	const cupGlass = new THREE.MeshPhysicalMaterial({ color: "#ffffff", transparent: true, opacity: 0.35, roughness: 0.05, depthWrite: false });
+	add(bar, new THREE.CylinderGeometry(0.09, 0.08, 0.1, 16), mat("#2b2d42", 0.4), -0.75, 1.08, -0.05);
+	add(bar, new THREE.CylinderGeometry(0.08, 0.06, 0.26, 16), cupGlass, -0.75, 1.26, -0.05, { cast: false });
+	add(bar, new THREE.CylinderGeometry(0.068, 0.055, 0.16, 16), mat("#ff8fab", 0.4), -0.75, 1.21, -0.05, { cast: false });
+	add(bar, new THREE.SphereGeometry(0.17, 18, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), mat("#f2ede4", 0.4, 0, { side: THREE.DoubleSide }), 0.7, 1.2, -0.08);
+	for (let i = 0; i < 7; i++) add(bar, new THREE.SphereGeometry(0.055, 12, 10), mat(["#ffa62b", "#ffe066", "#e63946", "#8ac926"][i % 4], 0.45), 0.7 + Math.cos(i) * 0.08, 1.1 + (i % 2) * 0.04, -0.08 + Math.sin(i) * 0.08, { cast: false });
+	[["#ff8fab", -0.25], ["#ffd166", 0.0], ["#9be7a6", 0.25]].forEach(([c, x]) => {
+		add(bar, new THREE.CylinderGeometry(0.04, 0.03, 0.15, 14), cupGlass, x, 1.105, 0.18, { cast: false });
+		add(bar, new THREE.CylinderGeometry(0.035, 0.026, 0.12, 14), mat(c, 0.5), x, 1.095, 0.18, { cast: false });
+		add(bar, new THREE.CylinderGeometry(0.005, 0.005, 0.18, 6), mat("#ff4d6d", 0.4), x + 0.02, 1.2, 0.18, { rz: 0.25, cast: false });
+	});
+	// bottles on a shelf at the back
+	add(bar, rbox(2.0, 0.04, 0.16, 0.01), mat("#7a4e34", 0.4), 0, 1.45, -0.26);
+	for (let i = 0; i < 7; i++) add(bar, new THREE.CylinderGeometry(0.035, 0.04, 0.22, 12), new THREE.MeshPhysicalMaterial({ color: ["#ff7aa2", "#ffd166", "#7bdff2", "#b2f7ef", "#f7aef8"][i % 5], transparent: true, opacity: 0.8, roughness: 0.1 }), -0.85 + i * 0.28, 1.58, -0.26, { cast: false });
+	k.box(BAR.x - 1.18, BAR.x + 1.18, BAR.z - 0.48, BAR.z + 0.42);
+	for (let i = 0; i < 2; i++) {
+		const sx = BAR.x - 0.55 + i * 1.1, sz = BAR.z + 0.85;
+		const st = group(g, sx, 0, sz);
+		add(st, new THREE.CylinderGeometry(0.2, 0.2, 0.07, 20), mat(i ? "#4cc9f0" : "#ff8fab", 0.6), 0, 0.72, 0);
+		add(st, new THREE.CylinderGeometry(0.025, 0.03, 0.7, 8), mat("#b88b55", 0.6), 0, 0.35, 0);
+		add(st, new THREE.TorusGeometry(0.15, 0.012, 6, 20), mat("#b88b55", 0.6), 0, 0.3, 0, { rx: Math.PI / 2 });
+		add(st, new THREE.CylinderGeometry(0.17, 0.2, 0.02, 20), mat("#b88b55", 0.6), 0, 0.01, 0);
+		k.spot({ id: "barStool" + i, x: sx, z: sz, h: Math.PI, y: 0.31 });
+		k.interact("pool:barstool" + i, { label: "Sit at the smoothie bar", stand: [sx, sz + 0.6], sit: ["barStool" + i] }, st);
+	}
+	k.interact("pool:bar", { label: "Get a smoothie", stand: [BAR.x, BAR.z + 1.05], face: Math.PI, reach: 2.2, use: () => ctx.foodMenu("Smoothie bar", ["smoothie", "juice", "strawberry", "icecream"]) }, bar);
 
 	// ---------------------------------------------------------------- loungers, an umbrella, palms, floats
 	const towelCols = ["#ff8fab", "#4cc9f0", "#ffd166", "#06d6a0", "#bdb2ff", "#ffb703"];
@@ -313,6 +515,31 @@ export function build(k) {
 		bulbs.forEach(b => { b.material.emissiveIntensity = 1.8 + Math.sin(t * 1.7 + b.userData.ph) * 0.6; });
 		tubBubbles.forEach(b => { const u = b.userData, p2 = (t * 0.8 + u.ph) % 1; b.position.set(Math.cos(u.a + t * 0.3) * u.r, 0.47 + p2 * 0.04, Math.sin(u.a + t * 0.3) * u.r); b.scale.setScalar(0.6 + p2); });
 		tubWater.position.y = 0.47 + Math.sin(t * 6) * 0.004;
+		// the swing rocks gently while someone's on it
+		const meSit = ctx.me().sit;
+		poolSwing.occupied = SWING_IDS.includes(meSit) || [...ctx.peers().values()].some(p => SWING_IDS.includes(p.sit));
+		poolSwing.angle += ((poolSwing.occupied ? Math.sin(t * 1.55) * 0.22 : 0) - poolSwing.angle) * Math.min(1, dt * 2.5);
+		swHang.rotation.x = poolSwing.angle;
+		swBulbs.forEach((b, i) => { b.material.emissiveIntensity = 1.5 + Math.sin(t * 2.2 + i * 0.9) * 0.6; });
+		barBulbs.forEach((b, i) => { b.material.emissiveIntensity = 1.2 + 0.8 * Math.max(0, Math.sin(t * 3 - i * 0.7)); });
+		// the arch: fairy lights twinkle, the heart lantern sways, petals drift down
+		twinkle[0].emissiveIntensity = 1.4 + Math.sin(t * 2.6) * 0.9;
+		twinkle[1].emissiveIntensity = 1.4 + Math.sin(t * 2.6 + Math.PI) * 0.9;
+		heartLamp.rotation.z = Math.sin(t * 1.3) * 0.12;
+		heartLamp.material.emissiveIntensity = 1.4 + Math.sin(t * 2) * 0.4;
+		petals.forEach(p => {
+			const u = p.userData, f = (t * u.sp + u.ph) % 1;
+			p.position.set(u.x + Math.sin(t * 1.1 + u.ph * 9) * 0.12, (AR.post + AR.r - 0.15) * (1 - f), u.z + Math.cos(t * 0.9 + u.ph * 7) * 0.1);
+			p.rotation.set(t * 1.7 + u.ph * 6, t * 1.3, u.ph * 3);
+		});
+		for (let i = shower.length - 1; i >= 0; i--) {
+			const p = shower[i], u = p.userData;
+			u.life += dt; u.vy -= 1.1 * dt;
+			u.vx *= 1 - dt * 0.8; u.vz *= 1 - dt * 0.8;
+			p.position.x += u.vx * dt; p.position.y = Math.max(0.01, p.position.y + u.vy * dt); p.position.z += u.vz * dt;
+			p.rotation.set(u.spin + u.life * 4, u.life * 3, 0);
+			if (u.life > 4.5) { arch.remove(p); shower.splice(i, 1); }
+		}
 		// the dive: along the board, spring, fly, splash
 		const me = ctx.me();
 		if (dive) {
@@ -361,6 +588,7 @@ export function build(k) {
 		update,
 		onLeave() { dive = null; },
 		onFx(d, p) {
+			if (d.what === "petals") { petalShower(); return; }
 			if (d.what !== "splash") return;
 			splash(d.x - k.ox, d.z - k.oz, 10);
 			if (d.to === ctx.MY_ID) { ctx.doUpper("laugh", 2400); ctx.notice(`<b>${ctx.esc(p ? p.look.name : "Someone")}</b> splashed you!`); }

@@ -208,6 +208,20 @@ export class WorldAudio {
 			case "smack": noise(0.05, 2400, 2.5, 0.3); tone(900, 1500, 0.07, "sine", 0.08); break;
 			case "smooch": tone(200, 260, 0.3, "sine", 0.06); noise(0.06, 2200, 2.5, 0.32, 0.32); tone(1100, 1700, 0.08, "sine", 0.09, 0.32); [0, 4, 7].forEach((n, i) => tone(mtof(84 + n), 0, 0.7, "triangle", 0.06, 0.45 + i * 0.08)); break;
 			case "wink": tone(1600, 2400, 0.08, "sine", 0.08); tone(2400, 0, 0.25, "triangle", 0.05, 0.08); break;
+			// calling the pets: a "wheet-whoo" whistle; the dog's two woofs; the cat's meow
+			case "whistle": tone(1500, 2500, 0.2, "sine", 0.16); tone(2500, 1600, 0.38, "sine", 0.16, 0.26); break;
+			case "woof": for (const d of [0, 0.26]) { tone(360, 150, 0.15, "sawtooth", 0.09, d); tone(720, 300, 0.12, "square", 0.03, d); noise(0.12, 700, 1.2, 0.18, d); } break;
+			case "meow": tone(560, 920, 0.2, "triangle", 0.12); tone(920, 470, 0.45, "triangle", 0.12, 0.18); tone(1840, 940, 0.45, "sine", 0.025, 0.18); break;
+			// the clubhouse: the karaoke stage's drum kit, the bowling lane, the billiard table, the dartboard, a crowd
+			case "snare": noise(0.16, 1900, 0.7, 0.32); tone(240, 160, 0.08, "triangle", 0.1); break;
+			case "hat": noise(0.05, 8000, 0.8, 0.12, 0, "highpass"); break;
+			case "tom": tone(160, 90, 0.28, "sine", 0.35); noise(0.05, 500, 1, 0.08); break;
+			case "crash": noise(1.4, 6500, 0.4, 0.14, 0, "highpass"); noise(0.6, 3500, 0.6, 0.08); break;
+			case "roll": noise(1.9, 220, 1.2, 0.16); break;
+			case "pins": for (let i = 0; i < 9; i++) { noise(0.09, 1400 + Math.random() * 2600, 3, 0.16, i * 0.035 + Math.random() * 0.03); tone(900 + Math.random() * 700, 500, 0.06, "triangle", 0.05, i * 0.04); } break;
+			case "clack": tone(2400, 1800, 0.035, "square", 0.08); noise(0.03, 3200, 2, 0.12); break;
+			case "thunk": noise(0.05, 900, 2, 0.25); tone(320, 200, 0.06, "sine", 0.15); break;
+			case "applause": for (let i = 0; i < 26; i++) noise(0.05, 1500 + Math.random() * 1500, 0.9, 0.12 + Math.random() * 0.1, Math.random() * 1.6); break;
 			case "yes": [0, 4, 7, 12, 16, 19, 24].forEach((n, i) => tone(mtof(67 + n), 0, 0.9, "triangle", 0.09, i * 0.09)); noise(0.8, 6000, 0.5, 0.05, 0.6, "highpass"); break;
 		}
 	}

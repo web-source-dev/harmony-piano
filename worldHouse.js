@@ -6,7 +6,7 @@
  * kitchen and dining table on the other side of it, a pet corner, and stairs up
  * to a balcony with the cinema's doors. Off the back of the lounge: the bedroom
  * and the bathroom. Out through the gap in the terrace railing: the pool, under
- * the sky. Biscuit and Mochi wander the whole house (worldPets.js).
+ * the sky, and past the pool deck the garden. Biscuit and Mochi wander the whole house (worldPets.js).
  *
  * Each room is its own module and its own group. They're all built in the
  * background shortly after you arrive (a tenth of a second each), but a room is
@@ -33,7 +33,7 @@ import { createPets } from "./worldPets.js";
 // and which rooms you can see into from it through open doors
 // (ry turns a room round: the cinema is built facing +z and turned so its doors face the living room)
 export const ZONES = {
-	lounge:  { name: "Lounge",   ox: 15.2,   oy: 0,    oz: 1.0,   bounds: [7.1, 23.25, -6.05, 8.05],   see: ["main", "bedroom", "bath", "pool", "loft"], file: "./worldLounge.js" },
+	lounge:  { name: "Lounge",   ox: 15.2,   oy: 0,    oz: 1.0,   bounds: [7.1, 23.25, -6.05, 8.05],   see: ["main", "bedroom", "bath", "pool", "loft", "games"], file: "./worldLounge.js" },
 	// upstairs, over the east half of the lounge: drawn there (vis), but on the floor plan it's 30 m further south,
 	// so the two floors never overlap (see shiftAt). The stairs carry you across (portals in worldLoft.js).
 	disco:   { name: "Disco",    ox: 15.2,   oy: 3.6,  oz: 31.0,  vis: [15.2, 1.0], bounds: [18.4, 23.15, 32.2, 37.95], see: ["loft"], file: "./worldDisco.js" },
@@ -41,11 +41,21 @@ export const ZONES = {
 	cinema:  { name: "Cinema",   ox: -13.25, oy: -1.8, oz: -3.5,  ry: Math.PI / 2, bounds: [-22.6, -7.05, -8.8, 1.8], see: ["main"], file: "./worldCinema.js" },
 	bedroom: { name: "Bedroom",  ox: 28.4,   oy: 0,    oz: -4,    bounds: [23.25, 33.6, -8.62, 0.75],  see: ["lounge", "pool", "loft"], file: "./worldBedroom.js" },
 	bath:    { name: "Bathroom", ox: 27.4,   oy: 0,    oz: 4.7,   bounds: [23.25, 31.6, 0.95, 8.4],    see: ["lounge", "loft"], file: "./worldBath.js" },
-	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.15],  see: ["main", "lounge", "bedroom", "loft"], outdoor: true, file: "./worldPool.js" }
+	// (the deck reaches right up to the lounge's back wall: with a gap between the two areas, the doorway between
+	// the lounge and the pool deck had a strip that belonged to no room, and nobody could walk through it)
+	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.05],  see: ["main", "lounge", "bedroom", "loft", "garden"], outdoor: true, file: "./worldPool.js" },
+	// past the pool deck, through the gap in its south railing: a rooftop garden (outdoors too)
+	garden:  { name: "Garden",   ox: 14.3,   oy: 0,    oz: -24.1, bounds: [5.45, 23.2, -30.1, -18.1], see: ["pool", "main"], outdoor: true, file: "./worldGarden.js" },
+	// the new wing, behind the lounge (through the door by the dining table): the game room in the middle, and off it
+	// the karaoke lounge (west), the spa (behind it) and the rooftop observatory (east)
+	games:   { name: "Game Room", ox: 12.75, oy: 0,    oz: 13.15, bounds: [8.55, 16.95, 8.05, 18.15], see: ["lounge", "spa", "karaoke", "observatory"], file: "./worldGameRoom.js" },
+	spa:     { name: "Spa",      ox: 12.75,  oy: 0,    oz: 21.05, bounds: [8.55, 16.95, 18.15, 23.95], see: ["games"], file: "./worldSpa.js" },
+	karaoke: { name: "Karaoke",  ox: 4.85,   oy: 0,    oz: 13.15, bounds: [1.15, 8.55, 8.15, 18.15], see: ["games"], file: "./worldKaraoke.js" },
+	observatory: { name: "Observatory", ox: 20.15, oy: 0, oz: 12.15, bounds: [16.95, 23.25, 8.05, 16.15], see: ["games"], file: "./worldObservatory.js" }
 };
 // what you can see from the living room / terrace
-const MAIN_SEES = ["lounge", "pool", "cinema", "loft"];
-const BUILD_ORDER = ["lounge", "loft", "pool", "bedroom", "bath", "cinema", "disco"];
+const MAIN_SEES = ["lounge", "pool", "cinema", "loft", "garden"];
+const BUILD_ORDER = ["lounge", "loft", "pool", "garden", "bedroom", "bath", "cinema", "disco", "games", "spa", "karaoke", "observatory"];
 
 export function createHouse(ctx) {
 	const { scene, room, renderer, camera } = ctx;
@@ -115,10 +125,43 @@ export function createHouse(ctx) {
 		ctx.restoreMainLights();   // ceiling light / lamp on or off, night mode
 	}
 	// which rooms get drawn: the one you're in and the ones you can see into
+	// (while the camera is up under the loft from the lounge, the loft and the disco are cut away)
 	function applyVisibility() {
 		visibleSet = new Set([region].concat(region === "main" ? MAIN_SEES : ZONES[region].see));
+		if (cut.low) { visibleSet.delete("loft"); visibleSet.delete("disco"); }
 		for (const id in built) built[id].group.visible = visibleSet.has(id);
 		mainGroup.visible = visibleSet.has("main");
+	}
+
+	// ---------------------------------------------------------------- cutaway: low ceilings never block the view
+	// The lounge is 7 m tall, but its east half is under the loft (a ceiling at 3.3 m), and up in the loft and the disco
+	// the roof is low too. Instead of squashing the camera in under those ceilings (a tiny, jittery view, the floor
+	// above poking into the picture), the camera keeps its distance and whatever it rises past is hidden:
+	//   low:   in the lounge, the camera up at / over the loft floor -> the loft's underside and the loft itself
+	//   roof:  in the loft or the disco, the camera up at the roof -> the lounge's ceiling, roof and beams
+	//   disco: in the disco, the camera up at its ceiling -> the disco's ceiling and its flat roof
+	const cut = { low: false, roof: false, disco: false };
+	const partsOf = what => { const out = []; for (const id in built) { const c = built[id].cut; if (c && c[what]) out.push(...c[what]); } return out; };
+	function setCut(what, on) {
+		if (cut[what] === on) return;
+		cut[what] = on;
+		partsOf(what).forEach(o => { o.visible = !on; });
+		if (what === "low") applyVisibility();
+		renderer.shadowMap.needsUpdate = true;
+	}
+	function cutaway(px, pz) {
+		const c = camera.position, L = built.lounge, s = L && L.cut && L.cut.slab;
+		let low = false, roof = false, disco = false;
+		if (region === "lounge" && s) {
+			// (a little hysteresis, so it never flickers on and off at the threshold)
+			const y0 = s.y - (cut.low ? 0.45 : 0.3);
+			low = c.y > y0 && (c.x > s.x0 - 0.6 || px > s.x0 - 0.3);
+		} else if (region === "loft" || region === "disco") {
+			const y = c.y - ZONES.loft.oy;
+			roof = y > (cut.roof ? 2.75 : 2.9);
+			if (region === "disco") { disco = y > (cut.disco ? 2.45 : 2.6); roof = roof || disco; }
+		}
+		setCut("low", low); setCut("roof", roof); setCut("disco", disco);
 	}
 	function setRegion(r) {
 		if (r === region) return;
@@ -151,6 +194,8 @@ export function createHouse(ctx) {
 			built[id] = zone;
 			delete loading[id];
 			if (ctx.debug) console.log(`[house] built ${id} in ${Math.round(performance.now() - t0)}ms`);
+			// built while its parts are cut away: hide them straight away too
+			if (zone.cut) for (const what in cut) if (cut[what] && zone.cut[what]) zone.cut[what].forEach(o => { o.visible = false; });
 			// shaders for everything in it, in the background, so walking in never stutters
 			zone.group.visible = true;
 			try { renderer.compileAsync(zone.group, camera, scene).catch(() => {}); } catch (e) { /* older browsers: compiled on first sight instead */ }
@@ -357,6 +402,10 @@ export function createHouse(ctx) {
 	const houseApi = {
 		ZONES, built, ensure, update, addDoor, portals,
 		start: pump,
+		// call after the camera has moved: hides the ceilings it's up at (see cutaway)
+		cutaway,
+		// the loft is cut away right now (so people up there aren't drawn floating in the air)
+		upstairsHidden: () => cut.low,
 		region: () => region,
 		regionOf,
 		inHouse: () => region !== "main",
@@ -372,6 +421,8 @@ export function createHouse(ctx) {
 		// a seat that watches a screen (cinema): the camera looks at this from your eyes
 		screenFor(sitId) { for (const id in built) { const Z = built[id]; if (Z.screenFor) { const s = Z.screenFor(sitId); if (s) return s; } } return null; },
 		promptOpts(opts) { const Z = built[region]; if (Z && Z.promptOpts) Z.promptOpts(opts); if (pets) pets.promptOpts(opts); },
+		// someone said something in the chat (the karaoke screen shows what the singer types)
+		onChat(id, who, text) { for (const zid in built) if (visibleSet.has(zid) && built[zid].onChat) built[zid].onChat(id, who, text); },
 		musicAt(x, z) { const Z = built[region]; return Z && Z.musicAt ? Z.musicAt(x, z) : 0; },
 		floorAt
 	};
@@ -565,6 +616,20 @@ function drawIcon(g, icon, color) {
 		case "wave":
 			for (let k = 0; k < 2; k++) { g.beginPath(); for (let x = -56; x <= 56; x += 4) { const y = -12 + k * 26 + Math.sin(x / 12) * 9; x === -56 ? g.moveTo(x, y) : g.lineTo(x, y); } g.stroke(); }
 			break;
+		case "star": {
+			g.beginPath();
+			for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 20 : 46; g.lineTo(Math.cos(a) * r, Math.sin(a) * r + 4); }
+			g.closePath(); g.stroke();
+			break;
+		}
+		case "mic":
+			g.beginPath(); g.ellipse(0, -18, 16, 22, 0, 0, Math.PI * 2); g.stroke();
+			P([[-26, -6], [-26, 6], [0, 22], [26, 6], [26, -6]]); P([[0, 22], [0, 44]]); P([[-16, 44], [16, 44]]);
+			break;
+		case "games":
+			g.strokeRect(-48, -26, 96, 52); g.beginPath(); g.arc(-22, 0, 9, 0, Math.PI * 2); g.stroke();
+			P([[18, -10], [18, 10]]); P([[8, 0], [28, 0]]);
+			break;
 		case "home":
 			P([[-48, 0], [0, -40], [48, 0]]); P([[-36, -8], [-36, 38], [36, 38], [36, -8]]); g.strokeRect(-10, 12, 20, 26);
 			break;
@@ -581,9 +646,12 @@ function makeShell(k, opt) {
 	let floor = null;
 	if (opt.floor !== false) { floor = add(g, new THREE.PlaneGeometry(W, D), opt.floor, 0, 0, 0, { rx: -Math.PI / 2, cast: false }); floor.userData.floor = true; }
 	if (opt.ceil !== false) {
-		add(g, new THREE.PlaneGeometry(W, D), opt.ceil || mat("#f3ece2", 0.95), 0, H, 0, { rx: Math.PI / 2, cast: false });
-		// a roof on top (the pool deck is outdoors: from up there you'd otherwise see straight in)
-		add(g, new THREE.BoxGeometry(W + 0.5, 0.22, D + 0.5), mat("#4a4048", 0.9), 0, H + 0.13, 0, { cast: false });
+		// (kept on the kit as ceilParts, so a room can cut them away when the camera goes up there)
+		k.ceilParts = [
+			add(g, new THREE.PlaneGeometry(W, D), opt.ceil || mat("#f3ece2", 0.95), 0, H, 0, { rx: Math.PI / 2, cast: false }),
+			// a roof on top (the pool deck is outdoors: from up there you'd otherwise see straight in)
+			add(g, new THREE.BoxGeometry(W + 0.5, 0.22, D + 0.5), mat("#4a4048", 0.9), 0, H + 0.13, 0, { cast: false })
+		];
 	}
 	const sides = {
 		n: { len: W, x: 0, z: -D / 2 - 0.1, ry: 0 },

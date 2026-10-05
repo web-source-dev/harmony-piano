@@ -291,6 +291,7 @@ body.touch #help { display: none; }
 /* all the frames in the house: the chosen one big on the left, every frame (by room) on the right */
 .pm { display: grid; grid-template-columns: 250px 1fr; gap: 18px; align-items: start; }
 .pm-edit { display: flex; flex-direction: column; gap: 12px; }
+.pm-foot { margin-top: 14px; justify-content: flex-end; }
 .pm-where { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .pm-where b { font-size: 15px; }
 .pm-list { max-height: min(58vh, 480px); overflow-y: auto; padding-right: 4px; }
@@ -332,6 +333,29 @@ body.touch #help { display: none; }
 .sizes i { display: block; border-radius: 50%; background: #fff; }
 
 /* music */
+/* the YouTube song playing on the record player / jukebox / DJ booth: a little card in the corner */
+#songcard { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 212px; padding: 8px; display: grid; gap: 7px; z-index: 3; animation: slideIn .28s cubic-bezier(.2,1.2,.4,1); }
+#songcard .sc-vid { width: 196px; height: 110px; border-radius: 10px; overflow: hidden; background: #000; }
+#songcard iframe { width: 196px; height: 110px; border: 0; display: block; pointer-events: none; }
+#songcard .sc-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+#songcard .sc-row .btn { flex: 1; padding: 7px 8px; font-size: 12px; border-radius: 10px; }
+#songcard .sc-name { font-size: 12px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#songcard .sc-far { display: none; font-size: 11px; color: var(--muted); }
+#songcard.far .sc-far { display: block; }
+#songcard.far .sc-vid { opacity: .55; }
+.sc-eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 12px; flex: none; }
+.sc-eq i { width: 3px; background: var(--accent); border-radius: 2px; animation: eqb .9s ease-in-out infinite; }
+.sc-eq i:nth-child(2) { animation-delay: .2s; } .sc-eq i:nth-child(3) { animation-delay: .4s; }
+#songcard.far .sc-eq i { animation-play-state: paused; }
+@keyframes eqb { 0%,100% { height: 3px; } 50% { height: 12px; } }
+@media (max-width: 560px) { #songcard { top: auto; bottom: calc(max(14px, env(safe-area-inset-bottom)) + 150px); width: 150px; } #songcard .sc-vid, #songcard iframe { width: 134px; height: 75px; } }
+/* YouTube songs in the music list */
+.track.yt .thumb { width: 64px; height: 36px; border-radius: 8px; object-fit: cover; flex: none; background: #000; }
+.track .grow { flex: 1; min-width: 0; }
+.track.yt b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.track .x { width: 28px; height: 28px; border-radius: 8px; border: none; background: rgba(255,255,255,.08); color: var(--text); cursor: pointer; display: grid; place-items: center; flex: none; }
+.mus-yt { display: flex; gap: 8px; margin-top: 12px; }
+.mus-yt .input { padding: 10px 12px; font-size: 14px; }
 .tracks { display: grid; gap: 8px; }
 .track { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; background: rgba(255,255,255,.05); border: 1px solid var(--line); cursor: pointer; }
 .track:hover { background: rgba(255,255,255,.1); }
@@ -495,6 +519,7 @@ body.touch #help { display: none; }
 		<div class="ppl" id="ppl"></div>
 	</div>
 	<div id="tr">
+		<button class="chip ib" id="b-pets" title="Call the pets (P) - they come running from anywhere in the house"><svg viewBox="0 0 24 24" fill="currentColor"><ellipse cx="12" cy="16" rx="4.6" ry="3.8"/><ellipse cx="6.2" cy="10.6" rx="1.9" ry="2.4"/><ellipse cx="9.6" cy="6.8" rx="1.9" ry="2.5"/><ellipse cx="14.4" cy="6.8" rx="1.9" ry="2.5"/><ellipse cx="17.8" cy="10.6" rx="1.9" ry="2.4"/></svg><span class="lbl">Pets</span></button>
 		<button class="chip ib" id="b-night" title="Night mode: lights out, fairy lights on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg><span class="lbl">Night</span></button>
 		<button class="chip ib" id="b-sound" title="Sound on/off"></button>
 		<button class="chip ib" id="b-gfx" title="Graphics quality"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4M6 13l3-3 3 2 4-4 2 2"/></svg><span class="lbl">High</span></button>
@@ -502,7 +527,13 @@ body.touch #help { display: none; }
 		<button class="chip ib" id="b-exit" title="Back to the piano"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg><span class="lbl">Piano</span></button>
 	</div>
 	<div id="toasts"></div>
-	<div id="help" class="chip"><b>WASD</b> / arrows to walk, <b>Shift</b> to run<br><b>Drag</b> to look around, <b>scroll</b> to zoom<br><b>Click</b> anything to walk there and use it<br><b>E</b> / <b>F</b> to use things, <b>Esc</b> to stand up<br><b>1</b> blow a kiss, <b>2</b> kiss, <b>3</b> pick up<br><b>Z</b> actions, <b>X</b> love, <b>C</b> mood<br><b>Enter</b> to chat<br>Glass doors by the arcade: the <b>lounge</b> and the rest of the house</div>
+	<div id="songcard" class="chip hidden" aria-label="Music playing">
+		<div class="sc-vid"></div>
+		<div class="sc-row"><span class="sc-eq"><i></i><i></i><i></i></span><span class="sc-name"></span></div>
+		<div class="sc-row"><button class="btn" id="sc-open">Music</button><button class="btn" id="sc-stop">Stop</button></div>
+		<div class="sc-far">Too far from the speakers to hear</div>
+	</div>
+	<div id="help" class="chip"><b>WASD</b> / arrows to walk, <b>Shift</b> to run<br><b>Drag</b> to look around, <b>scroll</b> to zoom<br><b>Click</b> anything to walk there and use it<br><b>E</b> / <b>F</b> to use things, <b>Esc</b> to stand up<br><b>1</b> blow a kiss, <b>2</b> kiss, <b>3</b> pick up<br><b>Z</b> actions, <b>X</b> love, <b>C</b> mood<br><b>P</b> calls the pets from anywhere<br><b>Enter</b> to chat<br>Glass doors by the arcade: the <b>lounge</b> and the rest of the house<br>Past the pool: the <b>garden</b>. By the lounge's dining table: the <b>game room</b>, spa, karaoke and observatory</div>
 	<div id="joy"><i></i></div>
 	<div id="bottom">
 		<div id="log" class="empty" aria-live="polite"></div>
@@ -576,7 +607,7 @@ body.touch #help { display: none; }
 <div id="modal" class="hidden"><div class="win"><header><h2 id="mtitle"></h2><button class="x" id="mclose" aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div class="body" id="mbody"></div></div></div>
 
 <script src="./roomSync.js?v=20261002w"></script>
-<script type="module" src="./world.js?v=20261004c"></script>
+<script type="module" src="./world.js?v=20261005c"></script>
 <script>
 // If the module never boots (old browser / CDN blocked), say so instead of spinning forever.
 setTimeout(function () {

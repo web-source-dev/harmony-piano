@@ -34,7 +34,9 @@ export function build(k) {
 	k.walk(EDGE, DISCO.x0, DISCO.z0 - 0.6, HD);
 	// the top of the stairs: walking down past x 1.75 puts you back on them (see the portals below)
 	k.walk(0.9, 2.6, -HD, -5.55);
-	k.cam = { minX: -HW + 0.2, maxX: HW - 0.2, minZ: -HD + 0.2, maxZ: HD - 0.2, maxY: ROOF - 0.3, minY: -3.3 };
+	// (the roof is low up here: the camera may rise above it, and the lounge's ceiling and roof are then cut away -
+	// see worldHouse.js cutaway - so there's always room to see you)
+	k.cam = { minX: -HW + 0.2, maxX: HW - 0.2, minZ: -HD + 0.2, maxZ: HD - 0.2, maxY: ROOF + 2.6, minY: -3.3 };
 
 	// ---------------------------------------------------------------- the stairs: lounge <-> loft
 	k.portal(true, 1.62, 1.85, -6.95, -5.5, 0.25);     // stepping up off the top step -> onto the loft
@@ -156,7 +158,7 @@ export function build(k) {
 	k.lightSwitch(1.4, 1.0, -HD + 0.02, 0);
 
 	// ---------------------------------------------------------------- the disco's walls (its inside is worldDisco.js)
-	let neonM, spillM, glowM;
+	let neonM, spillM, glowM, discoRoof;
 	{
 		const plaster = mat("#eadfcf", 0.9), dark = mat("#1a1030", 0.8);
 		const D = DISCO, T = 0.15;
@@ -180,7 +182,7 @@ export function build(k) {
 		wall(D.door1, HW, N0, N1, 0, D.h, 5);
 		wall(D.door0, D.door1, N0, N1, 2.3, D.h, 5);
 		// its ceiling (the room's own ceiling is higher), seen from above it's a flat roof
-		add(g, new THREE.BoxGeometry(HW - D.x0 + T / 2, 0.1, HD - D.z0 + T / 2), [dark, dark, plaster, dark, dark, dark], (HW + D.x0 - T / 2) / 2, D.h + 0.05, (HD + D.z0 - T / 2) / 2, { cast: false });
+		discoRoof = add(g, new THREE.BoxGeometry(HW - D.x0 + T / 2, 0.1, HD - D.z0 + T / 2), [dark, dark, plaster, dark, dark, dark], (HW + D.x0 - T / 2) / 2, D.h + 0.05, (HD + D.z0 - T / 2) / 2, { cast: false });
 		k.box(W0, W1, D.z0, HD);
 		k.box(D.x0, D.door0, N0, N1);
 		k.box(D.door1, HW, N0, N1);
@@ -222,5 +224,6 @@ export function build(k) {
 		glowM.color.copy(hue); glowM.opacity = 0.2 + Math.sin(t * 3.3) * 0.06;
 		neonM.opacity = (t % 7) < 0.12 ? 0.5 : 1;   // a little flicker now and then
 	}
-	return { update };
+	// the disco's flat roof goes when the camera is up over it from inside the disco
+	return { update, cut: { disco: [discoRoof] } };
 }

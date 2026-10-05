@@ -35,7 +35,9 @@ const NODES = {
 	// bedroom
 	B0: [24.4, -1.5], B1: [25.9, -3.2], B2: [29.9, -3.1], B3: [30.9, -5.8], B4: [25.6, -6.4], BG: [29.3, -7.2],
 	// bathroom
-	BA0: [24.4, 4.7], BA1: [28.2, 5.0]
+	BA0: [24.4, 4.7], BA1: [28.2, 5.0],
+	// the garden (through the gap in the pool deck's south railing; its points are its local coordinates + (14.3, -24.1))
+	GA: [11.3, -17.0], GB: [11.3, -19.3], GL: [13.3, -22.6], GE: [19.8, -21.6], GW: [8.3, -22.3], GS: [14.8, -27.3]
 };
 const EDGES = [
 	"LD-L4", "L4-L2", "L4-L3", "L2-L1", "L1-L3", "L1-L6", "L2-L5", "L5-L6", "L6-L7", "L7-LT", "LT-T0",
@@ -45,14 +47,15 @@ const EDGES = [
 	"LD-G0", "G0-G1", "G0-G8", "G0-G14", "G1-G2", "G1-G8", "G1-G7", "G2-G3", "G2-G15", "G3-G4", "G4-G5", "G4-G6", "G5-G6", "G5-G7", "G5-G9", "G7-G9",
 	"G9-G10", "G10-G16", "G16-G12", "G12-G13", "G11-G13", "G8-G11", "G13-G17", "G17-G14",
 	"G6-B0", "B0-B1", "B1-B2", "B2-B3", "B1-B4", "B4-B3",
-	"G10-BA0", "BA0-BA1"
+	"G10-BA0", "BA0-BA1",
+	"P1-GA", "GA-GB", "GB-GL", "GB-GW", "GL-GE", "GL-GS", "GW-GS"
 ];
 const NAMES = Object.keys(NODES);
 const ADJ = {};
 NAMES.forEach(n => { ADJ[n] = []; });
 EDGES.forEach(e => { const [a, b] = e.split("-"); ADJ[a].push(b); ADJ[b].push(a); });
 // where wandering takes them (not the doorway points)
-const WANDER = NAMES.filter(n => !["LD", "G0", "G6", "B0", "G10", "BA0", "TP", "P0", "LT", "T0", "GN", "BG", "PN"].includes(n));
+const WANDER = NAMES.filter(n => !["LD", "G0", "G6", "B0", "G10", "BA0", "TP", "P0", "LT", "T0", "GN", "BG", "PN", "GA", "GB"].includes(n));
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 // the heading that points a pet standing at a towards b (the models look down their local +z, and rotation.y = heading)
 const toward = (a, b) => Math.atan2(b[0] - a[0], b[1] - a[1]);
@@ -125,13 +128,24 @@ function hash(a, b) {
 // ---------------------------------------------------------------- shared bits (used by the corner and the pets)
 const names = ctx => Object.assign({ dog: "Biscuit", cat: "Mochi" }, ctx.get(KEYS.names) || {});
 const ev = (ctx, key) => ctx.get(KEYS[key]) || null;
+// Every event remembers the few before it of the same kind (prev). Where a pet is comes from replaying them all: with
+// only the latest one, petting twice in a row worked out where the pet was as if the first pat never happened, and
+// it vanished and popped up somewhere else.
+const HIST_MS = 10 * 60 * 1000, HIST_N = 6;
+function stamp(ctx, key, data) {
+	const t = Date.now();
+	const keep = (e, n) => (e && n > 0 && t - e.at < HIST_MS ? Object.assign({}, e, { prev: keep(e.prev, n - 1) || null }) : null);
+	ctx.setShared(KEYS[key], Object.assign({ at: t }, data, { prev: keep(ev(ctx, key), HIST_N) }));
+}
+// an event and the ones before it, newest first
+function history(e) { const out = []; for (let n = 0; e && n <= HIST_N; e = e.prev, n++) out.push(e); return out; }
 function hungerOf(ctx) { const f = ev(ctx, "feed"); return f ? Math.min(1, Math.max(0, (Date.now() - f.at) / (3 * 3600 * 1000))) : 1; }
 function happyOf(ctx, who) {
 	const last = Math.max(0, ...[ev(ctx, "pet" + who), who === DOG ? ev(ctx, "fetch") : null, ev(ctx, "call"), ev(ctx, "feed")].filter(Boolean).map(e => e.at));
 	return last ? Math.max(0.1, Math.min(1, 1 - (Date.now() - last) / (5 * 3600 * 1000))) : 0.5;
 }
 function feedPets(ctx) {
-	ctx.setShared(KEYS.feed, { at: Date.now(), by: ctx.profile().name });
+	stamp(ctx, "feed", { by: ctx.profile().name });
 	ctx.doUpper("give", 1400);
 	ctx.sfx("pour", 0.5);
 	const n = names(ctx);
@@ -264,16 +278,26 @@ function openBoard(ctx) {
 	body.querySelector("#pb-feed").onclick = () => { ctx.closeModal(); feedPets(ctx); };
 	body.querySelector("#pb-call").onclick = () => { ctx.closeModal(); callPets(ctx); };
 }
+// call them (from anywhere: the Pets button, the Z menu, the care board): a whistle and your voice, which everyone
+// nearby hears too, and they come running and answer with a woof and a meow
 function callPets(ctx) {
-	const me = ctx.me();
-	// upstairs (the loft, the disco): they won't do the stairs
-	if (shiftAt(me.x, me.z)) { const n = names(ctx); ctx.notice(`${n.dog} and ${n.cat} don't do stairs - they're waiting for you downstairs.`); return; }
-	ctx.setShared(KEYS.call, { at: Date.now(), x: me.x, z: me.z, by: ctx.profile().name });
-	ctx.doUpper("wave", 1600);
-	const n = names(ctx);
+	const me = ctx.me(), n = names(ctx);
 	const line = `Here ${n.dog}! Here ${n.cat}!`;
+	ctx.sfx("whistle", 0.6);
+	ctx.voice(line, 1);
 	ctx.myAvatar().say(line);
 	ctx.send({ t: "chat", text: line, auto: 1 });
+	ctx.send({ t: "fx", kind: "zfx", zone: "pets", what: "call", x: me.x, z: me.z, line, g: ctx.profile().gender });
+	if (!me.sit) ctx.doUpper("wave", 1600);
+	// upstairs (the loft, the disco): they hear you, but they won't do the stairs
+	if (shiftAt(me.x, me.z)) { setTimeout(() => answer(ctx, 0.35), 900); ctx.notice(`${ctx.esc(n.dog)} and ${ctx.esc(n.cat)} heard you, but they don't do stairs - they're waiting at the bottom.`); return; }
+	stamp(ctx, "call", { x: me.x, z: me.z, by: ctx.profile().name });
+	setTimeout(() => answer(ctx, 0.7), 900);
+}
+// the dog barks back, the cat meows
+function answer(ctx, vol) {
+	ctx.sfx("woof", vol);
+	setTimeout(() => ctx.sfx("meow", vol * 0.8), 650);
 }
 
 // ---------------------------------------------------------------- the animals
@@ -339,8 +363,17 @@ export function createPets(ctx, SP, house) {
 	}
 	const perched = face => ({ pos: [H[TOP][0], H[TOP][1]], y: H[TOP][2], heading: face, act: "perch", lvl: TOP });
 	// how far up she's got by `until`, making for the tree from `from` at dep (or already lvl0 up it)
+	// a walk from `from`, setting off at dep, that has to be there by `by`: far away, the pet hurries
+	// (walks used to be at one speed, and a long one across the house was still going when the next slot began:
+	// the pet then jumped to where it should have got to - it vanished and turned up somewhere else)
+	function leg(P, from, dep, to, by) {
+		const pts = route(from, to), len = polyLen(pts);
+		const speed = Math.min(P.run * 2, Math.max(P.speed, len / Math.max(1, by - 1.5 - dep)));
+		return { pts, speed, arrive: dep + len / speed };
+	}
+	// (until: the end of that slot)
 	function levelBy(P, from, dep, lvl0, until) {
-		const s = lvl0 ? until - dep : until - dep - polyLen(route(from, H[0])) / P.speed;
+		const s = lvl0 ? until - dep : until - leg(P, from, dep, H[0], until - TOP * HOP).arrive;
 		return s < 0 ? lvl0 : Math.min(TOP, lvl0 + Math.floor(s / HOP));
 	}
 	function wanderTarget(P, k2) {
@@ -359,12 +392,14 @@ export function createPets(ctx, SP, house) {
 		if (r < 0.32) return { pos: SP.dogBed, act: "sleep", face: -0.8, y: 0.1 };
 		return { pos: [node[0] + 0.3, node[1] - 0.3], act: a < 0.3 ? "sit" : a < 0.6 ? "lie" : a < 0.8 ? "groom" : "stand", face };
 	}
+	// everything that happened to this pet lately (with each kind's history: see stamp), newest first
 	function eventsFor(who) {
 		const out = [];
-		const f = ev(ctx, "feed"); if (f) out.push({ kind: "feed", at: f.at / 1000, d: f });
-		const c = ev(ctx, "call"); if (c) out.push({ kind: "call", at: c.at / 1000, d: c });
-		const p = ev(ctx, "pet" + who); if (p) out.push({ kind: "pet", at: p.at / 1000, d: p });
-		if (who === DOG) { const b = ev(ctx, "fetch"); if (b) out.push({ kind: "fetch", at: b.at / 1000, d: b }); }
+		const push = (kind, key) => history(ev(ctx, key)).forEach(d => { if (typeof d.at === "number") out.push({ kind, at: d.at / 1000, d }); });
+		push("feed", "feed");
+		push("call", "call");
+		push("pet", "pet" + who);
+		if (who === DOG) push("fetch", "fetch");
 		return out.sort((a, b) => b.at - a.at);
 	}
 	// walking a polyline that started at dep
@@ -385,6 +420,20 @@ export function createPets(ctx, SP, house) {
 	}
 	// how slot k starts: from where, when, and how far up the cat tree
 	function slotStart(P, k, after) {
+		const st = baseStart(P, k, after), s0 = k * P.slot;
+		// right after something happened, or up the cat tree: as it is
+		if (st.dep !== s0 || st.lvl) return st;
+		const pv = wanderTarget(P, k - 1);
+		if (pv.climb) return st;
+		// the walk of the slot before: if it's still going at s0, this slot starts from where the pet really is
+		let { from, dep, lvl } = baseStart(P, k - 1, after);
+		if (lvl) { from = H[0]; dep += lvl * HOP; }
+		const lg = leg(P, from, dep, pv.pos, s0);
+		if (lg.arrive <= s0) return st;
+		return { from: walk(lg.pts, dep, s0, lg.speed).pos, dep: s0, lvl: 0 };
+	}
+	// (as if the walk of the slot before got there in time)
+	function baseStart(P, k, after) {
 		const L = P.slot, s0 = k * L;
 		if (after && after.end > s0) return { from: after.final, dep: after.end, lvl: after.lvl || 0 };
 		const pv = wanderTarget(P, k - 1);
@@ -396,7 +445,7 @@ export function createPets(ctx, SP, house) {
 		return { from: pv.pos, dep: s0, lvl };
 	}
 	function wander(P, t, after) {
-		const k2 = Math.floor(t / P.slot);
+		const k2 = Math.floor(t / P.slot), end = (k2 + 1) * P.slot;
 		const tg = wanderTarget(P, k2);
 		let { from, dep, lvl } = slotStart(P, k2, after);
 		if (lvl && tg.climb) return lvl < TOP && t < dep + (TOP - lvl) * HOP ? hopAt(range(lvl, TOP), t - dep) : perched(tg.face);
@@ -404,8 +453,9 @@ export function createPets(ctx, SP, house) {
 			if (t < dep + lvl * HOP) return hopAt(range(lvl, 0), t - dep);
 			from = H[0]; dep += lvl * HOP;
 		}
-		const pts = route(from, tg.pos), arrive = dep + polyLen(pts) / P.speed;
-		if (t < arrive) { const m = walk(pts, dep, t, P.speed); return { pos: m.pos, y: 0, heading: m.heading, act: "walk" }; }
+		// (making for the cat tree she leaves time to climb it before the slot's over)
+		const lg = leg(P, from, dep, tg.pos, tg.climb ? end - TOP * HOP : end), arrive = lg.arrive;
+		if (t < arrive) { const m = walk(lg.pts, dep, t, lg.speed); return { pos: m.pos, y: 0, heading: m.heading, act: lg.speed > P.speed * 1.5 ? "run" : "walk" }; }
 		if (tg.climb) return t < arrive + TOP * HOP ? hopAt(range(0, TOP), t - arrive) : perched(tg.face);
 		return { pos: tg.pos, y: tg.y || 0, heading: tg.face, act: tg.act };
 	}
@@ -427,8 +477,10 @@ export function createPets(ctx, SP, house) {
 			const final = pts[pts.length - 1], arrive = e.at + 0.3 + down + polyLen(pts) / P.run;
 			plan = { pts, dep: e.at + 0.3 + down, speed: P.run, arrive, end: arrive + 6, final, act: "sit", face: toward(final, caller), down: lvl };
 		} else if (e.kind === "pet") {
+			// it stays right where it is (hold: while you walk over to it), then enjoys the pat
 			const at = lvl ? [H[lvl][0], H[lvl][1]] : start.pos;
-			plan = { pts: [at, at], dep: e.at, speed: 1, arrive: e.at, end: e.at + 5, final: at, act: "happy", face: toward(at, [e.d.x, e.d.z]), y: lvl ? H[lvl][2] : start.y || 0, lvl, keepAct: ["sleep", "lie", "perch"].includes(start.act) ? start.act : null };
+			const hold = Math.min(12, Math.max(0, +e.d.hold || 0));
+			plan = { pts: [at, at], dep: e.at, speed: 1, arrive: e.at, hold: e.at + hold, end: e.at + hold + 5, final: at, act: "happy", face: toward(at, [e.d.x, e.d.z]), y: lvl ? H[lvl][2] : start.y || 0, lvl, keepAct: ["sleep", "lie", "perch"].includes(start.act) ? start.act : null };
 		} else if (e.kind === "fetch") {
 			const land = e.d.to, thrower = e.d.from;
 			const go = e.at + 0.45, out = route(from, land);
@@ -438,14 +490,18 @@ export function createPets(ctx, SP, house) {
 			const drop = back[back.length - 1];
 			plan = { pts: out, dep: go, speed: P.run, arrive: t1, back: { pts: back, dep: t1 + 0.45, arrive: t2 }, end: t2 + 3, final: drop, act: "happy", face: toward(drop, thrower), fetch: true };
 		}
-		if (planCache.size > 40) planCache.clear();
+		if (planCache.size > 400) planCache.clear();
 		planCache.set(ck, plan);
 		return plan;
 	}
 	function eventState(P, e, t, older) {
 		const p = eventPlan(P, e, older);
 		if (!p || t >= p.end) return null;
-		if (e.kind === "pet") return { pos: p.final, y: p.y, heading: p.face, act: p.keepAct || "happy", petted: true, lvl: p.lvl };
+		if (e.kind === "pet") {
+			// waiting for you: sits (or stays curled up) and looks at you; then the pat
+			if (t < p.hold) return { pos: p.final, y: p.y, heading: p.face, act: p.keepAct || (P.id === DOG ? "sit" : "stand"), lvl: p.lvl };
+			return { pos: p.final, y: p.y, heading: p.face, act: p.keepAct || "happy", petted: true, lvl: p.lvl };
+		}
 		if (p.down && t < e.at + p.down * HOP) return hopAt(range(p.down, 0), t - e.at);
 		if (t < p.dep) return { pos: p.pts[0], y: 0, heading: along(p.pts, 0.01).heading, act: "stand" };
 		if (p.fetch) {
@@ -476,19 +532,26 @@ export function createPets(ctx, SP, house) {
 	}
 
 	// ---------------------------------------------------------------- doing things with them
+	// Click a pet: it stops right where it is and waits for you (everyone sees it stay put), you walk over and give
+	// it a pat. (It used to carry on wandering while you walked, and the pat then started from somewhere else.)
 	function petPet(who) {
 		const me = ctx.me();
 		const P = who === DOG ? dog : cat;
+		const key = who === DOG ? "petdog" : "petcat";
 		const d = Math.hypot(me.x - P.pos.x, me.z - P.pos.z);
-		const go = () => {
+		const pat = () => {
 			const Q = who === DOG ? dog : cat;
 			me.h = Math.atan2(Q.pos.x - me.x, Q.pos.z - me.z);
 			ctx.doUpper("pet", 3200);
-			ctx.setShared(who === DOG ? KEYS.petdog : KEYS.petcat, { at: Date.now(), x: me.x, z: me.z, by: ctx.profile().name });
-			setTimeout(() => { const Q2 = who === DOG ? dog : cat; ctx.heartsFx({ position: Q2.pos.clone() }, 5, null, who === DOG ? 1.0 : 0.7); ctx.sfx("love", 0.4); }, 600);
+			// (the pat itself: it stops waiting and enjoys it, right where it was)
+			stamp(ctx, key, { x: me.x, z: me.z, by: ctx.profile().name });
+			setTimeout(() => { const Q2 = who === DOG ? dog : cat; ctx.heartsFx({ position: Q2.pos.clone() }, 5, null, who === DOG ? 1.0 : 0.7); ctx.sfx("love", 0.4); ctx.sfx(who === DOG ? "woof" : "meow", 0.3); }, 600);
 		};
-		if (d < 1.0) go();
-		else { const dx = me.x - P.pos.x, dz = me.z - P.pos.z, l = Math.hypot(dx, dz) || 1; ctx.walkTo(P.pos.x + dx / l * 0.6, P.pos.z + dz / l * 0.6, go); }
+		if (d < 1.0) { pat(); return; }
+		// how long the walk over takes (a little extra for going round things)
+		stamp(ctx, key, { x: me.x, z: me.z, by: ctx.profile().name, hold: Math.min(12, d / 2.2 + 1.2) });
+		const dx = me.x - P.pos.x, dz = me.z - P.pos.z, l = Math.hypot(dx, dz) || 1;
+		ctx.walkTo(P.pos.x + dx / l * 0.6, P.pos.z + dz / l * 0.6, pat);
 	}
 	function throwBall() {
 		const me = ctx.me();
@@ -507,7 +570,7 @@ export function createPets(ctx, SP, house) {
 		const to = [best[0] + (Math.random() - 0.5) * 0.5, best[1] + (Math.random() - 0.5) * 0.5];
 		me.h = Math.atan2(to[0] - me.x, to[1] - me.z);
 		ctx.doUpper("give", 900);
-		ctx.setShared(KEYS.fetch, { at: Date.now(), from: [me.x, me.z], to, by: ctx.profile().name });
+		stamp(ctx, "fetch", { from: [me.x, me.z], to, by: ctx.profile().name });
 		ctx.sfx("whoosh", 0.5);
 	}
 
@@ -547,7 +610,16 @@ export function createPets(ctx, SP, house) {
 			if (key === KEYS.feed && e) ctx.notice(`<b>${ctx.esc(e.by || "Someone")}</b> fed ${ctx.esc(n.dog)} and ${ctx.esc(n.cat)}`);
 			if (key === KEYS.call && e) ctx.notice(`<b>${ctx.esc(e.by || "Someone")}</b> called the pets`);
 		},
-		onFx() {},
+		// someone called the pets: you hear them (louder the closer they are), and the pets answering
+		onFx(d) {
+			if (d.what !== "call" || typeof d.x !== "number") return;
+			const me = ctx.me(), near = Math.hypot(me.x - d.x, me.z - d.z);
+			const same = areaOf(me.x, me.z) === areaOf(d.x, d.z);
+			const vol = Math.max(0.15, Math.min(1, (same ? 1.1 : 0.6) - near / 30));
+			ctx.sfx("whistle", 0.6 * vol);
+			if (typeof d.line === "string") ctx.voice(d.line.slice(0, 80), vol, d.g === "female" ? "female" : "male");
+			setTimeout(() => answer(ctx, 0.7 * vol), 900);
+		},
 		promptOpts(opts) {
 			const me = ctx.me();
 			if (me.sit) return;

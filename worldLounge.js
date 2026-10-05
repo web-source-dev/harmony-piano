@@ -56,7 +56,8 @@ export function build(k) {
 			{ wall: "n", at: -2.0, w: 3.6, y0: 4.4, y1: 6.4 },        // high windows over the stairs
 			{ wall: "n", at: 6.6, w: 1.52, y1: 2.3 },                  // glass doors out to the pool deck
 			{ wall: "s", at: -4.6, w: 2.4, y0: 0.8, y1: 5.8 },        // tall window by the dining table
-			{ wall: "s", at: 2.4, w: 1.6, y0: 1.35, y1: 2.4 }         // kitchen window over the sink
+			{ wall: "s", at: 2.4, w: 1.6, y0: 1.35, y1: 2.4 },        // kitchen window over the sink
+			{ wall: "s", at: -1.85, w: 1.5, y1: 2.3 }                 // through to the game room (and the spa, karaoke, observatory)
 		]
 	});
 	k.floor(floorY);
@@ -65,14 +66,16 @@ export function build(k) {
 	k.walk(7.0, 8.6, -3.35, -1.65);  // bedroom
 	k.walk(7.0, 8.6, 2.95, 4.45);    // bathroom
 	k.walk(5.85, 7.35, -7.6, -6.0);  // out to the pool deck
+	k.walk(-2.6, -1.1, 6.0, 7.7);    // to the game room (its French doors are the game room's: worldGameRoom.js)
 	k.cam = { minX: -HW + 0.2, maxX: HW - 0.2, minZ: -HD + 0.2, maxZ: HD - 0.2, maxY: H - 0.3 };
 	const brass = mat("#c9a05a", 0.3, 0.9);
 	const frameM = mat("#fbf8f2", 0.45);
 	const white = mat("#f7f3ec", 0.55);
 	// outside, above the bedroom's roof (seen from the pool deck): brick
 	add(g, new THREE.PlaneGeometry(HD * 2 + 0.4, H - 3.0), mat("#ffffff", 0.95, 0, { map: k.brickTex((HD * 2) / 2.4, (H - 3) / 2.4) }), HW + 0.22, 3.0 + (H - 3.0) / 2, 0, { ry: Math.PI / 2, cast: false });
-	// exposed beams across the ceiling
-	for (let x = -6; x <= 6; x += 3) add(g, new THREE.BoxGeometry(0.22, 0.3, HD * 2), mat("#6b4a33", 0.6), x, H - 0.15, 0, { cast: false });
+	// exposed beams across the ceiling (they go with the ceiling when the camera is up there: see cut below)
+	const roofParts = (k.ceilParts || []).slice();
+	for (let x = -6; x <= 6; x += 3) roofParts.push(add(g, new THREE.BoxGeometry(0.22, 0.3, HD * 2), mat("#6b4a33", 0.6), x, H - 0.15, 0, { cast: false }));
 	// windows: a frame and the night outside
 	// seed: a painted night view behind the glass; 0 = the real outdoors (the north windows look out over the pool)
 	function windowAt(x, z, ry, w, y0, y1, seed, bars) {
@@ -107,7 +110,7 @@ export function build(k) {
 	k.frenchDoor("bath", { x: 8.08, z: 3.7, ry: Math.PI / 2, w: 1.46, h: 2.3, depth: 0.55, side: 1, curtain: "#5f8f8a" }, [7.95, 8.25, 2.95, 4.45], [[6.9, 3.7], [9.2, 3.7]]);
 	k.frenchDoor("loungepool", { x: 6.6, z: -7.05, ry: Math.PI, w: 1.48, h: 2.3, depth: 0.45, side: -1, curtain: "#5f8f8a" }, [5.85, 7.35, -7.25, -6.85], [[6.6, -6.2], [6.6, -7.9]]);
 	// little signs over the doors
-	for (const [x, y, z, ry, text, icon] of [[7.9, 2.75, -2.5, -Math.PI / 2, "Bedroom", "bed"], [7.9, 2.75, 3.7, -Math.PI / 2, "Bathroom", "bath"], [6.6, 2.75, -HD + 0.04, 0, "Pool", "wave"]]) {
+	for (const [x, y, z, ry, text, icon] of [[7.9, 2.75, -2.5, -Math.PI / 2, "Bedroom", "bed"], [7.9, 2.75, 3.7, -Math.PI / 2, "Bathroom", "bath"], [6.6, 2.75, -HD + 0.04, 0, "Pool", "wave"], [-1.85, 2.5, HD - 0.04, Math.PI, "Game Room", "games"]]) {
 		const st = tex.sign(text, icon);
 		add(g, new THREE.PlaneGeometry(0.9, 0.225), new THREE.MeshStandardMaterial({ map: st, roughness: 0.45, emissive: "#ffffff", emissiveMap: st, emissiveIntensity: 0.25 }), x, y, z, { ry, cast: false });
 	}
@@ -142,12 +145,16 @@ export function build(k) {
 	// (the cupboards' box starts a body's width in, so the top step stays clear for walking up onto the loft)
 	k.box(LAND.x0 + 0.3, LAND.x1, ST.z0, LAND.z1);
 	// the loft floor seen from below: a white ceiling with downlights
+	// (all of it, and the loft above, is cut away while the camera is up at its height: see cut below)
+	const slabParts = [];
 	{
-		const under = add(g, new THREE.PlaneGeometry(HW - LAND.x0, HD * 2), mat("#f4eee5", 0.9), (HW + LAND.x0) / 2, SLAB, 0, { rx: Math.PI / 2, cast: false });
+		// (just under the cupboards' top, so the two never fight over the same depth)
+		const under = add(g, new THREE.PlaneGeometry(HW - LAND.x0, HD * 2), mat("#f4eee5", 0.9), (HW + LAND.x0) / 2, SLAB - 0.004, 0, { rx: Math.PI / 2, cast: false });
 		under.userData.floor = false;
-		add(g, new THREE.BoxGeometry(0.12, 0.32, HD * 2), mat("#ffffff", 0.6), LAND.x0 + 0.06, SLAB + 0.15, 0, { cast: false });
+		slabParts.push(under);
+		slabParts.push(add(g, new THREE.BoxGeometry(0.12, 0.32, HD * 2), mat("#ffffff", 0.6), LAND.x0 + 0.06, SLAB + 0.15, 0, { cast: false }));
 		const dlM = new THREE.MeshBasicMaterial({ color: "#fff2d6", toneMapped: false });
-		for (const x of [3.2, 5.6]) for (const z of [-3.6, -1.2, 1.2, 3.6]) add(g, new THREE.CircleGeometry(0.07, 18), dlM, x, SLAB - 0.005, z, { rx: Math.PI / 2, cast: false, receive: false });
+		for (const x of [3.2, 5.6]) for (const z of [-3.6, -1.2, 1.2, 3.6]) slabParts.push(add(g, new THREE.CircleGeometry(0.07, 18), dlM, x, SLAB - 0.01, z, { rx: Math.PI / 2, cast: false, receive: false }));
 	}
 
 	// the main light switch, by the doors from the living room
@@ -156,7 +163,7 @@ export function build(k) {
 	// ---------------------------------------------------------------- photos up the stairs, and around the room
 	for (const [slot, x, y, z, ry, w, h] of [
 		[27, -4.5, 2.5, -HD + 0.03, 0, 0.6, 0.48], [28, -2.5, 3.4, -HD + 0.03, 0, 0.6, 0.48], [29, 0.4, 4.6, -HD + 0.03, 0, 0.6, 0.48],
-		[30, -HW + 0.03, 1.85, -0.1, Math.PI / 2, 0.6, 0.48], [31, -1.8, 1.7, HD - 0.03, Math.PI, 0.6, 0.48]
+		[30, -HW + 0.03, 1.85, -0.1, Math.PI / 2, 0.6, 0.48], [31, -1.85, 3.0, HD - 0.03, Math.PI, 0.6, 0.48]
 	]) k.photo(slot, x, y, z, ry, { w, h, frame: slot % 2 ? "#3b2519" : "#c9a05a", metal: slot % 2 ? 0 : 0.7 });
 
 	// ---------------------------------------------------------------- double-sided fireplace (between the sofa and the kitchen)
@@ -483,14 +490,16 @@ export function build(k) {
 	put(new THREE.BoxGeometry(0.16, 0.08, 0.12), new THREE.MeshPhysicalMaterial({ color: "#ffffff", transparent: true, opacity: 0.5 }), 0.2, 1.51, 0.12);
 	put(new THREE.BoxGeometry(0.14, 0.05, 0.1), mat("#e9c46a", 0.6), 0.2, 1.5, 0.12);
 	// the doors: freezer drawer below, the big door above with bottles in its shelves
-	const frDoor = group(fr, -FW / 2, 0, FD / 2);
-	add(frDoor, rbox(FW - 0.02, 1.32, 0.05, 0.03), mat("#eef1f3", 0.25, 0.4), FW / 2, 1.33, 0.025);
-	add(frDoor, rbox(0.03, 0.5, 0.04, 0.01), steel, FW - 0.1, 1.3, 0.075);
-	for (let i = 0; i < 4; i++) add(frDoor, new THREE.CylinderGeometry(0.025, 0.025, 0.01, 12), mat(["#ff4d6d", "#ffd166", "#06d6a0", "#118ab2"][i], 0.4), 0.2 + (i % 2) * 0.25, 1.55 + Math.floor(i / 2) * 0.25, 0.055, { rx: Math.PI / 2, cast: false });
-	add(frDoor, new THREE.PlaneGeometry(0.16, 0.3), new THREE.MeshStandardMaterial({ map: tex.art(3), roughness: 0.6 }), 0.6, 1.2, 0.056, { cast: false });
+	// (hinged on the room side, local +x: the fridge stands in the corner against the east wall, so a door hinged
+	// on the wall side would swing round into the wall)
+	const frDoor = group(fr, FW / 2, 0, FD / 2);
+	add(frDoor, rbox(FW - 0.02, 1.32, 0.05, 0.03), mat("#eef1f3", 0.25, 0.4), -FW / 2, 1.33, 0.025);
+	add(frDoor, rbox(0.03, 0.5, 0.04, 0.01), steel, -(FW - 0.1), 1.3, 0.075);
+	for (let i = 0; i < 4; i++) add(frDoor, new THREE.CylinderGeometry(0.025, 0.025, 0.01, 12), mat(["#ff4d6d", "#ffd166", "#06d6a0", "#118ab2"][i], 0.4), -(0.2 + (i % 2) * 0.25), 1.55 + Math.floor(i / 2) * 0.25, 0.055, { rx: Math.PI / 2, cast: false });
+	add(frDoor, new THREE.PlaneGeometry(0.16, 0.3), new THREE.MeshStandardMaterial({ map: tex.art(3), roughness: 0.6 }), -0.6, 1.2, 0.056, { cast: false });
 	for (const y of [0.85, 1.25, 1.65]) {
-		add(frDoor, new THREE.BoxGeometry(FW - 0.14, 0.02, 0.1), shelfGlass, FW / 2, y, -0.05, { cast: false });
-		for (let i = 0; i < 4; i++) add(frDoor, new THREE.CylinderGeometry(0.03, 0.03, 0.18, 12), mat(["#06d6a0", "#ef476f", "#ffffff", "#ffd166"][(i + Math.round(y * 10)) % 4], 0.3), 0.15 + i * 0.18, y + 0.1, -0.05, { cast: false });
+		add(frDoor, new THREE.BoxGeometry(FW - 0.14, 0.02, 0.1), shelfGlass, -FW / 2, y, -0.05, { cast: false });
+		for (let i = 0; i < 4; i++) add(frDoor, new THREE.CylinderGeometry(0.03, 0.03, 0.18, 12), mat(["#06d6a0", "#ef476f", "#ffffff", "#ffd166"][(i + Math.round(y * 10)) % 4], 0.3), -(0.15 + i * 0.18), y + 0.1, -0.05, { cast: false });
 	}
 	add(fr, rbox(FW - 0.02, 0.6, 0.05, 0.03), mat("#eef1f3", 0.25, 0.4), 0, 0.33, FD / 2 + 0.025);
 	add(fr, rbox(0.3, 0.03, 0.04, 0.01), steel, 0, 0.55, FD / 2 + 0.06);
@@ -504,7 +513,7 @@ export function build(k) {
 	} }, fr);
 	k.updaters.push(dt => {
 		frK += ((fridgeOpen ? 1 : 0) - frK) * Math.min(1, dt * 6);
-		frDoor.rotation.y = -frK * 1.75;
+		frDoor.rotation.y = frK * 1.75;   // swings open toward the kitchen, away from the wall
 		frGlow.color.setScalar(0.3 + frK * 0.7);
 		frIn.emissive.set("#cfe8ff"); frIn.emissiveIntensity = frK * 0.35;
 	});
@@ -809,6 +818,8 @@ export function build(k) {
 	return {
 		update,
 		petSpots,
+		// what the camera cuts away (worldHouse.js cutaway): the loft's underside when it's up under it, the roof when it's up there
+		cut: { low: slabParts, roof: roofParts, slab: { x0: LAND.x0 + k.ox, y: SLAB } },
 		onEnter() { here = true; shownMeal = "x"; applyMeal(); },
 		onLeave() { here = false; },
 		applyKey(key, remote) {

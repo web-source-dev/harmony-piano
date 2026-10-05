@@ -22,7 +22,7 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
 import { Avatar, SKIN_TONES, HAIR_COLORS, OUTFIT_COLORS, MOODS, drawMoodFace, FOOD_PROPS } from "./worldAvatar.js";
-import { buildRoom, ROOM, DOOR, TERRACE, MOON_DIR, walkable, areaOf, floorAt, heartMesh, makeMug, shiftAt, visXZ, makePhotoFrame } from "./worldRoom.js";
+import { buildRoom, ROOM, DOOR, TERRACE, MOON_DIR, walkable, areaOf, floorAt, heartMesh, makeMug, shiftAt, visXZ, makePhotoFrame, tickPhotoGlow } from "./worldRoom.js";
 import { WorldAudio, TRACKS } from "./worldAudio.js";
 import * as Games from "./worldGames.js";
 import { createHouse, ZONES } from "./worldHouse.js";
@@ -160,6 +160,7 @@ const house = createHouse({
 	get: k => get(k), setShared: (k, v) => setShared(k, v), send: o => send(o),
 	toast: (...a) => toast(...a), notice: h => addLog(h, true), esc,
 	sfx: (n, v) => { if (audio) audio.sfx(n, v); },
+	voice: (text, v, g) => speakVoice(text, v, g),
 	audio: () => audio, muted: () => muted, me: () => me, myAvatar: () => myAvatar, peers: () => peers, MY_ID,
 	profile: () => profile,
 	doUpper: (u, ms, p) => doUpper(u, ms, p), sitOn: ids => sitOn(ids), standUp: q => standUp(q), walkTo: (x, z, a) => walkTo(x, z, a),
@@ -248,7 +249,17 @@ const S = lsGet(LS_STATE, {});
 delete S.remote; delete S.fight;
 function get(k) { return S[k] ? S[k].v : (k in DEFAULTS ? DEFAULTS[k] : undefined); }
 let saveTimer = 0;
-function persist() { clearTimeout(saveTimer); saveTimer = setTimeout(() => { const c = Object.assign({}, S); delete c.remote; delete c.fight; lsSet(LS_STATE, c); }, 400); }
+// (50 photos can be more than the browser lets a page keep: if the full copy doesn't fit, keep everything but the
+// uploaded pictures - those are safe on the server - instead of silently keeping nothing at all)
+function persist() {
+	clearTimeout(saveTimer);
+	saveTimer = setTimeout(() => {
+		const c = Object.assign({}, S); delete c.remote; delete c.fight;
+		try { localStorage.setItem(LS_STATE, JSON.stringify(c)); return; } catch (e) { /* too big: below */ }
+		for (const k in c) if (/^photo/.test(k) && c[k] && typeof c[k].v === "string" && c[k].v.indexOf("data:") === 0) delete c[k];
+		lsSet(LS_STATE, c);
+	}, 400);
+}
 function setShared(k, v) {
 	S[k] = { v, ts: Math.max(now(), S[k] ? S[k].ts + 1 : 0) };
 	persist();
@@ -336,7 +347,7 @@ function onNet(d) {
 			if (p) {
 				const text = String(d.text).slice(0, 240);
 				p.avatar.say(text);
-				if (!d.auto) { chatMsg({ id: typeof d.mid === "string" ? d.mid : null, ts: now(), name: p.look.name, color: p.look.top, text }); if (audio) audio.sfx("pop", 0.5); }
+				if (!d.auto) { chatMsg({ id: typeof d.mid === "string" ? d.mid : null, ts: now(), name: p.look.name, color: p.look.top, text }); if (audio) audio.sfx("pop", 0.5); house.onChat(id, p, text); }
 			}
 			break;
 		case "fx": onFx(d, p); break;
@@ -445,6 +456,7 @@ function applyKey(k, remote) {
 	else if (k === "remote") applyRemote(remote);
 	else if (k === "fight") applyFight(remote);
 	else if (k === "music") applyMusic(remote);
+	else if (k === "musicLib") { if (modalKind === "music") openMusic(); }
 	else if (k === "plant") applyPlant();
 	else if (k === "coffee") applyCoffee();
 	else if (k === "cups") applyCups();
@@ -558,9 +570,15 @@ function flushChat() {
 const WORLD_SAVED = /^(photo|cap)([0-9]|[1-4][0-9])$/;
 const PHOTO_KEY = /^photo([0-9]|[1-4][0-9])$/, CAP_KEY = /^cap([0-9]|[1-4][0-9])$/;
 const worldSaveT = {};
-function saveWorldKey(k) {
+// (keeps trying until the server has it: a photo that only lived in this browser was gone the next day)
+function saveWorldKey(k, tries) {
 	if (!WORLD_SAVED.test(k) || !S[k] || !/^https?:$/.test(location.protocol)) return;
-	fetch("/api/world/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: ROOM_NAME, k, v: S[k].v, ts: S[k].ts }) }).catch(() => {});
+	tries = tries || 0;
+	const again = () => { if (tries < 8) { clearTimeout(worldSaveT[k]); worldSaveT[k] = setTimeout(() => saveWorldKey(k, tries + 1), 5000 * (tries + 1)); } };
+	fetch("/api/world/state", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: ROOM_NAME, k, v: S[k].v, ts: S[k].ts }) })
+		.then(r => r.ok ? r.json() : null)
+		.then(j => { if (!j || !j.ok) again(); })
+		.catch(again);
 }
 // chat history + saved photos when you come in (keeps retrying until the server answers)
 let worldLoaded = false, worldRetryT = 0;
@@ -583,6 +601,8 @@ function fetchWorld() {
 			if (mine && mine.ts > st[k].ts) saveWorldKey(k);   // this device has something newer: put it on the server
 			else receiveSet(k, st[k].v, +st[k].ts || 0);
 		});
+		// photos this device has that never made it to the server: send them now
+		Object.keys(S).forEach(k => { if (WORLD_SAVED.test(k) && !st[k] && S[k] && S[k].v) saveWorldKey(k); });
 	}).catch(retry);
 }
 function toast(text, action, onAction, ms = 7000) {
@@ -628,8 +648,8 @@ $("#modal").addEventListener("pointerdown", e => { if (e.target.id === "modal") 
 function interact(id) {
 	if (!room.interactables[id]) return;
 	const def = room.interactables[id];
-	// carrying someone: the bed / sofa is where you lay them down to cuddle
-	if (me.carrying && CARRY_FURNITURE[id]) { carryToCuddle(id); return; }
+	// carrying someone: the bed / sofa is where you lay them down to cuddle (any couch for two: sit down together)
+	if (me.carrying && carryPlace(id)) { carryToCuddle(id); return; }
 	if (def.face !== undefined && !def.sit && !me.sit) me.h = def.face;
 	// things in the other rooms of the house bring their own action
 	if (def.use) { def.use(); return; }
@@ -683,7 +703,7 @@ function doUpper(u, ms, partner) {
 	sendPose(true);
 }
 function labelOf(id) {
-	if (me.carrying && CARRY_FURNITURE[id] && peers.get(me.carrying)) return "Lie down with " + peers.get(me.carrying).look.name + " and cuddle";
+	if (me.carrying && peers.get(me.carrying) && carryPlace(id)) return (CARRY_FURNITURE[id] ? "Lie down with " : "Sit down with ") + peers.get(me.carrying).look.name + " and cuddle";
 	if (id === "coffee") return coffeeReady() ? "Pick up the coffee" : room.coffee.brewing > 0 ? "Brewing..." : "Make coffee";
 	if (id === "tv" || id === "remote") {
 		const r = get("remote");
@@ -793,7 +813,7 @@ function freeFloorNear(x, z, h) {
 	const dirs = [0, Math.PI / 2, -Math.PI / 2, Math.PI / 4, -Math.PI / 4, Math.PI, 3 * Math.PI / 4, -3 * Math.PI / 4];
 	for (let r = 0.6; r <= 3; r += 0.15) for (const d of dirs) {
 		const a = h + d, nx = x + Math.sin(a) * r, nz = z + Math.cos(a) * r;
-		if (!blocked(nx, nz, true)) return { x: nx, z: nz };
+		if (!blocked(nx, nz, true) && (waterAt(nx, nz) <= 0 || waterAt(x, z) > 0)) return { x: nx, z: nz };
 	}
 	return areaOf(x, z) === "room" ? { x: 0.5, z: 1.5 } : { x, z };
 }
@@ -836,7 +856,8 @@ function sitUpInBed(quiet) {
 function isAsleep(o) {
 	if (!o || o.anim !== "sleep" || COUPLE_POSES.includes(o.upper)) return false;
 	const s = o.sit && spotById(o.sit);
-	return !(s && s.sofaLie);
+	// (lying on the sofa, or on the spa's massage tables (awake), you're not asleep)
+	return !(s && (s.sofaLie || s.awake));
 }
 function sleepingPeers() { const out = []; peers.forEach((p, id) => { if (isAsleep(p)) out.push(id); }); return out; }
 function nearestSleeper() {
@@ -1189,23 +1210,147 @@ function updateFightRemote(t) {
 }
 
 // ---------- music
+// The record player, the lounge's jukebox and the disco's DJ booth all play the same shared music: one of the three
+// built-in tracks, or any song from YouTube (music.yt). A YouTube song plays in a little player in the corner of the
+// screen, started at the same moment for everyone, and its volume follows the speakers like the built-in tracks.
+const songName = m => m.yt ? (m.title || "a song from YouTube") : TRACKS[m.track % TRACKS.length].name;
 function applyMusic(remote) {
 	const m = get("music");
 	room.record.playing = !!m.on;
-	if (audio) { if (m.on) audio.startMusic(m.track, m.at); else audio.stopMusic(); }
-	if (remote && m.on) addLog("The record player is playing " + esc(TRACKS[m.track % TRACKS.length].name), true);
+	if (m.on && m.yt) { if (audio) audio.stopMusic(); mountSong(m); }
+	else { unmountSong(); if (audio) { if (m.on) audio.startMusic(m.track, m.at); else audio.stopMusic(); } }
+	if (remote && m.on) addLog("Now playing: " + esc(songName(m)), true);
 	if (modalKind === "music") openMusic();
 }
 function openMusic() {
 	const m = get("music");
 	const cols = ["#d1495b", "#3d7ea6", "#e9c46a"];
-	const html = `<div class="tracks">${TRACKS.map((t, i) => `<div class="track ${m.on && m.track === i ? "on" : ""}" data-t="${i}"><div class="disc" style="--c:${cols[i]}"></div><div><b>${t.name}</b><span>${t.bpm} bpm · plays for everyone</span></div>${m.on && m.track === i ? '<div class="eq"><i></i><i></i><i></i></div>' : ""}</div>`).join("")}</div>
-		<div class="row" style="margin-top:14px;justify-content:space-between"><span class="muted">Music gets louder the closer you are to the speakers.</span>${m.on ? '<button class="btn" id="mstop">Stop</button>' : ""}</div>`;
-	const body = openModal("music", "Record Player", html, 480);
+	const lib = (get("musicLib") || []).filter(s => s && /^[\w-]{11}$/.test(s.id));
+	const playing = s => m.on && m.yt === s.id;
+	const html = `<div class="tracks">${TRACKS.map((t, i) => `<div class="track ${m.on && !m.yt && m.track === i ? "on" : ""}" data-t="${i}"><div class="disc" style="--c:${cols[i]}"></div><div><b>${t.name}</b><span>${t.bpm} bpm · plays for everyone</span></div>${m.on && !m.yt && m.track === i ? '<div class="eq"><i></i><i></i><i></i></div>' : ""}</div>`).join("")}
+		${lib.map(s => `<div class="track yt ${playing(s) ? "on" : ""}" data-y="${s.id}"><img class="thumb" src="https://i.ytimg.com/vi/${s.id}/mqdefault.jpg" alt=""><div class="grow"><b>${esc(s.title || "YouTube song")}</b><span>YouTube · added by ${esc(s.by || "someone")}</span></div>${playing(s) ? '<div class="eq"><i></i><i></i><i></i></div>' : `<button class="x" data-rm="${s.id}" title="Remove from the list" aria-label="Remove from the list"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`}</div>`).join("")}</div>
+		<div class="mus-yt"><input class="input" id="mus-url" placeholder="Paste a YouTube link to play any song" autocomplete="off"><button class="btn primary" id="mus-go">Play</button></div>
+		<div class="row" style="margin-top:14px;justify-content:space-between"><span class="muted">Plays for everyone, at the record player, the jukebox and the disco. Louder the closer you are to the speakers.</span>${m.on ? '<button class="btn" id="mstop">Stop</button>' : ""}</div>`;
+	const body = openModal("music", "Music", html, 500);
 	body.querySelectorAll("[data-t]").forEach(el => el.onclick = () => setShared("music", { on: true, track: +el.dataset.t, at: now() }));
+	body.querySelectorAll("[data-y]").forEach(el => el.onclick = e => {
+		if (e.target.closest("[data-rm]")) return;
+		const s = lib.find(x => x.id === el.dataset.y);
+		if (s) playSong(s.id, s.title);
+	});
+	body.querySelectorAll("[data-rm]").forEach(b => b.onclick = e => { e.stopPropagation(); setShared("musicLib", lib.filter(s => s.id !== b.dataset.rm)); });
+	const inp = body.querySelector("#mus-url");
+	inp.addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") go(); });
+	const go = () => {
+		const r = YT_RE.exec(inp.value.trim()) || /^([\w-]{11})$/.exec(inp.value.trim());
+		if (!r) { inp.classList.add("bad"); setTimeout(() => inp.classList.remove("bad"), 900); return; }
+		playSong(r[1], "");
+	};
+	body.querySelector("#mus-go").onclick = go;
 	const st = body.querySelector("#mstop");
 	if (st) st.onclick = () => setShared("music", { on: false, track: m.track, at: 0 });
 }
+// play a YouTube song for everyone, and keep it in the list (the last 12 added)
+function playSong(id, title) {
+	const lib = (get("musicLib") || []).filter(s => s && s.id !== id);
+	const known = (get("musicLib") || []).find(s => s && s.id === id);
+	title = title || (known && known.title) || "";
+	const m = get("music");
+	setShared("music", { on: true, track: m.track || 0, at: now(), yt: id, title });
+	setShared("musicLib", [{ id, title, by: profile.name }].concat(lib).slice(0, 12));
+	send({ t: "fx", kind: "sys", text: profile.name + " put on " + (title || "a song from YouTube") });
+	if (audio) audio.sfx("click");
+	// its real title, from YouTube (the list and the player say "YouTube song" until then)
+	if (!title) fetch("https://www.youtube.com/oembed?format=json&url=" + encodeURIComponent("https://www.youtube.com/watch?v=" + id))
+		.then(r => r.ok ? r.json() : null)
+		.then(j => {
+			const t = j && typeof j.title === "string" ? j.title.slice(0, 90) : "";
+			if (!t) return;
+			setShared("musicLib", (get("musicLib") || []).map(s => s && s.id === id ? Object.assign({}, s, { title: t }) : s));
+			const cur = get("music");
+			if (cur.on && cur.yt === id && !cur.title) setShared("music", Object.assign({}, cur, { title: t }));
+		})
+		.catch(() => { /* no title: it stays "YouTube song" */ });
+}
+// the YouTube song's player (a small card in the corner: the video, its name, stop)
+let song = null;   // { id, at, iframe, dur }
+function songElapsed(m) { const s = Math.max(0, (now() - m.at) / 1000); return song && song.dur > 1 ? s % song.dur : s; }
+function songCmd(func, args) {
+	if (!song || !song.iframe.contentWindow) return;
+	try { song.iframe.contentWindow.postMessage(JSON.stringify({ event: "command", func, args: args || [] }), "*"); } catch (e) {}
+}
+function mountSong(m) {
+	if (!entered) return;
+	const card = $("#songcard");
+	card.querySelector(".sc-name").textContent = songName(m);
+	card.classList.remove("hidden");
+	if (song && song.id === m.yt) {
+		// the same song started over (or just got its title)
+		if (song.at !== m.at) { song.at = m.at; songCmd("seekTo", [songElapsed(m), true]); songCmd("playVideo"); }
+		return;
+	}
+	unmountSong(true);
+	const iframe = document.createElement("iframe");
+	iframe.allow = "autoplay; encrypted-media";
+	iframe.title = "Music";
+	const start = Math.floor(Math.max(0, (now() - m.at) / 1000));
+	iframe.src = `https://www.youtube.com/embed/${m.yt}?enablejsapi=1&autoplay=1&controls=0&rel=0&playsinline=1&modestbranding=1&iv_load_policy=3&loop=1&playlist=${m.yt}&start=${start}&origin=${encodeURIComponent(location.origin)}`;
+	card.querySelector(".sc-vid").appendChild(iframe);
+	song = { id: m.yt, at: m.at, iframe, dur: 0, vol: -1 };
+	iframe.addEventListener("load", () => {
+		try { iframe.contentWindow.postMessage(JSON.stringify({ event: "listening", id: 2 }), "*"); } catch (e) {}
+		const sync = () => { const cur = get("music"); if (song && song.iframe === iframe && cur.on && cur.yt === song.id) { songCmd("unMute"); songCmd("seekTo", [songElapsed(cur), true]); songCmd("playVideo"); song.vol = -1; } };
+		setTimeout(sync, 900);
+		setTimeout(sync, 3000);
+	});
+}
+function unmountSong(keepCard) {
+	if (song) { song.iframe.src = "about:blank"; song.iframe.remove(); song = null; }
+	if (!keepCard) $("#songcard").classList.add("hidden");
+}
+// the player tells us how long the song is (so someone joining late lands in the right spot of a looping song)
+addEventListener("message", e => {
+	if (!song || e.source !== song.iframe.contentWindow) return;
+	let d = e.data;
+	try { if (typeof d === "string") d = JSON.parse(d); } catch (err) { return; }
+	if (d && d.event === "infoDelivery" && d.info && d.info.duration > 1) song.dur = d.info.duration;
+});
+// its volume, from the loop: louder the closer you are to the speakers (0 where they can't be heard)
+function songVolume(v) {
+	if (!song) return;
+	const vol = Math.round(Math.max(0, Math.min(100, v * 100)));
+	if (Math.abs(vol - song.vol) < 2) return;
+	song.vol = vol;
+	songCmd("setVolume", [vol]);
+	$("#songcard").classList.toggle("far", vol < 8);
+}
+$("#sc-stop").onclick = () => { const m = get("music"); setShared("music", { on: false, track: m.track || 0, at: 0 }); };
+$("#sc-open").onclick = () => openMusic();
+
+// ---------- calling the pets, from anywhere
+// a small voice (the browser's own speech; quietly nothing where there isn't one)
+function speakVoice(text, vol, gender) {
+	if (muted || !text || !("speechSynthesis" in window)) return;
+	try {
+		const u = new SpeechSynthesisUtterance(String(text).slice(0, 120));
+		u.volume = Math.max(0, Math.min(1, vol === undefined ? 1 : vol));
+		u.rate = 1.05; u.pitch = 1.3;
+		const fem = (gender || profile.gender) === "female";
+		const isFem = v => /female|zira|samantha|aria|jenny|victoria|karen|susan|hazel|libby|sonia|moira|tessa|fiona|natasha|emma/i.test(v.name);
+		const en = speechSynthesis.getVoices().filter(v => /^en/i.test(v.lang));
+		const pick = en.find(v => fem ? isFem(v) : !isFem(v) && /male|david|daniel|guy|alex|fred|george|ryan|mark|james|thomas/i.test(v.name)) || en[0];
+		if (pick) u.voice = pick;
+		speechSynthesis.cancel();
+		speechSynthesis.speak(u);
+	} catch (e) { /* no speech here */ }
+}
+function callPetsNow() {
+	const P = house.pets();
+	if (!P) { addLog("The pets are still waking up - try again in a moment.", true); return; }
+	P.call();
+	canvas.focus();
+}
+$("#b-pets").onclick = callPetsNow;
 
 // ---------- notes
 let notesTimer = 0;
@@ -1280,7 +1425,7 @@ function openPhotos(sel) {
 		}).join("")}</div>`).join("")}</div>
 	</div><input type="file" accept="image/*" id="phfile" class="hidden">
 	<div id="phlib" class="phlib hidden"><div class="phlib-head"><b id="phlib-t">Choose a photo</b><button class="btn" id="phlib-x">Back</button></div><div class="phlib-grid" id="phlib-g"><p class="muted">Loading the media library...</p></div></div>
-	<p class="muted" style="margin:14px 0 0">${PHOTO_COUNT} frames hang around the house, with a whole wall of them upstairs. Pick a frame, then upload a photo or choose one from the media library - everyone sees it, and it stays saved in this room.</p>`;
+	<div class="row pm-foot"><button class="btn primary" id="ph-fill">${filled < PHOTO_COUNT ? "Fill all frames" : "Shuffle photos"}</button></div>`;
 	const body = openModal("photos", "Our Memories", html, 760);
 	const list = body.querySelector(".pm-list");
 	if (list) list.scrollTop = keepScroll;
@@ -1290,6 +1435,7 @@ function openPhotos(sel) {
 	body.querySelectorAll("[data-pick]").forEach(b => b.onclick = () => file.click());
 	body.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { setShared("photo" + slot, ""); openPhotos(); });
 	body.querySelectorAll("[data-lib]").forEach(b => b.onclick = () => openPhotoLibrary(body, slot));
+	body.querySelector("#ph-fill").onclick = e => fillAllFrames(e.currentTarget);
 	body.querySelectorAll("[data-cap]").forEach(inp => inp.oninput = () => { clearTimeout(inp._t); inp._t = setTimeout(() => setShared("cap" + inp.dataset.cap, inp.value.slice(0, 40)), 400); });
 	body.querySelectorAll("[data-view]").forEach(d => d.onclick = () => {
 		const src = get("photo" + d.dataset.view);
@@ -1310,6 +1456,65 @@ function openPhotos(sel) {
 	};
 }
 
+// A picture for a frame, in a form that lasts: media-library pictures stay where they are, but pictures shared in a
+// room (room-media/) get cleared out after a while - and the server never kept them - so those are copied into the
+// frame as a small JPEG instead. (Frames filled from them came up empty the next day.)
+function permanentPhoto(url) {
+	if (/^\/media-library\/[^/]+$/.test(url) || /^data:image\//.test(url)) return Promise.resolve(url);
+	return fetch(url).then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); }).then(b => compressImage(b, 45000));
+}
+// the media library's pictures (cached for this visit)
+function libraryImages() {
+	if (libCache) return Promise.resolve(libCache);
+	return fetch("/api/world/library", { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+		.then(j => { const list = (j && j.images) || []; libCache = list.length ? list : null; return list; });
+}
+const shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+// One button for all 50 frames: the first time it fills every empty frame (pictures from the media library, ones not
+// on the walls yet first); once they're all full, each click shuffles the photos round the house (captions go with them).
+let filling = false;
+function fillAllFrames(btn) {
+	if (filling) return;
+	const slots = range(0, PHOTO_COUNT - 1), empty = slots.filter(n => !get("photo" + n));
+	if (!empty.length) {
+		const order = shuffled(slots), pics = slots.map(n => [get("photo" + n), get("cap" + n) || ""]);
+		order.forEach((to, from) => { if (get("photo" + to) !== pics[from][0]) setShared("photo" + to, pics[from][0]); if ((get("cap" + to) || "") !== pics[from][1]) setShared("cap" + to, pics[from][1]); });
+		send({ t: "fx", kind: "sys", text: profile.name + " shuffled the photos round the house" });
+		addLog("Shuffled all the photos round the house", true);
+		if (audio) audio.sfx("whoosh", 0.4);
+		openPhotos();
+		return;
+	}
+	filling = true;
+	if (btn) { btn.disabled = true; btn.textContent = "Filling..."; }
+	const done = () => { filling = false; if (modalKind === "photos" && !photoLibOpen) openPhotos(); };
+	libraryImages().catch(() => []).then(list => {
+		const hung = new Set(slots.map(n => get("photo" + n)).filter(Boolean));
+		const fresh = shuffled(list.map(m => m.url).filter(u => !hung.has(u)));
+		const reuse = shuffled(list.map(m => m.url).concat([...hung]));
+		if (!fresh.length && !reuse.length) {
+			toast("There are no pictures to hang yet. Add some to the media library (the /manage page, Media tab), or upload one into a frame first.");
+			done();
+			return;
+		}
+		// each empty frame gets a picture not up yet if there is one, otherwise one that's already up somewhere else
+		const picks = empty.map((n, i) => i < fresh.length ? fresh[i] : reuse[(i - fresh.length) % reuse.length]);
+		let i = 0, ok = 0;
+		const next = () => {
+			if (i >= empty.length) {
+				send({ t: "fx", kind: "sys", text: profile.name + " filled every frame in the house with photos" });
+				addLog(`Filled ${ok} frame${ok === 1 ? "" : "s"} with photos. Click again to shuffle them.`, true);
+				if (audio) audio.sfx("chime", 0.5);
+				done();
+				return;
+			}
+			const n = empty[i], url = picks[i++];
+			permanentPhoto(url).then(u => { if (!get("photo" + n)) { setShared("photo" + n, u); ok++; } }).catch(() => {}).then(next);
+		};
+		next();
+	});
+}
+
 // pick one of the media library's pictures for a frame on the wall
 let libCache = null;
 function openPhotoLibrary(body, slot) {
@@ -1324,10 +1529,13 @@ function openPhotoLibrary(body, slot) {
 		grid.innerHTML = list.map((m, i) => `<button class="phlib-it${get("photo" + slot) === m.url ? " on" : ""}" data-i="${i}" title="${esc(m.title)}"><img loading="lazy" src="${esc(m.url)}" alt=""></button>`).join("");
 		grid.querySelectorAll(".phlib-it").forEach(b => b.onclick = () => {
 			const m = list[+b.dataset.i];
-			setShared("photo" + slot, m.url);
-			send({ t: "fx", kind: "sys", text: profile.name + " hung up a new photo" });
-			addLog("You hung up a new photo", true);
-			openPhotos();
+			b.disabled = true;
+			permanentPhoto(m.url).then(url => {
+				setShared("photo" + slot, url);
+				send({ t: "fx", kind: "sys", text: profile.name + " hung up a new photo" });
+				addLog("You hung up a new photo", true);
+				openPhotos();
+			}).catch(() => { b.disabled = false; toast("That picture couldn't be used. Try another one."); });
 		});
 	};
 	if (libCache) { show(libCache); return; }
@@ -2328,7 +2536,7 @@ function offerCarry(id) {
 	const p = peers.get(id);
 	if (!p) return;
 	const pr = p.look.gender === "female" ? "her" : "him";
-	toast(`<b>${esc(p.look.name)}</b> is standing up. Pick ${pr} up and carry ${pr} to the bed or the sofa to cuddle?`, "Pick up", () => carryAct(id), 9000);
+	toast(`<b>${esc(p.look.name)}</b> is standing up. Pick ${pr} up and carry ${pr} to a bed, the sofa or a couch to cuddle?`, "Pick up", () => carryAct(id), 9000);
 }
 function carryAct(id) {
 	if (me.carrying) { endCarry(); return; }
@@ -2377,7 +2585,7 @@ function startCarry(id) {
 	doUpper("carry", 1e9, id);
 	heartsFx(myAvatar.root, 5);
 	if (audio) audio.sfx("love", 0.5);
-	addLog(`You picked up <b>${esc(p.look.name)}</b>. Press <b>Cuddle</b> or click the bed or sofa to lie down together.`, true);
+	addLog(`You picked up <b>${esc(p.look.name)}</b>. Press <b>Cuddle</b> or click a bed, sofa or couch to cuddle up together.`, true);
 	updateCarryBar();
 }
 // put them back on their feet (quiet = they already know)
@@ -2390,10 +2598,20 @@ function endCarry(quiet) {
 	updateCarryBar();
 	sendPose(true);
 }
+// walking into the pool with someone in your arms: they're put down on the dry deck and you swim on your own
+// (carrying in the water made a tangle of the two of you)
+function putDownAtWater() {
+	const q = peers.get(me.carrying);
+	endCarry();
+	addLog(`You put ${q ? "<b>" + esc(q.look.name) + "</b>" : "them"} down on the edge - into the water on your own!`, true);
+	myAvatar.say("Wait here, I'm going in!");
+	send({ t: "chat", text: "Wait here, I'm going in!", auto: 1 });
+}
 function hopDown(quiet) {
 	const id = me.carriedBy;
 	if (!id) return;
 	me.carriedBy = null;
+	// (on dry floor: never dropped into the pool)
 	const p = freeFloorNear(me.x, me.z, me.h);
 	me.x = p.x; me.z = p.z;
 	if (!quiet) send({ t: "act", kind: "carryend", to: id });
@@ -2406,22 +2624,46 @@ function carrySpots(id) {
 	if (!c || taken.has(c.carried) || taken.has(c.carrier)) return null;
 	return c;
 }
-// walk to the nearest free bed / sofa, lay them down there and lie down next to them
+// any other couch / bench / seat for two (the lounge's sofas, the loft's loveseat and daybed, the disco booth, the swing,
+// the hot tub...): two free seats side by side - they're sat down on one, you take the one next to it.
+// (Carrying someone, those used to just put them down instead.)
+function couchPair(id) {
+	const def = room.interactables[id];
+	if (!def || !Array.isArray(def.sit) || def.lie || def.sit.length < 2 || CARRY_FURNITURE[id]) return null;
+	const taken = takenSpots();
+	const free = def.sit.map(spotById).filter(s => s && !s.lie && !taken.has(s.id));
+	let best = null, bd = 1e9;
+	for (const a of free) for (const b of free) {
+		if (a === b) continue;
+		const gap = Math.hypot(a.x - b.x, a.z - b.z);
+		if (gap > NEAR_SEAT - 0.1 || (b.excl && b.excl.includes(a.id))) continue;
+		// you take the seat nearer to you
+		const d = Math.hypot(b.x - me.x, b.z - me.z) + gap * 0.2;
+		if (d < bd) { bd = d; best = { carried: a.id, carrier: b.id }; }
+	}
+	return best;
+}
+// where to set down whoever you're carrying, at that bed / sofa / couch (null: no room there)
+function carryPlace(id) { return CARRY_FURNITURE[id] ? carrySpots(id) : couchPair(id); }
+// walk to the nearest free bed / sofa / couch, lay them down (or sit them down) there and cuddle up next to them
 function carryToCuddle(furn) {
 	const id = me.carrying, p = id && peers.get(id);
 	if (!p) return;
-	// only a bed / sofa in the room you're in (the bedroom's big bed when you're in the bedroom)
+	// only in the room you're in (the bedroom's big bed when you're in the bedroom)
 	const here = house.regionOf(areaOf(me.x, me.z));
-	const opts = (furn ? [furn] : Object.keys(CARRY_FURNITURE)).filter(k => room.interactables[k] && house.regionOf(areaOf(...room.interactables[k].stand)) === here).filter(carrySpots);
+	const standXZ = k => { const s = room.interactables[k].stand; return Array.isArray(s) ? s : null; };
+	const inHere = k => { const s = room.interactables[k] && standXZ(k); return !!s && house.regionOf(areaOf(s[0], s[1])) === here; };
+	const opts = (furn ? [furn] : Object.keys(room.interactables)).filter(k => inHere(k) && carryPlace(k));
 	if (!opts.length) {
-		myAvatar.say(furn ? "No room to lie down there..." : here === "main" ? "The bed and the sofa are both taken..." : "Let's find a bed...");
+		myAvatar.say(furn ? "No room for us there..." : "Let's find somewhere to cuddle...");
+		addLog("Carry them to a bed, a sofa or a couch with two free seats, then press <b>Cuddle</b> (or click it).", true);
 		return;
 	}
-	const dist = k => { const s = room.interactables[k].stand; return Math.hypot(s[0] - me.x, s[1] - me.z); };
+	const dist = k => { const s = standXZ(k); return Math.hypot(s[0] - me.x, s[1] - me.z); };
 	opts.sort((a, b) => dist(a) - dist(b));
 	const k = opts[0], def = room.interactables[k];
 	const layDown = () => {
-		const c = carrySpots(k);
+		const c = carryPlace(k);
 		if (me.carrying !== id || !peers.get(id)) return;
 		if (!c) { myAvatar.say("Someone took our spot..."); return; }
 		send({ t: "act", kind: "laydown", to: id, spot: c.carried });
@@ -2465,8 +2707,9 @@ function onCarryAct(d, p) {
 			const spot = spotById(String(d.spot));
 			me.carriedBy = null;
 			updateCarryBar();
-			if (spot && spot.lie && sitOn([spot.id])) addLog(`<b>${n}</b> laid you down gently`, true);
-			else hopDown();
+			// (lying down on a bed / the sofa, or sat down on a couch next to them)
+			if (spot && sitOn([spot.id])) addLog(spot.lie ? `<b>${n}</b> laid you down gently` : `<b>${n}</b> sat you down gently and snuggled up`, true);
+			else { const fp = freeFloorNear(me.x, me.z, me.h); me.x = fp.x; me.z = fp.z; sendPose(true); }
 			return true;
 		}
 		case "smooch": case "cheekkiss":
@@ -2752,6 +2995,7 @@ addEventListener("keydown", e => {
 	if (k === "enter" || k === "t") { e.preventDefault(); $("#chat").focus(); return; }
 	if (k === "e" || k === " ") { e.preventDefault(); const o = promptOpts.find(x => x.k === "E"); if (o) o.fn(); return; }
 	if (k === "1") emote("kiss"); else if (k === "2") emote("smooch"); else if (k === "3") emote("carry");
+	else if (k === "p") { callPetsNow(); return; }
 	else if (k === "f" || k === "g" || k === "r") { const o = promptOpts.find(x => x.k === k.toUpperCase()); if (o) { e.preventDefault(); o.fn(); return; } }
 	keys.add(k);
 	if (k.startsWith("arrow")) e.preventDefault();
@@ -2767,6 +3011,7 @@ chatEl.addEventListener("keydown", e => {
 			const m = { id: newChatId(), ts: now(), name: profile.name, color: profile.top, text };
 			myAvatar.say(text);
 			send({ t: "chat", text, mid: m.id });
+			house.onChat(MY_ID, me, text);
 			chatMsg(m);
 			saveChat(m);
 			chatEl.value = "";
@@ -2867,7 +3112,7 @@ function hoverAt(x, y) {
 		if (h.object.userData.note !== undefined) { pointer = true; label = me.upper === "piano" ? null : "Play the piano"; }
 		else {
 			const pid = findPeer(h.object);
-			if (pid) { const p = peers.get(pid); label = p ? (me.carrying === pid ? "Press Cuddle or click the bed / sofa" : me.carriedBy === pid ? null : isAsleep(p) ? "Wake " + p.look.name + " up" : me.holding === "flower" ? "Give " + p.look.name + " your flower" : me.holding === "mug" ? "Give " + p.look.name + " your coffee" : me.holding === "popcorn" ? "Share your popcorn with " + p.look.name : FOODS[me.holding] ? "Give " + p.look.name + " your " + FOODS[me.holding].name : "Wave at " + p.look.name) : null; }
+			if (pid) { const p = peers.get(pid); label = p ? (me.carrying === pid ? "Press Cuddle or click a bed / sofa / couch" : me.carriedBy === pid ? null : isAsleep(p) ? "Wake " + p.look.name + " up" : me.holding === "flower" ? "Give " + p.look.name + " your flower" : me.holding === "mug" ? "Give " + p.look.name + " your coffee" : me.holding === "popcorn" ? "Share your popcorn with " + p.look.name : FOODS[me.holding] ? "Give " + p.look.name + " your " + FOODS[me.holding].name : "Wave at " + p.look.name) : null; }
 			else if (h.object.userData.cupId) label = me.holding === "mug" ? null : "Pick up the coffee";
 			else if (h.object.userData.photoIndex !== undefined) label = get("photo" + h.object.userData.photoIndex) ? "Change this photo" : "Put a photo in this frame";
 			else { const id = findInteract(h.object); if (id) label = labelOf(id); }
@@ -2885,7 +3130,7 @@ function walkTo(x, z, act) {
 	stopScope();
 	if (me.anim === "floor") me.anim = "idle";
 	// going between indoors and outdoors (terrace, pool) with the terrace door shut: open it on the way
-	const outdoors = a => a === "terrace" || a === "pool";
+	const outdoors = a => a === "terrace" || a === "pool" || a === "garden";
 	if (!get("terraceDoor") && outdoors(areaOf(x, z)) !== outdoors(areaOf(me.x, me.z))) {
 		const st = standOf("terraceDoor");
 		if (Math.hypot(st[0] - me.x, st[1] - me.z) > 0.3) { walkTo(st[0], st[1], () => { setShared("terraceDoor", true); walkTo(x, z, act); }); return; }
@@ -2922,7 +3167,8 @@ function makeGrid(x0, z0, w, h) {
 // (upstairs is its own floor plan, 30 m south: see ZONES.loft)
 function gridFor(x, z) {
 	if (shiftAt(x, z)) return grids.up || (grids.up = makeGrid(16.0, 23.85, 37, 72));
-	return grids.home || (grids.home = makeGrid(-7.1, -21.6, 205, 150));
+	// (from the cinema in the west to the bedroom in the east, the garden in the south to the lounge in the north)
+	return grids.home || (grids.home = makeGrid(-23.0, -30.6, 285, 276));
 }
 // a room was just built (its furniture is now solid): the grid gets made fresh on the next walk
 function gridDirty() { delete grids.home; delete grids.up; }
@@ -3092,6 +3338,9 @@ function avatarAnim(anim, sit, carriedBy) {
 	if (anim === "sit" && sit && (spotById(sit) || {}).recline) return "lounge";
 	return anim;
 }
+// how deep the water is where you stand: only the pool has water (the cinema's floor is below the living room's
+// too - it's down a level - and reading that as "deep" had people swimming between the cinema seats)
+function waterAt(x, z) { return areaOf(x, z) === "pool" ? Math.max(0, -floorAt(x, z)) : 0; }
 function placeAvatar(av, x, z, h, sitId) {
 	const spot = sitId && room.sitSpots.find(s => s.id === sitId);
 	// standing: on whatever the floor is there (cinema tiers, the bottom of the pool), eased so steps don't jolt
@@ -3101,13 +3350,13 @@ function placeAvatar(av, x, z, h, sitId) {
 		else av._fy += (y - av._fy) * 0.22;
 		y = av._fy;
 	} else av._fy = y;
-	av.water = spot ? 0 : Math.max(0, -floorAt(x, z));
+	av.water = spot ? 0 : waterAt(x, z);
 	const vp = visXZ(x, z);
 	av.root.position.set(vp[0], y, vp[1]);
 	if (spot && spot.lie) { av.root.rotation.order = "YXZ"; av.root.rotation.set(-Math.PI / 2, spot.h, 0); }
 	else if (spot && spot.swing) {
-		// ride along with the swing seat
-		const sw = room.terrace.swing, a = sw.angle;
+		// ride along with the swing seat (the terrace's, or the one by the hot tub: spot.swingRef)
+		const sw = spot.swingRef || room.terrace.swing, a = sw.angle;
 		av.root.position.x -= Math.sin(a) * sw.L * Math.sin(spot.h);
 		av.root.position.z -= Math.sin(a) * sw.L * Math.cos(spot.h);
 		av.root.position.y += (1 - Math.cos(a)) * sw.L;
@@ -3163,7 +3412,7 @@ function updateMe(dt) {
 		const rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw);
 		mx = fx * iz + rx * ix; mz = fz * iz + rz * ix;
 		const l = Math.hypot(mx, mz);
-		want = Math.min(1, l) * (run ? 1.75 : 1) * (me.carrying ? 0.75 : 1) * (floorAt(me.x, me.z) < -0.55 ? 0.6 : 1);
+		want = Math.min(1, l) * (run ? 1.75 : 1) * (me.carrying ? 0.75 : 1) * (waterAt(me.x, me.z) > 0.55 ? 0.6 : 1);
 		mx /= l; mz /= l;
 	} else if (me.target) {
 		const dx = me.target.x - me.x, dz = me.target.z - me.z, l = Math.hypot(dx, dz);
@@ -3181,6 +3430,8 @@ function updateMe(dt) {
 		const v = me.speed * 2.6 * dt;
 		const nx = me.x + mx * v, nz = me.z + mz * v;
 		const ox = me.x, oz = me.z;
+		// carrying someone into the pool: put them down on the edge first, and go in on your own
+		if (me.carrying && waterAt(nx, nz) > 0.02 && waterAt(me.x, me.z) <= 0.02) putDownAtWater();
 		// if we somehow ended up inside furniture, let us walk straight out of it
 		const trapped = blocked(me.x, me.z, true) && walkable(me.x, me.z, 0.05);
 		bumpDoor = null;
@@ -3901,6 +4152,7 @@ $("#enter").onclick = async () => {
 	cam.tx = me.x; cam.tz = me.z;
 	cam.yaw = Math.atan2(me.x - (-1.5), me.z - (-3.5));
 	applyKey("tv", null);
+	applyKey("music", null);   // (a YouTube song only starts once you're in)
 	startNetwork();
 	loadWorld();
 	addLog("Welcome to your little world, " + esc(profile.name) + ". Click anything to use it.", true);
@@ -3964,7 +4216,7 @@ function frameBody() {
 	house.update(dt, t, me.x, me.z);
 	// only light the area you're in (fewer lights = much cheaper shading)
 	const inTerrace = areaOf(cam.tx, cam.tz) === "terrace" || (entered && areaOf(me.x, me.z) === "terrace");
-	const lightArea = house.indoorsAway() ? "house" : inTerrace || house.region() === "pool" ? "terrace" : "room";
+	const lightArea = house.indoorsAway() ? "house" : inTerrace || house.region() === "pool" || house.region() === "garden" ? "terrace" : "room";
 	if (lightArea !== lastArea) {
 		lastArea = lightArea;
 		room.areaLights.room.concat(room.minorLights.room).forEach(l => { l.visible = lightArea === "room"; });
@@ -3982,18 +4234,22 @@ function frameBody() {
 	updateFight();
 	room.update(dt, t);
 	updateCamera(dt, t);
+	// low ceilings (under the loft, the loft's roof, the disco) are cut away while the camera is up at them
+	if (entered) house.cutaway(me.x, me.z);
+	tickPhotoGlow(t);
 	if (entered) updatePrompt();
 	tvAcc += dt; arcAcc += dt; ytAcc += dt;
 	if (tvAcc > 1 / G.tvFps) { tvAcc = 0; drawTVFrame(t); }
 	if (arcAcc > 1 / G.arcFps) { arcAcc = 0; Games.drawArcade(room.arcade.canvas, get("game"), rpsLists(), t); room.arcade.tex.needsUpdate = true; }
 	if (marker.material.opacity > 0) { marker.material.opacity = Math.max(0, marker.material.opacity - dt * 1.5); marker.scale.multiplyScalar(1 + dt); }
 	const away = house.inHouse();
-	if (audio && get("music").on) {
-		// the record player is in the living room; elsewhere in the house only the lounge's jukebox plays it
+	if ((audio || song) && get("music").on) {
+		// the record player is in the living room; elsewhere in the house only the lounge's jukebox and the disco play it
 		let vol;
 		if (away) vol = house.musicAt(me.x, me.z);
 		else { const d = Math.hypot(me.x - 6.4, me.z + 0.9); vol = Math.max(0.18, Math.min(1, 1.3 - d / 9)) * (yt ? 0.35 : 1); }
-		audio.setMusicVolume(muted ? 0 : vol * 0.9);
+		if (audio) audio.setMusicVolume(muted || song ? 0 : vol * 0.9);
+		songVolume(muted ? 0 : vol * 0.9);
 	}
 	// the TV's video gets louder the closer you are (and isn't heard in the other rooms)
 	if (yt) yt.obj.visible = house.visible("main");

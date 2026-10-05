@@ -23,12 +23,13 @@ export function build(k) {
 	const R = rng(77);
 	k.floor(() => 0);
 	k.walk(X0, HW, Z0 - 0.6, HD);
-	k.cam = { minX: X0 + 0.15, maxX: HW - 0.15, minZ: Z0 + 0.15, maxZ: HD - 0.15, maxY: CH - 0.15 };
+	// (the camera may rise above the low ceiling: the ceilings and the roof are then cut away, see worldHouse.js cutaway)
+	k.cam = { minX: X0 + 0.15, maxX: HW - 0.15, minZ: Z0 + 0.15, maxZ: HD - 0.15, maxY: CH + 2.6 };
 
 	// ---------------------------------------------------------------- floor, ceiling, neon
 	const fl = add(g, new THREE.PlaneGeometry(HW - X0, HD - Z0), mat("#16101f", 0.25, 0.3), (HW + X0) / 2, 0.002, (HD + Z0) / 2, { rx: -Math.PI / 2, cast: false });
 	fl.userData.floor = true;
-	add(g, new THREE.PlaneGeometry(HW - X0, HD - Z0), mat("#0c0814", 0.9), (HW + X0) / 2, CH - 0.001, (HD + Z0) / 2, { rx: Math.PI / 2, cast: false });
+	const ceiling = add(g, new THREE.PlaneGeometry(HW - X0, HD - Z0), mat("#0c0814", 0.9), (HW + X0) / 2, CH - 0.001, (HD + Z0) / 2, { rx: Math.PI / 2, cast: false });
 	// dance floor tiles (each its own colour, animated)
 	const tiles = [];
 	const tileGeo = new THREE.PlaneGeometry(TILE - 0.04, TILE - 0.04);
@@ -128,7 +129,7 @@ export function build(k) {
 
 	// ---------------------------------------------------------------- photos in neon frames (east wall)
 	for (const [slot, z, c] of [[42, 2.4, "#ff4fd8"], [43, 3.9, "#3ff0ff"], [44, 5.4, "#ffd166"]]) {
-		const f = k.photo(slot, HW - 0.03, 1.7, z, -Math.PI / 2, { w: 0.62, h: 0.5, frame: c, mat: "#111111" });
+		const f = k.photo(slot, HW - 0.03, 1.7, z, -Math.PI / 2, { w: 0.62, h: 0.5, frame: c, mat: "#111111", glow: false });
 		const glow = new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.35, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending });
 		add(f.group, new THREE.PlaneGeometry(0.8, 0.68), glow, 0, 0, -0.01, { cast: false, receive: false });
 		f.group.children[0].material = new THREE.MeshBasicMaterial({ color: c, toneMapped: false });
@@ -195,6 +196,8 @@ export function build(k) {
 
 	return {
 		update,
+		// hidden while the camera is up above the ceiling
+		cut: { disco: [ceiling] },
 		// it's a disco: the music's loud in here
 		musicAt() { return 1; },
 		promptOpts(opts) {

@@ -83,7 +83,9 @@ export function build(k) {
 	k.floor(floorY);
 	k.walk(-5, 5, -7.5, 6);
 	// the main light switch beside the doors
-	k.lightSwitch(1.05, LANDING_Y + 1.25, 5.97, Math.PI);
+	// (flipping it also takes the projector's house-lights setting back to auto, so the switch always does what it says)
+	const wallSwitch = k.lightSwitch(1.05, LANDING_Y + 1.25, 5.97, Math.PI);
+	{ const flip = wallSwitch.use; wallSwitch.use = () => { flip(); ctx.setShared(LKEY, "auto"); }; }
 	// photo frames on the landing as you come in (2 of the house's 50)
 	k.photo(45, -4.96, 3.4, 4.1, Math.PI / 2, { w: 0.6, h: 0.45, frame: "#c9a05a", metal: 0.7 });
 	k.photo(46, 4.96, 3.4, 4.1, -Math.PI / 2, { w: 0.6, h: 0.45, frame: "#c9a05a", metal: 0.7 });
@@ -311,7 +313,9 @@ export function build(k) {
 	k.hemi = 0.35; k.env = 0.2; k.exposure = 1.0;
 
 	// ---------------------------------------------------------------- movie playback
-	const KEY = "z:cinema:movie", LKEY = "z:cinema:lights";
+	// LKEY: the house-lights mode from the projector (auto / on / off). (It used to share its key with the wall switch,
+	// which stores true / false there - each undid the other, so neither worked.) SWKEY: the wall switch.
+	const KEY = "z:cinema:movie", LKEY = "z:cinema:lightmode", SWKEY = "z:cinema:lights";
 	const YT_RE = /(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/))([\w-]{11})/;
 	let here = false, yt = null, volAcc = 0, idleAcc = 0, lastShown = "";
 	const movie = () => ctx.get(KEY) || { on: false, yt: "", at: 0, paused: false, pos: 0 };
@@ -395,7 +399,8 @@ export function build(k) {
 		};
 		body.querySelector("#cin-restart").onclick = () => { const m = movie(); if (m.yt) setMovie({ on: true, at: Date.now(), paused: false, pos: 0 }); };
 		body.querySelector("#cin-stop").onclick = () => setMovie({ on: false, paused: false, pos: 0 });
-		body.querySelectorAll("[data-l]").forEach(b => b.onclick = () => ctx.setShared(LKEY, b.dataset.l));
+		// ("On" also flips the wall switch back on, or the room would stay dark)
+		body.querySelectorAll("[data-l]").forEach(b => b.onclick = () => { ctx.setShared(LKEY, b.dataset.l); if (b.dataset.l !== "off" && ctx.get(SWKEY) === false) ctx.setShared(SWKEY, true); });
 		renderControls();
 		if (innerWidth > 560) setTimeout(() => inp.focus(), 60);
 	}
@@ -425,26 +430,12 @@ export function build(k) {
 	let popT = 0;
 
 	// ---------------------------------------------------------------- the idle screen picture
-	function drawIdle(t) {
+	// a plain blank screen while nothing's playing (soft light from the projector, a little darker at the edges)
+	function drawIdle() {
 		const c = idleCanvas.getContext("2d"), w = 1024, h = 576;
-		const gr = c.createRadialGradient(w / 2, h * 0.45, 40, w / 2, h / 2, w * 0.7);
-		gr.addColorStop(0, "#2a1530"); gr.addColorStop(1, "#06030a");
+		const gr = c.createRadialGradient(w / 2, h / 2, 60, w / 2, h / 2, w * 0.62);
+		gr.addColorStop(0, "#d8d6de"); gr.addColorStop(1, "#9c99a6");
 		c.fillStyle = gr; c.fillRect(0, 0, w, h);
-		for (let i = 0; i < 40; i++) {
-			const x = (i * 97 + t * 12) % w, y = (i * 53) % h;
-			c.fillStyle = `rgba(255,220,240,${0.15 + 0.15 * Math.sin(t * 2 + i)})`;
-			c.fillRect(x, y, 2, 2);
-		}
-		c.textAlign = "center";
-		c.fillStyle = "#ffd38a"; c.font = "800 26px Nunito, sans-serif";
-		c.fillText("WELCOME TO", w / 2, h * 0.32);
-		c.save(); c.shadowColor = "#ff4d8a"; c.shadowBlur = 30; c.fillStyle = "#fff0f5";
-		c.font = "900 92px Nunito, sans-serif"; c.fillText("Harmony Cinema", w / 2, h * 0.47); c.restore();
-		const pulse = 0.6 + 0.4 * Math.sin(t * 2.5);
-		c.fillStyle = `rgba(255,255,255,${pulse})`; c.font = "700 28px Nunito, sans-serif";
-		c.fillText("Paste a YouTube link at the projector (by the door) to start a movie", w / 2, h * 0.66);
-		c.fillStyle = "rgba(255,255,255,0.55)"; c.font = "600 22px Nunito, sans-serif";
-		c.fillText("Pick any seat · press F for movie view · popcorn is free", w / 2, h * 0.74);
 		idleTex.needsUpdate = true;
 	}
 	drawIdle(0);
@@ -455,7 +446,7 @@ export function build(k) {
 	function update(dt, t) {
 		const play = playing() && !movie().paused;
 		const lm = ctx.get(LKEY) || "auto";
-		const wantDim = lm === "off" ? 1 : lm === "on" ? 0 : play ? 1 : 0;
+		const wantDim = ctx.get(SWKEY) === false || lm === "off" ? 1 : lm === "on" ? 0 : play ? 1 : 0;
 		dim += (wantDim - dim) * Math.min(1, dt * 1.2);
 		curtains.open += ((playing() ? 1.06 : 0.92) - curtains.open) * Math.min(1, dt * 1.0);
 		const cw = 5 - SCREEN.w / 2 * curtains.open - 0.2;
@@ -482,7 +473,6 @@ export function build(k) {
 		}
 		beamM.opacity = playing() ? 0.05 + dim * 0.03 + Math.sin(t * 9) * 0.004 : 0;
 		// idle picture a few times a second
-		if (!yt) { idleAcc += dt; if (idleAcc > 0.2) { idleAcc = 0; drawIdle(t); } }
 		// keep the movie in step and at the right volume
 		if (yt) {
 			volAcc += dt;
@@ -518,7 +508,7 @@ export function build(k) {
 				if (remote && m.on && m.yt && m.yt !== lastShown && here) ctx.notice(`<b>${ctx.esc(m.by || "Someone")}</b> started a movie`);
 				lastShown = m.on ? m.yt : "";
 			}
-			if (key === LKEY) renderControls();
+			if (key === LKEY || key === SWKEY) renderControls();
 		},
 		cssActive: () => !!yt,
 		screenFor: id => (seatIds.has(id) ? screen : null),
