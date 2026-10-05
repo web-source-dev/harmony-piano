@@ -57,7 +57,7 @@ export function build(k) {
 			{ wall: "n", at: 6.6, w: 1.52, y1: 2.3 },                  // glass doors out to the pool deck
 			{ wall: "s", at: -4.6, w: 2.4, y0: 0.8, y1: 5.8 },        // tall window by the dining table
 			{ wall: "s", at: 2.4, w: 1.6, y0: 1.35, y1: 2.4 },        // kitchen window over the sink
-			{ wall: "s", at: -1.85, w: 1.5, y1: 2.3 }                 // through to the game room (and the spa, karaoke, observatory)
+			{ wall: "s", at: -1.85, w: 1.5, y1: 2.3 }                 // through to the hallway (the game room and the spa)
 		]
 	});
 	k.floor(floorY);
@@ -66,7 +66,7 @@ export function build(k) {
 	k.walk(7.0, 8.6, -3.35, -1.65);  // bedroom
 	k.walk(7.0, 8.6, 2.95, 4.45);    // bathroom
 	k.walk(5.85, 7.35, -7.6, -6.0);  // out to the pool deck
-	k.walk(-2.6, -1.1, 6.0, 7.7);    // to the game room (its French doors are the game room's: worldGameRoom.js)
+	k.walk(-2.6, -1.1, 6.0, 7.7);    // to the hallway (its French doors are the hallway's: worldHall.js)
 	k.cam = { minX: -HW + 0.2, maxX: HW - 0.2, minZ: -HD + 0.2, maxZ: HD - 0.2, maxY: H - 0.3 };
 	const brass = mat("#c9a05a", 0.3, 0.9);
 	const frameM = mat("#fbf8f2", 0.45);
@@ -110,7 +110,7 @@ export function build(k) {
 	k.frenchDoor("bath", { x: 8.08, z: 3.7, ry: Math.PI / 2, w: 1.46, h: 2.3, depth: 0.55, side: 1, curtain: "#5f8f8a" }, [7.95, 8.25, 2.95, 4.45], [[6.9, 3.7], [9.2, 3.7]]);
 	k.frenchDoor("loungepool", { x: 6.6, z: -7.05, ry: Math.PI, w: 1.48, h: 2.3, depth: 0.45, side: -1, curtain: "#5f8f8a" }, [5.85, 7.35, -7.25, -6.85], [[6.6, -6.2], [6.6, -7.9]]);
 	// little signs over the doors
-	for (const [x, y, z, ry, text, icon] of [[7.9, 2.75, -2.5, -Math.PI / 2, "Bedroom", "bed"], [7.9, 2.75, 3.7, -Math.PI / 2, "Bathroom", "bath"], [6.6, 2.75, -HD + 0.04, 0, "Pool", "wave"], [-1.85, 2.5, HD - 0.04, Math.PI, "Game Room", "games"]]) {
+	for (const [x, y, z, ry, text, icon] of [[7.9, 2.75, -2.5, -Math.PI / 2, "Bedroom", "bed"], [7.9, 2.75, 3.7, -Math.PI / 2, "Bathroom", "bath"], [6.6, 2.75, -HD + 0.04, 0, "Pool", "wave"], [-1.85, 2.5, HD - 0.04, Math.PI, "Games & Spa", "games"]]) {
 		const st = tex.sign(text, icon);
 		add(g, new THREE.PlaneGeometry(0.9, 0.225), new THREE.MeshStandardMaterial({ map: st, roughness: 0.45, emissive: "#ffffff", emissiveMap: st, emissiveIntensity: 0.25 }), x, y, z, { ry, cast: false });
 	}

@@ -6,7 +6,8 @@
  * kitchen and dining table on the other side of it, a pet corner, and stairs up
  * to a balcony with the cinema's doors. Off the back of the lounge: the bedroom
  * and the bathroom. Out through the gap in the terrace railing: the pool, under
- * the sky, and past the pool deck the garden. Biscuit and Mochi wander the whole house (worldPets.js).
+ * the sky, and past the pool deck (or straight out from the terrace) the garden, with the Box of Shame in it.
+ * Behind the lounge, a short hallway to the game room and the spa. Biscuit and Mochi wander the whole house (worldPets.js).
  *
  * Each room is its own module and its own group. They're all built in the
  * background shortly after you arrive (a tenth of a second each), but a room is
@@ -33,7 +34,7 @@ import { createPets } from "./worldPets.js";
 // and which rooms you can see into from it through open doors
 // (ry turns a room round: the cinema is built facing +z and turned so its doors face the living room)
 export const ZONES = {
-	lounge:  { name: "Lounge",   ox: 15.2,   oy: 0,    oz: 1.0,   bounds: [7.1, 23.25, -6.05, 8.05],   see: ["main", "bedroom", "bath", "pool", "loft", "games"], file: "./worldLounge.js" },
+	lounge:  { name: "Lounge",   ox: 15.2,   oy: 0,    oz: 1.0,   bounds: [7.1, 23.25, -6.05, 8.05],   see: ["main", "bedroom", "bath", "pool", "loft", "hall"], file: "./worldLounge.js" },
 	// upstairs, over the east half of the lounge: drawn there (vis), but on the floor plan it's 30 m further south,
 	// so the two floors never overlap (see shiftAt). The stairs carry you across (portals in worldLoft.js).
 	disco:   { name: "Disco",    ox: 15.2,   oy: 3.6,  oz: 31.0,  vis: [15.2, 1.0], bounds: [18.4, 23.15, 32.2, 37.95], see: ["loft"], file: "./worldDisco.js" },
@@ -43,19 +44,22 @@ export const ZONES = {
 	bath:    { name: "Bathroom", ox: 27.4,   oy: 0,    oz: 4.7,   bounds: [23.25, 31.6, 0.95, 8.4],    see: ["lounge", "loft"], file: "./worldBath.js" },
 	// (the deck reaches right up to the lounge's back wall: with a gap between the two areas, the doorway between
 	// the lounge and the pool deck had a strip that belonged to no room, and nobody could walk through it)
-	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.05],  see: ["main", "lounge", "bedroom", "loft", "garden"], outdoor: true, file: "./worldPool.js" },
-	// past the pool deck, through the gap in its south railing: a rooftop garden (outdoors too)
-	garden:  { name: "Garden",   ox: 14.3,   oy: 0,    oz: -24.1, bounds: [5.45, 23.2, -30.1, -18.1], see: ["pool", "main"], outdoor: true, file: "./worldGarden.js" },
-	// the new wing, behind the lounge (through the door by the dining table): the game room in the middle, and off it
-	// the karaoke lounge (west), the spa (behind it) and the rooftop observatory (east)
-	games:   { name: "Game Room", ox: 12.75, oy: 0,    oz: 13.15, bounds: [8.55, 16.95, 8.05, 18.15], see: ["lounge", "spa", "karaoke", "observatory"], file: "./worldGameRoom.js" },
-	spa:     { name: "Spa",      ox: 12.75,  oy: 0,    oz: 21.05, bounds: [8.55, 16.95, 18.15, 23.95], see: ["games"], file: "./worldSpa.js" },
-	karaoke: { name: "Karaoke",  ox: 4.85,   oy: 0,    oz: 13.15, bounds: [1.15, 8.55, 8.15, 18.15], see: ["games"], file: "./worldKaraoke.js" },
-	observatory: { name: "Observatory", ox: 20.15, oy: 0, oz: 12.15, bounds: [16.95, 23.25, 8.05, 16.15], see: ["games"], file: "./worldObservatory.js" }
+	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.05],  see: ["main", "lounge", "bedroom", "loft", "garden", "shame"], outdoor: true, file: "./worldPool.js" },
+	// in the garden, south of the hot tub: the Box of Shame (a cardboard box you can go into: a bed of roses, the Cute Corner)
+	// (before the garden: it sits inside the garden's area, and the first area that holds a point wins)
+	shame:   { name: "Box of Shame", ox: 28.6, oy: 0,   oz: -24.6, bounds: [24.9, 32.3, -27.6, -21.6], see: ["garden"], file: "./worldShame.js" },   // (inside, only the garden shows through the door: keeps it light)
+	// past the pool deck, through the gap in its south railing (or the gap in the terrace's south railing): a rooftop
+	// garden (outdoors too). It wraps round the pool deck: from in front of the terrace in the west to under the hot tub in the east
+	garden:  { name: "Garden",   ox: 14.3,   oy: 0,    oz: -24.1, bounds: [-7.6, 33.6, -30.1, -12.1], see: ["pool", "main", "shame"], outdoor: true, file: "./worldGarden.js" },
+	// the wing behind the lounge (through the door by the dining table): a short hallway, with the game room off
+	// its west side and the spa off its east side
+	hall:    { name: "Hallway",  ox: 13.35,  oy: 0,    oz: 10.35, bounds: [12.05, 14.65, 8.05, 12.55], see: ["lounge", "games", "spa"], file: "./worldHall.js" },
+	games:   { name: "Game Room", ox: 7.95,  oy: 0,    oz: 13.15, bounds: [3.75, 12.05, 8.05, 18.15], see: ["hall", "spa"], file: "./worldGameRoom.js" },
+	spa:     { name: "Spa",      ox: 18.75,  oy: 0,    oz: 11.15, bounds: [14.65, 22.95, 8.15, 14.05], see: ["hall", "games"], file: "./worldSpa.js" }
 };
 // what you can see from the living room / terrace
-const MAIN_SEES = ["lounge", "pool", "cinema", "loft", "garden"];
-const BUILD_ORDER = ["lounge", "loft", "pool", "garden", "bedroom", "bath", "cinema", "disco", "games", "spa", "karaoke", "observatory"];
+const MAIN_SEES = ["lounge", "pool", "cinema", "loft", "garden", "shame"];
+const BUILD_ORDER = ["lounge", "loft", "pool", "garden", "shame", "bedroom", "bath", "cinema", "disco", "hall", "games", "spa"];
 
 export function createHouse(ctx) {
 	const { scene, room, renderer, camera } = ctx;
@@ -421,7 +425,7 @@ export function createHouse(ctx) {
 		// a seat that watches a screen (cinema): the camera looks at this from your eyes
 		screenFor(sitId) { for (const id in built) { const Z = built[id]; if (Z.screenFor) { const s = Z.screenFor(sitId); if (s) return s; } } return null; },
 		promptOpts(opts) { const Z = built[region]; if (Z && Z.promptOpts) Z.promptOpts(opts); if (pets) pets.promptOpts(opts); },
-		// someone said something in the chat (the karaoke screen shows what the singer types)
+		// someone said something in the chat (a room can show it)
 		onChat(id, who, text) { for (const zid in built) if (visibleSet.has(zid) && built[zid].onChat) built[zid].onChat(id, who, text); },
 		musicAt(x, z) { const Z = built[region]; return Z && Z.musicAt ? Z.musicAt(x, z) : 0; },
 		floorAt
@@ -629,6 +633,9 @@ function drawIcon(g, icon, color) {
 		case "games":
 			g.strokeRect(-48, -26, 96, 52); g.beginPath(); g.arc(-22, 0, 9, 0, Math.PI * 2); g.stroke();
 			P([[18, -10], [18, 10]]); P([[8, 0], [28, 0]]);
+			break;
+		case "heart":
+			g.beginPath(); g.moveTo(0, 40); g.bezierCurveTo(-60, 0, -40, -46, 0, -18); g.bezierCurveTo(40, -46, 60, 0, 0, 40); g.closePath(); g.fill();
 			break;
 		case "home":
 			P([[-48, 0], [0, -40], [48, 0]]); P([[-36, -8], [-36, 38], [36, 38], [36, -8]]); g.strokeRect(-10, 12, 20, 26);

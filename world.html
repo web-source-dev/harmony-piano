@@ -231,6 +231,13 @@ body.night #tl, body.night #bar { background: rgba(14,14,34,.86); }
 #help { position: absolute; right: 14px; top: calc(max(14px, env(safe-area-inset-top)) + 52px); font-size: 12px; color: var(--muted); padding: 8px 12px; line-height: 1.55; max-width: 230px; transition: opacity 1.2s; }
 #help.gone { opacity: 0; pointer-events: none; }
 body.tvmode #help { display: none; }
+/* full screen TV / cinema: nothing but the screen (and, with a YouTube video on it, nothing but the video, on black) */
+body.fullvid { background: #000; }
+body.fullvid > :not(#css3d):not(#view):not(#fullexit) { display: none !important; }
+body.fullvid.fvvideo #view { visibility: hidden; }
+#fullexit { display: none; position: fixed; top: max(14px, env(safe-area-inset-top)); right: 14px; z-index: 30; padding: 8px 14px; border: 0; border-radius: 999px; background: rgba(20,14,28,.6); color: #fff; font: 800 13px "Nunito", sans-serif; cursor: pointer; opacity: 0; transition: opacity .3s; }
+body.fullvid #fullexit { display: block; }
+body.fullvid:hover #fullexit, #fullexit:focus-visible { opacity: 1; }
 #help b { color: var(--text); }
 #toasts { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; align-items: center; width: min(440px, calc(100% - 28px)); pointer-events: none; }
 .toast { pointer-events: auto; padding: 12px 14px 12px 16px; display: flex; align-items: center; gap: 12px; width: 100%; font-weight: 700; font-size: 14px; animation: tIn .3s cubic-bezier(.2,1.4,.4,1); border-left: 4px solid var(--accent); }
@@ -481,6 +488,7 @@ body.touch #help { display: none; }
 <body>
 <div id="css3d"></div>
 <canvas id="view" tabindex="0"></canvas>
+<button id="fullexit" type="button">Exit full screen (Esc)</button>
 
 <div id="loading"><div class="ld"><div class="ring"></div><p id="ldmsg">Building your little world...</p></div></div>
 
@@ -533,7 +541,7 @@ body.touch #help { display: none; }
 		<div class="sc-row"><button class="btn" id="sc-open">Music</button><button class="btn" id="sc-stop">Stop</button></div>
 		<div class="sc-far">Too far from the speakers to hear</div>
 	</div>
-	<div id="help" class="chip"><b>WASD</b> / arrows to walk, <b>Shift</b> to run<br><b>Drag</b> to look around, <b>scroll</b> to zoom<br><b>Click</b> anything to walk there and use it<br><b>E</b> / <b>F</b> to use things, <b>Esc</b> to stand up<br><b>1</b> blow a kiss, <b>2</b> kiss, <b>3</b> pick up<br><b>Z</b> actions, <b>X</b> love, <b>C</b> mood<br><b>P</b> calls the pets from anywhere<br><b>Enter</b> to chat<br>Glass doors by the arcade: the <b>lounge</b> and the rest of the house<br>Past the pool: the <b>garden</b>. By the lounge's dining table: the <b>game room</b>, spa, karaoke and observatory</div>
+	<div id="help" class="chip"><b>WASD</b> / arrows to walk, <b>Shift</b> to run<br><b>Drag</b> to look around, <b>scroll</b> to zoom<br><b>Click</b> anything to walk there and use it<br><b>E</b> / <b>F</b> to use things, <b>Esc</b> to stand up<br><b>1</b> blow a kiss, <b>2</b> kiss, <b>3</b> pick up<br><b>Z</b> actions, <b>X</b> love, <b>C</b> mood<br><b>P</b> calls the pets from anywhere<br><b>Enter</b> to chat<br>Glass doors by the arcade: the <b>lounge</b> and the rest of the house<br>Past the pool (or off the terrace): the <b>garden</b> and the <b>Box of Shame</b>. By the lounge's dining table: a hallway to the <b>game room</b> and the <b>spa</b></div>
 	<div id="joy"><i></i></div>
 	<div id="bottom">
 		<div id="log" class="empty" aria-live="polite"></div>

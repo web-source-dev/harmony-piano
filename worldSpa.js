@@ -1,11 +1,11 @@
 /**
- * Harmony World — the spa, through the game room's south doors (worldGameRoom.js).
+ * Harmony World — the spa, off the hallway behind the lounge (worldHall.js; the game room is across it).
  *
- * Local coordinates (origin at world 12.75, 21.05): x -4..4, z -2.7..2.7, ceiling 3.2 m. The door is in the
- * north wall (z -2.7) at x -1.
+ * Local coordinates (origin at world 18.75, 11.15): x -4..4, z -2.7..2.7, ceiling 3.2 m. The door is in the
+ * west wall (x -4) at z 0, out to the hallway.
  *
  *   a wooden sauna for two (pour water on the stones: a cloud of steam for everyone in there)
- *   two massage tables: lie down, and whoever's beside you can give you a massage
+ *   two massage tables: lie face down (head in the face cradle), and whoever's beside you can give you a massage
  *   two spa recliners side by side (hold hands), a treatment mirror (face masks and a glow-up),
  *   herbal tea and fruit, a zen water wall, candles and plants.
  */
@@ -23,11 +23,16 @@ export function build(k) {
 		floor: mat("#ffffff", 0.35, 0, { map: tex.tiles("#e9e1d3", "#e1d8c8", "#cbbfac", W / 1.2, D / 1.2, 4) }),
 		wall: mat("#ffffff", 0.9, 0, { map: tex.wall("#eadccb", "panel", "rgba(150,120,90,0.10)", W / 2, H / 2) }),
 		ceil: mat("#f3ebe0", 0.95),
-		holes: [{ wall: "n", at: -1.0, w: 1.5, y1: 2.3 }]
+		holes: [{ wall: "w", at: 0, w: 1.5, y1: 2.3 }]
 	});
 	k.floor(() => 0);
 	k.walk(-HW, HW, -HD, HD);
-	k.walk(-1.7, -0.3, -HD - 0.6, -HD + 0.4);   // back to the game room
+	k.walk(-HW - 0.9, -HW + 1.0, -0.7, 0.7);     // out to the hallway
+	k.frenchDoor("spahall", { x: -HW - 0.13, z: 0, ry: -Math.PI / 2, w: 1.46, h: 2.3, depth: 0.45, side: 1, curtain: "#5f8f8a" }, [-HW - 0.3, -HW, -0.75, 0.75], [[-HW + 1.0, 0], [-HW - 1.3, 0]]);
+	{
+		const st = tex.sign("Hallway", "home");
+		add(g, new THREE.PlaneGeometry(0.9, 0.225), new THREE.MeshStandardMaterial({ map: st, roughness: 0.45, emissive: "#ffffff", emissiveMap: st, emissiveIntensity: 0.3 }), -HW + 0.04, 2.62, 0, { ry: Math.PI / 2, cast: false });
+	}
 	k.cam = { minX: -HW + 0.2, maxX: HW - 0.2, minZ: -HD + 0.2, maxZ: HD - 0.2, maxY: H - 0.2 };
 	k.lightSwitch(-1.95, 1.25, -HD + 0.02, 0);
 	const wood = mat("#c8955f", 0.7), woodD = mat("#9c6b3f", 0.7), stone = mat("#8f8a84", 0.9);
@@ -88,8 +93,9 @@ export function build(k) {
 		add(st, new THREE.CylinderGeometry(0.02, 0.02, 0.5, 6), woodD, 0, 0.25, 0);
 		for (let j = 0; j < 3; j++) add(st, new THREE.CylinderGeometry(0.02, 0.025, 0.1, 10), new THREE.MeshPhysicalMaterial({ color: ["#ffd166", "#c77dff", "#7bdff2"][j], transparent: true, opacity: 0.8, roughness: 0.1 }), -0.07 + j * 0.07, 0.57, 0, { cast: false });
 		k.box(T.x - 0.98, T.x + 0.98, T.z - 0.4, T.z + 0.4);
-		// lying on your front... well, back, face up, looking at the ceiling: hips in the middle, head toward the cradle
-		k.spot({ id: T.id, x: T.x + 0.1, z: T.z, h: -Math.PI / 2, y: 0.85, lie: true, awake: true });
+		// lying face down along the table: feet at the +x end, face in the cradle at the -x end
+		// (a lying spot is where the feet are, and the body runs away from h)
+		k.spot({ id: T.id, x: T.x + 0.84, z: T.z, h: Math.PI / 2, y: 0.86, lie: true, prone: true, awake: true });
 		k.interact("spa:" + T.id, { label: "Lie down for a massage", stand: [T.x, T.z + 0.85], sit: [T.id] }, t);
 		return t;
 	});
@@ -97,7 +103,7 @@ export function build(k) {
 	function massage(T, id) {
 		const q = ctx.peers().get(id);
 		if (!q) return;
-		const stand = [T.x + k.ox - 0.1, T.z + k.oz - 0.7];
+		const stand = [T.x + k.ox, T.z + k.oz - 0.75];
 		ctx.walkTo(stand[0], stand[1], () => {
 			const me = ctx.me();
 			me.h = 0;
@@ -124,7 +130,7 @@ export function build(k) {
 	recliner(1, -3.0, -1.2);
 
 	// ---------------------------------------------------------------- the treatment mirror (west wall)
-	const VZ = 1.5;
+	const VZ = 1.8;
 	const van = group(g, -HW + 0.25, 0, VZ, Math.PI / 2);
 	add(van, rbox(1.3, 0.08, 0.5, 0.02), mat("#f7f3ec", 0.4), 0, 0.82, 0);
 	add(van, rbox(1.2, 0.78, 0.46, 0.02), wood, 0, 0.4, 0);

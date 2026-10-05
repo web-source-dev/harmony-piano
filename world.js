@@ -169,6 +169,7 @@ const house = createHouse({
 	updateProps: () => updateProps(), sendPose: f => sendPose(f), heartsFx: (...a) => heartsFx(...a),
 	whoSits: id => whoSits(id), freeSpot: ids => freeSpot(ids), spotById: id => spotById(id),
 	enterTV: () => enterTV(), tvMode: () => tvMode, openMusic: () => openMusic(), showLook: () => showLobby(true),
+	openArcade: () => openArcade(true),
 	gfxTier: () => gfxTier(),
 	photoFrame: (...a) => photoFrame(...a), openPhotos: slot => openPhotos(slot),
 	foodMenu: (title, ids, extra) => foodMenu(title, ids, extra), takeFood: (id, from) => takeFood(id, from),
@@ -2904,9 +2905,33 @@ function enterTV() {
 }
 function exitTV() {
 	if (!tvMode) return;
+	exitFull();
 	tvMode = false;
 	document.body.classList.remove("tvmode");
 }
+// ---------- full screen: the TV (or the cinema's screen) fills the whole window, and the monitor too if the browser lets us.
+// The camera is put square in front of the screen, just far enough back that it fits; while a YouTube video is on it,
+// the 3D view is hidden altogether, so it's only the video, edge to edge, on black.
+let fullVid = false;
+const _fsAt = new THREE.Vector3(), _fsN = new THREE.Vector3(), _fsQ = new THREE.Quaternion(), _fsS = new THREE.Vector3();
+const watchedScreen = () => house.screenFor(me.sit) || room.tv.screen;
+function enterFull() {
+	if (!tvMode) enterTV();
+	if (!tvMode || fullVid) return;
+	fullVid = true;
+	document.body.classList.add("fullvid");
+	const el = document.documentElement;
+	if (el.requestFullscreen && !document.fullscreenElement) { try { el.requestFullscreen().catch(() => {}); } catch (e) { /* not allowed here: it still fills the window */ } }
+	addLog("Full screen - <b>G</b> or <b>Esc</b> to go back", true);
+}
+function exitFull() {
+	if (!fullVid) return;
+	fullVid = false;
+	document.body.classList.remove("fullvid", "fvvideo");
+	if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+}
+document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement && fullVid) exitFull(); });
+$("#fullexit").onclick = () => exitFull();
 const stars = [];
 function shootingStar() {
 	const dir = room.terrace.telescope.dir.clone();
@@ -2972,6 +2997,7 @@ addEventListener("keydown", e => {
 		else if (drawOpen) closeDraw();
 		else if (remoteOpen) closeRemote();
 		else if (loveOpen) closeLove();
+		else if (fullVid) exitFull();
 		else if (tvMode) exitTV();
 		else if (me.carrying) endCarry();
 		else if (me.carriedBy) hopDown();
@@ -3130,7 +3156,7 @@ function walkTo(x, z, act) {
 	stopScope();
 	if (me.anim === "floor") me.anim = "idle";
 	// going between indoors and outdoors (terrace, pool) with the terrace door shut: open it on the way
-	const outdoors = a => a === "terrace" || a === "pool" || a === "garden";
+	const outdoors = a => a === "terrace" || a === "pool" || a === "garden" || a === "shame";
 	if (!get("terraceDoor") && outdoors(areaOf(x, z)) !== outdoors(areaOf(me.x, me.z))) {
 		const st = standOf("terraceDoor");
 		if (Math.hypot(st[0] - me.x, st[1] - me.z) > 0.3) { walkTo(st[0], st[1], () => { setShared("terraceDoor", true); walkTo(x, z, act); }); return; }
@@ -3353,7 +3379,8 @@ function placeAvatar(av, x, z, h, sitId) {
 	av.water = spot ? 0 : waterAt(x, z);
 	const vp = visXZ(x, z);
 	av.root.position.set(vp[0], y, vp[1]);
-	if (spot && spot.lie) { av.root.rotation.order = "YXZ"; av.root.rotation.set(-Math.PI / 2, spot.h, 0); }
+	// (face down on a massage table: spot.prone; the body still runs the same way, feet at the spot, head away from h)
+	if (spot && spot.lie) { av.root.rotation.order = "YXZ"; if (spot.prone) av.root.rotation.set(Math.PI / 2, spot.h + Math.PI, 0); else av.root.rotation.set(-Math.PI / 2, spot.h, 0); }
 	else if (spot && spot.swing) {
 		// ride along with the swing seat (the terrace's, or the one by the hot tub: spot.swingRef)
 		const sw = spot.swingRef || room.terrace.swing, a = sw.angle;
@@ -3790,7 +3817,20 @@ function updateCamera(dt, t) {
 	cam.pull = cam.pull === undefined || f < cam.pull ? f : cam.pull + (f - cam.pull) * Math.min(1, dt * 3);
 	px = cam.tx + (px - cam.tx) * cam.pull; py = cam.ty + (py - cam.ty) * cam.pull; pz = cam.tz + (pz - cam.tz) * cam.pull;
 	let fov = 55;
-	if (tvMode) {
+	if (tvMode && fullVid) {
+		// square in front of the screen, filling the view
+		const scr = watchedScreen();
+		scr.getWorldPosition(_fsAt); scr.getWorldQuaternion(_fsQ); scr.getWorldScale(_fsS);
+		_fsN.set(0, 0, 1).applyQuaternion(_fsQ);
+		const gp = scr.geometry.parameters, sw = gp.width * _fsS.x, sh = gp.height * _fsS.y;
+		fov = 40;
+		const tf = Math.tan(fov * Math.PI / 360);
+		camera.position.copy(_fsAt).addScaledVector(_fsN, Math.max(sh / 2 / tf, sw / 2 / (tf * camera.aspect)));
+		camera.lookAt(_fsAt);
+		if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
+		// a YouTube video on it (the screen is a hole the video shows through): only the video, on black
+		document.body.classList.toggle("fvvideo", scr.material.blending === THREE.NoBlending);
+	} else if (tvMode) {
 		// your own eyes, looking at the screen (your avatar is hidden so nothing's in the way)
 		myAvatar.head.localToWorld(_tvEye.set(0, 0.14, 0.12));
 		const scr = house.screenFor(me.sit);
@@ -3865,6 +3905,7 @@ function updatePrompt() {
 		if (canTVMode()) {
 			const mv = !!house.screenFor(me.sit);
 			opts.push(tvMode ? { k: "F", label: mv ? "Leave movie view" : "Leave TV mode", fn: exitTV } : { k: "F", label: mv ? "Movie view" : "TV mode", fn: enterTV });
+			opts.push(fullVid ? { k: "G", label: "Leave full screen", fn: exitFull } : { k: "G", label: "Full screen", fn: enterFull });
 		}
 	}
 	// whatever the room of the house you're in offers right here (feed the pets, cook, popcorn...)

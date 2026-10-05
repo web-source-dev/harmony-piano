@@ -1,16 +1,25 @@
 /**
- * Harmony World — the garden: a rooftop garden past the pool deck, through the gap in its south railing.
+ * Harmony World — the garden: a rooftop garden past the pool deck (through the gap in its south railing),
+ * and straight out from the terrace (through the gap in its south railing).
  *
- * Local coordinates (origin at world 14.3, -24.1): x -8.85..8.9, z -6..6. The pool deck is along the
- * north edge (z +6); the way in is the gap at x -3.7..-2.3. Outdoors under the night sky, like the pool
- * (it keeps the terrace's lights and the moon).
+ * Local coordinates (origin at world 14.3, -24.1). It's an L: the long lawn along the south of the pool deck,
+ * x -21.3..19.3, z -6..6 (the pool deck is along its north edge, z +6, with the way in at x -3.7..-2.3), and
+ * the west wing in front of the terrace, x -21.3..-8.85, z 6..12 (the terrace's gap is at x -19.8..-18.3).
+ * Outdoors under the night sky, like the pool (it keeps the terrace's lights and the moon).
  *
- *   a lawn with a stone path, a white gazebo with a bench for two (cuddle up in it),
+ *   a lawn with stone paths, a white gazebo with a bench for two (cuddle up in it),
  *   a koi pond with lily pads and a bench beside it, flower beds you can water,
- *   cherry trees in blossom, little lanterns along the path, and fireflies.
+ *   cherry trees in blossom, little lanterns along the paths, and fireflies;
+ *   in the west wing: a rose arch at the top of the steps from the terrace, a fountain (toss a coin, make a wish)
+ *   with benches round it;
+ *   in the east, under the hot tub: the Box of Shame (its own room: worldShame.js), with a red carpet up to its door.
  */
-const HW0 = -8.85, HW1 = 8.9, HD0 = -6.0, HD1 = 6.0;
+const HW0 = -21.3, HW1 = 19.3, HD0 = -6.0, HD1 = 6.0;
+const WING = { x1: -8.85, z1: 12.0 };              // the west wing reaches up to the terrace
+const TGAP = { x0: -19.8, x1: -18.3 };              // the terrace's railing gap (TGAP in worldRoom.js, in local x)
 const GAP = { x0: -3.7, x1: -2.3 };
+const BOX = { x0: 10.6, x1: 18.0, z0: -3.5, z1: 2.5, door: -0.5 };   // the Box of Shame's footprint (worldShame.js)
+const FTN = { x: -15.0, z: 3.0, r: 1.35 };         // the fountain
 const GZ = { x: 3.0, z: -2.0, r: 1.9 };          // the gazebo
 const POND = { x: -5.0, z: -1.5, rx: 1.6, rz: 1.1 };
 
@@ -19,8 +28,10 @@ export function build(k) {
 	const R = rng(404);
 	k.floor(() => 0);
 	k.walk(HW0 + 0.15, HW1 - 0.15, HD0 + 0.15, HD1);
-	k.walk(GAP.x0, GAP.x1, HD1 - 0.5, HD1 + 0.6);   // through the gap from the pool deck
-	k.cam = { minX: HW0 - 1.5, maxX: HW1 + 1.5, minZ: HD0 - 1.5, maxZ: HD1, maxY: 8, minY: 0.2 };
+	k.walk(HW0 + 0.15, WING.x1, HD1 - 1.2, WING.z1 + 0.05);   // the west wing (its east side is the pool deck's railing)
+	k.walk(GAP.x0, GAP.x1, HD1 - 1.2, HD1 + 0.6);   // through the gap from the pool deck
+	k.walk(TGAP.x0, TGAP.x1, WING.z1 - 0.6, WING.z1 + 0.8);   // up to the terrace
+	k.cam = { minX: HW0 - 1.5, maxX: HW1 + 1.5, minZ: HD0 - 1.5, maxZ: WING.z1, maxY: 8, minY: 0.2 };
 
 	// ---------------------------------------------------------------- the lawn and the path
 	const grass = canvasTex(512, 512, (c, w, h) => {
@@ -34,12 +45,25 @@ export function build(k) {
 			c.beginPath(); c.moveTo(x, y); c.lineTo(x + (r() - 0.5) * 4, y - 4 - r() * 6); c.stroke();
 		}
 	}, (HW1 - HW0) / 3, (HD1 - HD0) / 3);
-	const lawn = add(g, new THREE.PlaneGeometry(HW1 - HW0, HD1 - HD0), mat("#ffffff", 0.95, 0, { map: grass }), (HW0 + HW1) / 2, 0, (HD0 + HD1) / 2, { rx: -Math.PI / 2, cast: false });
-	lawn.userData.floor = true;
+	// the lawn, in pieces: the long lawn round the Box of Shame (none under it: its own floor is there), and the west wing
+	const lawnPiece = (x0, x1, z0, z1) => {
+		const t = grass.clone();
+		t.repeat.set((x1 - x0) / 3, (z1 - z0) / 3);
+		t.offset.set(x0 / 3, z0 / 3);
+		t.needsUpdate = true;
+		const m = add(g, new THREE.PlaneGeometry(x1 - x0, z1 - z0), mat("#ffffff", 0.95, 0, { map: t }), (x0 + x1) / 2, 0, (z0 + z1) / 2, { rx: -Math.PI / 2, cast: false });
+		m.userData.floor = true;
+	};
+	lawnPiece(HW0, BOX.x0, HD0, HD1);
+	lawnPiece(BOX.x1, HW1, HD0, HD1);
+	lawnPiece(BOX.x0, BOX.x1, HD0, BOX.z0);
+	lawnPiece(BOX.x0, BOX.x1, BOX.z1, HD1);
+	lawnPiece(HW0, WING.x1, HD1, WING.z1 + 0.05);
 	// the roof edge under it
 	const edgeM = mat("#5b4636", 0.8);
 	add(g, new THREE.BoxGeometry(HW1 - HW0, 0.3, 0.1), edgeM, (HW0 + HW1) / 2, -0.15, HD0 - 0.02);
-	for (const x of [HW0 - 0.02, HW1 + 0.02]) add(g, new THREE.BoxGeometry(0.1, 0.3, HD1 - HD0), edgeM, x, -0.15, (HD0 + HD1) / 2);
+	add(g, new THREE.BoxGeometry(0.1, 0.3, WING.z1 - HD0), edgeM, HW0 - 0.02, -0.15, (HD0 + WING.z1) / 2);
+	add(g, new THREE.BoxGeometry(0.1, 0.3, HD1 - HD0), edgeM, HW1 + 0.02, -0.15, (HD0 + HD1) / 2);
 	// stepping stones: from the gap down to the gazebo, and off to the pond
 	const stoneM = mat("#cfc6b8", 0.85);
 	const stones = (pts, n) => {
@@ -53,6 +77,10 @@ export function build(k) {
 	};
 	stones([[-3.0, 5.6], [-2.2, 3.2], [0.4, 1.0], [GZ.x - 0.2, GZ.z + GZ.r + 0.3]], 11);
 	stones([[-1.6, 2.4], [-3.4, 1.6], [POND.x + 1.0, POND.z + POND.rz + 0.5]], 6);
+	// from the terrace's steps, past the fountain, round to the pond
+	stones([[(TGAP.x0 + TGAP.x1) / 2, 11.6], [-18.6, 8.0], [FTN.x - 1.0, FTN.z + FTN.r + 0.7], [FTN.x + FTN.r + 0.9, FTN.z - 0.4], [-9.5, 0.8], [POND.x - POND.rx - 0.6, POND.z + 0.3]], 26);
+	// from the gazebo across to the Box of Shame
+	stones([[GZ.x + 1.6, GZ.z + 2.2], [6.6, 0.2], [8.9, BOX.door]], 6);
 
 	// ---------------------------------------------------------------- glass railing round the outside (it's up on the roof)
 	const railM = mat("#6b4f3a", 0.5), postM = mat("#3e3a3a", 0.4, 0.6);
@@ -68,16 +96,16 @@ export function build(k) {
 		for (let i = 0; i <= n; i++) add(rg, new THREE.BoxGeometry(0.06, 1.05, 0.06), postM, 0, 0.525, -len / 2 + (len * i) / n);
 	};
 	railRun(HW0 + 0.05, HD0 + 0.05, HW1 - 0.05, HD0 + 0.05);
-	railRun(HW0 + 0.05, HD0 + 0.05, HW0 + 0.05, HD1 - 0.05);
+	railRun(HW0 + 0.05, HD0 + 0.05, HW0 + 0.05, WING.z1 - 0.05);
 	railRun(HW1 - 0.05, HD0 + 0.05, HW1 - 0.05, HD1 - 0.05);
 	k.box(HW0, HW1, HD0, HD0 + 0.15);
-	k.box(HW0, HW0 + 0.15, HD0, HD1);
+	k.box(HW0, HW0 + 0.15, HD0, WING.z1);
 	k.box(HW1 - 0.15, HW1, HD0, HD1);
 
 	// ---------------------------------------------------------------- flowers (instanced: hundreds of them)
 	const bloomCols = ["#ff5d8f", "#ffd166", "#ffffff", "#c77dff", "#ff9e4a", "#ff8fab", "#7bdff2", "#f15bb5"];
 	const blooms = [], tint = new THREE.Color(), dummy = new THREE.Object3D();
-	function flowerBed(x0, x1, z0, z1) {
+	function flowerBed(x0, x1, z0, z1, cols) {
 		// a low wooden border, dark soil, flowers on stems
 		const wood = mat("#7a5236", 0.7);
 		const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = x1 - x0, d = z1 - z0;
@@ -95,7 +123,7 @@ export function build(k) {
 			dummy.position.set(x, 0.16 + hgt / 2, z); dummy.rotation.set((R() - 0.5) * 0.2, 0, (R() - 0.5) * 0.2); dummy.scale.set(1, hgt, 1); dummy.updateMatrix();
 			stems.setMatrixAt(i, dummy.matrix);
 			dummy.position.set(x, 0.16 + hgt, z); dummy.rotation.set(R() * 3, R() * 3, R() * 3); dummy.scale.setScalar(0.7 + R() * 0.8); dummy.updateMatrix();
-			heads.setMatrixAt(i, dummy.matrix); heads.setColorAt(i, tint.set(bloomCols[Math.floor(R() * bloomCols.length)]));
+			heads.setMatrixAt(i, dummy.matrix); heads.setColorAt(i, tint.set((cols || bloomCols)[Math.floor(R() * (cols || bloomCols).length)]));
 			dummy.position.set(x + (R() - 0.5) * 0.08, 0.2 + R() * 0.08, z + (R() - 0.5) * 0.08); dummy.scale.set(1, 0.4, 0.8); dummy.updateMatrix();
 			leaves.setMatrixAt(i, dummy.matrix); leaves.setColorAt(i, tint.set(R() < 0.5 ? "#3f8a4a" : "#5aa864"));
 		}
@@ -104,11 +132,20 @@ export function build(k) {
 		k.box(x0 - 0.05, x1 + 0.05, z0 - 0.05, z1 + 0.05);
 		return { x0, x1, z0, z1, heads };
 	}
+	const ROSES = ["#d00000", "#e5383b", "#ba181b", "#ff4d6d", "#a4133c"];
 	const beds = [
-		flowerBed(HW1 - 1.35, HW1 - 0.3, -5.4, 4.6),    // along the east railing
-		flowerBed(HW0 + 0.3, HW0 + 1.35, -5.4, -3.2),   // west, past the pond
-		flowerBed(HW0 + 0.3, HW0 + 1.35, 1.2, 4.8),
-		flowerBed(-2.4, 0.9, HD0 + 0.3, HD0 + 1.2)      // along the south railing
+		flowerBed(7.55, 8.6, -5.4, -1.7),               // east of the gazebo (the red carpet to the Box of Shame runs past its end)
+		flowerBed(-8.55, -7.5, -5.4, -3.2),             // past the pond
+		flowerBed(-8.55, -7.5, 1.2, 4.8),
+		flowerBed(-2.4, 0.9, HD0 + 0.3, HD0 + 1.2),     // along the south railing
+		// the west wing: along its railing, and under the terrace
+		flowerBed(HW0 + 0.3, HW0 + 1.3, -5.4, 0.6),
+		flowerBed(HW0 + 0.3, HW0 + 1.3, 4.4, 9.6),
+		flowerBed(-16.6, -10.6, 10.9, 11.7),
+		flowerBed(-13.4, -9.6, HD0 + 0.3, HD0 + 1.2),
+		// the east, under the hot tub: roses all along the front of the Box of Shame, and a bed of mixed ones behind it
+		flowerBed(BOX.x0 + 1.2, BOX.x1 - 0.3, BOX.z1 + 0.5, BOX.z1 + 1.2, ROSES),
+		flowerBed(BOX.x0 + 0.4, BOX.x1 - 0.4, HD0 + 0.3, BOX.z0 - 0.7, ROSES)
 	];
 
 	// ---------------------------------------------------------------- cherry trees in blossom
@@ -136,6 +173,11 @@ export function build(k) {
 	cherry(6.4, 4.4, 1.0);
 	cherry(-6.9, 4.6, 0.9);
 	cherry(-0.8, -3.6, 0.85);
+	cherry(-11.4, 8.9, 1.0);
+	cherry(-19.6, -3.4, 0.95);
+	cherry(-11.6, -3.8, 0.85);
+	cherry(18.5, 4.7, 0.8);
+	cherry(9.4, -4.6, 0.8);
 
 	// ---------------------------------------------------------------- the gazebo, with a bench for two
 	const white = mat("#f7f3ec", 0.5);
@@ -261,13 +303,120 @@ export function build(k) {
 		ctx.sfx("pour", 0.5);
 	}
 	k.interact("garden:flowers", {
-		label: "Water the flowers", stand: [bedE.x0 - 0.65, 0.0], face: Math.PI / 2,
+		label: "Water the flowers", stand: [bedE.x0 - 0.65, (bedE.z0 + bedE.z1) / 2], face: Math.PI / 2,
 		use: () => { const me = ctx.me(); const z = me.z - k.oz; waterFlowers(z); ctx.send({ t: "fx", kind: "zfx", zone: "garden", what: "water", z }); ctx.doUpper("give", 1800); setTimeout(() => ctx.heartsFx(ctx.myAvatar().root, 3, "#9be7a6"), 900); }
 	}, bedE.heads);
 
-	// ---------------------------------------------------------------- lanterns along the path, fireflies
+
+	// ---------------------------------------------------------------- the west wing: a rose arch at the terrace steps
+	const ARCH = { x: (TGAP.x0 + TGAP.x1) / 2, z: 10.3 };
+	{
+		const ar = group(g, ARCH.x, 0, ARCH.z);
+		const archM = mat("#f7f3ec", 0.5);
+		const path = new THREE.CatmullRomCurve3([new THREE.Vector3(-0.95, 0, 0), new THREE.Vector3(-0.95, 1.9, 0), new THREE.Vector3(-0.55, 2.45, 0), new THREE.Vector3(0, 2.6, 0), new THREE.Vector3(0.55, 2.45, 0), new THREE.Vector3(0.95, 1.9, 0), new THREE.Vector3(0.95, 0, 0)]);
+		for (const dz of [-0.2, 0.2]) {
+			const tube = add(ar, new THREE.TubeGeometry(path, 40, 0.035, 8, false), archM, 0, 0, dz);
+			tube.castShadow = true;
+		}
+		for (let i = 0; i <= 12; i++) { const p = path.getPoint(i / 12); add(ar, new THREE.BoxGeometry(0.03, 0.03, 0.42), archM, p.x, p.y, 0, { cast: false }); }
+		// climbing roses all over it
+		const n = 90, leafIM = new THREE.InstancedMesh(new THREE.SphereGeometry(0.06, 6, 5), mat("#3f7a3a", 0.8), n), roseIM = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.05, 1), mat("#ffffff", 0.55), n);
+		for (let i = 0; i < n; i++) {
+			const p = path.getPoint(R()), z = (R() - 0.5) * 0.5;
+			dummy.position.set(p.x + (R() - 0.5) * 0.12, p.y + (R() - 0.5) * 0.12, z); dummy.rotation.set(R() * 3, R() * 3, R() * 3); dummy.scale.set(1.3, 0.7, 1); dummy.updateMatrix();
+			leafIM.setMatrixAt(i, dummy.matrix);
+			dummy.position.set(p.x + (R() - 0.5) * 0.14, p.y + (R() - 0.5) * 0.14, z + (R() - 0.5) * 0.08); dummy.scale.setScalar(0.8 + R() * 0.6); dummy.updateMatrix();
+			roseIM.setMatrixAt(i, dummy.matrix); roseIM.setColorAt(i, tint.set(ROSES[i % ROSES.length]));
+		}
+		for (const im of [leafIM, roseIM]) { im.castShadow = false; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; ar.add(im); }
+		for (const sx of [-0.95, 0.95]) k.box(ARCH.x + sx - 0.08, ARCH.x + sx + 0.08, ARCH.z - 0.25, ARCH.z + 0.25);
+	}
+
+	// ---------------------------------------------------------------- the fountain (toss a coin, make a wish)
+	const ftn = group(g, FTN.x, 0, FTN.z);
+	const stoneF = mat("#e6ddd0", 0.6);
+	add(ftn, new THREE.CylinderGeometry(FTN.r + 0.15, FTN.r + 0.2, 0.45, 32, 1, true), mat("#e6ddd0", 0.6, 0, { side: THREE.DoubleSide }), 0, 0.225, 0, { cast: true });
+	add(ftn, new THREE.TorusGeometry(FTN.r + 0.08, 0.1, 8, 40), stoneF, 0, 0.45, 0, { rx: Math.PI / 2, cast: false });
+	add(ftn, new THREE.CircleGeometry(FTN.r, 32), mat("#1d3c46", 0.9), 0, 0.05, 0, { rx: -Math.PI / 2, cast: false });
+	const ftnWaterM = new THREE.MeshPhysicalMaterial({ color: "#5fb4c9", transparent: true, opacity: 0.6, roughness: 0.05, clearcoat: 1, emissive: "#1f6f80", emissiveIntensity: 0.45, depthWrite: false });
+	const ftnWater = add(ftn, new THREE.CircleGeometry(FTN.r - 0.02, 32), ftnWaterM, 0, 0.36, 0, { rx: -Math.PI / 2, cast: false, receive: false });
+	ftnWater.renderOrder = 2;
+	// the column, the upper bowl, and a little heart on top that the water bubbles out of
+	add(ftn, new THREE.CylinderGeometry(0.14, 0.2, 1.1, 16), stoneF, 0, 0.55, 0);
+	add(ftn, new THREE.CylinderGeometry(0.62, 0.22, 0.2, 24), stoneF, 0, 1.15, 0);
+	const upperM = ftnWaterM.clone();
+	add(ftn, new THREE.CircleGeometry(0.56, 24), upperM, 0, 1.24, 0, { rx: -Math.PI / 2, cast: false, receive: false }).renderOrder = 2;
+	add(ftn, new THREE.CylinderGeometry(0.06, 0.09, 0.35, 12), stoneF, 0, 1.4, 0);
+	const fHeart = k.heartMesh(0.32, "#ff8fab");
+	fHeart.position.set(0, 1.72, 0);
+	ftn.add(fHeart);
+	// water: falling from the upper bowl's rim, and spouting up from the heart
+	const ftnDrops = [];
+	const fdGeo = new THREE.SphereGeometry(0.022, 6, 4), fdM = new THREE.MeshBasicMaterial({ color: "#d6f2ff", transparent: true, opacity: 0.75, depthWrite: false });
+	for (let i = 0; i < 70; i++) {
+		const d = new THREE.Mesh(fdGeo, fdM);
+		d.userData = { a: R() * Math.PI * 2, ph: R(), kind: i < 48 ? "rim" : "spout" };
+		ftn.add(d);
+		ftnDrops.push(d);
+	}
+	k.box(FTN.x - FTN.r - 0.25, FTN.x + FTN.r + 0.25, FTN.z - FTN.r - 0.25, FTN.z + FTN.r + 0.25);
+	const coins = [];
+	const coinGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.006, 12), coinM = mat("#e9c46a", 0.25, 0.9);
+	const WISHES = ["You tossed a coin and wished... for more nights like this one.", "Plink! Your wish is safe with the fountain.", "A coin, a wish, a little smile. It's going to come true.", "You wished for someone special. (They might be standing right there.)", "Plink! The fountain winks back at you."];
+	function tossCoin(from) {
+		const c = add(ftn, coinGeo, coinM, 0, -5, 0, { cast: false });
+		const a = R() * Math.PI * 2, rr = 0.75 + R() * 0.35;
+		c.userData = { t: 0, sx: from[0], sz: from[1], ex: Math.cos(a) * rr, ez: Math.sin(a) * rr };
+		coins.push(c);
+		if (coins.length > 24) { const old = coins.shift(); ftn.remove(old); }
+		setTimeout(() => ctx.sfx("water", 0.3), 650);
+	}
+	k.interact("garden:fountain", {
+		label: "Toss a coin and make a wish", nearest: true,
+		stand: [FTN.x + FTN.r + 0.7, FTN.z], stands: [[FTN.x + FTN.r + 0.7, FTN.z], [FTN.x - FTN.r - 0.7, FTN.z], [FTN.x, FTN.z - FTN.r - 0.7]],
+		use: () => {
+			const me = ctx.me(), lx = me.x - k.ox - FTN.x, lz = me.z - k.oz - FTN.z;
+			me.h = Math.atan2(-lx, -lz);
+			ctx.doUpper("give", 1100);
+			tossCoin([lx, lz]);
+			ctx.send({ t: "fx", kind: "zfx", zone: "garden", what: "coin", lx: +lx.toFixed(2), lz: +lz.toFixed(2) });
+			setTimeout(() => { ctx.notice(WISHES[Math.floor(Math.random() * WISHES.length)]); ctx.heartsFx(ctx.myAvatar().root, 4, "#ffd166"); }, 900);
+		}
+	}, ftn);
+	// two benches facing the fountain
+	const fBench = (id, x, z, h) => {
+		const b = group(g, x, 0, z, h);
+		add(b, rbox(1.5, 0.07, 0.45, 0.02), benchWood, 0, 0.42, 0);
+		add(b, rbox(1.5, 0.45, 0.06, 0.02), benchWood, 0, 0.72, -0.22, { rx: -0.12 });
+		for (const sx of [-0.68, 0.68]) add(b, rbox(0.06, 0.42, 0.42, 0.02), mat("#2e2b2b", 0.5, 0.5), sx, 0.21, 0);
+		const c = Math.cos(h), sn = Math.sin(h);
+		k.box(x - (Math.abs(c) * 0.8 + Math.abs(sn) * 0.3), x + (Math.abs(c) * 0.8 + Math.abs(sn) * 0.3), z - (Math.abs(sn) * 0.8 + Math.abs(c) * 0.3), z + (Math.abs(sn) * 0.8 + Math.abs(c) * 0.3));
+		for (const [j, sx] of [[0, -0.35], [1, 0.35]]) k.spot({ id: id + j, x: x + sx * c + 0.05 * sn, z: z - sx * sn + 0.05 * c, h, y: 0.04 });
+		k.interact("garden:" + id, { label: "Sit by the fountain", stand: [x + 0.9 * sn, z + 0.9 * c], sit: [id + "0", id + "1"] }, b);
+	};
+	fBench("ftnBenchS", FTN.x, FTN.z - FTN.r - 1.35, 0);
+	fBench("ftnBenchW", FTN.x - FTN.r - 1.35, FTN.z, Math.PI / 2);
+
+	// ---------------------------------------------------------------- the east: a red carpet up to the Box of Shame
+	{
+		const carpet = add(g, new THREE.PlaneGeometry(BOX.x0 - 8.9 + 0.05, 1.1), mat("#b5171f", 0.9), (8.9 + BOX.x0) / 2, 0.01, BOX.door, { rx: -Math.PI / 2, cast: false });
+		carpet.userData.floor = true;
+		for (const dz of [-0.56, 0.56]) add(g, new THREE.PlaneGeometry(BOX.x0 - 8.9 + 0.05, 0.05), mat("#e9c46a", 0.5, 0.6), (8.9 + BOX.x0) / 2, 0.012, BOX.door + dz, { rx: -Math.PI / 2, cast: false });
+		// little velvet-rope posts either side
+		for (const dz of [-0.85, 0.85]) for (const x of [9.0, 10.2]) {
+			add(g, new THREE.CylinderGeometry(0.035, 0.05, 0.85, 10), mat("#e9c46a", 0.3, 0.8), x, 0.425, BOX.door + dz);
+			add(g, new THREE.SphereGeometry(0.06, 12, 8), mat("#e9c46a", 0.3, 0.8), x, 0.88, BOX.door + dz, { cast: false });
+			k.box(x - 0.07, x + 0.07, BOX.door + dz - 0.07, BOX.door + dz + 0.07);
+		}
+		for (const dz of [-0.85, 0.85]) {
+			const rope = new THREE.CatmullRomCurve3([new THREE.Vector3(9.0, 0.8, BOX.door + dz), new THREE.Vector3(9.6, 0.62, BOX.door + dz), new THREE.Vector3(10.2, 0.8, BOX.door + dz)]);
+			add(g, new THREE.TubeGeometry(rope, 12, 0.02, 6, false), mat("#8d0801", 0.7), 0, 0, 0, { cast: false });
+		}
+	}
+
+	// ---------------------------------------------------------------- lanterns along the paths, fireflies
 	const lamps = [];
-	for (const [x, z] of [[-3.9, 4.6], [-1.3, 3.4], [-0.6, 0.6], [1.6, 0.8], [-3.6, 0.6]]) {
+	for (const [x, z] of [[-3.9, 4.6], [-1.3, 3.4], [-0.6, 0.6], [1.6, 0.8], [-3.6, 0.6], [-17.6, 10.8], [-20.0, 7.0], [-17.3, 5.6], [-12.2, 1.6], [-10.0, -0.6], [6.0, 1.6], [8.3, 0.9], [6.9, -1.2]]) {
 		const l = group(g, x, 0, z);
 		add(l, new THREE.CylinderGeometry(0.025, 0.03, 0.75, 8), mat("#2e2b2b", 0.5, 0.5), 0, 0.375, 0);
 		const m = new THREE.MeshStandardMaterial({ color: "#fff1d6", emissive: "#ffc26b", emissiveIntensity: 2 });
@@ -279,10 +428,13 @@ export function build(k) {
 	}
 	const flies = [];
 	const flyM = new THREE.SpriteMaterial({ map: canvasTex(32, 32, (c, w, h) => { const gr = c.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, "rgba(255,255,200,1)"); gr.addColorStop(0.3, "rgba(220,255,140,0.7)"); gr.addColorStop(1, "rgba(200,255,120,0)"); c.fillStyle = gr; c.fillRect(0, 0, w, h); }), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
-	for (let i = 0; i < 34; i++) {
+	for (let i = 0; i < 70; i++) {
 		const s = new THREE.Sprite(flyM.clone());
 		s.scale.setScalar(0.12);
-		s.userData = { x: HW0 + 1 + R() * (HW1 - HW0 - 2), z: HD0 + 1 + R() * (HD1 - HD0 - 2), y: 0.4 + R() * 1.6, ph: R() * 6, sp: 0.2 + R() * 0.3 };
+		// (over the long lawn, or the west wing - never out over the pool deck)
+		const wing = i % 4 === 0;
+		s.userData = wing ? { x: HW0 + 1 + R() * (WING.x1 - HW0 - 2), z: HD1 + R() * (WING.z1 - HD1 - 1), y: 0.4 + R() * 1.6, ph: R() * 6, sp: 0.2 + R() * 0.3 }
+			: { x: HW0 + 1 + R() * (BOX.x0 - 2 - HW0), z: HD0 + 1 + R() * (HD1 - HD0 - 2), y: 0.4 + R() * 1.6, ph: R() * 6, sp: 0.2 + R() * 0.3 };   // (not inside the Box of Shame)
 		g.add(s);
 		flies.push(s);
 	}
@@ -300,6 +452,21 @@ export function build(k) {
 			f.rotation.y = Math.atan2(-Math.sin(a) * POND.rx, Math.cos(a) * POND.rz);   // (heads along +z: facing the way it swims)
 			u.tail.rotation.y = Math.sin(t * 9 + i) * 0.5;
 		});
+		// the fountain: water falling from the bowl's rim, bubbling up from the heart; wishing coins sail in
+		ftnWaterM.emissiveIntensity = 0.4 + Math.sin(t * 1.3) * 0.08;
+		ftnDrops.forEach(d => {
+			const u = d.userData, f = (t * (u.kind === "rim" ? 0.9 : 1.2) + u.ph) % 1;
+			if (u.kind === "rim") { const r = 0.6 + f * 0.25; d.position.set(Math.cos(u.a) * r, 1.22 - f * f * 0.86, Math.sin(u.a) * r); }
+			else { const r = f * 0.4; d.position.set(Math.cos(u.a) * r, 1.85 + f * 0.55 - f * f * 0.75, Math.sin(u.a) * r); }
+		});
+		for (const c of coins) {
+			const u = c.userData;
+			if (u.t >= 1) continue;
+			u.t = Math.min(1, u.t + dt / 0.7);
+			c.position.set(u.sx + (u.ex - u.sx) * u.t, 1.2 + Math.sin(u.t * Math.PI) * 0.9 - u.t * 1.12, u.sz + (u.ez - u.sz) * u.t);
+			c.rotation.x += dt * 14;
+			if (u.t >= 1) c.rotation.set(0, R() * 3, 0);
+		}
 		pads.forEach(p => { p.position.y = 0.075 + Math.sin(t * 1.2 + p.userData.ph) * 0.004; p.rotation.z = Math.sin(t * 0.3 + p.userData.ph) * 0.2; });
 		waterM.emissiveIntensity = 0.35 + Math.sin(t * 0.8) * 0.08;
 		for (let i = ripples.length - 1; i >= 0; i--) {
@@ -337,6 +504,7 @@ export function build(k) {
 		update,
 		onFx(d) {
 			if (d.what === "koi") feedKoi();
+			if (d.what === "coin" && typeof d.lx === "number") tossCoin([d.lx, d.lz]);
 			if (d.what === "water" && typeof d.z === "number") waterFlowers(Math.max(bedE.z0, Math.min(bedE.z1, d.z)));
 		},
 		promptOpts(opts) {

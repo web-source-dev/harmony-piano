@@ -212,7 +212,7 @@ export class WorldAudio {
 			case "whistle": tone(1500, 2500, 0.2, "sine", 0.16); tone(2500, 1600, 0.38, "sine", 0.16, 0.26); break;
 			case "woof": for (const d of [0, 0.26]) { tone(360, 150, 0.15, "sawtooth", 0.09, d); tone(720, 300, 0.12, "square", 0.03, d); noise(0.12, 700, 1.2, 0.18, d); } break;
 			case "meow": tone(560, 920, 0.2, "triangle", 0.12); tone(920, 470, 0.45, "triangle", 0.12, 0.18); tone(1840, 940, 0.45, "sine", 0.025, 0.18); break;
-			// the clubhouse: the karaoke stage's drum kit, the bowling lane, the billiard table, the dartboard, a crowd
+			// the game room: a drum kit, the bowling lane, the billiard table, the dartboard, a crowd
 			case "snare": noise(0.16, 1900, 0.7, 0.32); tone(240, 160, 0.08, "triangle", 0.1); break;
 			case "hat": noise(0.05, 8000, 0.8, 0.12, 0, "highpass"); break;
 			case "tom": tone(160, 90, 0.28, "sine", 0.35); noise(0.05, 500, 1, 0.08); break;

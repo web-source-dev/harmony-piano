@@ -94,7 +94,7 @@ export function build(k) {
 	railRun(XA0 + 0.05, ZN + 0.05, XA0 + 0.05, 0.1);
 	k.box(XA0, GG0, ZN, ZN + 0.12);
 	k.box(GG1, XB1, ZN, ZN + 0.12);
-	k.walk(GG0, GG1, ZN - 0.6, ZN + 0.5);
+	k.walk(GG0, GG1, ZN - 0.6, ZN + 1.2);
 	// a little sign by the gap
 	{
 		const sg = group(g, GG0 - 0.35, 0, ZN + 0.3);

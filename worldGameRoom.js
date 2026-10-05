@@ -1,21 +1,25 @@
+import { createPC, PC_GAMES } from "./worldPCGames.js";
+
 /**
- * Harmony World — the game room: the heart of the new wing, through the door by the lounge's dining table.
+ * Harmony World — the game room, off the hallway behind the lounge (worldHall.js).
  *
- * Local coordinates (origin at world 12.75, 13.15): x -4..4, z -4.8..4.8, ceiling 3.6 m.
- * Doors: north back to the lounge, east to the observatory (worldObservatory.js), south to the spa (worldSpa.js),
- * west to the karaoke lounge (worldKaraoke.js).
+ * Local coordinates (origin at world 7.95, 13.15): x -4..4, z -4.8..4.8, ceiling 3.6 m.
+ * The door is in the east wall, out to the hallway (and across it, the spa).
  *
  *   a bowling lane along the west wall (bowl, watch the pins go, a scoreboard with everyone's best)
  *   a billiard table in the middle (take a shot from wherever you stand; the balls roll the same on every screen)
  *   a dartboard on the east wall (three darts a turn, scored like the real thing)
  *   a snack machine, a sofa to watch from (and cuddle on)
+ *   two gaming PCs side by side on the south wall: sit down and play (worldPCGames.js), or take on each other
  *
- * Shared keys: z:games:bowl (the last roll), z:games:bowlScores, z:games:pool (the last shot), z:games:darts.
+ * Shared keys: z:games:bowl (the last roll), z:games:bowlScores, z:games:pool (the last shot), z:games:darts,
+ * z:games:pc0 / z:games:pc1 (what's on each PC's screen), z:games:pcBest (the high scores).
  */
 const W = 8.0, D = 9.6, H = 3.6, HW = W / 2, HD = D / 2;
 const LANE = { x: -3.0, w: 1.05, foul: 1.6, pinZ: -3.3 };
 const TB = { x: 1.4, z: -1.0, hw: 0.6, hl: 1.15, y: 0.82, r: 0.03 };
 const DART = { z: 3.0, y: 1.73, line: 1.5, R: 0.2 };
+const PCS = [{ id: "pc0", x: -3.1 }, { id: "pc1", x: -1.55 }], PCZ = 4.38;   // the two desks, against the south wall
 const DART_ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 
 export function build(k) {
@@ -30,24 +34,15 @@ export function build(k) {
 		wall: mat("#ffffff", 0.9, 0, { map: tex.wall("#2c2a45", "stripes", "rgba(255,255,255,0.035)", W / 2, H / 2) }),
 		ceil: mat("#1d1b2e", 0.95),
 		holes: [
-			{ wall: "n", at: 0.6, w: 1.5, y1: 2.3 },    // back to the lounge
-			{ wall: "e", at: -0.6, w: 1.5, y1: 2.3 },   // to the observatory
-			{ wall: "s", at: -1.0, w: 1.5, y1: 2.3 },   // to the spa
-			{ wall: "w", at: 3.2, w: 1.5, y1: 2.3 }     // to the karaoke lounge
+			{ wall: "e", at: -2.0, w: 1.5, y1: 2.3 }    // out to the hallway (the lounge, the spa)
 		]
 	});
 	k.floor(() => 0);
 	k.walk(-HW, HW, -HD, HD);
-	k.walk(-0.1, 1.3, -HD - 0.6, -HD + 0.4); // back to the lounge
-	k.walk(3.6, HW + 0.8, -1.3, 0.1);       // to the observatory
-	k.walk(-1.7, -0.3, HD - 0.4, HD + 0.6); // to the spa
-	k.walk(-HW - 0.8, -3.6, 2.5, 3.9);      // to the karaoke lounge
+	k.walk(HW - 1.0, HW + 0.9, -2.7, -1.3); // out to the hallway
 	k.cam = { minX: -HW + 0.2, maxX: HW - 0.2, minZ: -HD + 0.2, maxZ: HD - 0.2, maxY: H - 0.25 };
-	k.frenchDoor("gameslounge", { x: 0.6, z: -HD - 0.1, ry: Math.PI, w: 1.46, h: 2.3, depth: 0.45, side: -1, curtain: "#8b7bb0" }, [-0.15, 1.35, -HD - 0.25, -HD + 0.05], [[0.6, -HD + 0.8], [0.6, -HD - 1.0]]);
-	k.frenchDoor("gamesobs", { x: HW + 0.13, z: -0.6, ry: Math.PI / 2, w: 1.46, h: 2.3, depth: 0.45, side: 1, curtain: "#3d5a80" }, [HW, HW + 0.3, -1.35, 0.15], [[HW - 1.0, -0.6], [HW + 1.3, -0.6]]);
-	k.frenchDoor("gamesspa", { x: -1.0, z: HD + 0.1, ry: 0, w: 1.46, h: 2.3, depth: 0.45, side: -1, curtain: "#5f8f8a" }, [-1.75, -0.25, HD - 0.05, HD + 0.25], [[-1.0, HD - 0.8], [-1.0, HD + 1.0]]);
-	k.frenchDoor("gameskaraoke", { x: -HW - 0.13, z: 3.2, ry: -Math.PI / 2, w: 1.46, h: 2.3, depth: 0.45, side: 1, curtain: "#9b2c5a" }, [-HW - 0.3, -HW, 2.45, 3.95], [[-HW + 1.0, 3.2], [-HW - 1.3, 3.2]]);
-	for (const [x, y, z, ry, text, icon] of [[0.6, 2.75, -HD + 0.04, 0, "Lounge", "sofa"], [HW - 0.04, 2.75, -0.6, -Math.PI / 2, "Observatory", "star"], [-1.0, 2.75, HD - 0.04, Math.PI, "Spa", "bath"], [-HW + 0.04, 2.75, 3.2, Math.PI / 2, "Karaoke", "mic"]]) {
+	k.frenchDoor("gameshall", { x: HW + 0.13, z: -2.0, ry: Math.PI / 2, w: 1.46, h: 2.3, depth: 0.45, side: 1, curtain: "#3d5a80" }, [HW, HW + 0.3, -2.75, -1.25], [[HW - 1.0, -2.0], [HW + 1.3, -2.0]]);
+	for (const [x, y, z, ry, text, icon] of [[HW - 0.04, 2.75, -2.0, -Math.PI / 2, "Lounge & Spa", "home"]]) {
 		const st = tex.sign(text, icon);
 		add(g, new THREE.PlaneGeometry(0.9, 0.225), new THREE.MeshStandardMaterial({ map: st, roughness: 0.45, emissive: "#ffffff", emissiveMap: st, emissiveIntensity: 0.3 }), x, y, z, { ry, cast: false });
 	}
@@ -380,6 +375,105 @@ export function build(k) {
 		add(pg, new THREE.PlaneGeometry(0.54, 0.74), new THREE.MeshStandardMaterial({ map: tex.art(seed), roughness: 0.6 }), 0, 0, 0.017, { cast: false });
 	});
 
+
+	// ---------------------------------------------------------------- two gaming PCs on the south wall
+	// sit down and the PC's screen opens (worldPCGames.js); the monitor shows your game, or for everyone else your
+	// name, the game and your score
+	const PK0 = "z:games:pc";
+	const pcState = i => { const s = ctx.get(PK0 + i); return s && Date.now() - s.at < 60000 ? s : null; };
+	const deskM = mat("#1c1b29", 0.35, 0.3), rgbM = [];
+	const gameName = id => (PC_GAMES.find(x => x.id === id) || { name: "a game" }).name;
+	// the PC I'm sitting at (one screen controller, for whichever PC that is)
+	let myPc = -1;
+	const ctl = createPC(ctx, { onState: s => { if (myPc >= 0) ctx.setShared(PK0 + myPc, s); }, title: () => "Gaming PC " + (myPc + 1) });
+	const openPc = i => { myPc = i; ctl.menu(); };
+	const monitors = PCS.map((P, i) => {
+		const d = group(g, P.x, 0, PCZ);
+		// the desk: black top on two legs, an RGB strip along its front edge
+		add(d, rbox(1.4, 0.05, 0.7, 0.015), deskM, 0, 0.74, 0);
+		for (const sx of [-0.66, 0.66]) add(d, new THREE.BoxGeometry(0.05, 0.72, 0.62), deskM, sx, 0.36, 0);
+		const strip = new THREE.MeshBasicMaterial({ color: "#ff4fd8", toneMapped: false });
+		rgbM.push(strip);
+		add(d, new THREE.BoxGeometry(1.36, 0.012, 0.012), strip, 0, 0.72, -0.35, { cast: false });
+		// the monitor (on a stand) facing the chair
+		const mon = group(d, 0, 0.77, 0.1);
+		add(mon, new THREE.CylinderGeometry(0.12, 0.14, 0.015, 20), deskM, 0, 0.008, 0);
+		add(mon, new THREE.BoxGeometry(0.05, 0.3, 0.04), deskM, 0, 0.16, 0.04);
+		add(mon, rbox(0.7, 0.54, 0.04, 0.012), mat("#111018", 0.4), 0, 0.5, 0.0);
+		const cv = document.createElement("canvas");
+		cv.width = 512; cv.height = 384;
+		const st = new THREE.CanvasTexture(cv);
+		st.colorSpace = THREE.SRGBColorSpace;
+		add(mon, new THREE.PlaneGeometry(0.64, 0.48), new THREE.MeshBasicMaterial({ map: st, toneMapped: false }), 0, 0.5, -0.021, { ry: Math.PI, cast: false, receive: false });
+		// keyboard (glowing keys), mouse on a pad
+		add(d, rbox(0.46, 0.025, 0.15, 0.008), mat("#15141f", 0.4), -0.05, 0.775, -0.12, { cast: false });
+		const kb = new THREE.MeshBasicMaterial({ color: "#3ff0ff", toneMapped: false, transparent: true, opacity: 0.55 });
+		rgbM.push(kb);
+		add(d, new THREE.PlaneGeometry(0.43, 0.12), kb, -0.05, 0.789, -0.12, { rx: -Math.PI / 2, cast: false, receive: false });
+		add(d, new THREE.PlaneGeometry(0.26, 0.22), mat("#2a2840", 0.9), 0.33, 0.766, -0.1, { rx: -Math.PI / 2, cast: false });
+		add(d, new THREE.SphereGeometry(0.03, 12, 8), mat("#e9e3ff", 0.3), 0.33, 0.775, -0.1, { cast: false }).scale.set(0.8, 0.5, 1.2);
+		// the tower on the desk's end: glass side, RGB fans
+		const tw = group(d, 0.5, 0.765, 0.12);
+		add(tw, rbox(0.2, 0.46, 0.4, 0.015), mat("#121119", 0.35, 0.4), 0, 0.23, 0);
+		const fanM = new THREE.MeshBasicMaterial({ color: i ? "#3ff0ff" : "#ff4fd8", toneMapped: false });
+		rgbM.push(fanM);
+		for (const fz of [-0.09, 0.09]) add(tw, new THREE.TorusGeometry(0.065, 0.012, 6, 20), fanM, -0.102, 0.26, fz, { ry: Math.PI / 2, cast: false });
+		k.box(P.x - 0.72, P.x + 0.72, PCZ - 0.38, HD);
+		// the gaming chair, facing the desk
+		const chZ = PCZ - 0.85;
+		const ch = group(g, P.x, 0, chZ);
+		const seatM = mat(i ? "#1d4ed8" : "#e63946", 0.6), blackM = mat("#16151d", 0.5);
+		add(ch, new THREE.CylinderGeometry(0.03, 0.03, 0.36, 8), mat("#888888", 0.3, 0.8), 0, 0.22, 0);
+		for (let j = 0; j < 5; j++) { const a = j / 5 * Math.PI * 2; add(ch, new THREE.BoxGeometry(0.04, 0.03, 0.3), blackM, Math.sin(a) * 0.14, 0.04, Math.cos(a) * 0.14, { ry: a, cast: false }); }
+		add(ch, rbox(0.52, 0.1, 0.5, 0.04), blackM, 0, 0.44, 0);
+		add(ch, rbox(0.42, 0.04, 0.42, 0.02), seatM, 0, 0.5, 0, { cast: false });
+		add(ch, rbox(0.5, 0.82, 0.1, 0.05), blackM, 0, 0.9, -0.26, { rx: -0.1 });
+		add(ch, rbox(0.2, 0.7, 0.02, 0.01), seatM, 0, 0.92, -0.2, { rx: -0.1, cast: false });
+		add(ch, rbox(0.3, 0.14, 0.08, 0.04), seatM, 0, 1.24, -0.3, { rx: -0.1, cast: false });
+		for (const sx of [-0.27, 0.27]) add(ch, rbox(0.06, 0.05, 0.32, 0.02), blackM, sx, 0.66, 0.02);
+		k.box(P.x - 0.3, P.x + 0.3, chZ - 0.35, chZ + 0.25);
+		k.spot({ id: P.id, x: P.x, z: chZ + 0.02, h: 0, y: 0.06 });
+		k.interact("games:" + P.id, {
+			label: () => { const s = pcState(i), who = ctx.whoSits(P.id); return who ? who.look.name + " is playing" + (s ? " " + gameName(s.game) : "") : "Play on gaming PC " + (i + 1); },
+			stand: [P.x, chZ - 0.7],
+			use: () => { const who = ctx.whoSits(P.id); if (who) { ctx.notice(`<b>${esc(who.look.name)}</b> is on that PC - take the other one and play together!`); return; } if (ctx.sitOn([P.id])) openPc(i); }
+		}, d, ch);
+		return { cv, st, i };
+	});
+	// a neon sign over the PCs
+	{
+		const neon = tex.text("GAMING", { w: 1024, h: 256, color: "#ffe1f7", glow: "#ff4fd8", font: "900 150px 'Nunito', sans-serif" });
+		add(g, new THREE.PlaneGeometry(1.6, 0.4), new THREE.MeshBasicMaterial({ map: neon, transparent: true, toneMapped: false, depthWrite: false }), (PCS[0].x + PCS[1].x) / 2, 2.55, HD - 0.03, { ry: Math.PI, cast: false, receive: false });
+	}
+	function drawMonitor(M, t) {
+		const c = M.cv.getContext("2d"), w = M.cv.width, h = M.cv.height;
+		const mine = myPc === M.i ? ctl.canvas() : null;
+		if (mine) { c.drawImage(mine, 0, 0, w, h); M.st.needsUpdate = true; return; }
+		const s = pcState(M.i), who = ctx.whoSits(PCS[M.i].id);
+		const gr = c.createLinearGradient(0, 0, w, h);
+		gr.addColorStop(0, "#160f2e"); gr.addColorStop(1, "#06121c");
+		c.fillStyle = gr; c.fillRect(0, 0, w, h);
+		c.textAlign = "center"; c.textBaseline = "middle";
+		if (s && who) {
+			const info = PC_GAMES.find(x => x.id === s.game) || PC_GAMES[0];
+			c.fillStyle = info.color; c.font = "900 50px Nunito, sans-serif"; c.fillText(info.name.toUpperCase(), w / 2, 100);
+			c.fillStyle = "#ffffff"; c.font = "800 32px Nunito, sans-serif"; c.fillText(s.name.slice(0, 18) + " is playing", w / 2, 180);
+			c.fillStyle = s.over ? "#ff8fab" : "#ffd166"; c.font = "900 60px Nunito, sans-serif"; c.fillText(s.over ? "GAME OVER  " + s.score : String(s.score), w / 2, 270);
+		} else {
+			// idle (or someone's choosing a game): a game controller, slowly changing colour
+			const cx = w / 2, cy = 150;
+			c.fillStyle = `hsl(${(t * 40 + M.i * 120) % 360},90%,65%)`;
+			c.beginPath(); c.ellipse(cx - 70, cy + 10, 52, 48, 0, 0, Math.PI * 2); c.ellipse(cx + 70, cy + 10, 52, 48, 0, 0, Math.PI * 2); c.fill();
+			c.fillRect(cx - 80, cy - 38, 160, 70);
+			c.fillStyle = "#160f2e";
+			c.fillRect(cx - 88, cy - 4, 40, 12); c.fillRect(cx - 74, cy - 18, 12, 40);
+			for (const [dx, dy] of [[62, -6], [82, 8], [62, 22], [42, 8]]) { c.beginPath(); c.arc(cx + dx, cy + dy, 7, 0, Math.PI * 2); c.fill(); }
+			c.fillStyle = "rgba(255,255,255,0.75)"; c.font = "800 30px Nunito, sans-serif"; c.fillText(who ? who.look.name.slice(0, 18) + " is picking a game" : "Sit down to play", w / 2, 240);
+		}
+		M.st.needsUpdate = true;
+	}
+	let monT = 1;
+
 	// ---------------------------------------------------------------- light
 	const L = {
 		lane: k.light(LANE.x, H - 0.4, -1.5, "#d6e4ff", 3.0, 7),
@@ -387,7 +481,8 @@ export function build(k) {
 		table: k.light(TB.x, 1.75, TB.z, "#fff1d6", 3.2, 4.5),
 		darts: k.light(DART.line + 1.2, 2.6, DART.z, "#ffe2c0", 2.0, 4),
 		neon: k.light(2.75, 2.6, -HD + 0.6, "#3ff0ff", 1.6, 4.5),
-		sofa: k.light(2.3, 2.4, HD - 1.2, "#ffcf8a", 1.8, 5)
+		sofa: k.light(2.3, 2.4, HD - 1.2, "#ffcf8a", 1.8, 5),
+		pcs: k.light((PCS[0].x + PCS[1].x) / 2, 2.2, PCZ - 0.9, "#c77dff", 1.6, 4)
 	};
 	k.lamp("table", L.table, [poolBulb], [pl], [TB.x + TB.hw + 0.75, TB.z + 0.8], "light over the table");
 	k.key.pos.copy(k.V(0, H - 0.2, 0)); k.key.target.copy(k.V(0, 0, 0.3));
@@ -399,6 +494,14 @@ export function build(k) {
 	const tmp = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
 	function update(dt, t) {
 		const T = Date.now();
+		// the PCs: monitors (my own game every frame, the rest a few times a second), RGB colour cycling
+		monT += dt;
+		const playing = myPc >= 0 && ctl.canvas();
+		if (playing) drawMonitor(monitors[myPc], t);
+		if (monT > 0.25) { monT = 0; monitors.forEach(M => { if (!(playing && M.i === myPc)) drawMonitor(M, t); }); }
+		rgbM.forEach((m, i) => m.color.setHSL((t * 0.12 + i * 0.13) % 1, 0.9, 0.6));
+		// got up from the PC: its screen goes back to idle for everyone
+		if (myPc >= 0 && ctx.me().sit !== PCS[myPc].id) { ctl.close(); if (ctx.get(PK0 + myPc)) ctx.setShared(PK0 + myPc, null); myPc = -1; }
 		// bowling: the ball rolls down, the pins fly, the rack resets
 		const b = bowl();
 		if (b && b.id !== lastBowl) { lastBowl = b.id; drawScoreboard(); }
@@ -476,8 +579,17 @@ export function build(k) {
 		applyKey(key) { if (key === BS || key === BK) drawScoreboard(); if (key === DK) drawDartScore(); },
 		promptOpts(opts) {
 			const me = ctx.me();
-			if (me.sit) return;
 			const free = key => !opts.some(o => o.k === key);
+			// at a gaming PC: open its screen again, or take on whoever's at the other one
+			const at = PCS.findIndex(P => P.id === me.sit);
+			if (at >= 0) {
+				const key = ["E", "F", "G"].find(free);
+				if (key) opts.push({ k: key, label: "Play games on the PC", fn: () => openPc(at) });
+				const other = ctx.whoSits(PCS[1 - at].id), key2 = ["G", "R"].find(free);
+				if (other && key2) opts.push({ k: key2, label: "Play " + other.look.name + " (board games)", fn: () => ctx.openArcade() });
+				return;
+			}
+			if (me.sit) return;
 			// by the billiard table: rack them up again
 			if (Math.hypot(me.x - (TB.x + k.ox), me.z - (TB.z + k.oz)) < 2.2 && free("R")) opts.push({ k: "R", label: "Rack the balls", fn: rackUp });
 		},

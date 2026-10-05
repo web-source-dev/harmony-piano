@@ -22,6 +22,8 @@ export const TERRACE = { minX: -7, maxX: 5.5, minZ: -12, maxZ: -6.2 };
 export const LDOOR = { z0: 2.9, z1: 4.6, h: 2.3 };
 // the gap in the terrace's east railing, out to the pool deck
 export const POOLGAP = { z0: -10.3, z1: -8.3 };
+// the gap in the terrace's south railing, down into the garden (worldGarden.js)
+export const TGAP = { x0: -5.5, x1: -4.0 };
 // the French doors in the left wall, into the cinema
 export const CDOOR = { z0: -4.21, z1: -2.79, h: 2.3 };
 // The other rooms of the house (lounge, bedroom, bathroom, cinema, pool) sit around the living room
@@ -43,6 +45,7 @@ export function walkable(x, z, r) {
 	if (x > 6.0 && x < 8.2 && z > LDOOR.z0 + r && z < LDOOR.z1 - r) return true;
 	if (x > 4.4 && x < 6.6 && z > POOLGAP.z0 + r && z < POOLGAP.z1 - r) return true;
 	if (x > -7.8 && x < -6.0 && z > CDOOR.z0 + r && z < CDOOR.z1 - r) return true;
+	if (x > TGAP.x0 + r && x < TGAP.x1 - r && z > -12.9 && z < -11.3) return true;
 	const a = areaAt(x, z);
 	if (a) for (const q of a.rects) if (x > q.minX + r && x < q.maxX - r && z > q.minZ + r && z < q.maxZ - r) return true;
 	return false;

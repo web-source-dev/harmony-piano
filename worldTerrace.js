@@ -50,7 +50,17 @@ export function buildTerrace(scene, h) {
 		const n = Math.max(1, Math.round(len / 1.25));
 		for (let i = 0; i <= n; i++) add(g, new THREE.BoxGeometry(0.06, 1.05, 0.06), postM, 0, 0.525, -len / 2 + (len * i) / n);
 	};
-	railRun(-6.95, -11.95, 5.45, -11.95);
+	// (a gap in the south railing leads down into the garden: TGAP in worldRoom.js)
+	railRun(-6.95, -11.95, -5.5, -11.95);
+	railRun(-4.0, -11.95, 5.45, -11.95);
+	{
+		const sg = group(scene, -3.65, 0, -11.7);
+		add(sg, new THREE.CylinderGeometry(0.03, 0.03, 1.1, 8), mat("#5b4636", 0.7), 0, 0.55, 0);
+		add(sg, rbox(0.62, 0.22, 0.04, 0.02), mat("#8a5a3c", 0.6), 0, 1.15, 0);
+		const c = canvasTex(512, 128, (g, w, h) => { g.fillStyle = "#f6ecd2"; g.font = "800 84px 'Caveat', 'Nunito', cursive"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("Garden", w / 2, h / 2 + 4); });
+		add(sg, new THREE.PlaneGeometry(0.56, 0.16), new THREE.MeshBasicMaterial({ map: c, transparent: true, depthWrite: false }), 0, 1.15, 0.025, { cast: false, receive: false });
+		box(-3.72, -3.58, -11.77, -11.63);
+	}
 	railRun(-6.95, -6.25, -6.95, -11.95);
 	// (a gap in the east railing leads out to the pool deck)
 	railRun(5.45, -6.25, 5.45, -8.3);
