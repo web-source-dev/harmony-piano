@@ -1,9 +1,9 @@
 /**
- * Harmony World — the Aquarium: a big blue building off the garden's west wing (through the gap in its west
- * railing). Indoors, dim and blue, lit mostly by the water.
+ * Harmony World — the Aquarium: a big blue building on the west avenue, at the west end of the cross walk (and across
+ * the lawn from the garden's west wing gate). Indoors, dim and blue, lit mostly by the water.
  *
- * Local coordinates (origin at world -19.3, -13.6): x -11.7..11.7, z -6.0..4.7 (world x -31..-7.6, z -19.6..-8.9).
- * The way in is the doorway in the east wall (x 11.7) at z -0.75..0.75, from the garden.
+ * Local coordinates (origin at world -41.3, -21.5): x -11.7..11.7, z -6.0..4.7 (world x -53..-29.6, z -27.5..-16.8).
+ * The way in is the doorway in the east wall (x 11.7) at z -0.75..0.75, at the west end of the cross walk.
  *
  *   the lobby (x 8..11.45): a ticket desk, a glass column of little fish, the show board, and the big button that
  *     starts a feeding show;
@@ -36,7 +36,7 @@ export function build(k) {
 	// only touch leave a strip nobody can stand on - the doorway one runs on past the wall, out into the garden,
 	// because the garden's own rect doesn't count on this side of x 11.7)
 	k.walk(8.2, 11.45, -5.65, 4.35);                 // the lobby
-	k.walk(10.4, 12.7, -0.75, 0.75);                 // out through the doorway to the garden
+	k.walk(10.4, 12.7, -0.75, 0.75);                 // out through the doorway onto the grounds
 	k.walk(TANK.x0 - 1.0, TANK.x1 + 1.0, -1.5, 1.5); // the tunnel (on into the lobby and the gallery)
 	k.walk(-11.45, TANK.x0, -5.65, 4.35);            // the gallery
 	k.cam = { minX: -11.3, maxX: 11.3, minZ: -5.5, maxZ: 4.2, maxY: 3.6, minY: 0.2 };

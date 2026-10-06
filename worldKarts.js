@@ -1,8 +1,8 @@
 /**
- * Harmony World — the Bumper Kart Arena: west of the Fun Park, through the gate in its west railing.
+ * Harmony World — the Bumper Kart Arena: west of the Fun Park, down the path from the gate in its west railing.
  * Outdoors under the night sky, like the park.
  *
- * Local coordinates (origin at world -16.8, -41.8): x -9.2..9.2, z -10.2..11.6. The gate from the park is in the
+ * Local coordinates (origin at world -36.8, -85.8): x -9.2..9.2, z -10.2..11.6. The gate from the park's path is in the
  * east edge (x 9.2) at z -0.8..0.8.
  *
  *   the arena: a rounded checkered floor ringed by stacked tyres with a neon rail along the top, a tyre island in the
@@ -17,7 +17,7 @@
  * spin out, stars fly, and it goes on the scoreboard ("karts:score", shared). Esc gets you out.
  * Everyone with upper === "kart" in the arena gets a kart drawn round them (a pool of them, coloured by who it is).
  */
-const OX = -16.8, OZ = -41.8;                      // = ZONES.karts ox / oz
+const OX = -36.8, OZ = -85.8;                      // = ZONES.karts ox / oz
 const X0 = -9.2, X1 = 9.2, Z0 = -10.2, Z1 = 11.6;
 const GATE = { z0: -0.8, z1: 0.8 };
 const A = { x: -1.3, z: -0.4, hx: 7.3, hz: 8.5, rc: 2.6 };    // the arena floor: a rounded rectangle (inside of the tyres)
@@ -108,6 +108,28 @@ export function build(k) {
 		fl.userData.floor = true;
 		// a glowing ring painted round the middle (painted marks sit 2 cm up, so they never flicker into the floor)
 		add(g, new THREE.RingGeometry(4.0, 4.12, 64), glow("#4cc9f0"), A.x, 0.02, A.z, { rx: -Math.PI / 2, cast: false, receive: false });
+	}
+
+	// ================================================================ a glass railing round the edge (it stands on the lawn), open at the gate
+	{
+		const railM = mat("#6b4f3a", 0.5), postM = mat("#3e3a3a", 0.4, 0.6);
+		const glassM = new THREE.MeshPhysicalMaterial({ color: "#cfe7ff", transparent: true, opacity: 0.16, roughness: 0.05, depthWrite: false, side: THREE.DoubleSide });
+		const railRun = (x0, z0, x1, z1) => {
+			const len = Math.hypot(x1 - x0, z1 - z0), ang = Math.atan2(x1 - x0, z1 - z0);
+			const rg = group(g, (x0 + x1) / 2, 0, (z0 + z1) / 2, ang);
+			add(rg, new THREE.BoxGeometry(0.08, 0.06, len + 0.08), railM, 0, 1.05, 0);
+			const gl = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.9), glassM);
+			gl.rotation.y = Math.PI / 2; gl.position.y = 0.55;
+			rg.add(gl);
+			const n = Math.max(1, Math.round(len / 1.25));
+			for (let i = 0; i <= n; i++) add(rg, new THREE.BoxGeometry(0.06, 1.05, 0.06), postM, 0, 0.525, -len / 2 + (len * i) / n, { cast: false });
+		};
+		const GW = 1.4;   // (clear of the entrance arch's posts)
+		railRun(X0 + 0.05, Z0 + 0.05, X1 - 0.05, Z0 + 0.05);
+		railRun(X0 + 0.05, Z1 - 0.05, X1 - 0.05, Z1 - 0.05);
+		railRun(X0 + 0.05, Z0 + 0.05, X0 + 0.05, Z1 - 0.05);
+		railRun(X1 - 0.05, Z0 + 0.05, X1 - 0.05, -GW);
+		railRun(X1 - 0.05, GW, X1 - 0.05, Z1 - 0.05);
 	}
 
 	// ================================================================ the tyre wall with a neon rail on top

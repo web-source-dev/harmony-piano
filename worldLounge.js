@@ -71,8 +71,8 @@ export function build(k) {
 	const brass = mat("#c9a05a", 0.3, 0.9);
 	const frameM = mat("#fbf8f2", 0.45);
 	const white = mat("#f7f3ec", 0.55);
-	// outside, above the bedroom's roof (seen from the pool deck): brick
-	add(g, new THREE.PlaneGeometry(HD * 2 + 0.4, H - 3.0), mat("#ffffff", 0.95, 0, { map: k.brickTex((HD * 2) / 2.4, (H - 3) / 2.4) }), HW + 0.22, 3.0 + (H - 3.0) / 2, 0, { ry: Math.PI / 2, cast: false });
+	// outside, above the bedroom's roof: render, like the rest of the house
+	add(g, new THREE.PlaneGeometry(HD * 2 + 0.4, H - 3.0), mat("#ffffff", 0.88, 0, { map: k.renderTex((HD * 2) / 2.4, (H - 3) / 2.4) }), HW + 0.22, 3.0 + (H - 3.0) / 2, 0, { ry: Math.PI / 2, cast: false });
 	// exposed beams across the ceiling (they go with the ceiling when the camera is up there: see cut below)
 	const roofParts = (k.ceilParts || []).slice();
 	for (let x = -6; x <= 6; x += 3) roofParts.push(add(g, new THREE.BoxGeometry(0.22, 0.3, HD * 2), mat("#6b4a33", 0.6), x, H - 0.15, 0, { cast: false }));

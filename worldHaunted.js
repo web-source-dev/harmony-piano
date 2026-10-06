@@ -1,9 +1,9 @@
 /**
- * Harmony World — the Haunted Mansion: a crooked old house off the west end of the garden (through the gap in the
- * garden's west railing). Indoors, and very dark.
+ * Harmony World — the Haunted Mansion: a crooked old house across the lawn from the garden's west gate, on the west
+ * avenue. Indoors, and very dark.
  *
- * Local coordinates (origin at world -19.3, -21.65): x -11.7..11.7, z -8.45..1.95. The front door is in the east
- * wall (x 11.7) at z -0.75..0.75, onto the garden lawn. From the garden you see the facade: crooked gables, a
+ * Local coordinates (origin at world -41.3, -41.65): x -11.7..11.7, z -8.45..1.95. The front door is in the east
+ * wall (x 11.7) at z -0.75..0.75, onto the path from the garden's west gate. From the grounds you see the facade: crooked gables, a
  * leaning tower, glowing boarded windows, a dripping "HAUNTED MANSION" sign, jack-o'-lanterns on the porch, a dead
  * tree and a little iron fence.
  *
@@ -24,7 +24,7 @@
  *
  * Lights: seven flickering ones (one per room, and a lantern on the front cart that travels the track).
  */
-const OX = -19.3, OZ = -21.65;                    // = ZONES.haunted ox / oz
+const OX = -41.3, OZ = -41.65;                    // = ZONES.haunted ox / oz
 const X0 = -11.7, X1 = 11.7, Z0 = -8.45, Z1 = 1.95, H = 3.8;
 const SW = -4.6;                                    // the wall between the walk-through and the ghost train
 const DOOR = { z0: -0.75, z1: 0.75, h: 2.5 };

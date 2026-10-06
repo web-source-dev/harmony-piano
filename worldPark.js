@@ -1,14 +1,14 @@
 /**
- * Harmony World — the Fun Park: a big rooftop amusement park south of the garden (through the gate in its south
- * railing, past the gazebo). Outdoors under the night sky, like the pool and the garden.
+ * Harmony World — the Fun Park: a big amusement park at the south end of the grounds (down the path from the
+ * garden's south gate). Outdoors under the night sky, like the pool and the garden.
  *
- * Local coordinates (origin at world 13, -48): x -20.6..20.6, z -18..17.9 (world x -7.6..33.6, z -66..-30.1).
- * The gate from the garden is in the north edge at x 6.1..7.9.
+ * Local coordinates (origin at world 13, -92): x -20.6..20.6, z -18..17.9 (world x -7.6..33.6, z -110..-74.1).
+ * The gate from the path to the garden is in the north edge at x 6.1..7.9.
  *
  *   the Moonlight Express: a roller coaster that leaves its station along the south edge, climbs a lift hill and runs
- *     right round the whole house (down the west side past the cinema, a loop behind the game room, back down the
- *     east side past the bedroom) and home again. Four cars, two seats each; it boards, leaves and comes back on a
- *     clock, so everyone sees the same train
+ *     right round the whole estate (up the far west side past the karts, the mansion and the aquarium, a loop behind
+ *     the house, back down the east side) and home again. Four cars, two seats each; it boards, leaves and comes back
+ *     on a clock, so everyone sees the same train
  *   a Ferris wheel (ten gondolas for two, hop on whichever is at the bottom), a carousel with eight horses,
  *   a drop tower (up 21 m, a pause, and down), a swing ride that spins out and rises as it goes,
  *   the Jolly Roger (a swinging pirate ship), the Teacups (cups that spin on a turning floor round a giant teapot),
@@ -22,9 +22,9 @@
  * Riding is sitting: each ride seat is a sit spot with a ride(pos, quat) function that world.js calls to carry
  * your body along (see placeAvatar); the camera rides with you (F switches between your own eyes and from behind).
  */
-const OX = 13.0, OZ = -48.0;                       // = ZONES.park ox / oz
+const OX = 13.0, OZ = -92.0;                       // = ZONES.park ox / oz
 const X0 = -20.6, X1 = 20.6, Z0 = -18.0, Z1 = 17.9;
-const GATE = { x0: 6.1, x1: 7.9 };                 // the gap in the garden's south railing (world x 19.1..20.9)
+const GATE = { x0: 6.1, x1: 7.9 };                 // in line with the garden's south gate (world x 19.1..20.9), up the path
 const KGATE = { z0: 5.4, z1: 7.0 };                // the gate in the west railing, out to the Bumper Karts (worldKarts.js)
 const CAROUSEL = { x: -3.0, z: 7.5, r: 3.6 };
 const FW = { x: -12.5, z: -3.0, R: 6.6, hub: 8.7, n: 10 };     // Ferris wheel (turns in the x-y plane)
@@ -46,19 +46,23 @@ const smooth = u => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
 const mod = (a, n) => ((a % n) + n) % n;
 
 // the coaster's track, in world coordinates [x, y, z], starting where the front car stops in the station and heading
-// west (the station is along the park's south edge). Round the house: west side, north side (with the loop), east side.
-function trackPoints() {
+// west (the station is along the park's south edge). Round the estate, outside its paths and clear of every building:
+// up the far west side (past the karts, the mansion and the aquarium), behind the house (with the loop), down the east.
+// (exported: the grounds keep their trees and lamps out from under it)
+export function trackPoints() {
 	const pts = [
-		[8, 0.2, -63.8], [2, 0.2, -63.8], [-4, 1.2, -63.6], [-11, 4.6, -63], [-19, 10, -61.5], [-26, 15.5, -58.5],
-		[-31, 18, -53.5],                                               // the top of the lift hill
-		[-34.5, 16.5, -48], [-37, 6, -39], [-37.5, 3, -30], [-37, 9, -20], [-36, 12, -12], [-37, 6, -3], [-36, 8.5, 7],
-		[-32, 12, 17], [-25, 10, 24.5], [-16, 5, 29], [-9, 2.8, 30.6]   // round the north-west corner, down to the loop
+		[8, 0.2, -107.8], [2, 0.2, -107.8], [-4, 1.2, -107.6], [-11, 4.6, -107], [-19, 10, -106.5], [-28, 15.5, -107.5],
+		[-36, 18, -110],                                                // the top of the lift hill
+		[-46, 16.5, -113], [-56, 8, -110], [-62, 4, -100], [-62.5, 3, -88], [-62, 9, -76], [-61, 12, -64], [-62, 6, -52],
+		[-61.5, 8.5, -40], [-62, 11, -28], [-60, 12, -14], [-58, 7, -2], [-54, 9.5, 10], [-46, 12, 21],
+		[-36, 10, 28.5], [-24, 6, 31.5], [-9, 2.8, 30.6]                // round the north-west corner, down to the loop
 	];
-	// the loop (behind the game room): a circle in the x-y plane, sliding sideways a little so the way out passes the way in
+	// the loop (behind the house): a circle in the x-y plane, sliding sideways a little so the way out passes the way in
 	const LC = { x: -1, y: 8, r: 5.2 };
 	for (let i = 0; i <= 8; i++) { const a = i / 8 * TAU; pts.push([LC.x + LC.r * Math.sin(a), LC.y - LC.r * Math.cos(a), 31 + 3 * i / 8]); }
-	pts.push([7, 2.8, 34.4], [15, 6, 34], [25, 12.5, 31], [35, 12, 25], [42, 7, 14], [44, 4, 2], [43.5, 10.5, -9], [44, 4.5, -21],
-		[42.5, 9, -33], [40, 11, -45], [37, 6, -56], [33, 2.0, -62.6], [26, 0.2, -63.8], [17, 0.2, -63.8]);
+	pts.push([7, 2.8, 34.4], [15, 6, 34], [25, 12.5, 32], [37, 11, 30.5], [44.5, 8, 21], [45, 4, 8], [44.5, 10.5, -5], [45, 4.5, -19],
+		[44, 9, -32], [45, 11, -45], [44.5, 6, -57], [45, 9, -69], [44, 12, -81], [42, 7, -93], [38, 3, -102], [33, 2.0, -106.6],
+		[26, 0.2, -107.8], [17, 0.2, -107.8]);
 	return pts;
 }
 const LOOP_IN = [-9, 2.8, 30.6], LOOP_OUT = [7, 2.8, 34.4];
@@ -151,7 +155,7 @@ export function build(k) {
 	pad(FW.x, FW.z, 4.4, "#3d5a4a", "#06d6a0");
 	// the path from the gate
 	add(g, new THREE.PlaneGeometry(GATE.x1 - GATE.x0 + 1.2, 6), mat("#b5577b", 0.85), (GATE.x0 + GATE.x1) / 2, 0.005, Z1 - 3, { rx: -Math.PI / 2, cast: false });
-	// the roof edge and a glass railing on the three open sides (the garden's railing is the north side)
+	// the edge and a glass railing all round (the north side has the gate in it, at the end of the path from the garden)
 	const edgeM = mat("#5b4636", 0.8);
 	add(g, new THREE.BoxGeometry(X1 - X0, 0.3, 0.1), edgeM, 0, -0.15, Z0 - 0.02);
 	add(g, new THREE.BoxGeometry(0.1, 0.3, Z1 - Z0), edgeM, X0 - 0.02, -0.15, (Z0 + Z1) / 2);
@@ -172,6 +176,10 @@ export function build(k) {
 	railRun(X0 + 0.05, Z0 + 0.05, X0 + 0.05, KGATE.z0);
 	railRun(X0 + 0.05, KGATE.z1, X0 + 0.05, Z1 - 0.05);
 	railRun(X1 - 0.05, Z0 + 0.05, X1 - 0.05, Z1 - 0.05);
+	railRun(X0 + 0.05, Z1 - 0.05, GATE.x0, Z1 - 0.05);
+	railRun(GATE.x1, Z1 - 0.05, X1 - 0.05, Z1 - 0.05);
+	k.box(X0, GATE.x0, Z1 - 0.15, Z1);
+	k.box(GATE.x1, X1, Z1 - 0.15, Z1);
 	k.box(X0, X1, Z0, Z0 + 0.15);
 	k.box(X0, X0 + 0.15, Z0, KGATE.z0);
 	k.box(X0, X0 + 0.15, KGATE.z1, Z1);
@@ -321,7 +329,7 @@ export function build(k) {
 		}
 		ties.castShadow = false;
 		g.add(ties);
-		// supports: tall steel columns down past the edge of the roof (short posts in the park, where it runs low)
+		// supports: tall steel columns down into the lawn (short posts in the park, where it runs low); solid to walk into
 		const cols = [];
 		for (let i = 0; i < N; i += 8) {
 			const pp = P[i], inPark = pp.x > X0 - 0.5 && pp.x < X1 + 0.5 && pp.z > Z0 - 0.5 && pp.z < Z1;
@@ -331,7 +339,7 @@ export function build(k) {
 			const top = pp.clone().addScaledVector(U[i], -0.38), base = inPark ? 0 : -24;
 			if (top.y - base < 0.3) continue;
 			cols.push([top.x, base, top.z, top.y - base]);
-			if (inPark) k.box(top.x - 0.2, top.x + 0.2, top.z - 0.2, top.z + 0.2);
+			k.box(top.x - 0.2, top.x + 0.2, top.z - 0.2, top.z + 0.2);
 		}
 		const sup = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 10), mat("#efe7f5", 0.4, 0.5), cols.length);
 		cols.forEach(([x, y0, z, h], n) => { d.position.set(x, y0 + h / 2, z); d.quaternion.identity(); d.scale.set(0.15, h, 0.15); d.updateMatrix(); sup.setMatrixAt(n, d.matrix); });

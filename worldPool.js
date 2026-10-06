@@ -107,8 +107,8 @@ export function build(k) {
 	k.box(XB1 - 0.12, XB1, ZN, ZB1);
 	k.box(XA0, XA0 + 0.12, ZN, 0.1);
 
-	// ---------------------------------------------------------------- the back of the lounge, in brick (with its windows and glass doors)
-	const brick = (w, h) => mat("#ffffff", 0.95, 0, { map: k.brickTex(w / 2.4, h / 2.4) });
+	// ---------------------------------------------------------------- the back of the lounge, in white render like the rest of the house (with its windows and glass doors)
+	const brick = (w, h) => mat("#ffffff", 0.88, 0, { map: k.renderTex(w / 2.4, h / 2.4) });
 	const FZ = 5.93, FH = 7.3;
 	// holes in that wall, in pool coordinates: [x0, x1, y0, y1]
 	const holes = [[-8.15, -4.55, 4.4, 6.4], [-2.25, 0.75, 4.2, 6.5], [1.5, 3.0, 0, 2.35]];

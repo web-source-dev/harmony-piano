@@ -45,6 +45,13 @@ button { font: inherit; color: inherit; }
 #loading .ld { text-align: center; }
 #loading .ring { width: 54px; height: 54px; border-radius: 50%; border: 4px solid rgba(255,255,255,.12); border-top-color: var(--accent); animation: spin 1s linear infinite; margin: 0 auto 16px; }
 #loading p { color: var(--muted); font-weight: 700; margin: 0; }
+#loading .ld { width: min(340px, calc(100vw - 48px)); }
+#loading h2 { margin: 0 0 6px; font-size: 22px; font-weight: 900; letter-spacing: -.3px; color: var(--text); }
+#loading .ld-track { height: 8px; border-radius: 99px; background: rgba(255,255,255,.1); overflow: hidden; margin: 16px 0 10px; }
+#loading .ld-track i { display: block; height: 100%; width: 0; border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .25s ease-out; }
+#loading .ld-row { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+#loading .ld-row span { color: var(--muted); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#loading .ld-row b { color: var(--text); font-variant-numeric: tabular-nums; }
 #tl .where { font-size: 11px; color: #ffd9a8; font-weight: 700; margin-left: 4px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -490,7 +497,7 @@ body.touch #help { display: none; }
 <canvas id="view" tabindex="0"></canvas>
 <button id="fullexit" type="button">Exit full screen (Esc)</button>
 
-<div id="loading"><div class="ld"><div class="ring"></div><p id="ldmsg">Building your little world...</p></div></div>
+<div id="loading"><div class="ld"><div class="ring"></div><h2>Building your world</h2><p id="ldmsg">Every room and ride is loaded up front, so nothing stutters once you're in.</p><div class="ld-track"><i id="ld-bar"></i></div><div class="ld-row"><span id="ld-what">Starting up&hellip;</span><b id="ld-pct">0%</b></div></div></div>
 
 <div id="lobby" class="hidden">
 	<div class="card">
@@ -616,7 +623,7 @@ body.touch #help { display: none; }
 <div id="modal" class="hidden"><div class="win"><header><h2 id="mtitle"></h2><button class="x" id="mclose" aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div class="body" id="mbody"></div></div></div>
 
 <script src="./roomSync.js?v=20261002w"></script>
-<script type="module" src="./world.js?v=20261005c"></script>
+<script type="module" src="./world.js?v=20261006a"></script>
 <script>
 // If the module never boots (old browser / CDN blocked), say so instead of spinning forever.
 setTimeout(function () {

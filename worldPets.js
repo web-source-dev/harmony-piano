@@ -36,8 +36,10 @@ const NODES = {
 	B0: [24.4, -1.5], B1: [25.9, -3.2], B2: [29.9, -3.1], B3: [30.9, -5.8], B4: [25.6, -6.4], BG: [29.3, -7.2],
 	// bathroom
 	BA0: [24.4, 4.7], BA1: [28.2, 5.0],
-	// the garden (through the gap in the pool deck's south railing; its points are its local coordinates + (14.3, -24.1))
-	GA: [11.3, -17.0], GB: [11.3, -19.3], GL: [13.3, -22.6], GE: [19.8, -21.6], GW: [8.3, -22.3], GS: [14.8, -27.3]
+	// the garden: out through the gap in the pool deck's south railing, down the path across the lawn, in at the garden's
+	// north gate (its points are its local coordinates + (14.3, -44.1))
+	GA: [11.3, -17.0], GB: [11.3, -19.3], GC: [11.3, -36.6], GD: [11.3, -39.4],
+	GL: [13.3, -42.6], GE: [19.8, -41.6], GW: [8.3, -42.3], GS: [14.8, -47.3]
 };
 const EDGES = [
 	"LD-L4", "L4-L2", "L4-L3", "L2-L1", "L1-L3", "L1-L6", "L2-L5", "L5-L6", "L6-L7", "L7-LT", "LT-T0",
@@ -48,14 +50,14 @@ const EDGES = [
 	"G9-G10", "G10-G16", "G16-G12", "G12-G13", "G11-G13", "G8-G11", "G13-G17", "G17-G14",
 	"G6-B0", "B0-B1", "B1-B2", "B2-B3", "B1-B4", "B4-B3",
 	"G10-BA0", "BA0-BA1",
-	"P1-GA", "GA-GB", "GB-GL", "GB-GW", "GL-GE", "GL-GS", "GW-GS"
+	"P1-GA", "GA-GB", "GB-GC", "GC-GD", "GD-GL", "GD-GW", "GL-GE", "GL-GS", "GW-GS"
 ];
 const NAMES = Object.keys(NODES);
 const ADJ = {};
 NAMES.forEach(n => { ADJ[n] = []; });
 EDGES.forEach(e => { const [a, b] = e.split("-"); ADJ[a].push(b); ADJ[b].push(a); });
 // where wandering takes them (not the doorway points)
-const WANDER = NAMES.filter(n => !["LD", "G0", "G6", "B0", "G10", "BA0", "TP", "P0", "LT", "T0", "GN", "BG", "PN", "GA", "GB"].includes(n));
+const WANDER = NAMES.filter(n => !["LD", "G0", "G6", "B0", "G10", "BA0", "TP", "P0", "LT", "T0", "GN", "BG", "PN", "GA", "GB", "GC", "GD"].includes(n));
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 // the heading that points a pet standing at a towards b (the models look down their local +z, and rotation.y = heading)
 const toward = (a, b) => Math.atan2(b[0] - a[0], b[1] - a[1]);

@@ -297,8 +297,8 @@ export function build(k) {
 		}
 	};
 	k.addDoor("bedpool", glassWall, [GX0 + PW, GX1 - PW, -4.78, -4.32], [[0.9, -3.7], [0.9, -5.4]], ["Close the glass doors", "Open the glass doors", "Draw the sheer curtains", "Open the curtains"]);
-	// outside: brick round the glass, a parapet, and the wall facing east
-	const brickM = (w, h) => mat("#ffffff", 0.95, 0, { map: k.brickTex(w / 2.4, h / 2.4) });
+	// outside: render round the glass, a parapet, and the wall facing east (under the house's facade: worldGrounds.js)
+	const brickM = (w, h) => mat("#ffffff", 0.88, 0, { map: k.renderTex(w / 2.4, h / 2.4) });
 	add(g, new THREE.PlaneGeometry(2.3, 3.1), brickM(2.3, 3.1), -4.05, 1.55, -4.72, { ry: Math.PI, cast: false });
 	add(g, new THREE.PlaneGeometry(0.5, 3.1), brickM(0.5, 3.1), 5.0, 1.55, -4.72, { ry: Math.PI, cast: false });
 	add(g, new THREE.PlaneGeometry(GX1 - GX0, 3.1 - GH - 0.1), brickM(GX1 - GX0, 0.3), (GX0 + GX1) / 2, (GH + 0.1 + 3.1) / 2, -4.72, { ry: Math.PI, cast: false });

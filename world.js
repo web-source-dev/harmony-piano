@@ -26,6 +26,7 @@ import { buildRoom, ROOM, DOOR, TERRACE, MOON_DIR, walkable, areaOf, floorAt, he
 import { WorldAudio, TRACKS } from "./worldAudio.js";
 import * as Games from "./worldGames.js";
 import { createHouse, ZONES } from "./worldHouse.js";
+import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, COURTS, subtractRects } from "./worldEstate.js";
 
 const esc = Games.esc;
 const $ = s => document.querySelector(s);
@@ -190,6 +191,7 @@ function applyGfx() {
 	renderer.shadowMap.enabled = g.shadows;
 	renderer.shadowMap.type = g.soft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 	for (const l of [moon].concat(room.shadowLights || [])) {
+		l.shadow.camera.layers.enableAll();   // (the rooms' detail layers too: see worldHouse.js INSIDE)
 		l.castShadow = g.shadows;
 		if (l.shadow.mapSize.x !== g.map) {
 			l.shadow.mapSize.set(g.map, g.map);
@@ -3074,6 +3076,7 @@ document.querySelectorAll(".em[data-e]").forEach(b => b.addEventListener("click"
 
 // pointer: drag to orbit, click/tap to walk or use things
 const ray = new THREE.Raycaster();
+ray.layers.enableAll();   // (every room's detail layer: see worldHouse.js INSIDE; what the camera isn't drawing is skipped below)
 const ndc = new THREE.Vector2();
 let drag = null;
 function pick(cx, cy) {
@@ -3081,7 +3084,7 @@ function pick(cx, cy) {
 	ray.setFromCamera(ndc, camera);
 	const hits = ray.intersectObjects(scene.children, true);
 	for (const h of hits) {
-		if (isMine(h.object) || h.object.isSprite || !visibleChain(h.object)) continue;
+		if (isMine(h.object) || h.object.isSprite || !visibleChain(h.object) || !h.object.layers.test(camera.layers)) continue;
 		return h;
 	}
 	return null;
@@ -3184,8 +3187,10 @@ function walkTo(x, z, act) {
 	if (drawOpen) closeDraw();
 	stopScope();
 	if (me.anim === "floor") me.anim = "idle";
-	// going between indoors and outdoors (terrace, pool) with the terrace door shut: open it on the way
-	const outdoors = a => a === "terrace" || a === "pool" || a === "garden" || a === "shame";
+	// going between indoors and outdoors (the terrace, the pool, the grounds and everything on them) with the terrace
+	// door shut: open it on the way (the house's own rooms are indoors; everything else is out past the courtyard)
+	const HOUSE_ROOMS = ["room", "lounge", "loft", "disco", "cinema", "bedroom", "bath", "hall", "games", "spa"];
+	const outdoors = a => !HOUSE_ROOMS.includes(a);
 	if (!get("terraceDoor") && outdoors(areaOf(x, z)) !== outdoors(areaOf(me.x, me.z))) {
 		const st = standOf("terraceDoor");
 		if (Math.hypot(st[0] - me.x, st[1] - me.z) > 0.3) { walkTo(st[0], st[1], () => { setShared("terraceDoor", true); walkTo(x, z, act); }); return; }
@@ -3207,36 +3212,37 @@ function walkTo(x, z, act) {
 	me.stuck = 0;
 }
 // ---------- grid A* pathfinding over everything you can walk on
-// one grid for the living room + terrace, and one per room of the house (built the first time you walk there)
+// one grid for the whole estate (the house, the grounds and everything on them), and one per floor upstairs
+// The estate is big (half a million cells), so a cell is only worked out the first time a search reaches it
+// (0 = not looked at yet, 1 = free, 2 = blocked), and the search's own arrays are kept with the grid and reused.
 const grids = {};
 let GRID = null;   // the grid in use for the current search
 function makeGrid(x0, z0, w, h) {
-	const G = { x0, z0, s: 0.2, w, h, blocked: new Uint8Array(w * h) };
-	for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
-		const x = x0 + (i + 0.5) * G.s, z = z0 + (j + 0.5) * G.s;
-		G.blocked[j * w + i] = blocked(x, z, true, true) ? 1 : 0;
-	}
-	return G;
+	return { x0, z0, s: 0.2, w, h, cell: new Uint8Array(w * h), g: null };
 }
-// the whole home is one floor plan (the cinema upstairs doesn't sit over anything), so one grid covers it
-// (upstairs is its own floor plan, 30 m south: see ZONES.loft)
+// the ground floor is one floor plan (the cinema's tiers don't sit over anything), so one grid covers all of it
+// (upstairs is its own floor plan, 230 m north: see ZONES.loft; the treehouse's is 80 m east)
 function gridFor(x, z) {
 	if (shiftAt(x, z)) {
 		// (the loft and the disco share one; the treehouse has its own)
 		const a = areaOf(x, z), id = a === "disco" ? "loft" : a, Z = ZONES[id];
-		if (id === "loft") return grids.up || (grids.up = makeGrid(16.0, 23.85, 37, 72));
 		if (!Z) return null;
-		const b = Z.bounds, key = "up:" + id;
+		const b = id === "loft" ? [16.0, 23.4, 223.85, 238.25] : Z.bounds, key = "up:" + id;
 		return grids[key] || (grids[key] = makeGrid(b[0] - 0.4, b[2] - 0.4, Math.ceil((b[1] - b[0] + 0.8) / 0.2), Math.ceil((b[3] - b[2] + 0.8) / 0.2)));
 	}
-	// (from the aquarium and the haunted mansion in the west to the bedroom in the east, the Fun Park in the south to
-	// the lounge in the north)
-	return grids.home || (grids.home = makeGrid(-31.4, -66.6, 326, 456));
+	// (everything inside the hedge round the estate)
+	return grids.home || (grids.home = makeGrid(ESTATE[0], ESTATE[2], Math.ceil((ESTATE[1] - ESTATE[0]) / 0.2), Math.ceil((ESTATE[3] - ESTATE[2]) / 0.2)));
 }
 // a room was just built (its furniture is now solid): the grid gets made fresh on the next walk
 function gridDirty() { for (const k in grids) delete grids[k]; }
 function cellOf(x, z) { return [Math.floor((x - GRID.x0) / GRID.s), Math.floor((z - GRID.z0) / GRID.s)]; }
-function cellFree(i, j) { return i >= 0 && j >= 0 && i < GRID.w && j < GRID.h && !GRID.blocked[j * GRID.w + i]; }
+function cellFree(i, j) {
+	if (i < 0 || j < 0 || i >= GRID.w || j >= GRID.h) return false;
+	const n = j * GRID.w + i;
+	let c = GRID.cell[n];
+	if (!c) c = GRID.cell[n] = blocked(GRID.x0 + (i + 0.5) * GRID.s, GRID.z0 + (j + 0.5) * GRID.s, true, true) ? 2 : 1;
+	return c === 1;
+}
 function nearestFree(i, j) {
 	if (cellFree(i, j)) return [i, j];
 	for (let r = 1; r < 12; r++) for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
@@ -3257,11 +3263,13 @@ function findPath(sx, sz, tx, tz) {
 	const s0 = nearestFree(...cellOf(sx, sz)), t0 = nearestFree(...cellOf(tx, tz));
 	if (!s0 || !t0) return null;
 	const W = GRID.w, N = W * GRID.h;
-	const g = new Float32Array(N).fill(Infinity), came = new Int32Array(N).fill(-1), closed = new Uint8Array(N);
+	if (!GRID.g) GRID.g = { g: new Float32Array(N), came: new Int32Array(N), closed: new Uint8Array(N), f: new Float32Array(N) };
+	const { g, came, closed, f } = GRID.g;
+	g.fill(Infinity); came.fill(-1); closed.fill(0); f.fill(Infinity);
 	const start = s0[1] * W + s0[0], goal = t0[1] * W + t0[0];
 	const hfun = c => Math.hypot((c % W) - t0[0], Math.floor(c / W) - t0[1]);
 	g[start] = 0;
-	const f = new Float32Array(N).fill(Infinity); f[start] = hfun(start);
+	f[start] = hfun(start);
 	// binary min-heap on f (the old linear scan got slow on long walks on weak phones)
 	const heap = [start];
 	const push = c => {
@@ -3286,7 +3294,7 @@ function findPath(sx, sz, tx, tz) {
 		return top;
 	};
 	let found = false, iter = 0;
-	while (heap.length && iter++ < 60000) {
+	while (heap.length && iter++ < 400000) {
 		const c = pop();
 		if (c === goal) { found = true; break; }
 		if (closed[c]) continue;
@@ -3355,9 +3363,30 @@ function joyMove(e) {
 
 // ============================================================ movement + collision
 let bumpDoor = null;   // a shut door you just walked into (it opens for you)
+// the colliders, filed by 4 m cell (the estate has thousands of them: checking every one for every step was slow)
+// (they never move once added - rooms only ever add more - so the index is rebuilt whenever the list grows)
+const COL_CELL = 4, NO_COLS = [];
+let colIndex = null, colIndexed = -1;
+function collidersNear(x, z) {
+	const cs = room.colliders;
+	if (cs.length !== colIndexed) {
+		colIndexed = cs.length;
+		colIndex = new Map();
+		for (const c of cs) {
+			const i0 = Math.floor((c.minX - 0.6) / COL_CELL), i1 = Math.floor((c.maxX + 0.6) / COL_CELL);
+			const j0 = Math.floor((c.minZ - 0.6) / COL_CELL), j1 = Math.floor((c.maxZ + 0.6) / COL_CELL);
+			for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+				const key = i * 65536 + j;
+				const l = colIndex.get(key);
+				if (l) l.push(c); else colIndex.set(key, [c]);
+			}
+		}
+	}
+	return colIndex.get(Math.floor(x / COL_CELL) * 65536 + Math.floor(z / COL_CELL)) || NO_COLS;
+}
 function blocked(x, z, ignorePeers, ignoreDoors) {
 	if (!walkable(x, z, RADIUS)) return true;
-	for (const c of room.colliders) {
+	for (const c of collidersNear(x, z)) {
 		if (c.door && (ignoreDoors || c.door.isOpen())) continue;
 		if (x > c.minX - RADIUS && x < c.maxX + RADIUS && z > c.minZ - RADIUS && z < c.maxZ + RADIUS) { if (c.door) bumpDoor = c.door; return true; }
 	}
@@ -3512,7 +3541,11 @@ function updateMe(dt) {
 				me.target = null;
 				if (me.targetAct) { const a = me.targetAct; me.targetAct = null; runAct(a); }
 			}
-		} else { mx = dx / l; mz = dz / l; want = Math.min(1.25, 0.4 + l + (me.path.length ? 1 : 0)) * (me.carrying ? 0.75 : 1); }
+		} else {
+			// a long way across the grounds: jog (as fast as running with Shift); indoors, or nearly there, a walk
+			const far = (l > 8 || me.path.length > 1) && house.outdoorAt(me.x, me.z);
+			mx = dx / l; mz = dz / l; want = Math.min(far ? 1.75 : 1.25, 0.4 + l + (me.path.length ? 1 : 0)) * (me.carrying ? 0.75 : 1);
+		}
 	}
 	if (me.sit) want = 0;
 	if (!veh) me.speed += (want - me.speed) * Math.min(1, dt * 10);
@@ -3814,7 +3847,7 @@ function updateBall(dt) {
 	let nx = ball.position.x + v.x * dt, nz = ball.position.z + v.y * dt;
 	if (nx < ROOM.minX + r || nx > ROOM.maxX - r) { v.x *= -0.7; nx = ball.position.x; }
 	if (nz < ROOM.minZ + r || nz > ROOM.maxZ - r) { v.y *= -0.7; nz = ball.position.z; }
-	for (const c of room.colliders) {
+	for (const c of collidersNear(nx, nz)) {
 		if (nx > c.minX - r && nx < c.maxX + r && nz > c.minZ - r && nz < c.maxZ + r) {
 			const inX = ball.position.x > c.minX - r && ball.position.x < c.maxX + r;
 			if (inX) { v.y *= -0.6; nz = ball.position.z; } else { v.x *= -0.6; nx = ball.position.x; }
@@ -3964,8 +3997,8 @@ function updateCamera(dt, t) {
 		camera.lookAt(cam.tx - sh[0], cam.ty + Math.tan(lookUp * 1.8) * Math.hypot(px - cam.tx, pz - cam.tz), cam.tz - sh[1]);
 	}
 	if (camera.fov !== fov) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 6); if (Math.abs(camera.fov - fov) < 0.1) camera.fov = fov; camera.updateProjectionMatrix(); }
-	// outdoors you can see a long way (the Fun Park, the roller coaster all round the house); indoors 60 m is plenty
-	const far = house.indoorsAway() ? 60 : 260;
+	// outdoors you can see a long way (the whole estate, the roller coaster all round it); indoors 60 m is plenty
+	const far = house.indoorsAway() ? 60 : 340;
 	if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
 	// the sky dome is centred on the living room; far out from it (the park, up on the coaster) it comes along with
 	// the camera, so you never fly out through the sky (close in it stays put: the telescope aims at its painted moon)
@@ -3985,14 +4018,16 @@ let weather = null;
 		const sx = Z.vis ? Z.ox - Z.vis[0] : 0, sz = Z.vis ? Z.oz - Z.vis[1] : 0;
 		indoorRects.push(R(b[0] - sx, b[1] - sx, b[2] - sz, b[3] - sz));
 	}
-	// the open-air floors (not under the Box of Shame, not on the pool's water)
+	// the open-air floors (not under the Box of Shame, not on the pool's water): the terrace, the pool deck, the garden,
+	// the Fun Park, the kart arena, and the lawns and paths of the grounds between them (not the buildings)
+	const zr = id => { const Z = ZONES[id]; return (Z.parts || [Z.bounds]); };
 	const groundRects = [
 		R(TERRACE.minX, TERRACE.maxX, TERRACE.minZ, TERRACE.maxZ),
 		R(5.5, 23.2, -18.0, -6.25), R(23.2, 33.6, -18.0, -8.7),                         // the pool deck
-		R(-7.0, 24.9, -30.1, -18.1), R(24.9, 32.3, -30.1, -27.6), R(24.9, 32.3, -21.6, -18.1), R(32.3, 33.6, -30.1, -18.1),
-		R(-7.0, 5.45, -18.1, -12.1),                                                         // the garden and its west wing
-		R(-7.6, 33.6, -66.0, -30.1),                                                         // the Fun Park
-		R(-26.0, -7.6, -52.0, -30.2)                                                         // the kart arena
+		...subtractRects(ZONES.garden.parts[0], [ZONES.shame.bounds]).map(r => R(...r)), R(...ZONES.garden.parts[1]),
+		R(...ZONES.park.bounds), R(...ZONES.karts.bounds),
+		...subtractRects([ESTATE[0] + HEDGE_IN, ESTATE[1] - HEDGE_IN, ESTATE[2] + HEDGE_IN, ESTATE[3] - HEDGE_IN],
+			HOUSE_BLOCKS.concat(COURTS, ...["garden", "park", "karts", "aquarium", "haunted"].map(zr))).map(r => R(...r))
 	];
 	const waterRects = [R(13.55, 21.55, -15.0, -10.1, -0.12)];
 	import("./worldWeather.js").then(mod => {
@@ -4474,7 +4509,6 @@ function frameBody() {
 
 // ============================================================ boot
 (window.requestIdleCallback || (fn => setTimeout(fn, 1500)))(() => gridFor());
-house.start();   // build the rest of the house in the background
 applyGfx();
 $("#rname").textContent = ROOM_NAME === "lobby" ? "Lobby World" : ROOM_NAME;
 redrawEasel();
@@ -4482,7 +4516,21 @@ applyAll();
 renderSound();
 window.__worldBooted = true;
 requestAnimationFrame(frame);
-setTimeout(() => { $("#loading").style.opacity = 0; setTimeout(() => $("#loading").remove(), 600); }, 200);
+// Everything - every room, the grounds, the attractions - is built now, behind the loading screen, with its shaders
+// compiled and its textures on the graphics card: walking anywhere or looking far off never stalls after this.
+{
+	const bar = $("#ld-bar"), what = $("#ld-what"), pct = $("#ld-pct");
+	house.preload((done, total, label) => {
+		const p = Math.round(done / total * 100);
+		if (bar) bar.style.width = p + "%";
+		if (pct) pct.textContent = p + "%";
+		if (what) what.textContent = label;
+	}).catch(e => console.error("[world] preload:", e)).then(() => {
+		gridDirty();
+		const ld = $("#loading");
+		if (ld) { ld.style.opacity = 0; setTimeout(() => ld.remove(), 600); }
+	});
+}
 checkAuth().then(ok => {
 	if (!ok) { needPassword = true; $("#gate").classList.remove("hidden"); }
 	showLobby(false);

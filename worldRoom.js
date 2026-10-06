@@ -29,10 +29,12 @@ export const CDOOR = { z0: -4.21, z1: -2.79, h: 2.3 };
 // The other rooms of the house (lounge, bedroom, bathroom, cinema, pool) sit around the living room
 // and register here: where they are, where you can stand in them, and how high the floor is
 // (the lounge has stairs, the cinema is upstairs with tiers, the pool is deep).
-const AREAS = [];   // { id, bounds: {minX,maxX,minZ,maxZ}, rects: [...], floor?: (x, z) => y }
+// (contains: an area that isn't a plain rect - an L, or the grounds round the house - says which points in its bounds are
+// its own; walkFn: an area too big for walk rects - the grounds - says where a body of radius r can stand itself)
+const AREAS = [];   // { id, bounds: {minX,maxX,minZ,maxZ}, rects: [...], floor?: (x, z) => y, contains?: (x, z) => bool, walkFn?: (x, z, r) => bool }
 export function registerArea(a) { a.rects = a.rects || []; AREAS.push(a); return a; }
 function areaAt(x, z) {
-	for (const a of AREAS) { const b = a.bounds; if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ) return a; }
+	for (const a of AREAS) { const b = a.bounds; if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ && (!a.contains || a.contains(x, z))) return a; }
 	return null;
 }
 // Where can a body of radius r stand? (inside the room, in the doorway, on the terrace, or in another room of the house)
@@ -47,7 +49,10 @@ export function walkable(x, z, r) {
 	if (x > -7.8 && x < -6.0 && z > CDOOR.z0 + r && z < CDOOR.z1 - r) return true;
 	if (x > TGAP.x0 + r && x < TGAP.x1 - r && z > -12.9 && z < -11.3) return true;
 	const a = areaAt(x, z);
-	if (a) for (const q of a.rects) if (x > q.minX + r && x < q.maxX - r && z > q.minZ + r && z < q.maxZ - r) return true;
+	if (a) {
+		for (const q of a.rects) if (x > q.minX + r && x < q.maxX - r && z > q.minZ + r && z < q.maxZ - r) return true;
+		if (a.walkFn && a.walkFn(x, z, r)) return true;
+	}
 	return false;
 }
 // rooms upstairs over another room (the loft over the lounge) live somewhere else on the floor plan, so walking,
@@ -248,6 +253,17 @@ function brickTex(rx, ry) {
 			g.fillRect(x + 3, y + 3, bw - 6, bh - 6);
 			g.fillStyle = "rgba(0,0,0,0.08)"; g.fillRect(x + 3, y + bh - 8, bw - 6, 5);
 		}
+	}, rx, ry);
+}
+
+// the house's outside walls: smooth white render in big panels with fine joints (the whole house is clad in it:
+// see worldGrounds.js for the rest of the outside)
+function renderTex(rx, ry) {
+	return canvasTex(512, 512, (g, w, h) => {
+		g.fillStyle = "#e9e3d8"; g.fillRect(0, 0, w, h);
+		const r = rng(61);
+		for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(${r() < 0.5 ? "120,110,95" : "255,255,255"},${r() * 0.06})`; g.fillRect(r() * w, r() * h, 2, 2); }
+		g.fillStyle = "rgba(90,80,70,0.16)"; g.fillRect(0, 0, w, 2); g.fillRect(0, 0, 2, h);
 	}, rx, ry);
 }
 
@@ -477,8 +493,8 @@ export function buildRoom(scene) {
 	sky.renderOrder = -1;
 	scene.add(sky);
 
-	// Outside of the building: brick facade on the back wall, a roof slab and parapet
-	const brickSeg = (w, h, x, y) => add(scene, new THREE.PlaneGeometry(w, h), mat("#ffffff", 0.95, 0, { map: brickTex(w / 2.4, h / 2.4) }), x, y, -6.205, { ry: Math.PI, cast: false });
+	// Outside of the building: the back wall's facade (white render, like the whole house), a roof slab and parapet
+	const brickSeg = (w, h, x, y) => add(scene, new THREE.PlaneGeometry(w, h), mat("#ffffff", 0.88, 0, { map: renderTex(w / 2.4, h / 2.4) }), x, y, -6.205, { ry: Math.PI, cast: false });
 	brickSeg(DOOR.x0 + 7.2, H + 0.6, (-7.2 + DOOR.x0) / 2, (H + 0.6) / 2);
 	brickSeg(win.x0 - DOOR.x1, H + 0.6, (DOOR.x1 + win.x0) / 2, (H + 0.6) / 2);
 	brickSeg(DOOR.x1 - DOOR.x0, H + 0.6 - DOOR.h, (DOOR.x0 + DOOR.x1) / 2, (H + 0.6 + DOOR.h) / 2);
@@ -1479,7 +1495,7 @@ export function frenchDoor(parent, o) {
 }
 
 // the building blocks the other rooms of the house are made with
-export const kit = { mat, canvasTex, rbox, add, group, rng, heartShape, heartMesh, brickTex, marbleTex, tileTex, wallpaperTex, diamond, frenchDoor };
+export const kit = { mat, canvasTex, rbox, add, group, rng, heartShape, heartMesh, brickTex, renderTex, marbleTex, tileTex, wallpaperTex, diamond, frenchDoor };
 
 export function makeMug(color) {
 	const g = new THREE.Group();

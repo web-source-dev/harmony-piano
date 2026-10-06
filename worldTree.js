@@ -32,9 +32,10 @@ const LUP = { walk: 0.35, climb: 2.3, over: 0.55 }, LDN = { walk: 0.3, over: 0.4
 const UP_FOR = LUP.walk + LUP.climb + LUP.over, DN_FOR = LDN.walk + LDN.over + LDN.climb + LDN.off;
 const UP_LAND = [1.75, LZ], DN_LAND = [3.65, LZ];  // where you end up (DN_LAND is on the lawn, garden-local)
 // the zipline: from the frame on T1 to the pole on the pool deck (local; y from the platforms)
-const ZA = [8.75, 2.85, 4.6], ZB = [2.5, -1.0, 17.1], ZSAG = 0.5;
+// (the garden is 20 m south of the pool deck now, across the lawn: the cable is long, and you let go 80% of the way down)
+const ZA = [8.75, 2.85, 4.6], ZB = [2.5, -1.0, 37.1], ZSAG = 0.9;
 // hand: hands -> feet when hanging (the "zip" pose); bar: the handle below the trolley on the cable
-const ZIP = { hand: 2.0, bar: 0.56, step: 0.6, glide: 3.4, tRel: 0.56, fall: 0.7, bob: 1.0, drift: 0.8, waterY: -5.4, poolY: -5.7, surfY: -4.52 };
+const ZIP = { hand: 2.0, bar: 0.56, step: 0.6, glide: 6.2, tRel: 0.8, fall: 0.7, bob: 1.0, drift: 0.8, waterY: -5.4, poolY: -5.7, surfY: -4.52 };
 const ZIP_FOR = ZIP.step + ZIP.glide + ZIP.fall + ZIP.bob;
 const TAU = Math.PI * 2;
 const smooth = u => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
@@ -289,6 +290,7 @@ export function build(k) {
 	}
 
 	// ---------------------------------------------------------------- T3: a hammock for two, binoculars, bunting
+	let hammock = null;   // (it rocks in update(): declared out here so update can reach it)
 	{
 		const d = DECK[0], hz = d.z1 - 0.55;
 		for (const x of [d.x0 + 0.3, d.x1 - 0.3]) add(g, new THREE.CylinderGeometry(0.06, 0.07, 1.5, 8), darkWood, x, 0.75, hz);
@@ -302,7 +304,7 @@ export function build(k) {
 		}
 		cloth.computeVertexNormals();
 		const net = new THREE.Mesh(cloth, mat("#f2cc8f", 0.95, 0, { side: THREE.DoubleSide }));
-		const hammock = group(g, 0, 0, hz);
+		hammock = group(g, 0, 0, hz);
 		hammock.add(net);
 		for (const x of [hx0, hx0 + hl]) add(g, new THREE.SphereGeometry(0.05, 8, 6), ropeM, x, 1.3, hz, { cast: false });
 		k.box(d.x0 + 0.2, d.x1 - 0.2, hz - 0.35, d.z1);
@@ -552,7 +554,7 @@ export function build(k) {
 		bridgeG.forEach((b, i) => { b.rotation.x = Math.sin(t * 0.9 + i * 2) * 0.008; b.position.y = Math.sin(t * 1.3 + i) * 0.006; });
 		lanterns.forEach(l => { l.rotation.z = Math.sin(t * 1.1 + l.userData.ph) * 0.08; l.rotation.x = Math.cos(t * 0.9 + l.userData.ph) * 0.06; });
 		cabinFlag.rotation.y = Math.sin(t * 3.2) * 0.3;
-		hammock.rotation.x = Math.sin(t * 0.8) * 0.03;
+		if (hammock) hammock.rotation.x = Math.sin(t * 0.8) * 0.03;
 		cabinLamp.material.emissiveIntensity = 2.2 + Math.sin(t * 2.3) * 0.15 + Math.sin(t * 7.7) * 0.08;
 		doorLantern.scale.setScalar(1 + Math.sin(t * 5.1) * 0.05);
 		// the leaves the camera is in fade away (so you never look out from inside a canopy)

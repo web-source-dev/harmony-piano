@@ -1,10 +1,10 @@
 /**
- * Harmony World — the garden: a rooftop garden past the pool deck (through the gap in its south railing),
- * and straight out from the terrace (through the gap in its south railing).
+ * Harmony World — the garden: a walled garden on the lawn south of the house, at the end of the paths from the pool
+ * deck (through the gap in its south railing) and from the terrace (through the gap in its south railing).
  *
- * Local coordinates (origin at world 14.3, -24.1). It's an L: the long lawn along the south of the pool deck,
- * x -21.3..19.3, z -6..6 (the pool deck is along its north edge, z +6, with the way in at x -3.7..-2.3), and
- * the west wing in front of the terrace, x -21.3..-8.85, z 6..12 (the terrace's gap is at x -19.8..-18.3).
+ * Local coordinates (origin at world 14.3, -44.1). It's an L: the long lawn, x -21.3..19.3, z -6..6 (the gate in its
+ * north railing, from the pool deck's path, is at x -3.7..-2.3), and the west wing, x -21.3..-8.85, z 6..12 (the gate
+ * at the top of its steps, from the terrace's path, is at x -19.8..-18.3).
  * Outdoors under the night sky, like the pool (it keeps the terrace's lights and the moon).
  *
  *   a lawn with stone paths, a white gazebo with a bench for two (cuddle up in it),
@@ -20,7 +20,7 @@
  */
 const HW0 = -21.3, HW1 = 19.3, HD0 = -6.0, HD1 = 6.0;
 const WING = { x1: -8.85, z1: 12.0 };              // the west wing reaches up to the terrace
-const TGAP = { x0: -19.8, x1: -18.3 };              // the terrace's railing gap (TGAP in worldRoom.js, in local x)
+const TGAP = { x0: -19.8, x1: -18.3 };              // in line with the terrace's railing gap (TGAP in worldRoom.js), up the path
 const GAP = { x0: -3.7, x1: -2.3 };
 const PGATE = { x0: 4.8, x1: 6.6 };               // the gate in the south railing, out to the Fun Park (worldPark.js)
 const HGATE = { z0: 1.7, z1: 3.2 };                // the gap in the west railing into the Haunted Mansion (worldHaunted.js)
@@ -36,9 +36,9 @@ export function build(k) {
 	const R = rng(404);
 	k.floor(() => 0);
 	k.walk(HW0 + 0.15, HW1 - 0.15, HD0 + 0.15, HD1);
-	k.walk(HW0 + 0.15, WING.x1, HD1 - 1.2, WING.z1 + 0.05);   // the west wing (its east side is the pool deck's railing)
-	k.walk(GAP.x0, GAP.x1, HD1 - 1.2, HD1 + 0.6);   // through the gap from the pool deck
-	k.walk(TGAP.x0, TGAP.x1, WING.z1 - 0.6, WING.z1 + 0.8);   // up to the terrace
+	k.walk(HW0 + 0.15, WING.x1 - 0.15, HD1 - 1.2, WING.z1 - 0.15);   // the west wing
+	k.walk(GAP.x0, GAP.x1, HD1 - 1.2, HD1 + 0.6);   // in through the north gate (the path from the pool deck)
+	k.walk(TGAP.x0, TGAP.x1, WING.z1 - 1.2, WING.z1 + 0.8);   // out of the wing's gate (the path up to the terrace; reaching well into the wing: no seam)
 	k.walk(PGATE.x0, PGATE.x1, HD0 - 0.9, HD0 + 1.2);   // out through the gate to the Fun Park
 	k.walk(HW0 - 1.4, HW0 + 1.0, HGATE.z0, HGATE.z1);   // in at the mansion's door / the aquarium's door (their rooms start
 	k.walk(HW0 - 1.4, HW0 + 1.0, AGATE.z0, AGATE.z1);   // at world x -7.6; reaching past it leaves no seam in the doorway)
@@ -127,6 +127,27 @@ export function build(k) {
 	k.box(HW0, HW0 + 0.15, HD0, HGATE.z0);
 	k.box(HW0, HW0 + 0.15, HGATE.z1, AGATE.z0);
 	k.box(HW0, HW0 + 0.15, AGATE.z1, WING.z1);
+	// the north side, out onto the lawn in front of the house (it used to lean on the pool deck): railings, with a gate
+	// for each path - the pool deck's, into the long lawn, and the terrace's, into the west wing
+	railRun(WING.x1 + 0.05, HD1 - 0.05, GAP.x0, HD1 - 0.05);
+	railRun(GAP.x1, HD1 - 0.05, HW1 - 0.05, HD1 - 0.05);
+	railRun(WING.x1 - 0.05, HD1 - 0.05, WING.x1 - 0.05, WING.z1 - 0.05);
+	railRun(HW0 + 0.05, WING.z1 - 0.05, TGAP.x0, WING.z1 - 0.05);
+	railRun(TGAP.x1, WING.z1 - 0.05, WING.x1 - 0.05, WING.z1 - 0.05);
+	k.box(WING.x1, GAP.x0, HD1 - 0.15, HD1);
+	k.box(GAP.x1, HW1, HD1 - 0.15, HD1);
+	k.box(WING.x1 - 0.15, WING.x1, HD1, WING.z1);
+	k.box(HW0, TGAP.x0, WING.z1 - 0.15, WING.z1);
+	k.box(TGAP.x1, WING.x1, WING.z1 - 0.15, WING.z1);
+	// a signpost at the north gate
+	{
+		const sg = group(g, GAP.x1 + 0.35, 0, HD1 - 0.35);
+		add(sg, new THREE.CylinderGeometry(0.03, 0.03, 1.2, 8), mat("#5b4636", 0.7), 0, 0.6, 0);
+		add(sg, rbox(0.82, 0.24, 0.04, 0.02), mat("#2a9d8f", 0.6), 0, 1.22, 0);
+		add(sg, new THREE.PlaneGeometry(0.76, 0.18), new THREE.MeshBasicMaterial({ map: k.tex.text("Garden", { w: 512, h: 128, color: "#fff4d6", font: "800 80px 'Caveat', 'Nunito', cursive" }), transparent: true, depthWrite: false }), 0, 1.22, 0.025, { cast: false, receive: false });
+		add(sg, new THREE.PlaneGeometry(0.76, 0.18), new THREE.MeshBasicMaterial({ map: k.tex.text("House & Pool", { w: 512, h: 128, color: "#fff4d6", font: "800 70px 'Caveat', 'Nunito', cursive" }), transparent: true, depthWrite: false }), 0, 1.22, -0.025, { ry: Math.PI, cast: false, receive: false });
+		k.box(GAP.x1 + 0.28, GAP.x1 + 0.42, HD1 - 0.42, HD1 - 0.28);
+	}
 	// signposts by the two doors in the west railing
 	for (const [z, a, b] of [[HGATE.z1 + 0.35, "Haunted Mansion", "Garden"], [AGATE.z0 - 0.35, "Aquarium", "Garden"]]) {
 		const sg = group(g, HW0 + 0.35, 0, z, Math.PI / 2);

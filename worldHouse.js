@@ -13,10 +13,13 @@
  * garden's west side, the Aquarium (worldAquarium.js) and the Haunted Mansion (worldHaunted.js); off the Fun Park's
  * west side, the Bumper Kart arena (worldKarts.js). The weather (worldWeather.js) is the same everywhere outdoors.
  *
- * Each room is its own module and its own group. They're all built in the
- * background shortly after you arrive (a tenth of a second each), but a room is
- * only drawn while you're in it or next to it (you see into the next room
- * through an open door), so the house costs nothing where you aren't.
+ * All of it stands on landscaped grounds (worldGrounds.js, laid out in worldEstate.js): lawns, paved paths, trees and
+ * lamps between the attractions, and the house's outside - one rectangular block under one flat roof.
+ *
+ * Each room is its own module and its own group. They're all built while the loading screen is up (preload), with
+ * their shaders compiled and textures uploaded, so nothing stalls the first time you walk somewhere. Indoors, a room
+ * is only drawn while you're in it or next to it (you see into the next room through an open door); outdoors you
+ * see everything out there, near or far (the attractions, the garden, the house from outside).
  *
  * Lights: three.js recompiles every shader when the number of lights changes,
  * so the house never adds lights. It owns a fixed pool of point lights (as many
@@ -30,52 +33,74 @@
  * rest of the world (walking, sitting, cuddling, prompts) just works there.
  */
 import * as THREE from "three";
-import { kit, registerArea, floorAt, areaOf, frenchDoor } from "./worldRoom.js";
+import { kit, registerArea, floorAt, areaOf, frenchDoor, visXZ } from "./worldRoom.js";
 import { roundRect } from "./worldAvatar.js";
 import { createPets } from "./worldPets.js";
+import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, COURTS, GATES, inRect } from "./worldEstate.js";
 
 // where each room sits in the world (its local origin), the area it covers [minX, maxX, minZ, maxZ],
 // and which rooms you can see into from it through open doors
 // (ry turns a room round: the cinema is built facing +z and turned so its doors face the living room)
+// (parts: an area that isn't a plain rect - the garden's L - is these rects of its bounds)
 export const ZONES = {
-	lounge:  { name: "Lounge",   ox: 15.2,   oy: 0,    oz: 1.0,   bounds: [7.1, 23.25, -6.05, 8.05],   see: ["main", "bedroom", "bath", "pool", "loft", "hall"], file: "./worldLounge.js" },
-	// upstairs, over the east half of the lounge: drawn there (vis), but on the floor plan it's 30 m further south,
-	// so the two floors never overlap (see shiftAt). The stairs carry you across (portals in worldLoft.js).
-	disco:   { name: "Disco",    ox: 15.2,   oy: 3.6,  oz: 31.0,  vis: [15.2, 1.0], bounds: [18.4, 23.15, 32.2, 37.95], see: ["loft"], file: "./worldDisco.js" },
-	loft:    { name: "Upstairs", ox: 15.2,   oy: 3.6,  oz: 31.0,  vis: [15.2, 1.0], bounds: [16.2, 23.15, 24.05, 37.95], see: ["lounge", "disco", "pool", "main"], borrow: "lounge", file: "./worldLoft.js" },
+	lounge:  { name: "Lounge",   ox: 15.2,   oy: 0,    oz: 1.0,   bounds: [7.1, 23.25, -6.05, 8.05],   see: ["main", "bedroom", "bath", "pool", "loft", "hall", "grounds", "garden", "tree"], file: "./worldLounge.js" },
+	// upstairs, over the east half of the lounge: drawn there (vis), but on the floor plan it's 230 m further north,
+	// well clear of the grounds, so the two floors never overlap (see shiftAt). The stairs carry you across (portals in worldLoft.js).
+	disco:   { name: "Disco",    ox: 15.2,   oy: 3.6,  oz: 231.0, vis: [15.2, 1.0], bounds: [18.4, 23.15, 232.2, 237.95], see: ["loft"], file: "./worldDisco.js" },
+	loft:    { name: "Upstairs", ox: 15.2,   oy: 3.6,  oz: 231.0, vis: [15.2, 1.0], bounds: [16.2, 23.15, 224.05, 237.95], see: ["lounge", "disco", "pool", "main", "grounds", "garden", "tree"], borrow: "lounge", file: "./worldLoft.js" },
 	cinema:  { name: "Cinema",   ox: -13.25, oy: -1.8, oz: -3.5,  ry: Math.PI / 2, bounds: [-22.6, -7.05, -8.8, 1.8], see: ["main"], file: "./worldCinema.js" },
-	bedroom: { name: "Bedroom",  ox: 28.4,   oy: 0,    oz: -4,    bounds: [23.25, 33.6, -8.62, 0.75],  see: ["lounge", "pool", "loft"], file: "./worldBedroom.js" },
+	bedroom: { name: "Bedroom",  ox: 28.4,   oy: 0,    oz: -4,    bounds: [23.25, 33.6, -8.62, 0.75],  see: ["lounge", "pool", "loft", "grounds"], file: "./worldBedroom.js" },
 	bath:    { name: "Bathroom", ox: 27.4,   oy: 0,    oz: 4.7,   bounds: [23.25, 31.6, 0.95, 8.4],    see: ["lounge", "loft"], file: "./worldBath.js" },
 	// (the deck reaches right up to the lounge's back wall: with a gap between the two areas, the doorway between
 	// the lounge and the pool deck had a strip that belonged to no room, and nobody could walk through it)
-	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.05],  see: ["main", "lounge", "bedroom", "loft", "garden", "shame", "park", "tree"], outdoor: true, file: "./worldPool.js" },
+	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.05],  see: ["main", "lounge", "bedroom", "loft"], outdoor: true, file: "./worldPool.js" },
 	// up in the garden's three big trees: drawn over the garden (vis), but on the floor plan 80 m further east, so the
 	// platforms never mix with the lawn under them (like the loft). The ladder on the middle tree carries you across.
-	tree:    { name: "Treehouse", ox: 94.3,  oy: 4.4,  oz: -24.1, vis: [14.3, -24.1], bounds: [85.0, 104.5, -28.6, -17.8], see: ["garden", "pool", "main", "shame", "park", "aquarium", "haunted"], outdoor: true, file: "./worldTree.js" },
-	// in the garden, south of the hot tub: the Box of Shame (a cardboard box you can go into: a bed of roses, the Cute Corner)
+	tree:    { name: "Treehouse", ox: 94.3,  oy: 4.4,  oz: -44.1, vis: [14.3, -44.1], bounds: [85.0, 104.5, -48.6, -37.8], see: [], outdoor: true, file: "./worldTree.js" },
+	// in the garden, east of the gazebo: the Box of Shame (a cardboard box you can go into: a bed of roses, the Cute Corner)
 	// (before the garden: it sits inside the garden's area, and the first area that holds a point wins)
-	shame:   { name: "Box of Shame", ox: 28.6, oy: 0,   oz: -24.6, bounds: [24.9, 32.3, -27.6, -21.6], see: ["garden"], file: "./worldShame.js" },   // (inside, only the garden shows through the door: keeps it light)
-	// past the pool deck, through the gap in its south railing (or the gap in the terrace's south railing): a rooftop
-	// garden (outdoors too). It wraps round the pool deck: from in front of the terrace in the west to under the hot tub in the east
-	garden:  { name: "Garden",   ox: 14.3,   oy: 0,    oz: -24.1, bounds: [-7.6, 33.6, -30.1, -12.1], see: ["pool", "main", "shame", "park", "tree", "aquarium", "haunted"], outdoor: true, file: "./worldGarden.js" },
-	// off the garden's west side, through the gaps in its west railing: the Aquarium (by the west wing) and the
-	// Haunted Mansion (at the west end of the long lawn); you see their outsides from the garden
-	aquarium: { name: "Aquarium", ox: -19.3, oy: 0,    oz: -13.6, bounds: [-31.0, -7.6, -19.6, -8.9],  see: ["garden"], file: "./worldAquarium.js" },
-	haunted: { name: "Haunted Mansion", ox: -19.3, oy: 0, oz: -21.65, bounds: [-31.0, -7.6, -30.1, -19.7], see: ["garden"], file: "./worldHaunted.js" },
-	// south of the garden, through the gate in its south railing: the Fun Park (a carousel, a Ferris wheel, a drop tower,
-	// a swing ride, and the station of a roller coaster that runs all the way round the house)
-	park:    { name: "Fun Park", ox: 13.0,   oy: 0,    oz: -48.0, bounds: [-7.6, 33.6, -66.0, -30.1], see: ["garden", "pool", "main", "shame", "karts", "haunted", "tree"], outdoor: true, file: "./worldPark.js" },
-	// off the Fun Park's west side, through the gate in its west railing: the Bumper Kart arena (drive, ram, kick)
-	karts:   { name: "Bumper Karts", ox: -16.8, oy: 0,  oz: -41.8, bounds: [-26.0, -7.6, -52.0, -30.2], see: ["park", "garden", "haunted"], outdoor: true, file: "./worldKarts.js" },
+	shame:   { name: "Box of Shame", ox: 28.6, oy: 0,   oz: -44.6, bounds: [24.9, 32.3, -47.6, -41.6], see: ["garden", "grounds"], file: "./worldShame.js" },   // (inside, only out through the door shows)
+	// a walled garden on the lawn south of the house: in through the gate in its north railing (the path from the pool
+	// deck), or up the path from the terrace into its west wing; out of its south gate to the Fun Park, and out of its
+	// west gates to the Haunted Mansion and the Aquarium
+	garden:  { name: "Garden",   ox: 14.3,   oy: 0,    oz: -44.1, bounds: [-7.6, 33.6, -50.1, -32.1], parts: [[-7.6, 33.6, -50.1, -38.1], [-7.6, 5.45, -38.1, -32.1]], see: [], outdoor: true, file: "./worldGarden.js" },
+	// along the west avenue: the Aquarium (at the west end of the cross walk) and the Haunted Mansion (across the lawn
+	// from the garden's west gate); you see their outsides from everywhere outdoors
+	aquarium: { name: "Aquarium", ox: -41.3, oy: 0,    oz: -21.5, bounds: [-53.0, -29.6, -27.5, -16.8],  see: ["grounds"], file: "./worldAquarium.js" },
+	haunted: { name: "Haunted Mansion", ox: -41.3, oy: 0, oz: -41.65, bounds: [-53.0, -29.6, -50.1, -39.7], see: ["grounds"], file: "./worldHaunted.js" },
+	// far south, down the path from the garden's south gate: the Fun Park (a carousel, a Ferris wheel, a drop tower,
+	// a swing ride, and the station of a roller coaster that runs all the way round the estate)
+	park:    { name: "Fun Park", ox: 13.0,   oy: 0,    oz: -92.0, bounds: [-7.6, 33.6, -110.0, -74.1], see: [], outdoor: true, file: "./worldPark.js" },
+	// off the Fun Park's west side, down the path from the gate in its west railing: the Bumper Kart arena (drive, ram, kick)
+	karts:   { name: "Bumper Karts", ox: -36.8, oy: 0,  oz: -85.8, bounds: [-46.0, -27.6, -96.0, -74.2], see: [], outdoor: true, file: "./worldKarts.js" },
 	// the wing behind the lounge (through the door by the dining table): a short hallway, with the game room off
 	// its west side and the spa off its east side
 	hall:    { name: "Hallway",  ox: 13.35,  oy: 0,    oz: 10.35, bounds: [12.05, 14.65, 8.05, 12.55], see: ["lounge", "games", "spa"], file: "./worldHall.js" },
 	games:   { name: "Game Room", ox: 7.95,  oy: 0,    oz: 13.15, bounds: [3.75, 12.05, 8.05, 18.15], see: ["hall", "spa"], file: "./worldGameRoom.js" },
-	spa:     { name: "Spa",      ox: 18.75,  oy: 0,    oz: 11.15, bounds: [14.65, 22.95, 8.15, 14.05], see: ["hall", "games"], file: "./worldSpa.js" }
+	spa:     { name: "Spa",      ox: 18.75,  oy: 0,    oz: 11.15, bounds: [14.65, 22.95, 8.15, 14.05], see: ["hall", "games"], file: "./worldSpa.js" },
+	// last: everything outdoors that isn't one of the places above (the lawns, the paths, the trees round the house),
+	// and the house's own outside. Its area is the whole estate except the house and its courtyard.
+	grounds: { name: "Grounds",     ox: 0,   oy: 0,    oz: 0,     bounds: ESTATE.slice(), see: [], outdoor: true, file: "./worldGrounds.js" }
 };
-// what you can see from the living room / terrace
-const MAIN_SEES = ["lounge", "pool", "cinema", "loft", "garden", "shame", "park", "tree"];
-const BUILD_ORDER = ["lounge", "loft", "pool", "garden", "shame", "park", "tree", "bedroom", "bath", "cinema", "disco", "hall", "games", "spa", "aquarium", "haunted", "karts"];
+// Outdoors you see everything out there, near and far: the outdoor places, the outsides of the buildings, and (through
+// the courtyard's glass) the rooms that open onto it. The living room / terrace sees all of it too.
+const OUTSIDE = ["main", "grounds", "pool", "garden", "shame", "tree", "park", "karts", "aquarium", "haunted", "lounge", "bedroom", "loft"];
+const MAIN_SEES = OUTSIDE.concat(["cinema"]);
+// built first to last on the loading screen (the grounds first: they're what you see first, out of every window)
+const BUILD_ORDER = ["grounds", "lounge", "loft", "pool", "garden", "shame", "tree", "park", "bedroom", "bath", "cinema", "disco", "hall", "games", "spa", "aquarium", "haunted", "karts"];
+// Level of detail, by distance from the camera: each room's small things (and, in a building, everything inside its
+// walls) go on a render layer of its own, and the camera only draws that layer while it's near enough to see them.
+// INSIDE: up to what height (world y) a building's insides are, and from how far off you could still see them (through
+// its doors and windows); outdoor places only lose their small things (beyond DETAIL_NEAR).
+// (small: under SMALL_R across, or thin - a post, a rail, a trim, a sign - under THIN thick and a couple of metres long)
+const INSIDE = {
+	lounge: [6.9, 20], loft: [6.5, 20], disco: [6.6, 16], bedroom: [3.0, 18], bath: [3.0, 14], cinema: [4.7, 14], hall: [3.0, 14],
+	games: [3.6, 14], spa: [3.2, 14], aquarium: [5.3, 12], haunted: [3.8, 10], shame: [3.4, 10]
+};
+// the living room (it isn't a zone): its insides, and the terrace's small things
+const MAIN_RECT = [-7.2, 7.2, -6.3, 6.3], MAIN_INSIDE = [3.4, 18];
+const DETAIL_NEAR = 30, SMALL_R = 0.25, THIN = 0.09, THIN_R = 1.3;
+const LABEL = { grounds: "the grounds and the house", lounge: "the lounge and the kitchen", loft: "upstairs", pool: "the pool", garden: "the garden", shame: "the Box of Shame", tree: "the treehouse", park: "the Fun Park", bedroom: "the bedroom", bath: "the bathroom", cinema: "the cinema", disco: "the disco", hall: "the hallway", games: "the game room", spa: "the spa", aquarium: "the aquarium", haunted: "the Haunted Mansion", karts: "the bumper karts" };
 
 export function createHouse(ctx) {
 	const { scene, room, renderer, camera } = ctx;
@@ -86,6 +111,24 @@ export function createHouse(ctx) {
 		const Z = ZONES[id], b = Z.bounds;
 		Z.area = registerArea({ id, bounds: { minX: b[0], maxX: b[1], minZ: b[2], maxZ: b[3] } });
 		if (Z.vis) Z.area.shift = [Z.ox - Z.vis[0], Z.oz - Z.vis[1]];
+		if (Z.parts) Z.area.contains = (x, z) => Z.parts.some(r => inRect(r, x, z, 1e-6));
+	}
+	// The grounds: the whole estate but the house and its courtyard (the living room and the terrace aren't zones, so
+	// they're left out here; every other place was registered first, so it wins inside its own area anyway).
+	// You can stand anywhere on the grounds that's inside the hedge and clear of every place's walls and railings, and in
+	// the corridors through their gates and doorways (GATES: they reach across the edge, so no doorway has a seam).
+	{
+		const G = ZONES.grounds.area, inner = [ESTATE[0] + HEDGE_IN, ESTATE[1] - HEDGE_IN, ESTATE[2] + HEDGE_IN, ESTATE[3] - HEDGE_IN];
+		const notOurs = HOUSE_BLOCKS.concat(COURTS);
+		G.contains = (x, z) => !notOurs.some(r => inRect(r, x, z, 1e-6));
+		const solid = notOurs.slice();
+		for (const id in ZONES) { const Z = ZONES[id]; if (id !== "grounds" && !Z.vis) solid.push(...(Z.parts || [Z.bounds])); }
+		G.walkFn = (x, z, r) => {
+			if (!inRect(inner, x, z, -r)) return false;
+			for (const q of GATES) if (inRect(q.r, x, z, -r)) return true;
+			for (const q of solid) if (inRect(q, x, z, r)) return false;
+			return true;
+		};
 	}
 
 	// the living room, the terrace and the sky go in one group, so they can be switched off in one go
@@ -148,8 +191,13 @@ export function createHouse(ctx) {
 	// (while the camera is up under the loft from the lounge, the loft and the disco are cut away)
 	// (up on a ride - the coaster round the house, the top of the Ferris wheel - you can see everything: wide)
 	let wide = false;
+	// (outdoors: everything outdoors. near: the rooms whose moving parts run every frame - the one you're in and the ones
+	// you look into; the rest of what's in view runs a few times a second, it's far off)
+	let nearSet = new Set(["main"]);
 	function applyVisibility() {
-		visibleSet = new Set([region].concat(region === "main" ? MAIN_SEES : ZONES[region].see));
+		const own = region === "main" ? MAIN_SEES : ZONES[region].see;
+		nearSet = new Set([region].concat(own));
+		visibleSet = new Set([region].concat(own, region === "main" || ZONES[region].outdoor ? OUTSIDE : []));
 		if (wide) { visibleSet.add("main"); for (const id in built) visibleSet.add(id); }
 		if (cut.low) { visibleSet.delete("loft"); visibleSet.delete("disco"); }
 		for (const id in built) built[id].group.visible = visibleSet.has(id);
@@ -216,6 +264,7 @@ export function createHouse(ctx) {
 			const zone = finishZone(id, k, api);
 			built[id] = zone;
 			delete loading[id];
+			cullZone(id, zone);
 			if (ctx.debug) console.log(`[house] built ${id} in ${Math.round(performance.now() - t0)}ms`);
 			// built while its parts are cut away: hide them straight away too
 			if (zone.cut) for (const what in cut) if (cut[what] && zone.cut[what]) zone.cut[what].forEach(o => { o.visible = false; });
@@ -232,6 +281,51 @@ export function createHouse(ctx) {
 		}).catch(err => { delete loading[id]; console.error("[house] could not build " + id, err); throw err; });
 		return loading[id];
 	}
+	// ---------------------------------------------------------------- level of detail (see INSIDE)
+	let nextLayer = 1;
+	const lods = [];
+	const _sph = new THREE.Sphere(), _sc = new THREE.Vector3();
+	// put a group's small and thin things (and the insides, below ins[0] within rect) on a layer of its own, drawn
+	// while the camera is within ins[1] of rect (DETAIL_NEAR for a place with no insides)
+	function cullSetup(group, rect, ins, name) {
+		if (nextLayer > 31) return null;
+		const inner = [rect[0] + 0.45, rect[1] - 0.45, rect[2] + 0.45, rect[3] - 0.45];
+		const layer = nextLayer++;
+		let n = 0;
+		group.updateMatrixWorld(true);
+		group.traverse(o => {
+			if (!o.isMesh || o.isInstancedMesh || o.userData.floor) return;
+			const geo = o.geometry;
+			if (!geo.boundingSphere) geo.computeBoundingSphere();
+			if (!geo.boundingBox) geo.computeBoundingBox();
+			_sph.copy(geo.boundingSphere).applyMatrix4(o.matrixWorld);
+			o.getWorldScale(_sc);
+			const bb = geo.boundingBox, thin = Math.min((bb.max.x - bb.min.x) * _sc.x, (bb.max.y - bb.min.y) * _sc.y, (bb.max.z - bb.min.z) * _sc.z);
+			const small = _sph.radius < SMALL_R || (thin < THIN && _sph.radius < THIN_R);
+			const inside = !!ins && _sph.radius < 3.5 && _sph.center.y + _sph.radius < ins[0] && inRect(inner, _sph.center.x, _sph.center.z);
+			if (small || inside) { o.layers.set(layer); n++; }
+		});
+		const lod = { layer, rect, near: ins ? ins[1] : DETAIL_NEAR, on: true };
+		lods.push(lod);
+		camera.layers.enable(layer);
+		if (ctx.debug) console.log(`[house] ${name}: ${n} things drawn only up close (layer ${layer})`);
+		return lod;
+	}
+	function cullZone(id, zone) {
+		const Z = ZONES[id], sh = Z.area.shift || [0, 0], b = Z.bounds;
+		zone.lod = cullSetup(zone.group, [b[0] - sh[0], b[1] - sh[0], b[2] - sh[1], b[3] - sh[1]], INSIDE[id], id);   // (where it's drawn)
+	}
+	cullSetup(mainGroup, MAIN_RECT, MAIN_INSIDE, "living room");
+	// once a frame: which details the camera is near enough to draw (a little hysteresis: no flicker at the edge)
+	function updateLod() {
+		const c = camera.position;
+		for (const L of lods) {
+			const r = L.rect, dx = Math.max(r[0] - c.x, 0, c.x - r[1]), dz = Math.max(r[2] - c.z, 0, c.z - r[3]);
+			const d = Math.hypot(dx, dz), on = L.on ? d < L.near + 3 : d < L.near;
+			if (on !== L.on) { L.on = on; if (on) camera.layers.enable(L.layer); else camera.layers.disable(L.layer); }
+		}
+	}
+
 	// build everything, one room at a time, while the browser has nothing else to do
 	const queue = BUILD_ORDER.slice();
 	let pumping = false;
@@ -245,6 +339,54 @@ export function createHouse(ctx) {
 			if (!id || built[id]) { done(); return; }
 			ensure(id).then(done, done);
 		}, { timeout: 2000 });
+	}
+	// The loading screen: build every room now, one after another (a frame in between, so the progress bar moves),
+	// then get everything onto the graphics card - every shader compiled, every texture uploaded - so walking anywhere,
+	// or turning to look at something far off, never stalls. progress(done, total, what) after each step.
+	const nextFrame = () => new Promise(res => requestAnimationFrame(() => setTimeout(res, 0)));
+	async function preload(progress) {
+		const ids = BUILD_ORDER.filter(id => ZONES[id]);
+		const total = ids.length + 2;
+		let n = 0;
+		const step = what => { if (progress) try { progress(n, total, what); } catch (e) { /* the screen's gone */ } };
+		for (const id of ids) {
+			step("Building " + (LABEL[id] || ZONES[id].name) + "\u2026");
+			await nextFrame();
+			try { await ensure(id); } catch (e) { /* (logged in ensure: the rest of the world still loads) */ }
+			n++;
+		}
+		step("Painting the walls\u2026");
+		await nextFrame();
+		uploadTextures();
+		n++;
+		step("Warming up the lights\u2026");
+		await nextFrame();
+		// every shader, for every room, with the lights it will be drawn with (all groups on while they compile)
+		const vis = [];
+		scene.traverse(o => { if (o.isGroup && o.name.indexOf("zone:") === 0) { vis.push([o, o.visible]); o.visible = true; } });
+		const mainVis = mainGroup.visible, mask = camera.layers.mask;
+		mainGroup.visible = true;
+		camera.layers.enableAll();
+		try { await (renderer.compileAsync ? renderer.compileAsync(scene, camera) : Promise.resolve(renderer.compile(scene, camera))); } catch (e) { /* compiled on first sight instead */ }
+		camera.layers.mask = mask;
+		vis.forEach(([o, v]) => { o.visible = v; });
+		mainGroup.visible = mainVis;
+		applyVisibility();
+		renderer.shadowMap.needsUpdate = true;
+		n++;
+		step("Ready");
+	}
+	// push every texture in the scene to the graphics card now (the first frame each one shows would stall otherwise)
+	function uploadTextures() {
+		if (!renderer.initTexture) return;
+		const seen = new Set();
+		scene.traverse(o => {
+			const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+			for (const m of ms) for (const key in m) {
+				const t = m[key];
+				if (t && t.isTexture && !seen.has(t) && !t.isRenderTargetTexture && !t.isVideoTexture) { seen.add(t); try { renderer.initTexture(t); } catch (e) { /* skip it */ } }
+			}
+		});
 	}
 
 	// ---------------------------------------------------------------- doors (French doors with curtains, shared open / closed)
@@ -429,22 +571,41 @@ export function createHouse(ctx) {
 	}
 
 	// ---------------------------------------------------------------- every frame
+	let farTick = 0;
+	// how far (x, z) is from a room, as it's drawn (the treehouse over the garden, not out on its own floor plan)
+	function farFrom(id, x, z) {
+		const Z = ZONES[id], b = Z.bounds, sh = Z.area.shift || [0, 0];
+		const v = visXZ(x, z);
+		const dx = Math.max(b[0] - sh[0] - v[0], 0, v[0] - (b[1] - sh[0])), dz = Math.max(b[2] - sh[1] - v[1], 0, v[1] - (b[3] - sh[1]));
+		return Math.hypot(dx, dz);
+	}
 	function update(dt, t, x, z) {
 		nightK += ((ctx.get("night") ? 1 : 0) - nightK) * Math.min(1, dt * 3);
 		for (const id in built) { const B = built[id]; if (B.litOn) B.litK += ((B.litOn() ? 1 : 0) - B.litK) * Math.min(1, dt * 6); }
 		setRegion(regionOf(areaOf(x, z)));
 		const w = !!(built[region] && built[region].wide && built[region].wide());
 		if (w !== wide) { wide = w; applyVisibility(); renderer.shadowMap.needsUpdate = true; }
-		// the room you're in, and the rooms you can see into, keep moving
-		for (const id in built) if (visibleSet.has(id)) built[id].update(dt, t);
+		// the room you're in, and the rooms you can see into, keep moving (far off: a few times a second)
+		// (one room's bug never stops the rest of the world: it's logged once and that room stands still)
+		farTick++;
+		for (const id in built) {
+			if (!visibleSet.has(id)) continue;
+			const B = built[id];
+			let d = dt;
+			if (!nearSet.has(id) && !wide && id !== "park" && farFrom(id, x, z) > 35) { B.farDt = (B.farDt || 0) + dt; if (farTick % 4) continue; d = Math.min(0.25, B.farDt); }
+			B.farDt = 0;
+			try { B.update(d, t); }
+			catch (e) { if (!B.failed) { B.failed = true; console.error("[house] " + id + " update failed:", e); } }
+		}
 		if (lit !== "main" && built[lit]) applyLights(built[lit]);
+		updateLod();
 		doors.forEach(d => d.fd.update(dt, d.isOpen(), d.curtOpen()));
 		if (pets) pets.update(dt, t, visibleSet);
 	}
 
 	const houseApi = {
 		ZONES, built, ensure, update, addDoor, portals, camWalls,
-		start: pump,
+		start: pump, preload,
 		// call after the camera has moved: hides the ceilings it's up at (see cutaway)
 		cutaway,
 		// the loft is cut away right now (so people up there aren't drawn floating in the air)
