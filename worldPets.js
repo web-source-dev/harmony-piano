@@ -39,7 +39,9 @@ const NODES = {
 	// the garden: out through the gap in the pool deck's south railing, down the path across the lawn, in at the garden's
 	// north gate (its points are its local coordinates + (14.3, -44.1))
 	GA: [11.3, -17.0], GB: [11.3, -19.3], GC: [11.3, -36.6], GD: [11.3, -39.4],
-	GL: [13.3, -42.6], GE: [19.8, -41.6], GW: [8.3, -42.3], GS: [14.8, -47.3]
+	GL: [13.3, -42.6], GE: [19.8, -41.6], GW: [8.3, -42.3], GS: [14.8, -47.3],
+	// on down the big lawn, under the treehouse to the south end
+	GT: [11.5, -64.1], GU: [17.3, -74.1]
 };
 const EDGES = [
 	"LD-L4", "L4-L2", "L4-L3", "L2-L1", "L1-L3", "L1-L6", "L2-L5", "L5-L6", "L6-L7", "L7-LT", "LT-T0",
@@ -50,7 +52,7 @@ const EDGES = [
 	"G9-G10", "G10-G16", "G16-G12", "G12-G13", "G11-G13", "G8-G11", "G13-G17", "G17-G14",
 	"G6-B0", "B0-B1", "B1-B2", "B2-B3", "B1-B4", "B4-B3",
 	"G10-BA0", "BA0-BA1",
-	"P1-GA", "GA-GB", "GB-GC", "GC-GD", "GD-GL", "GD-GW", "GL-GE", "GL-GS", "GW-GS"
+	"P1-GA", "GA-GB", "GB-GC", "GC-GD", "GD-GL", "GD-GW", "GL-GE", "GL-GS", "GW-GS", "GS-GT", "GT-GU"
 ];
 const NAMES = Object.keys(NODES);
 const ADJ = {};

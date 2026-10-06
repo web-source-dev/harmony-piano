@@ -1,7 +1,7 @@
 /**
- * Harmony World — the Box of Shame: a giant cardboard box in the garden, south of the hot tub (worldGarden.js).
+ * Harmony World — the Box of Shame: a giant cardboard box in the garden's south-east corner (worldGarden.js).
  *
- * Local coordinates (origin at world 28.6, -24.6): x -3.5..3.5, z -2.8..2.8, ceiling 3.4 m. The door is in the
+ * Local coordinates (origin at world 28.6, -75.1): x -3.5..3.5, z -2.8..2.8, ceiling 3.4 m. The door is in the
  * west wall (x -3.5) at z 0, at the end of the red carpet. Outside it's a brown cardboard box, flaps open at the
  * top, BOX OF SHAME written big on its sides and on a marquee sign on the roof. Inside it's all pink:
  *

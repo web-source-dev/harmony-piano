@@ -59,23 +59,23 @@ export const ZONES = {
 	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.05],  see: ["main", "lounge", "bedroom", "loft"], outdoor: true, file: "./worldPool.js" },
 	// up in the garden's three big trees: drawn over the garden (vis), but on the floor plan 80 m further east, so the
 	// platforms never mix with the lawn under them (like the loft). The ladder on the middle tree carries you across.
-	tree:    { name: "Treehouse", ox: 94.3,  oy: 4.4,  oz: -44.1, vis: [14.3, -44.1], bounds: [84.4, 106.4, -47.0, -36.0], see: [], outdoor: true, file: "./worldTree.js" },
-	// in the garden, east of the gazebo: the Box of Shame (a cardboard box you can go into: a bed of roses, the Cute Corner)
+	tree:    { name: "Treehouse", ox: 94.3,  oy: 4.4,  oz: -62.1, vis: [14.3, -62.1], bounds: [84.4, 106.4, -65.0, -54.0], see: [], outdoor: true, file: "./worldTree.js" },
+	// in the garden's south-east corner, well clear of the treehouse: the Box of Shame (a cardboard box you can go into: a bed of roses, the Cute Corner)
 	// (before the garden: it sits inside the garden's area, and the first area that holds a point wins)
-	shame:   { name: "Box of Shame", ox: 28.6, oy: 0,   oz: -44.6, bounds: [24.9, 32.3, -47.6, -41.6], see: ["garden", "grounds"], file: "./worldShame.js" },   // (inside, only out through the door shows)
+	shame:   { name: "Box of Shame", ox: 28.6, oy: 0,   oz: -75.1, bounds: [24.9, 32.3, -78.1, -72.1], see: ["garden", "grounds"], file: "./worldShame.js" },   // (inside, only out through the door shows)
 	// a walled garden on the lawn south of the house: in through the gate in its north railing (the path from the pool
 	// deck), or up the path from the terrace into its west wing; out of its south gate to the Fun Park, and out of its
 	// west gates to the Haunted Mansion and the Aquarium
-	garden:  { name: "Garden",   ox: 14.3,   oy: 0,    oz: -44.1, bounds: [-7.6, 33.6, -50.1, -32.1], parts: [[-7.6, 33.6, -50.1, -38.1], [-7.6, 5.45, -38.1, -32.1]], see: [], outdoor: true, file: "./worldGarden.js" },
+	garden:  { name: "Garden",   ox: 14.3,   oy: 0,    oz: -44.1, bounds: [-7.6, 33.6, -84.1, -32.1], parts: [[-7.6, 33.6, -84.1, -38.1], [-7.6, 5.45, -38.1, -32.1]], see: [], outdoor: true, file: "./worldGarden.js" },
 	// along the west avenue: the Aquarium (at the west end of the cross walk) and the Haunted Mansion (across the lawn
 	// from the garden's west gate); you see their outsides from everywhere outdoors
 	aquarium: { name: "Aquarium", ox: -41.3, oy: 0,    oz: -21.5, bounds: [-53.0, -29.6, -27.5, -16.8],  see: ["grounds"], file: "./worldAquarium.js" },
 	haunted: { name: "Haunted Mansion", ox: -41.3, oy: 0, oz: -41.65, bounds: [-53.0, -29.6, -50.1, -39.7], see: ["grounds"], file: "./worldHaunted.js" },
 	// far south, down the path from the garden's south gate: the Fun Park (a carousel, a Ferris wheel, a drop tower,
 	// a swing ride, and the station of a roller coaster that runs all the way round the estate)
-	park:    { name: "Fun Park", ox: 13.0,   oy: 0,    oz: -92.0, bounds: [-7.6, 33.6, -110.0, -74.1], see: [], outdoor: true, file: "./worldPark.js" },
+	park:    { name: "Fun Park", ox: 13.0,   oy: 0,    oz: -126.0, bounds: [-7.6, 33.6, -144.0, -108.1], see: [], outdoor: true, file: "./worldPark.js" },
 	// off the Fun Park's west side, down the path from the gate in its west railing: the Bumper Kart arena (drive, ram, kick)
-	karts:   { name: "Bumper Karts", ox: -36.8, oy: 0,  oz: -85.8, bounds: [-46.0, -27.6, -96.0, -74.2], see: [], outdoor: true, file: "./worldKarts.js" },
+	karts:   { name: "Bumper Karts", ox: -45.6, oy: 0,  oz: -119.8, bounds: [-66.0, -27.6, -143.6, -96.8], see: [], outdoor: true, file: "./worldKarts.js" },
 	// along the north side of the hall, each with its door straight off it: the game room and the spa (their own shells,
 	// local coordinates round their middles; their doors are in their south walls, out to the hall)
 	games:   { name: "Game Room", ox: 8.95,  oy: 0,    oz: 18.41, bounds: [3.85, 14.15, 12.3, 24.5], see: ["gallery"], file: "./worldGameRoom.js" },

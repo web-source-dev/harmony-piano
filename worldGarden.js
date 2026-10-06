@@ -2,34 +2,37 @@
  * Harmony World — the garden: a walled garden on the lawn south of the house, at the end of the paths from the pool
  * deck (through the gap in its south railing) and from the terrace (through the gap in its south railing).
  *
- * Local coordinates (origin at world 14.3, -44.1). It's an L: the long lawn, x -21.3..19.3, z -6..6 (the gate in its
+ * Local coordinates (origin at world 14.3, -44.1). It's an L: the big lawn, x -21.3..19.3, z -40..6 (the gate in its
  * north railing, from the pool deck's path, is at x -3.7..-2.3), and the west wing, x -21.3..-8.85, z 6..12 (the gate
  * at the top of its steps, from the terrace's path, is at x -19.8..-18.3).
  * Outdoors under the night sky, like the pool (it keeps the terrace's lights and the moon).
  *
- *   a lawn with stone paths, a white gazebo with a bench for two (cuddle up in it),
- *   a koi pond with lily pads and a bench beside it, flower beds you can water,
- *   cherry trees in blossom, little lanterns along the paths, and fireflies;
- *   in the west wing: a rose arch at the top of the steps from the terrace, a fountain (toss a coin, make a wish)
- *   with benches round it;
- *   in the east, under the hot tub: the Box of Shame (its own room: worldShame.js), with a red carpet up to its door;
- *   in the south railing, past the gazebo: the gate out to the Fun Park (worldPark.js);
- *   in the west railing: the doors of the Haunted Mansion (worldHaunted.js, off the long lawn) and the Aquarium
- *   (worldAquarium.js, off the west wing);
- *   up in three big trees over the lawn: the Treehouse (worldTree.js), its own floor (only the trunks are down here).
+ * Everything has room round it: a stone path winds from the north gate right down the lawn to the south gate, with
+ * branches off it to each place.
+ *   in the north-west, by the west wing: a fountain (toss a coin, make a wish) with benches round it, and below it a
+ *   koi pond with lily pads and a bench beside it;
+ *   in the west wing: a rose arch at the top of the steps from the terrace;
+ *   in the middle of the lawn, the path running under it: three big trees with the Treehouse up in them (worldTree.js,
+ *   its own floor: only the trunks are down here);
+ *   in the south-west: a white gazebo with a bench for two (cuddle up in it);
+ *   in the south-east corner: the Box of Shame (its own room: worldShame.js), with a red carpet up to its door;
+ *   flower beds all round (water the east one), cherry trees in blossom, lanterns along the paths, and fireflies;
+ *   in the south railing: the gate out to the Fun Park (worldPark.js);
+ *   in the west railing: the doors of the Haunted Mansion (worldHaunted.js, off the big lawn) and the Aquarium
+ *   (worldAquarium.js, off the west wing).
  */
-const HW0 = -21.3, HW1 = 19.3, HD0 = -6.0, HD1 = 6.0;
+const HW0 = -21.3, HW1 = 19.3, HD0 = -40.0, HD1 = 6.0;
 const WING = { x1: -8.85, z1: 12.0 };              // the west wing reaches up to the terrace
 const TGAP = { x0: -19.8, x1: -18.3 };              // in line with the terrace's railing gap (TGAP in worldRoom.js), up the path
 const GAP = { x0: -3.7, x1: -2.3 };
 const PGATE = { x0: 4.8, x1: 6.6 };               // the gate in the south railing, out to the Fun Park (worldPark.js)
 const HGATE = { z0: 1.7, z1: 3.2 };                // the gap in the west railing into the Haunted Mansion (worldHaunted.js)
 const AGATE = { z0: 9.75, z1: 11.25 };             // ...and into the Aquarium (worldAquarium.js)
-const TRUNKS = [[-6.2, 2.2], [0.6, 2.2], [8.8, 2.2]];   // the treehouse's trees (worldTree.js)
-const BOX = { x0: 10.6, x1: 18.0, z0: -3.5, z1: 2.5, door: -0.5 };   // the Box of Shame's footprint (worldShame.js)
-const FTN = { x: -15.0, z: 3.0, r: 1.35 };         // the fountain
-const GZ = { x: 3.0, z: -2.0, r: 1.9 };          // the gazebo
-const POND = { x: -5.0, z: -1.5, rx: 1.6, rz: 1.1 };
+const TRUNKS = [[-6.2, -15.8], [0.6, -15.8], [8.8, -15.8]];   // the treehouse's trees (worldTree.js: its origin is 18 m south of ours)
+const BOX = { x0: 10.6, x1: 18.0, z0: -34.0, z1: -28.0, door: -31.0 };   // the Box of Shame's footprint (worldShame.js)
+const FTN = { x: -13.5, z: -0.5, r: 1.35 };        // the fountain
+const GZ = { x: -12.5, z: -30.0, r: 1.9 };         // the gazebo
+const POND = { x: -12.5, z: -9.0, rx: 2.4, rz: 1.6 };
 
 export function build(k) {
 	const { THREE, add, mat, group, rbox, g, ctx, canvasTex, rng } = k;
@@ -42,7 +45,7 @@ export function build(k) {
 	k.walk(PGATE.x0, PGATE.x1, HD0 - 0.9, HD0 + 1.2);   // out through the gate to the Fun Park
 	k.walk(HW0 - 1.4, HW0 + 1.0, HGATE.z0, HGATE.z1);   // in at the mansion's door / the aquarium's door (their rooms start
 	k.walk(HW0 - 1.4, HW0 + 1.0, AGATE.z0, AGATE.z1);   // at world x -7.6; reaching past it leaves no seam in the doorway)
-	k.cam = { minX: HW0 - 1.5, maxX: HW1 + 1.5, minZ: HD0 - 1.5, maxZ: WING.z1, maxY: 8, minY: 0.2 };
+	k.cam = { minX: HW0 - 1.5, maxX: HW1 + 1.5, minZ: HD0 - 1.5, maxZ: WING.z1, maxY: 10, minY: 0.2 };
 
 	// ---------------------------------------------------------------- the lawn and the path
 	const grass = canvasTex(512, 512, (c, w, h) => {
@@ -86,12 +89,16 @@ export function build(k) {
 			s.userData.floor = true;
 		}
 	};
-	stones([[-3.0, 5.6], [-2.2, 3.2], [0.4, 1.0], [GZ.x - 0.2, GZ.z + GZ.r + 0.3]], 11);
-	stones([[-1.6, 2.4], [-3.4, 1.6], [POND.x + 1.0, POND.z + POND.rz + 0.5]], 6);
-	// from the terrace's steps, past the fountain, round to the pond
-	stones([[(TGAP.x0 + TGAP.x1) / 2, 11.6], [-18.6, 8.0], [FTN.x - 1.0, FTN.z + FTN.r + 0.7], [FTN.x + FTN.r + 0.9, FTN.z - 0.4], [-9.5, 0.8], [POND.x - POND.rx - 0.6, POND.z + 0.3]], 26);
-	// from the gazebo across to the Box of Shame
-	stones([[GZ.x + 1.6, GZ.z + 2.2], [6.6, 0.2], [8.9, BOX.door]], 6);
+	// the main path: from the north gate, down under the treehouse, out of the south gate
+	stones([[-3.0, 5.6], [-2.7, 1.0], [-3.4, -4.0], [-2.8, -10.0], [-2.8, -16.0], [-2.0, -22.0], [1.5, -27.5], [4.5, -33.0], [5.7, -39.4]], 60);
+	// off it: to the pond, to the foot of the treehouse ladder, to the gazebo, to the Box of Shame, and east to the flowers
+	stones([[-3.3, -5.5], [-7.0, -8.4], [POND.x + POND.rx + 0.6, POND.z + 0.2]], 8);
+	stones([[-2.8, -12.0], [0.6, -12.3], [3.5, -14.0], [3.75, -14.9]], 9);
+	stones([[-1.6, -24.5], [-6.0, -26.4], [GZ.x + 0.2, GZ.z + GZ.r + 0.3]], 14);
+	stones([[3.0, -30.8], [6.2, -31.1], [8.9, BOX.door]], 7);
+	stones([[-2.6, 1.8], [3.0, 0.4], [9.0, -1.8], [13.6, -6.6]], 18);
+	// from the terrace's steps, past the fountain, to the main path
+	stones([[(TGAP.x0 + TGAP.x1) / 2, 11.6], [-18.6, 8.0], [-16.4, 4.4], [FTN.x + 0.3, FTN.z + FTN.r + 0.8], [FTN.x + FTN.r + 0.9, FTN.z - 0.4], [-7.0, -2.0], [-3.6, -3.0]], 28);
 
 	// ---------------------------------------------------------------- glass railing round the outside (it's up on the roof)
 	const railM = mat("#6b4f3a", 0.5), postM = mat("#3e3a3a", 0.4, 0.6);
@@ -193,18 +200,22 @@ export function build(k) {
 	}
 	const ROSES = ["#d00000", "#e5383b", "#ba181b", "#ff4d6d", "#a4133c"];
 	const beds = [
-		flowerBed(7.55, 8.6, -5.4, -1.7),               // east of the gazebo (the red carpet to the Box of Shame runs past its end)
-		flowerBed(-8.55, -7.5, -5.4, -3.2),             // past the pond
-		flowerBed(-8.55, -7.5, 1.2, 4.8),
-		flowerBed(-2.4, 0.9, HD0 + 0.3, HD0 + 1.2),     // along the south railing
-		// the west wing: along its railing, and under the terrace
-		flowerBed(HW0 + 0.3, HW0 + 1.3, -5.4, 0.6),
+		flowerBed(14.5, 15.55, -9.0, -5.3),             // the east bed, at the end of the path that way (water it)
+		flowerBed(-9.6, -8.6, -5.6, -3.4),              // between the fountain and the pond
+		flowerBed(-6.4, -2.8, HD0 + 0.3, HD0 + 1.2),    // along the south railing
+		flowerBed(-1.0, 0.0, -36.5, -33.0),             // by the main path, near the south gate
+		// along the west railing, the wing and under the terrace
+		flowerBed(HW0 + 0.3, HW0 + 1.3, -7.0, -2.0),
+		flowerBed(HW0 + 0.3, HW0 + 1.3, -36.0, -24.0),
 		flowerBed(HW0 + 0.3, HW0 + 1.3, 4.4, 9.6),
 		flowerBed(-16.6, -10.6, 10.9, 11.7),
-		flowerBed(-13.4, -9.6, HD0 + 0.3, HD0 + 1.2),
-		// the east, under the hot tub: roses all along the front of the Box of Shame, and a bed of mixed ones behind it
+		// along the north railing and the east railing
+		flowerBed(6.0, 14.5, HD1 - 1.2, HD1 - 0.3),
+		flowerBed(HW1 - 1.3, HW1 - 0.3, -24.0, -14.0),
+		flowerBed(HW1 - 1.3, HW1 - 0.3, -4.0, 1.0),
+		// the south-east corner: roses all along the front of the Box of Shame, and a bed of them behind it
 		flowerBed(BOX.x0 + 1.2, BOX.x1 - 0.3, BOX.z1 + 0.5, BOX.z1 + 1.2, ROSES),
-		flowerBed(BOX.x0 + 0.4, BOX.x1 - 0.4, HD0 + 0.3, BOX.z0 - 0.7, ROSES)
+		flowerBed(BOX.x0 + 0.4, BOX.x1 - 0.4, BOX.z0 - 1.6, BOX.z0 - 0.7, ROSES)
 	];
 
 	// ---------------------------------------------------------------- cherry trees in blossom
@@ -229,14 +240,17 @@ export function build(k) {
 		k.box(x - 0.25 * s, x + 0.25 * s, z - 0.25 * s, z + 0.25 * s);
 		trees.push(crown);
 	}
-	cherry(6.4, 4.4, 1.0);
-	cherry(-6.9, 4.6, 0.9);
-	cherry(-0.8, -3.6, 0.85);
+	cherry(16.5, 3.5, 0.9);
+	cherry(9.5, 3.4, 0.85);
+	cherry(-7.5, 3.6, 0.9);
 	cherry(-11.4, 8.9, 1.0);
-	cherry(-19.6, -3.4, 0.95);
-	cherry(-11.6, -3.8, 0.85);
-	cherry(18.5, 4.7, 0.8);
-	cherry(9.4, -4.6, 0.8);
+	cherry(-19.2, -10.5, 0.95);
+	cherry(-17.5, -21.0, 1.0);
+	cherry(17.0, -18.5, 0.95);
+	cherry(12.0, -24.5, 0.85);
+	cherry(-5.5, -33.5, 0.9);
+	cherry(-19.0, -37.5, 0.85);
+	cherry(16.8, -37.8, 0.8);
 
 	// ---------------------------------------------------------------- the gazebo, with a bench for two
 	const white = mat("#f7f3ec", 0.5);
@@ -475,7 +489,12 @@ export function build(k) {
 
 	// ---------------------------------------------------------------- lanterns along the paths, fireflies
 	const lamps = [];
-	for (const [x, z] of [[-3.9, 4.6], [-1.3, 3.4], [-0.6, 0.6], [1.6, 0.8], [-3.6, 0.6], [-17.6, 10.8], [-20.0, 7.0], [-17.3, 5.6], [-12.2, 1.6], [-10.0, -0.6], [6.0, 1.6], [8.3, 0.9], [6.9, -1.2]]) {
+	for (const [x, z] of [
+		[-1.9, 3.6], [-1.6, -4.6], [-4.2, -9.0], [-4.3, -19.5], [-0.6, -21.5], [3.1, -26.6], [2.9, -33.6], [7.0, -38.3],   // the main path
+		[-17.6, 10.8], [-20.0, 7.0], [-15.4, 2.6], [-10.4, 0.4],      // the terrace's path, past the fountain
+		[-8.0, -7.0], [-8.5, -25.0], [-10.0, -27.6], [4.6, -12.8],    // by the pond, the gazebo, the ladder
+		[7.8, -29.6], [7.8, -32.4], [6.0, 1.3], [12.2, -3.6]          // the Box of Shame's carpet, the east path
+	]) {
 		const l = group(g, x, 0, z);
 		add(l, new THREE.CylinderGeometry(0.025, 0.03, 0.75, 8), mat("#2e2b2b", 0.5, 0.5), 0, 0.375, 0);
 		const m = new THREE.MeshStandardMaterial({ color: "#fff1d6", emissive: "#ffc26b", emissiveIntensity: 2 });
@@ -487,13 +506,15 @@ export function build(k) {
 	}
 	const flies = [];
 	const flyM = new THREE.SpriteMaterial({ map: canvasTex(32, 32, (c, w, h) => { const gr = c.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, "rgba(255,255,200,1)"); gr.addColorStop(0.3, "rgba(220,255,140,0.7)"); gr.addColorStop(1, "rgba(200,255,120,0)"); c.fillStyle = gr; c.fillRect(0, 0, w, h); }), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false });
-	for (let i = 0; i < 70; i++) {
+	for (let i = 0; i < 140; i++) {
 		const s = new THREE.Sprite(flyM.clone());
 		s.scale.setScalar(0.12);
-		// (over the long lawn, or the west wing - never out over the pool deck)
-		const wing = i % 4 === 0;
+		// (over the big lawn, or the west wing - never out over the pool deck, nor inside the Box of Shame)
+		const wing = i % 8 === 0;
+		let x, z;
+		do { x = HW0 + 1 + R() * (HW1 - HW0 - 2); z = HD0 + 1 + R() * (HD1 - HD0 - 2); } while (x > BOX.x0 - 1.2 && x < BOX.x1 + 1.2 && z > BOX.z0 - 1.2 && z < BOX.z1 + 1.2);
 		s.userData = wing ? { x: HW0 + 1 + R() * (WING.x1 - HW0 - 2), z: HD1 + R() * (WING.z1 - HD1 - 1), y: 0.4 + R() * 1.6, ph: R() * 6, sp: 0.2 + R() * 0.3 }
-			: { x: HW0 + 1 + R() * (BOX.x0 - 2 - HW0), z: HD0 + 1 + R() * (HD1 - HD0 - 2), y: 0.4 + R() * 1.6, ph: R() * 6, sp: 0.2 + R() * 0.3 };   // (not inside the Box of Shame)
+			: { x, z, y: 0.4 + R() * 1.6, ph: R() * 6, sp: 0.2 + R() * 0.3 };
 		g.add(s);
 		flies.push(s);
 	}

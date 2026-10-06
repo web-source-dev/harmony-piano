@@ -3,8 +3,7 @@
  * the grounds (worldGrounds.js) and the world (world.js: walking, the weather).
  *
  * The house stands in the north with the terrace and the pool deck in its courtyard. Everything else stands on
- * landscaped grounds round it, each with room to breathe (world x -68..56, z -124..40, about 3.5 times the old
- * rooftop), joined by paved paths:
+ * landscaped grounds round it, each with plenty of room to breathe (world x -94..56, z -166..40), joined by paved paths:
  *
  *   north   the house: one rectangular block, a walkable roof deck on top with the gym and the playroom up there, the
  *           terrace cantilevered off its south edge, and the double-height lounge rising out of it
@@ -17,7 +16,7 @@
  */
 
 // the grounds: everything inside the hedge
-export const ESTATE = [-68, 56, -124, 40];
+export const ESTATE = [-94, 56, -166, 40];
 // (how far in from the edge you can walk: the hedge is in the way)
 export const HEDGE_IN = 1.4;
 
@@ -131,12 +130,12 @@ export const GATES = [
 	{ id: "poolDeck", r: [10.6, 12.0, -19.6, -17.4] },
 	{ id: "gardenNorth", r: [10.6, 12.0, -39.6, -37.4] },
 	{ id: "gardenWing", r: [-5.5, -4.0, -32.8, -30.6] },
-	{ id: "gardenSouth", r: [19.1, 20.9, -51.6, -49.4] },
+	{ id: "gardenSouth", r: [19.1, 20.9, -85.6, -83.4] },
 	{ id: "gardenHaunted", r: [-9.6, -6.6, -42.4, -40.9] },
 	{ id: "gardenAquarium", r: [-9.6, -6.6, -34.35, -32.85] },
-	{ id: "parkNorth", r: [19.1, 20.9, -74.8, -72.6] },
-	{ id: "parkWest", r: [-9.6, -6.6, -86.6, -85.0] },
-	{ id: "karts", r: [-28.6, -26.0, -86.6, -85.0] },
+	{ id: "parkNorth", r: [19.1, 20.9, -108.8, -106.6] },
+	{ id: "parkWest", r: [-9.6, -6.6, -120.6, -119.0] },
+	{ id: "karts", r: [-28.6, -26.0, -120.6, -119.0] },
 	{ id: "aquarium", r: [-30.6, -28.0, -22.25, -20.75] },
 	{ id: "haunted", r: [-30.6, -28.0, -42.4, -40.9] },
 	{ id: "frontWest", r: [-23.9, -21.6, 9.5, 11.1] },        // the Gallery's front doors, at each end of the house
@@ -149,13 +148,13 @@ export const PATHS = [
 	[11.3, -18.1, 11.3, -38.1, 1.9],        // from the pool deck's gate down to the garden
 	[-29.6, -21.5, 39.0, -21.5, 2.6],       // the cross walk, from the Aquarium's doors east
 	[-4.75, -26.5, 11.3, -26.5, 1.7],       // across the plaza
-	[-20.0, -21.5, -20.0, -85.8, 2.6],      // the west avenue
+	[-20.0, -21.5, -20.0, -119.8, 2.6],     // the west avenue
 	[-20.0, -33.6, -7.6, -33.6, 1.7],       // to the garden's west gate (the Aquarium's side)
 	[-29.6, -41.65, -7.6, -41.65, 2.2],     // the Haunted Mansion's doors to the garden's west gate
-	[-27.6, -85.8, -7.6, -85.8, 2.2],       // the Bumper Karts to the Fun Park's west gate
-	[20.0, -50.1, 20.0, -74.1, 2.6],        // the garden's south gate to the Fun Park
-	[-20.0, -62.0, 39.0, -62.0, 2.0],       // the south walk, between the garden and the park
-	[39.0, 29.0, 39.0, -62.0, 2.0],         // the east walk
+	[-27.6, -119.8, -7.6, -119.8, 2.2],     // the Bumper Karts to the Fun Park's west gate
+	[20.0, -84.1, 20.0, -108.1, 2.6],       // the garden's south gate to the Fun Park
+	[-20.0, -96.0, 39.0, -96.0, 2.0],       // the south walk, between the garden and the park
+	[39.0, 29.0, 39.0, -96.0, 2.0],         // the east walk
 	[-27.0, 29.0, 39.0, 29.0, 2.0],         // behind the house
 	[-27.0, 29.0, -27.0, -21.5, 2.0],       // along the west side of the house
 	[-27.0, 10.3, -22.55, 10.3, 2.0],       // to the front door at the west end of the Gallery

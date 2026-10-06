@@ -2,7 +2,8 @@
  * Harmony World — the Treehouse: up in three big old trees in the garden, with rope bridges between them and a
  * zipline from the tallest one right down into the pool.
  *
- * Local coordinates are the garden's (origin at world 14.3, -44.1); y is from the platforms (4.4 m up), so the lawn
+ * Local coordinates: origin at world 14.3, -62.1 (the garden's x, 18 m south of the garden's origin: the trees stand in
+ * the middle of its lawn, garden-local z -15.8); y is from the platforms (4.4 m up), so the lawn
  * is at y -4.4. The treehouse is drawn over the garden, but on the floor plan it sits 80 m further east
  * (ZONES.tree in worldHouse.js: vis), so up here and down there never mix; the ladder moves you across (k.portal).
  *
@@ -16,7 +17,7 @@
  * The ladder and the zipline are seats that ride (like the Fun Park's): world.js tells ride() when that person got on
  * (who.sitT), asks ridePose(who) how to hold the body, and stands them up when it's over (spot.rideFor) at spot.side.
  */
-const TR = [{ x: -6.2, z: 2.2 }, { x: 0.6, z: 2.2 }, { x: 8.8, z: 2.2 }];   // T3, T2, T1 (garden-local: trunks on the lawn)
+const TR = [{ x: -6.2, z: 2.2 }, { x: 0.6, z: 2.2 }, { x: 8.8, z: 2.2 }];   // T3, T2, T1 (trunks on the lawn: worldGarden.js TRUNKS)
 // (big decks: room to walk round, sit, and look out from all three trees)
 const DECK = [
 	{ x0: -9.6, x1: -4.6, z0: -1.0, z1: 4.8 },     // T3: the lookout
@@ -33,10 +34,11 @@ const LUP = { walk: 0.35, climb: 2.3, over: 0.55 }, LDN = { walk: 0.3, over: 0.4
 const UP_FOR = LUP.walk + LUP.climb + LUP.over, DN_FOR = LDN.walk + LDN.over + LDN.climb + LDN.off;
 const UP_LAND = [1.75, LZ], DN_LAND = [3.65, LZ];  // where you end up (DN_LAND is on the lawn, garden-local)
 // the zipline: from the frame on T1 to the pole on the pool deck (local; y from the platforms)
-// (the garden is 20 m south of the pool deck now, across the lawn: the cable is long, and you let go 80% of the way down)
-const ZA = [8.75, 2.85, 4.6], ZB = [2.5, -1.0, 37.1], ZSAG = 0.9;
+// (the trees stand in the middle of the big garden, 50 m south of the pool deck: the cable is long and only sags a
+// little, so you clear the pool deck's railing, and you let go 87% of the way down, over the water)
+const ZA = [8.75, 2.85, 4.6], ZB = [2.5, -1.0, 55.1], ZSAG = 0.6;
 // hand: hands -> feet when hanging (the "zip" pose); bar: the handle below the trolley on the cable
-const ZIP = { hand: 2.0, bar: 0.56, step: 0.6, glide: 6.2, tRel: 0.8, fall: 0.7, bob: 1.0, drift: 0.8, waterY: -5.4, poolY: -5.7, surfY: -4.52 };
+const ZIP = { hand: 2.0, bar: 0.56, step: 0.6, glide: 9.5, tRel: 0.871, fall: 0.7, bob: 1.0, drift: 0.8, waterY: -5.4, poolY: -5.7, surfY: -4.52 };
 const ZIP_FOR = ZIP.step + ZIP.glide + ZIP.fall + ZIP.bob;
 const TAU = Math.PI * 2;
 const smooth = u => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
@@ -230,12 +232,46 @@ export function build(k) {
 		const C = CABIN, cg = group(g, 0, 0, 0);
 		const wallTex = planks.clone(); wallTex.repeat.set(2, 1.4); wallTex.needsUpdate = true;
 		const wallM = mat("#d9b28a", 0.85, 0, { map: wallTex });
-		const roofM = mat("#a2403a", 0.8);
+		// a roof of rounded red shingles, row over row
+		const shingles = canvasTex(256, 256, (c, w, h) => {
+			c.fillStyle = "#6e2420"; c.fillRect(0, 0, w, h);
+			const r = rng(31);
+			for (let row = 0; row < 8; row++) for (let i = -1; i < 9; i++) {
+				const x = i * 32 + (row % 2) * 16, y = row * 32, t = 0.8 + r() * 0.35;
+				c.fillStyle = `rgb(${172 * t | 0},${62 * t | 0},${54 * t | 0})`;
+				c.beginPath(); c.moveTo(x + 1, y); c.lineTo(x + 31, y); c.lineTo(x + 31, y + 22); c.quadraticCurveTo(x + 16, y + 40, x + 1, y + 22); c.closePath(); c.fill();
+				c.strokeStyle = "rgba(40,10,8,.45)"; c.lineWidth = 2; c.stroke();
+			}
+		}, 2, 2);
+		const roofM = mat("#ffffff", 0.8, 0, { map: shingles });
 		const cx = (C.x0 + C.x1) / 2, cz = (C.z0 + C.z1) / 2, w = C.x1 - C.x0, l = C.z1 - C.z0;
-		// walls (the door in the south wall)
+		// walls (the door in the south wall, and a window beside it)
+		const WIN = { x0: 1.5, x1: 2.1, y0: 1.0, y1: 1.7 };
 		add(cg, new THREE.BoxGeometry(C.door0 - C.x0, C.h, 0.1), wallM, (C.x0 + C.door0) / 2, C.h / 2, C.z0);
-		add(cg, new THREE.BoxGeometry(C.x1 - C.door1, C.h, 0.1), wallM, (C.door1 + C.x1) / 2, C.h / 2, C.z0);
+		add(cg, new THREE.BoxGeometry(WIN.x0 - C.door1, C.h, 0.1), wallM, (C.door1 + WIN.x0) / 2, C.h / 2, C.z0);
+		add(cg, new THREE.BoxGeometry(C.x1 - WIN.x1, C.h, 0.1), wallM, (WIN.x1 + C.x1) / 2, C.h / 2, C.z0);
+		add(cg, new THREE.BoxGeometry(WIN.x1 - WIN.x0, WIN.y0, 0.1), wallM, (WIN.x0 + WIN.x1) / 2, WIN.y0 / 2, C.z0);
+		add(cg, new THREE.BoxGeometry(WIN.x1 - WIN.x0, C.h - WIN.y1, 0.1), wallM, (WIN.x0 + WIN.x1) / 2, (WIN.y1 + C.h) / 2, C.z0);
 		add(cg, new THREE.BoxGeometry(C.door1 - C.door0, C.h - 1.85, 0.1), wallM, (C.door0 + C.door1) / 2, 1.85 + (C.h - 1.85) / 2, C.z0);
+		// the window: warm glass, a frame with a cross in it, pink shutters, and a flower box under it
+		{
+			const wx = (WIN.x0 + WIN.x1) / 2, wy = (WIN.y0 + WIN.y1) / 2, ww = WIN.x1 - WIN.x0, wh = WIN.y1 - WIN.y0;
+			add(cg, new THREE.BoxGeometry(ww, wh, 0.02), new THREE.MeshStandardMaterial({ color: "#ffe2a8", emissive: "#ffb35a", emissiveIntensity: 1.2, transparent: true, opacity: 0.85 }), wx, wy, C.z0, { cast: false });
+			for (const [x, y, fw, fh] of [[wx, WIN.y0, ww + 0.1, 0.06], [wx, WIN.y1, ww + 0.1, 0.06], [WIN.x0, wy, 0.06, wh], [WIN.x1, wy, 0.06, wh], [wx, wy, 0.035, wh], [wx, wy, ww, 0.035]]) add(cg, new THREE.BoxGeometry(fw, fh, 0.14), darkWood, x, y, C.z0, { cast: false });
+			const shutM = mat("#ff8fab", 0.7);
+			for (const s of [-1, 1]) {
+				const sh = add(cg, rbox(0.28, wh + 0.04, 0.03, 0.01), shutM, s < 0 ? WIN.x0 - 0.17 : WIN.x1 + 0.17, wy, C.z0 - 0.07, { cast: false });
+				for (let i = 0; i < 4; i++) add(sh, new THREE.BoxGeometry(0.22, 0.02, 0.01), mat("#e86f93", 0.7), 0, -wh / 2 + 0.12 + i * 0.16, -0.02, { cast: false });
+			}
+			const fb = group(cg, wx, WIN.y0 - 0.1, C.z0 - 0.14);
+			add(fb, rbox(ww + 0.2, 0.14, 0.16, 0.02), woodM, 0, 0, 0, { cast: false });
+			for (let i = 0; i < 9; i++) add(fb, new THREE.IcosahedronGeometry(0.045, 0), mat(["#ff4d6d", "#ffd166", "#ffffff", "#c77dff"][i % 4], 0.6), -0.32 + i * 0.08, 0.1 + (i % 2) * 0.03, (R() - 0.5) * 0.06, { cast: false });
+			for (let i = 0; i < 6; i++) add(fb, new THREE.SphereGeometry(0.05, 6, 5), mat("#3f8a4a", 0.8), -0.28 + i * 0.11, 0.07, 0.02, { cast: false }).scale.set(1, 0.6, 1);
+		}
+		// corner posts and a skirting board round the bottom
+		for (const x of [C.x0, C.x1]) for (const z of [C.z0, C.z1]) add(cg, new THREE.BoxGeometry(0.14, C.h + 0.04, 0.14), darkWood, x, C.h / 2, z, { cast: false });
+		for (const z of [C.z0, C.z1]) add(cg, new THREE.BoxGeometry(w + 0.16, 0.14, 0.13), darkWood, cx, 0.07, z, { cast: false });
+		for (const x of [C.x0, C.x1]) add(cg, new THREE.BoxGeometry(0.13, 0.14, l), darkWood, x, 0.07, cz, { cast: false });
 		add(cg, new THREE.BoxGeometry(w, C.h, 0.1), wallM, cx, C.h / 2, C.z1 - 0.05);
 		for (const x of [C.x0, C.x1]) {
 			add(cg, new THREE.BoxGeometry(0.1, C.h, l), wallM, x, C.h / 2, cz);
@@ -263,16 +299,73 @@ export function build(k) {
 		add(cg, new THREE.BoxGeometry(C.door1 - C.door0 + 0.12, 0.08, 0.14), darkWood, (C.door0 + C.door1) / 2, 1.88, C.z0, { cast: false });
 		const heart = add(cg, new THREE.ExtrudeGeometry(k.heartShape(0.14), { depth: 0.03, bevelEnabled: false }), new THREE.MeshStandardMaterial({ color: "#ff8fab", emissive: "#ff4d6d", emissiveIntensity: 1.4 }), (C.door0 + C.door1) / 2, 2.0, C.z0 - 0.07, { cast: false });
 		heart.geometry.center(); heart.rotation.z = Math.PI;
-		var doorLantern = add(cg, new THREE.SphereGeometry(0.09, 12, 8), glow("#ffcf6e"), C.door1 + 0.2, 1.75, C.z0 - 0.16, { cast: false });
-		// inside: a rug, a bench for two with cushions, a hanging lamp, a little shelf with books
+		var doorLantern = add(cg, new THREE.SphereGeometry(0.09, 12, 8), glow("#ffcf6e"), C.door0 - 0.2, 1.75, C.z0 - 0.16, { cast: false });
+		// a doormat on the deck outside
+		add(cg, new THREE.PlaneGeometry(0.9, 0.5), mat("#b0814f", 0.95), (C.door0 + C.door1) / 2, 0.006, C.z0 - 0.4, { rx: -Math.PI / 2, cast: false }).userData.floor = true;
+		// inside: a rug, a loveseat for two along the back wall, a side table with a candle, a hanging lamp, a shelf of
+		// books on the west wall, a heart picture, and fairy lights all round under the eaves
 		add(cg, new THREE.CircleGeometry(0.9, 24), mat("#c77dff", 0.95), cx, 0.006, cz - 0.1, { rx: -Math.PI / 2, cast: false }).userData.floor = true;
-		add(cg, rbox(1.6, 0.42, 0.55, 0.04), woodM, 0.7, 0.21, C.z1 - 0.45);
-		add(cg, rbox(1.6, 0.1, 0.55, 0.04), mat("#e9b4c8", 0.9), 0.7, 0.47, C.z1 - 0.45);
-		for (const [x, c] of [[0.2, "#ffd166"], [0.7, "#ffffff"], [1.2, "#9fb4d8"]]) add(cg, rbox(0.42, 0.36, 0.12, 0.06), mat(c, 0.9), x, 0.72, C.z1 - 0.66, { rx: -0.25, cast: false });
+		const SOFA = { x: 0.7, z: C.z1 - 0.52 };
+		{
+			// built facing +z, turned round to face the door (-z): legs, a base, seat and back cushions, rolled arms, pillows, a throw
+			const sg = group(cg, SOFA.x, 0, SOFA.z, Math.PI);
+			const velvet = mat("#d46a8c", 0.9), deep = mat("#b4506f", 0.9);
+			for (const sx of [-0.85, 0.85]) for (const sz of [-0.33, 0.33]) add(sg, new THREE.CylinderGeometry(0.03, 0.02, 0.1, 8), darkWood, sx, 0.05, sz, { cast: false });
+			add(sg, rbox(1.9, 0.26, 0.84, 0.05), deep, 0, 0.23, 0);
+			for (const sx of [-0.41, 0.41]) add(sg, rbox(0.8, 0.14, 0.66, 0.06), velvet, sx, 0.43, 0.06);
+			add(sg, rbox(1.9, 0.62, 0.2, 0.07), deep, 0, 0.62, -0.32);
+			for (const sx of [-0.41, 0.41]) add(sg, rbox(0.8, 0.44, 0.17, 0.08), velvet, sx, 0.73, -0.17, { rx: -0.12, cast: false });
+			for (const sx of [-0.865, 0.865]) {
+				add(sg, rbox(0.17, 0.58, 0.84, 0.06), deep, sx, 0.39, 0);
+				add(sg, new THREE.CylinderGeometry(0.1, 0.1, 0.84, 14), velvet, sx, 0.68, 0, { rx: Math.PI / 2, cast: false });
+			}
+			add(sg, rbox(0.36, 0.34, 0.12, 0.06), mat("#ffd166", 0.9), -0.58, 0.68, -0.04, { rx: -0.3, rz: 0.25, cast: false });
+			add(sg, rbox(0.36, 0.34, 0.12, 0.06), mat("#9fd8ff", 0.9), 0.58, 0.68, -0.04, { rx: -0.3, rz: -0.25, cast: false });
+			const hp = add(sg, new THREE.ExtrudeGeometry(k.heartShape(0.13), { depth: 0.08, bevelEnabled: true, bevelSize: 0.025, bevelThickness: 0.025, bevelSegments: 2 }), mat("#ff4d6d", 0.85), 0, 0.72, -0.08, { cast: false });
+			hp.geometry.center(); hp.rotation.set(-0.25, 0, Math.PI);
+			// a knitted throw over one arm
+			const throwM = mat("#fff1e6", 0.95);
+			add(sg, rbox(0.3, 0.025, 0.7, 0.01), throwM, 0.87, 0.79, 0.02, { cast: false });
+			add(sg, rbox(0.025, 0.42, 0.7, 0.01), throwM, 1.0, 0.58, 0.02, { cast: false });
+			for (let i = 0; i < 4; i++) add(sg, new THREE.BoxGeometry(0.03, 0.43, 0.04), mat("#ff8fab", 0.9), 1.012, 0.58, -0.28 + i * 0.19, { cast: false });
+			var sofa = sg;
+		}
+		// the side table, with a candle in a little glass lantern
+		{
+			const tx = 2.03, tz = SOFA.z + 0.05;
+			add(cg, new THREE.CylinderGeometry(0.2, 0.2, 0.04, 20), woodM, tx, 0.55, tz);
+			add(cg, new THREE.CylinderGeometry(0.03, 0.04, 0.53, 8), darkWood, tx, 0.27, tz, { cast: false });
+			add(cg, new THREE.CylinderGeometry(0.13, 0.15, 0.03, 16), darkWood, tx, 0.015, tz, { cast: false });
+			add(cg, new THREE.CylinderGeometry(0.06, 0.06, 0.16, 12), new THREE.MeshPhysicalMaterial({ color: "#fff6e0", transparent: true, opacity: 0.35, roughness: 0.05, depthWrite: false }), tx, 0.65, tz, { cast: false });
+			var candle = add(cg, new THREE.SphereGeometry(0.025, 8, 6), glow("#ffb35a"), tx, 0.64, tz, { cast: false });
+			k.box(tx - 0.22, tx + 0.22, tz - 0.22, tz + 0.22);
+		}
 		add(cg, new THREE.CylinderGeometry(0.005, 0.005, 0.5, 4), mat("#333333"), cx, C.h - 0.05, cz, { cast: false });
 		var cabinLamp = add(cg, new THREE.SphereGeometry(0.13, 14, 10), new THREE.MeshStandardMaterial({ color: "#fff1d6", emissive: "#ffb35a", emissiveIntensity: 2.4 }), cx, C.h - 0.38, cz, { cast: false });
-		add(cg, rbox(0.6, 0.05, 0.22, 0.02), woodM, C.x0 + 0.45, 1.2, C.z1 - 0.2, { cast: false });
-		for (let i = 0; i < 5; i++) add(cg, new THREE.BoxGeometry(0.05, 0.18 + (i % 2) * 0.04, 0.14), mat(["#7b2d3b", "#2f3e5c", "#e9c46a", "#2a9d8f", "#e76f51"][i], 0.7), C.x0 + 0.25 + i * 0.07, 1.32, C.z1 - 0.2, { cast: false });
+		// the shelf of books on the west wall
+		add(cg, rbox(0.22, 0.05, 0.8, 0.02), woodM, C.x0 + 0.16, 1.25, 4.95, { cast: false });
+		for (let i = 0; i < 7; i++) { const hgt = 0.18 + (i % 3) * 0.03; add(cg, new THREE.BoxGeometry(0.14, hgt, 0.06), mat(["#7b2d3b", "#2f3e5c", "#e9c46a", "#2a9d8f", "#e76f51", "#c77dff", "#ff8fab"][i], 0.7), C.x0 + 0.16, 1.275 + hgt / 2, 4.65 + i * 0.085, { rx: i === 6 ? 0.25 : 0, cast: false }); }
+		// a heart picture over the loveseat
+		{
+			const pic = canvasTex(256, 200, (c, w, h) => {
+				c.fillStyle = "#fff4e6"; c.fillRect(0, 0, w, h);
+				c.fillStyle = "#ff4d6d"; c.beginPath(); c.moveTo(128, 160); c.bezierCurveTo(30, 100, 60, 30, 128, 70); c.bezierCurveTo(196, 30, 226, 100, 128, 160); c.fill();
+			});
+			add(cg, rbox(0.62, 0.5, 0.03, 0.01), darkWood, SOFA.x, 1.55, C.z1 - 0.1, { cast: false });
+			add(cg, new THREE.PlaneGeometry(0.52, 0.4), mat("#ffffff", 0.8, 0, { map: pic }), SOFA.x, 1.55, C.z1 - 0.12, { ry: Math.PI, cast: false });
+		}
+		// fairy lights under the eaves, inside
+		var cabinLights = [];
+		{
+			const pts = [[C.x0 + 0.1, C.z0 + 0.1], [C.x0 + 0.1, C.z1 - 0.12], [C.x1 - 0.1, C.z1 - 0.12], [C.x1 - 0.1, C.z0 + 0.1]];
+			for (let s = 0; s < 3; s++) {
+				const [a, b] = [pts[s], pts[s + 1]], n = Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.22);
+				for (let i = 0; i <= n; i++) {
+					const u = i / n, m = glow(["#ffd59a", "#ff9ec4", "#bfe6ff"][i % 3]);
+					cabinLights.push(add(cg, new THREE.SphereGeometry(0.025, 6, 4), m, a[0] + (b[0] - a[0]) * u, C.h - 0.14 - Math.abs(Math.sin(u * Math.PI * 3)) * 0.06, a[1] + (b[1] - a[1]) * u, { cast: false }));
+				}
+			}
+		}
 		// a flag on the roof
 		add(cg, new THREE.CylinderGeometry(0.02, 0.02, 1.0, 6), darkWood, C.x1 - 0.2, C.peak + 0.45, cz, { cast: false });
 		var cabinFlag = add(cg, new THREE.PlaneGeometry(0.55, 0.32), mat("#ff4d6d", 0.8, 0, { side: THREE.DoubleSide }), C.x1 + 0.08, C.peak + 0.8, cz, { cast: false });
@@ -284,10 +377,10 @@ export function build(k) {
 		k.wall(C.x1 - 0.08, C.x1 + 0.06, C.z0, C.z1, 0, C.h);
 		k.camWall(C.x0, C.x1, C.z1 - 0.12, C.z1 + 0.05, 0, C.h);
 		k.camWall(C.x0 - 0.3, C.x1 + 0.3, C.z0 - 0.3, C.z1 + 0.3, C.h, C.peak + 0.15);
-		k.box(-0.15, 1.55, C.z1 - 0.75, C.z1);
-		k.spot({ id: "treeCabin0", x: 0.35, z: C.z1 - 0.62, h: Math.PI, y: 0.04 });
-		k.spot({ id: "treeCabin1", x: 1.05, z: C.z1 - 0.62, h: Math.PI, y: 0.04 });
-		k.interact("tree:cabin", { label: "Cuddle up in the treehouse", stand: [0.7, C.z1 - 1.4], sit: ["treeCabin0", "treeCabin1"] }, cg);
+		k.box(SOFA.x - 1.0, SOFA.x + 1.0, SOFA.z - 0.44, C.z1);
+		k.spot({ id: "treeCabin0", x: SOFA.x - 0.41, z: SOFA.z - 0.07, h: Math.PI, y: 0.07 });
+		k.spot({ id: "treeCabin1", x: SOFA.x + 0.41, z: SOFA.z - 0.07, h: Math.PI, y: 0.07 });
+		k.interact("tree:cabin", { label: "Cuddle up on the loveseat", stand: [SOFA.x, SOFA.z - 0.95], sit: ["treeCabin0", "treeCabin1"] }, cg);
 	}
 
 	// ---------------------------------------------------------------- T3: a hammock for two, binoculars, bunting
@@ -558,6 +651,8 @@ export function build(k) {
 		if (hammock) hammock.rotation.x = Math.sin(t * 0.8) * 0.03;
 		cabinLamp.material.emissiveIntensity = 2.2 + Math.sin(t * 2.3) * 0.15 + Math.sin(t * 7.7) * 0.08;
 		doorLantern.scale.setScalar(1 + Math.sin(t * 5.1) * 0.05);
+		candle.scale.set(1, 1.2 + Math.sin(t * 11) * 0.2 + Math.sin(t * 17.3) * 0.1, 1);
+		cabinLights.forEach((m, i) => { m.visible = Math.sin(t * 1.9 + i * 1.7) > -0.6; });
 		// the leaves the camera is in fade away (so you never look out from inside a canopy)
 		const cp = ctx.camera && ctx.camera.position;
 		if (cp) leafFade.forEach(L => {

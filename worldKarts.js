@@ -2,12 +2,12 @@
  * Harmony World — the Bumper Kart Arena: west of the Fun Park, down the path from the gate in its west railing.
  * Outdoors under the night sky, like the park.
  *
- * Local coordinates (origin at world -36.8, -85.8): x -9.2..9.2, z -10.2..11.6. The gate from the park's path is in the
- * east edge (x 9.2) at z -0.8..0.8.
+ * Local coordinates (origin at world -45.6, -119.8): x -20.4..18, z -23.8..23. The gate from the park's path is in the
+ * east edge (x 18) at z -0.8..0.8.
  *
- *   the arena: a rounded checkered floor ringed by stacked tyres with a neon rail along the top, a tyre island in the
- *     middle with a glowing pylon, boost pads on the floor, floodlights on the corners, and a scoreboard of who has
- *     kicked the most karts
+ *   the track: a big rounded checkered ring (32 x 40 m) round a grassy infield, both edged with stacked tyres with a
+ *     neon rail along the top, a glowing pylon in the infield, a start / finish gantry across the east straight, boost
+ *     pads on every straight, floodlights on the corners, and a scoreboard of who has kicked the most karts
  *   the pit along the east side (where you come in): three karts waiting under a canopy; get in and you drive
  *   the stands along the north side: two rows of benches to watch from
  *
@@ -17,35 +17,38 @@
  * spin out, stars fly, and it goes on the scoreboard ("karts:score", shared). Esc gets you out.
  * Everyone with upper === "kart" in the arena gets a kart drawn round them (a pool of them, coloured by who it is).
  */
-const OX = -36.8, OZ = -85.8;                      // = ZONES.karts ox / oz
-const X0 = -9.2, X1 = 9.2, Z0 = -10.2, Z1 = 11.6;
+const OX = -45.6, OZ = -119.8;                     // = ZONES.karts ox / oz
+const X0 = -20.4, X1 = 18.0, Z0 = -23.8, Z1 = 23.0;
 const GATE = { z0: -0.8, z1: 0.8 };
-const A = { x: -1.3, z: -0.4, hx: 7.3, hz: 8.5, rc: 2.6 };    // the arena floor: a rounded rectangle (inside of the tyres)
-const ISLE = { r: 1.3 };                                         // the tyre island in the middle
+const A = { x: -2.0, z: -1.0, hx: 16, hz: 20, rc: 7 };          // the track's outer edge: a rounded rectangle (inside of the tyres)
+const ISLE = { hx: 6.5, hz: 10.5, rc: 4 };                       // the infield (round A's middle): the track is the ring between
 const R = 0.75;                                                  // a kart's bumper (for bumping)
-const PIT = { x: 8.0 };                                          // the pit lane, east of the arena
-const STAND = { z0: 9.05 };                                      // the stands, north of the arena
+const PIT = { x: A.x + A.hx + 2.4 };                             // the pit lane, east of the track
+const STAND = { z0: A.z + A.hz + 1.05 };                         // the stands, north of the track
+const SL = 26;                                                   // how long the stands' benches are
 const TAU = Math.PI * 2;
-const MAX_V = 6, BOOST_V = 11, REV_V = 3;
+const MAX_V = 8.5, BOOST_V = 14, REV_V = 3.5;
 const POOL = 10;
 const COLORS = ["#ff4d6d", "#ffd166", "#06d6a0", "#4cc9f0", "#c77dff", "#ff9e4a", "#f15bb5", "#9ef01a", "#00f5d4", "#fee440"];
 const hashId = s => { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return Math.abs(h); };
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 
-// signed distance from a point (relative to the arena's middle) to the arena's edge (< 0 inside), and the way out
-function sdArena(px, pz, n) {
-	const qx = Math.abs(px) - (A.hx - A.rc), qz = Math.abs(pz) - (A.hz - A.rc);
+// signed distance from a point (relative to the track's middle) to the edge of a rounded rectangle S (A: the outer
+// edge, ISLE: the infield) (< 0 inside), and the way out
+function sdArena(px, pz, n, S = A) {
+	const qx = Math.abs(px) - (S.hx - S.rc), qz = Math.abs(pz) - (S.hz - S.rc);
 	const out = Math.hypot(Math.max(qx, 0), Math.max(qz, 0)), inn = Math.min(Math.max(qx, qz), 0);
 	if (n) {
 		if (qx > 0 && qz > 0) { n.x = qx / out * Math.sign(px); n.z = qz / out * Math.sign(pz); }
 		else if (qx > qz) { n.x = Math.sign(px) || 1; n.z = 0; }
 		else { n.x = 0; n.z = Math.sign(pz) || 1; }
 	}
-	return out + inn - A.rc;
+	return out + inn - S.rc;
 }
-// points round the arena's edge, off pushed out from it, about every `step` metres (closed loop, local coordinates)
-function rimPoints(off, step) {
-	const r = A.rc + off, cx = A.hx - A.rc, cz = A.hz - A.rc, dense = [];
+// points round a rounded rectangle's edge (round the track's middle), off pushed out from it, about every `step`
+// metres (closed loop, local coordinates)
+function rimPoints(off, step, S = A) {
+	const r = S.rc + off, cx = S.hx - S.rc, cz = S.hz - S.rc, dense = [];
 	const corners = [[cx, cz, 0], [-cx, cz, Math.PI / 2], [-cx, -cz, Math.PI], [cx, -cz, Math.PI * 1.5]];
 	for (const [x, z, a0] of corners) for (let i = 0; i <= 16; i++) { const a = a0 + i / 16 * Math.PI / 2; dense.push([A.x + x + Math.cos(a) * r, A.z + z + Math.sin(a) * r]); }
 	const segs = dense.map((p, i) => { const q = dense[(i + 1) % dense.length]; return Math.hypot(q[0] - p[0], q[1] - p[1]); });
@@ -67,7 +70,7 @@ export function build(k) {
 	k.walk(PIT.x - 1.0, X1 - 0.15, Z0 + 0.15, Z1 - 0.15);          // the pit lane (east)
 	k.walk(X0 + 0.15, X1 - 0.15, STAND.z0, Z1 - 0.15);              // round the stands (north)
 	k.walk(X1 - 1.2, X1 + 0.8, GATE.z0, GATE.z1);                    // in through the gate from the park (past the line: no seam)
-	k.cam = { minX: X0 - 3, maxX: X1 + 3, minZ: Z0 - 3, maxZ: Z1 + 3, maxY: 14, minY: 0.2 };
+	k.cam = { minX: X0 - 3, maxX: X1 + 3, minZ: Z0 - 3, maxZ: Z1 + 3, maxY: 22, minY: 0.2 };
 	const glow = c => new THREE.MeshBasicMaterial({ color: c, toneMapped: false });
 	const sign = (text, o) => new THREE.MeshBasicMaterial({ map: k.tex.text(text, Object.assign({ w: 1024, h: 256 }, o)), transparent: true, depthWrite: false, toneMapped: false });
 	const me = () => ctx.me();
@@ -76,8 +79,8 @@ export function build(k) {
 	// the camera can't pass through the solid things (tyre wall, stands, canopy, scoreboard); the arena stays open above
 	const camWall = (x0, x1, z0, z1, y0, y1) => (k.camWall ? k.camWall(x0, x1, z0, z1, y0, y1) : null);
 	// the arena's outline (a rounded rectangle round its middle), for the floor and the hole in the paving round it
-	const arenaPath = (path, r0) => {
-		const cx = A.hx - A.rc, cz = A.hz - A.rc, r = A.rc + r0, ox = A.x, oy = -A.z;   // (shape y = -z: it's laid flat with rx -PI/2)
+	const arenaPath = (path, r0, S = A) => {
+		const cx = S.hx - S.rc, cz = S.hz - S.rc, r = S.rc + r0, ox = A.x, oy = -A.z;   // (shape y = -z: it's laid flat with rx -PI/2)
 		path.moveTo(ox + cx + r, oy - cz);
 		path.absarc(ox + cx, oy + cz, r, 0, Math.PI / 2, false);
 		path.absarc(ox - cx, oy + cz, r, Math.PI / 2, Math.PI, false);
@@ -106,8 +109,26 @@ export function build(k) {
 		// (exactly the hole in the paving, running in under the tyres: no gap at the seam, no overlap to flicker)
 		const fl = add(g, new THREE.ShapeGeometry(arenaPath(new THREE.Shape(), 0.25), 12), mat("#ffffff", 0.55, 0.1, { map: checks }), 0, 0.002, 0, { rx: -Math.PI / 2, cast: false });
 		fl.userData.floor = true;
-		// a glowing ring painted round the middle (painted marks sit 2 cm up, so they never flicker into the floor)
-		add(g, new THREE.RingGeometry(4.0, 4.12, 64), glow("#4cc9f0"), A.x, 0.02, A.z, { rx: -Math.PI / 2, cast: false, receive: false });
+		// the infield: a lawn in the middle of the ring (1 cm up: it never flickers into the floor under it)
+		const turf = canvasTex(256, 256, (c, w, h) => {
+			c.fillStyle = "#2f5a2c"; c.fillRect(0, 0, w, h);
+			for (let i = 0; i < 2600; i++) { c.fillStyle = Math.random() < 0.5 ? "rgba(110,170,90,0.35)" : "rgba(20,50,20,0.35)"; c.fillRect(Math.random() * w, Math.random() * h, 1.5, 4); }
+		}, 0.4, 0.4);
+		add(g, new THREE.ShapeGeometry(arenaPath(new THREE.Shape(), -0.25, ISLE), 12), mat("#ffffff", 0.95, 0, { map: turf }), 0, 0.01, 0, { rx: -Math.PI / 2, cast: false }).userData.floor = true;
+		// glowing lines painted along both edges of the track (painted marks sit 2 cm up, so they never flicker into the floor)
+		for (const [off, S] of [[-0.7, A], [0.7, ISLE]]) {
+			const pts = rimPoints(off, 0.5, S).map(([x, z]) => new THREE.Vector3(x, 0.02, z));
+			add(g, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), pts.length * 2, 0.05, 4, true), glow("#4cc9f0"), 0, 0, 0, { cast: false, receive: false });
+		}
+		// the start / finish line across the east straight: a checkered strip, and a gantry over it
+		const flagTex = canvasTex(256, 64, (c, w, h) => { for (let j = 0; j < 2; j++) for (let i = 0; i < 16; i++) { c.fillStyle = (i + j) % 2 ? "#111111" : "#f4efe8"; c.fillRect(i * w / 16, j * h / 2, w / 16, h / 2); } });
+		const x0 = A.x + ISLE.hx, x1 = A.x + A.hx;
+		add(g, new THREE.PlaneGeometry(x1 - x0, 1.2), mat("#ffffff", 0.6, 0, { map: flagTex }), (x0 + x1) / 2, 0.022, A.z, { rx: -Math.PI / 2, cast: false });
+		const gm = mat("#2e2b2b", 0.4, 0.6);
+		for (const x of [x0 - 0.7, x1 + 1.0]) { add(g, new THREE.CylinderGeometry(0.12, 0.15, 5.2, 12), gm, x, 2.6, A.z); k.box(x - 0.2, x + 0.2, A.z - 0.2, A.z + 0.2); }
+		add(g, rbox(x1 - x0 + 2.0, 0.9, 0.2, 0.06), dark, (x0 + x1) / 2 + 0.15, 4.9, A.z);
+		for (const s of [-1, 1]) add(g, new THREE.PlaneGeometry(x1 - x0 + 1.4, 0.75), sign("START  /  FINISH", { color: "#ffffff", glow: "#f15bb5", font: "900 120px Nunito, 'Segoe UI', sans-serif" }), (x0 + x1) / 2 + 0.15, 4.9, A.z + s * 0.11, { ry: s > 0 ? 0 : Math.PI, cast: false, receive: false });
+		camWall(x0 - 0.9, x1 + 1.2, A.z - 0.2, A.z + 0.2, 4.4, 5.4);
 	}
 
 	// ================================================================ a glass railing round the edge (it stands on the lawn), open at the gate
@@ -156,26 +177,30 @@ export function build(k) {
 		const low = rimPoints(-0.02, 0.5).map(([x, z]) => new THREE.Vector3(x, 0.04, z));
 		add(g, new THREE.TubeGeometry(new THREE.CatmullRomCurve3(low, true), low.length * 2, 0.03, 5, true), glow("#4cc9f0"), 0, 0, 0, { cast: false, receive: false });
 	}
-	// the island in the middle: a ring of tyres, a striped pylon with a light on top
+	// the infield: a wall of yellow and black tyres round its edge (two high), a big striped pylon with a light on top
 	var pylonBall;
 	{
-		const n = 12, ig = group(g, A.x, 0, A.z);
-		const tyres = new THREE.InstancedMesh(tyreGeo, tyreM, n * 2);
-		for (let i = 0; i < n; i++) for (let l = 0; l < 2; l++) {
-			const a = (i + l * 0.5) / n * TAU;
-			d.position.set(Math.sin(a) * (ISLE.r - 0.4), 0.13 + l * 0.26, Math.cos(a) * (ISLE.r - 0.4)); d.rotation.set(Math.PI / 2, 0, 0); d.updateMatrix();
-			tyres.setMatrixAt(i * 2 + l, d.matrix); tyres.setColorAt(i * 2 + l, col.set((i + l) % 2 ? "#ffd166" : "#26232c"));
-		}
+		const pts = rimPoints(-0.45, 0.92, ISLE);
+		const tyres = new THREE.InstancedMesh(tyreGeo, tyreM, pts.length * 2);
+		pts.forEach(([x, z], i) => {
+			for (let l = 0; l < 2; l++) {
+				d.position.set(x, 0.13 + l * 0.26, z); d.rotation.set(Math.PI / 2, 0, 0); d.updateMatrix();
+				tyres.setMatrixAt(i * 2 + l, d.matrix); tyres.setColorAt(i * 2 + l, col.set((i + l) % 2 ? "#ffd166" : "#26232c"));
+			}
+		});
 		tyres.castShadow = false;
-		ig.add(tyres);
-		add(ig, new THREE.CylinderGeometry(ISLE.r - 0.75, ISLE.r - 0.7, 0.4, 20), mat("#3a2f4a", 0.7), 0, 0.2, 0);
-		camWall(A.x - 0.95, A.x + 0.95, A.z - 0.95, A.z + 0.95, 0, 0.6);
+		g.add(tyres);
+		rimPoints(-0.45, 1.4, ISLE).forEach(([x, z]) => camWall(x - 0.55, x + 0.55, z - 0.55, z + 0.55, 0, 0.66));
+		const ig = group(g, A.x, 0, A.z);
+		add(ig, new THREE.CylinderGeometry(0.7, 0.8, 0.4, 20), mat("#3a2f4a", 0.7), 0, 0.2, 0);
 		const stripe = canvasTex(64, 256, (c, w, h) => { for (let i = 0; i < 8; i++) { c.fillStyle = i % 2 ? "#ffffff" : "#ff4d6d"; c.fillRect(0, i * h / 8, w, h / 8 + 1); } });
-		add(ig, new THREE.ConeGeometry(0.32, 2.4, 16), mat("#ffffff", 0.5, 0, { map: stripe }), 0, 1.6, 0);
-		pylonBall = add(ig, new THREE.SphereGeometry(0.16, 14, 10), glow("#ffd166"), 0, 2.9, 0, { cast: false });
+		add(ig, new THREE.ConeGeometry(0.55, 4.2, 16), mat("#ffffff", 0.5, 0, { map: stripe }), 0, 2.5, 0);
+		pylonBall = add(ig, new THREE.SphereGeometry(0.26, 14, 10), glow("#ffd166"), 0, 4.75, 0, { cast: false });
 	}
-	// boost pads: drive over one and it shoves you forward
-	const PADS = [[A.x + 4.4, A.z, 0], [A.x - 4.4, A.z, Math.PI], [A.x, A.z + 5.6, -Math.PI / 2], [A.x, A.z - 5.6, Math.PI / 2]];
+	// boost pads: drive over one and it shoves you forward (on every straight, pointing the way round the ring)
+	const MX = (ISLE.hx + A.hx) / 2, MZ = (ISLE.hz + A.hz) / 2;
+	const PADS = [[A.x + MX, A.z - 6, 0], [A.x - MX, A.z + 6, Math.PI], [A.x + 4, A.z + MZ, -Math.PI / 2], [A.x - 4, A.z - MZ, Math.PI / 2],
+		[A.x + MX, A.z + 9, 0], [A.x - MX, A.z - 9, Math.PI]];
 	const padMats = [];
 	{
 		const chev = canvasTex(256, 256, (c, w, h) => {
@@ -196,13 +221,13 @@ export function build(k) {
 	for (const [sx, sz] of [[1, 1], [-1, 1], [-1, -1], [1, -1]]) {
 		const x = A.x + sx * (A.hx + 0.35), z = A.z + sz * (A.hz + 0.35);
 		const fg = group(g, x, 0, z, Math.atan2(A.x - x, A.z - z));
-		add(fg, new THREE.CylinderGeometry(0.08, 0.12, 7.0, 10), mat("#3e3a3a", 0.4, 0.6), 0, 3.5, 0);
-		add(fg, rbox(1.1, 0.5, 0.25, 0.04), dark, 0, 7.1, 0.15, { rx: 0.5 });
-		const head = add(fg, new THREE.PlaneGeometry(0.95, 0.38), glow("#fff6e0"), 0, 7.08, 0.29, { rx: 0.5, cast: false, receive: false });
+		add(fg, new THREE.CylinderGeometry(0.1, 0.16, 11.0, 10), mat("#3e3a3a", 0.4, 0.6), 0, 5.5, 0);
+		add(fg, rbox(1.8, 0.7, 0.3, 0.05), dark, 0, 11.1, 0.15, { rx: 0.5 });
+		const head = add(fg, new THREE.PlaneGeometry(1.6, 0.55), glow("#fff6e0"), 0, 11.08, 0.31, { rx: 0.5, cast: false, receive: false });
 		floodHeads.push(head);
-		// a soft beam of light down onto the arena
-		const beam = new THREE.Mesh(new THREE.ConeGeometry(2.6, 7.4, 20, 1, true), new THREE.MeshBasicMaterial({ color: "#fff3d6", transparent: true, opacity: 0.05, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false }));
-		beam.position.set(0, 3.5, 2.0); beam.rotation.x = -0.5;
+		// a soft beam of light down onto the track
+		const beam = new THREE.Mesh(new THREE.ConeGeometry(4.6, 12.5, 20, 1, true), new THREE.MeshBasicMaterial({ color: "#fff3d6", transparent: true, opacity: 0.05, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, toneMapped: false }));
+		beam.position.set(0, 5.6, 3.4); beam.rotation.x = -0.5;
 		beam.castShadow = false; beam.receiveShadow = false; beam.renderOrder = 3;
 		fg.add(beam);
 		k.box(x - 0.15, x + 0.15, z - 0.15, z + 0.15);
@@ -276,20 +301,21 @@ export function build(k) {
 	// the stands: two rows of benches facing the arena
 	{
 		const wood = mat("#8a5a3c", 0.55), iron = mat("#2e2b2b", 0.5, 0.5);
-		[9.75, 10.95].forEach((z, row) => {
+		[STAND.z0 + 0.7, STAND.z0 + 1.9].forEach((z, row) => {
 			const ids = [];
-			const bg = group(g, -1.3, 0.04, z, Math.PI);
-			add(bg, rbox(12.6, 0.07, 0.42, 0.02), wood, 0, 0.42, 0);
-			add(bg, rbox(12.6, 0.4, 0.06, 0.02), wood, 0, 0.72, -0.2, { rx: -0.12 });
-			for (let i = 0; i < 7; i++) add(bg, rbox(0.06, 0.42, 0.38, 0.02), iron, -6.2 + i * 2.07, 0.21, 0);
-			for (let i = 0; i < 6; i++) {
-				const id = "kartStand" + row + i, x = -6.3 + i * 2.0 + row * 0.6;
+			const bg = group(g, A.x, 0.04, z, Math.PI);
+			add(bg, rbox(SL, 0.07, 0.42, 0.02), wood, 0, 0.42, 0);
+			add(bg, rbox(SL, 0.4, 0.06, 0.02), wood, 0, 0.72, -0.2, { rx: -0.12 });
+			const nLegs = Math.round(SL / 2) + 1;
+			for (let i = 0; i < nLegs; i++) add(bg, rbox(0.06, 0.42, 0.38, 0.02), iron, -SL / 2 + 0.1 + i * (SL - 0.2) / (nLegs - 1), 0.21, 0);
+			for (let i = 0; i < 12; i++) {
+				const id = "kartStand" + row + i, x = A.x - 11.3 + i * 2.0 + row * 0.6;
 				k.spot({ id, x, z: z - 0.05, y: 0.04, h: Math.PI });
 				ids.push(id);
 			}
-			k.box(-7.7, 5.1, z - 0.25, z + 0.25);
-			camWall(-7.7, 5.1, z - 0.3, z + 0.3, 0, 0.95);
-			k.interact("karts:stand" + row, { label: "Watch from the stands", stand: [-1.3, z - 0.55], sit: ids, reach: 6.5 }, bg);
+			k.box(A.x - SL / 2 - 0.1, A.x + SL / 2 + 0.1, z - 0.25, z + 0.25);
+			camWall(A.x - SL / 2 - 0.1, A.x + SL / 2 + 0.1, z - 0.3, z + 0.3, 0, 0.95);
+			k.interact("karts:stand" + row, { label: "Watch from the stands", stand: [A.x, z - 0.55], sit: ids, reach: 14 }, bg);
 		});
 	}
 	// the scoreboard (south side, facing the arena and the stands)
@@ -297,10 +323,10 @@ export function build(k) {
 	const boardTex = new THREE.CanvasTexture(boardC); boardTex.colorSpace = THREE.SRGBColorSpace;
 	{
 		const sb = group(g, A.x, 0, A.z - A.hz - 1.15);
-		for (const sx of [-1.9, 1.9]) add(sb, new THREE.CylinderGeometry(0.07, 0.08, 4.8, 10), mat("#3e3a3a", 0.4, 0.6), sx, 2.4, 0);
-		add(sb, rbox(4.3, 2.3, 0.14, 0.06), dark, 0, 3.55, -0.04);
-		add(sb, new THREE.PlaneGeometry(4.1, 2.05), new THREE.MeshBasicMaterial({ map: boardTex, toneMapped: false }), 0, 3.55, 0.035, { cast: false, receive: false });
-		camWall(A.x - 2.2, A.x + 2.2, A.z - A.hz - 1.3, A.z - A.hz - 1.0, 2.35, 4.75);
+		for (const sx of [-3.0, 3.0]) { add(sb, new THREE.CylinderGeometry(0.1, 0.12, 7.2, 10), mat("#3e3a3a", 0.4, 0.6), sx, 3.6, 0); k.box(A.x + sx - 0.15, A.x + sx + 0.15, A.z - A.hz - 1.3, A.z - A.hz - 1.0); }
+		add(sb, rbox(6.9, 3.7, 0.16, 0.08), dark, 0, 5.2, -0.04);
+		add(sb, new THREE.PlaneGeometry(6.6, 3.3), new THREE.MeshBasicMaterial({ map: boardTex, toneMapped: false }), 0, 5.2, 0.045, { cast: false, receive: false });
+		camWall(A.x - 3.5, A.x + 3.5, A.z - A.hz - 1.3, A.z - A.hz - 1.0, 3.3, 7.1);
 	}
 	let boardSig = "";
 	function drawBoard() {
@@ -402,7 +428,10 @@ export function build(k) {
 	// K: { x, z (local), h, vx, vz, spin, spinDir, cool, boostT, pad, hits: Map id -> time, engT }
 	let K = null;
 	const _n = { x: 0, z: 0 };
-	const startSpots = [[4.6, -6.2], [4.6, -3.1], [4.6, 3.1], [4.6, 6.2], [-6.2, -6.2], [-6.2, 6.2], [-1.3, 6.8], [-1.3, -7.6]];
+	// (on the grid behind the start line, and round the ring; you face the way round)
+	const startSpots = [[A.x + 9.2, A.z - 3], [A.x + 13.4, A.z - 3], [A.x + 9.2, A.z - 6.5], [A.x + 13.4, A.z - 6.5],
+		[A.x - MX, A.z + 3], [A.x - 4, A.z + MZ], [A.x + 4, A.z - MZ], [A.x - MX, A.z - 3]];
+	const roundH = (x, z) => Math.atan2(z - A.z, -(x - A.x));
 	// where everyone else's kart is (local), for bumping: from their drawn avatars, with a velocity worked out frame to frame
 	const others = new Map();   // id -> { x, z, vx, vz, name, seen }
 	function drivingNow() {
@@ -426,7 +455,7 @@ export function build(k) {
 		// the start spot furthest from everyone already driving
 		let best = startSpots[0], bd = -1;
 		for (const s of startSpots) { let dmin = 99; for (const o of taken) dmin = Math.min(dmin, Math.hypot(o.x - s[0], o.z - s[1])); if (dmin > bd) { bd = dmin; best = s; } }
-		const h = Math.atan2(A.x - best[0], A.z - best[1]);
+		const h = roundH(best[0], best[1]);
 		K = { x: best[0], z: best[1], h, vx: 0, vz: 0, spin: 0, spinDir: 1, cool: 0, boostT: 0, pad: -1, hits: new Map(), engT: 0, honkT: 0, boostHeld: false };
 		m.target = null; if (m.path) m.path = [];
 		m.anim = "sit"; m.upper = "kart"; m.upperUntil = 0; m.sit = null;
@@ -442,7 +471,7 @@ export function build(k) {
 		if (m.upper === "kart") m.upper = null;
 		m.anim = "idle"; m.speed = 0;
 		// out into the pit lane, level with where you were (but not in among the parked karts)
-		m.x = OX + PIT.x - 0.4; m.z = OZ + clamp(z, -0.6, 8.4);
+		m.x = OX + PIT.x - 0.4; m.z = OZ + clamp(z, -0.6, 18);
 		m.h = Math.PI / 2;
 		ctx.sendPose(true);
 		if (!quiet) ctx.sfx("door", 0.3);
@@ -509,12 +538,12 @@ export function build(k) {
 				if (vn > 1.6 && performance.now() / 1000 - (K.wallT || 0) > 0.25) { K.wallT = performance.now() / 1000; ctx.sfx("thunk", Math.min(0.7, 0.2 + vn * 0.08)); burst(K.x + _n.x * R, 0.4, K.z + _n.z * R, Math.round(4 + vn * 2), "#f15bb5", 2 + vn * 0.3); }
 			}
 		}
-		// the island
+		// the infield's tyres
 		{
-			const dx = K.x - A.x, dz = K.z - A.z, dd = Math.hypot(dx, dz) || 0.001, lim = ISLE.r + R - 0.15;
-			if (dd < lim) {
-				const nx = dx / dd, nz = dz / dd;
-				K.x = A.x + nx * lim; K.z = A.z + nz * lim;
+			const si = sdArena(K.x - A.x, K.z - A.z, _n, ISLE), lim = R - 0.1;
+			if (si < lim) {
+				const nx = _n.x, nz = _n.z;
+				K.x += nx * (lim - si); K.z += nz * (lim - si);
 				const vn = K.vx * nx + K.vz * nz;
 				if (vn < 0) {
 					const e = vn < -1.6 ? 1.5 : 1.0;

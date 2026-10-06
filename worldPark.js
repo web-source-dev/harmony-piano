@@ -2,7 +2,7 @@
  * Harmony World — the Fun Park: a big amusement park at the south end of the grounds (down the path from the
  * garden's south gate). Outdoors under the night sky, like the pool and the garden.
  *
- * Local coordinates (origin at world 13, -92): x -20.6..20.6, z -18..17.9 (world x -7.6..33.6, z -110..-74.1).
+ * Local coordinates (origin at world 13, -126): x -20.6..20.6, z -18..17.9 (world x -7.6..33.6, z -144..-108.1).
  * The gate from the path to the garden is in the north edge at x 6.1..7.9.
  *
  *   the Moonlight Express: a roller coaster that leaves its station along the south edge, climbs a lift hill and runs
@@ -22,7 +22,7 @@
  * Riding is sitting: each ride seat is a sit spot with a ride(pos, quat) function that world.js calls to carry
  * your body along (see placeAvatar); the camera rides with you (F switches between your own eyes and from behind).
  */
-const OX = 13.0, OZ = -92.0;                       // = ZONES.park ox / oz
+const OX = 13.0, OZ = -126.0;                      // = ZONES.park ox / oz
 const X0 = -20.6, X1 = 20.6, Z0 = -18.0, Z1 = 17.9;
 const GATE = { x0: 6.1, x1: 7.9 };                 // in line with the garden's south gate (world x 19.1..20.9), up the path
 const KGATE = { z0: 5.4, z1: 7.0 };                // the gate in the west railing, out to the Bumper Karts (worldKarts.js)
@@ -51,18 +51,18 @@ const mod = (a, n) => ((a % n) + n) % n;
 // (exported: the grounds keep their trees and lamps out from under it)
 export function trackPoints() {
 	const pts = [
-		[8, 0.2, -107.8], [2, 0.2, -107.8], [-4, 1.2, -107.6], [-11, 4.6, -107], [-19, 10, -106.5], [-28, 15.5, -107.5],
-		[-36, 18, -110],                                                // the top of the lift hill
-		[-46, 16.5, -113], [-56, 8, -110], [-62, 4, -100], [-62.5, 3, -88], [-62, 9, -76], [-61, 12, -64], [-62, 6, -52],
-		[-61.5, 8.5, -40], [-62, 11, -28], [-60, 12, -14], [-58, 7, -2], [-54, 9.5, 10], [-46, 12, 21],
-		[-36, 10, 28.5], [-24, 6, 31.5], [-9, 2.8, 30.6]                // round the north-west corner, down to the loop
+		[8, 0.2, -141.8], [2, 0.2, -141.8], [-4, 1.2, -141.6], [-11, 4.6, -142.5], [-19, 10, -145.5], [-28, 15.5, -150],
+		[-37, 18, -154],                                                // the top of the lift hill (south of the kart arena)
+		[-48, 16.5, -157], [-60, 10, -156], [-72, 5, -150], [-80, 4, -138], [-80.5, 3, -124], [-80, 9, -110], [-79, 12, -96],
+		[-80, 6, -82], [-79.5, 8.5, -68], [-80, 11, -54], [-79.5, 12, -40], [-79, 8, -27], [-77, 10, -14], [-74, 7, -2],
+		[-68, 9.5, 10], [-58, 12, 21], [-44, 10, 28.5], [-26, 6, 31.5], [-9, 2.8, 30.6]   // round the north-west corner, down to the loop
 	];
 	// the loop (behind the house): a circle in the x-y plane, sliding sideways a little so the way out passes the way in
 	const LC = { x: -1, y: 8, r: 5.2 };
 	for (let i = 0; i <= 8; i++) { const a = i / 8 * TAU; pts.push([LC.x + LC.r * Math.sin(a), LC.y - LC.r * Math.cos(a), 31 + 3 * i / 8]); }
 	pts.push([7, 2.8, 34.4], [15, 6, 34], [25, 12.5, 32], [37, 11, 30.5], [44.5, 8, 21], [45, 4, 8], [44.5, 10.5, -5], [45, 4.5, -19],
-		[44, 9, -32], [45, 11, -45], [44.5, 6, -57], [45, 9, -69], [44, 12, -81], [42, 7, -93], [38, 3, -102], [33, 2.0, -106.6],
-		[26, 0.2, -107.8], [17, 0.2, -107.8]);
+		[44, 9, -32], [45, 11, -45], [44.5, 6, -57], [45, 9, -69], [44, 9, -81], [45, 6, -93], [44.5, 8, -105], [44, 7.5, -117],
+		[42, 7, -127], [38, 3, -136], [33, 2.0, -140.6], [26, 0.2, -141.8], [17, 0.2, -141.8]);
 	return pts;
 }
 const LOOP_IN = [-9, 2.8, 30.6], LOOP_OUT = [7, 2.8, 34.4];
@@ -235,7 +235,7 @@ export function build(k) {
 	const V = new Float32Array(N);
 	for (let i = 0; i < N; i++) {
 		const s = i * DS, rem = L - s;
-		let v = i <= iCrest ? Math.min(vLift, 0.9 + s * 0.45) : Math.sqrt(Math.max(9, vLift * vLift + 2 * GRAV * (yCrest - P[i].y) - 2 * 0.011 * GRAV * (s - sCrest)));
+		let v = i <= iCrest ? Math.min(vLift, 0.9 + s * 0.45) : Math.sqrt(Math.max(9, vLift * vLift + 2 * GRAV * (yCrest - P[i].y) - 2 * 0.008 * GRAV * (s - sCrest)));
 		if (rem < 50) v = Math.min(v, 1.2 + rem * 0.22);
 		if (rem < 6) v = Math.min(v, 0.5 + rem * 0.12);
 		V[i] = v;

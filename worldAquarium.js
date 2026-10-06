@@ -593,16 +593,20 @@ export function build(k) {
 	k.hemi = 0.25; k.env = 0.15; k.exposure = 1.0;
 
 	// ================================================================ every frame
-	const inside = () => { const m = ctx.me(); return m.x > -31 && m.x < -7.6 && m.z > -19.6 && m.z < -8.9; };
+	// (in local coordinates, worked out from wherever the building stands: the doorway is at local (11.7, 0))
+	const local = (x, z) => [x - k.ox, z - k.oz];
+	const inside = () => { const m = ctx.me(), [x, z] = local(m.x, m.z); return x > -11.8 && x < 11.8 && z > -6.1 && z < 4.8; };
 	const _p = new THREE.Vector3(), _q = new THREE.Vector3(), _w = new THREE.Quaternion(), _wq = new THREE.Quaternion();
 	const inner = new THREE.Group();
 	g.add(inner);
 	[...g.children].forEach(c => { if (!shellKids.has(c) && c !== inner) inner.add(c); });
-	// (me: world coordinates; the door is at world (-7.6, -13.6)) - and wherever the camera is looking in from
+	// (me near the doorway, or inside) - and wherever the camera is looking in from
 	const near = () => {
-		const m = ctx.me(), c = ctx.camera && ctx.camera.position;
-		if (inside() || Math.hypot(m.x + 7.6, m.z + 13.6) < 10) return true;
-		return !!c && c.x > -31.5 && c.x < -4 && c.z > -20 && c.z < -8.5 && c.y < HB;
+		const m = ctx.me(), c = ctx.camera && ctx.camera.position, [mx, mz] = local(m.x, m.z);
+		if (inside() || Math.hypot(mx - 11.7, mz) < 12) return true;
+		if (!c) return false;
+		const [cx, cz] = local(c.x, c.z);
+		return cx > -12.2 && cx < 16 && cz > -6.5 && cz < 5.2 && c.y < HB;
 	};
 	let boardT = 9, sfxT = 3, wasOn = null, prevChest = 0;
 	function update(dt, t) {

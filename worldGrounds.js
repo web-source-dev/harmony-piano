@@ -29,14 +29,14 @@ const TERRACE_OVER = [-7 + TERRACE_AT[0] - 0.4, 5.5 + TERRACE_AT[0] + 0.4, -12 +
 const TERRACE_GAP = [-19.3, -17.3];
 // where each place's own floor is (the lawn stops at its edge)
 const FOOT = [
-	[-7.0, 33.6, -50.1, -38.1], [-7.0, 5.45, -38.1, -32.1],     // the garden
-	[-7.6, 33.6, -110.0, -74.1],                                  // the Fun Park
-	[-46.0, -27.6, -96.0, -74.2],                                 // the kart arena
+	[-7.0, 33.6, -84.1, -38.1], [-7.0, 5.45, -38.1, -32.1],     // the garden
+	[-7.6, 33.6, -144.0, -108.1],                                 // the Fun Park
+	[-66.0, -27.6, -143.6, -96.8],                                // the kart arena
 	[-53.0, -29.6, -27.5, -16.8],                                 // the Aquarium
 	[-53.0, -29.6, -50.1, -39.7]                                  // the Haunted Mansion
 ];
 // the zipline from the treehouse (over the garden) to the pool deck: nothing tall under it
-const ZIP = [[23.05, -39.5], [16.8, -7.0]];
+const ZIP = [[23.05, -57.5], [16.8, -7.0]];
 const LAWN_Y = -0.02, PATH_Y = 0.012;
 const segDist = (a, b, x, z) => pathDist([a[0], a[1], b[0], b[1]], x, z);
 
@@ -211,10 +211,10 @@ export function build(k) {
 		const BENCHES = [
 			[3.5, -23.25, Math.PI], [3.5, -29.75, 0],          // at the plaza, facing the sculpture
 			[-12.0, -23.6, 0], [26.0, -23.6, 0],               // along the cross walk, facing the house
-			[-17.8, -52.0, -Math.PI / 2], [-17.8, -73.0, -Math.PI / 2],   // the west avenue
-			[37.1, 6.0, Math.PI / 2], [37.1, -40.0, Math.PI / 2],         // the east walk
+			[-17.8, -52.0, -Math.PI / 2], [-17.8, -73.0, -Math.PI / 2], [-17.8, -104.0, -Math.PI / 2],   // the west avenue
+			[37.1, 6.0, Math.PI / 2], [37.1, -40.0, Math.PI / 2], [37.1, -76.0, Math.PI / 2],             // the east walk
 			[-6.0, 31.1, Math.PI], [24.0, 31.1, Math.PI],      // behind the house (across the path, facing it)
-			[6.0, -60.1, Math.PI]                              // the south walk
+			[6.0, -94.1, Math.PI], [-12.0, -94.1, Math.PI]     // the south walk
 		];
 		BENCHES.forEach(([x, z, h], i) => {
 			const b = group(g, x, 0, z, h);
@@ -237,10 +237,10 @@ export function build(k) {
 	// ================================================================ signposts at the crossings
 	{
 		const DEST = [
-			["House & Pool", 11.3, -12.0], ["Garden & Treehouse", 13.0, -41.0], ["Fun Park", 20.0, -76.0],
-			["Aquarium", -31.0, -21.5], ["Haunted Mansion", -31.0, -41.65], ["Bumper Karts", -29.0, -85.8]
+			["House & Pool", 11.3, -12.0], ["Garden & Treehouse", 13.0, -41.0], ["Fun Park", 20.0, -110.0],
+			["Aquarium", -31.0, -21.5], ["Haunted Mansion", -31.0, -41.65], ["Bumper Karts", -29.0, -119.8]
 		];
-		const SIGNS = [[-4.75, -21.5], [11.3, -21.5], [-20.0, -21.5], [-20.0, -41.65], [-20.0, -62.0], [20.0, -62.0], [39.0, -21.5], [-20.0, -85.8]];
+		const SIGNS = [[-4.75, -21.5], [11.3, -21.5], [-20.0, -21.5], [-20.0, -41.65], [-20.0, -96.0], [20.0, -96.0], [39.0, -21.5], [39.0, -96.0], [-20.0, -119.8]];
 		const postM = mat("#2e2a31", 0.5, 0.3);
 		const arrow = (c, x, y, ang, s) => {
 			c.save(); c.translate(x, y); c.rotate(ang);
@@ -347,7 +347,7 @@ export function build(k) {
 		avenue(PATHS[12], [-1], 11, 2.6);          // the west side of the house (the far side)
 		avenue(PATHS[2], [-1], 12, 2.8);           // the cross walk (its south side: the house side stays open)
 		// groves: clusters scattered through the open lawn
-		for (let c = 0; c < 26; c++) {
+		for (let c = 0; c < 40; c++) {
 			const cx = ESTATE[0] + 6 + R() * (ESTATE[1] - ESTATE[0] - 12), cz = ESTATE[2] + 6 + R() * (ESTATE[3] - ESTATE[2] - 12);
 			const n = 3 + Math.floor(R() * 5);
 			for (let i = 0; i < n * 3 && n > 0; i++) {
