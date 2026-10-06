@@ -223,6 +223,23 @@ export class WorldAudio {
 			case "thunk": noise(0.05, 900, 2, 0.25); tone(320, 200, 0.06, "sine", 0.15); break;
 			case "applause": for (let i = 0; i < 26; i++) noise(0.05, 1500 + Math.random() * 1500, 0.9, 0.12 + Math.random() * 0.1, Math.random() * 1.6); break;
 			case "yes": [0, 4, 7, 12, 16, 19, 24].forEach((n, i) => tone(mtof(67 + n), 0, 0.9, "triangle", 0.09, i * 0.09)); noise(0.8, 6000, 0.5, 0.05, 0.6, "highpass"); break;
+			// the haunted mansion: a shriek, a wavering ghostly "wooo", a door creak, a heartbeat
+			case "scream": tone(1250, 2100, 0.35, "sawtooth", 0.07); tone(1900, 900, 0.7, "sawtooth", 0.06, 0.3); noise(0.9, 2600, 1.2, 0.12, 0.05); break;
+			case "ghost": for (let i = 0; i < 4; i++) tone(300 + i * 25, 420 + i * 25, 0.55, "sine", 0.1, i * 0.45); tone(420, 260, 1.4, "triangle", 0.05, 1.6); break;
+			case "creak": for (let i = 0; i < 7; i++) tone(170 + Math.random() * 60, 120 + Math.random() * 50, 0.13, "sawtooth", 0.035, i * 0.1); break;
+			case "heartbeat": for (const d of [0, 0.22]) tone(70, 45, 0.18, "sine", 0.4, d); break;
+			// weather: a roll of thunder, a burst of rain (played over and over while it rains)
+			case "thunder": noise(0.25, 1800, 0.6, 0.35); noise(2.8, 140, 0.7, 0.5, 0.05); noise(2.2, 70, 0.8, 0.45, 0.6); tone(55, 32, 2.4, "sine", 0.25, 0.1); break;
+			case "rain": noise(2.2, 5200, 0.35, 0.09, 0, "highpass"); noise(2.2, 1400, 0.5, 0.05); break;
+			case "splat": noise(0.12, 1100, 1.4, 0.35); tone(240, 90, 0.12, "sine", 0.12); break;
+			// water: a big splash, a few bubbles
+			case "splash": noise(0.15, 2600, 0.6, 0.4); noise(0.9, 1100, 0.6, 0.28, 0.06); for (let i = 0; i < 6; i++) tone(500 + Math.random() * 700, 1400, 0.06, "sine", 0.05, 0.15 + i * 0.07); break;
+			case "bubble": for (let i = 0; i < 5; i++) tone(380 + Math.random() * 500, 900 + Math.random() * 600, 0.07, "sine", 0.07, i * 0.09 + Math.random() * 0.04); break;
+			// the zipline's trolley rolling down the cable
+			case "zip": noise(2.6, 3200, 1.5, 0.12, 0, "bandpass"); tone(900, 1600, 2.4, "sawtooth", 0.015); break;
+			// bumper karts: a rubbery thump, a little engine buzz
+			case "bump": tone(140, 55, 0.22, "sine", 0.45); noise(0.1, 700, 1, 0.25); tone(500, 300, 0.08, "square", 0.04); break;
+			case "engine": tone(78, 92, 0.32, "sawtooth", 0.05); tone(156, 180, 0.32, "square", 0.012); break;
 		}
 	}
 }

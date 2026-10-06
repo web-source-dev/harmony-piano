@@ -13,13 +13,19 @@
  *   in the west wing: a rose arch at the top of the steps from the terrace, a fountain (toss a coin, make a wish)
  *   with benches round it;
  *   in the east, under the hot tub: the Box of Shame (its own room: worldShame.js), with a red carpet up to its door;
- *   in the south railing, past the gazebo: the gate out to the Fun Park (worldPark.js).
+ *   in the south railing, past the gazebo: the gate out to the Fun Park (worldPark.js);
+ *   in the west railing: the doors of the Haunted Mansion (worldHaunted.js, off the long lawn) and the Aquarium
+ *   (worldAquarium.js, off the west wing);
+ *   up in three big trees over the lawn: the Treehouse (worldTree.js), its own floor (only the trunks are down here).
  */
 const HW0 = -21.3, HW1 = 19.3, HD0 = -6.0, HD1 = 6.0;
 const WING = { x1: -8.85, z1: 12.0 };              // the west wing reaches up to the terrace
 const TGAP = { x0: -19.8, x1: -18.3 };              // the terrace's railing gap (TGAP in worldRoom.js, in local x)
 const GAP = { x0: -3.7, x1: -2.3 };
 const PGATE = { x0: 4.8, x1: 6.6 };               // the gate in the south railing, out to the Fun Park (worldPark.js)
+const HGATE = { z0: 1.7, z1: 3.2 };                // the gap in the west railing into the Haunted Mansion (worldHaunted.js)
+const AGATE = { z0: 9.75, z1: 11.25 };             // ...and into the Aquarium (worldAquarium.js)
+const TRUNKS = [[-6.2, 2.2], [0.6, 2.2], [8.8, 2.2]];   // the treehouse's trees (worldTree.js)
 const BOX = { x0: 10.6, x1: 18.0, z0: -3.5, z1: 2.5, door: -0.5 };   // the Box of Shame's footprint (worldShame.js)
 const FTN = { x: -15.0, z: 3.0, r: 1.35 };         // the fountain
 const GZ = { x: 3.0, z: -2.0, r: 1.9 };          // the gazebo
@@ -34,6 +40,8 @@ export function build(k) {
 	k.walk(GAP.x0, GAP.x1, HD1 - 1.2, HD1 + 0.6);   // through the gap from the pool deck
 	k.walk(TGAP.x0, TGAP.x1, WING.z1 - 0.6, WING.z1 + 0.8);   // up to the terrace
 	k.walk(PGATE.x0, PGATE.x1, HD0 - 0.9, HD0 + 1.2);   // out through the gate to the Fun Park
+	k.walk(HW0 - 1.4, HW0 + 1.0, HGATE.z0, HGATE.z1);   // in at the mansion's door / the aquarium's door (their rooms start
+	k.walk(HW0 - 1.4, HW0 + 1.0, AGATE.z0, AGATE.z1);   // at world x -7.6; reaching past it leaves no seam in the doorway)
 	k.cam = { minX: HW0 - 1.5, maxX: HW1 + 1.5, minZ: HD0 - 1.5, maxZ: WING.z1, maxY: 8, minY: 0.2 };
 
 	// ---------------------------------------------------------------- the lawn and the path
@@ -101,7 +109,9 @@ export function build(k) {
 	// (the south side has the gate out to the Fun Park in it)
 	railRun(HW0 + 0.05, HD0 + 0.05, PGATE.x0, HD0 + 0.05);
 	railRun(PGATE.x1, HD0 + 0.05, HW1 - 0.05, HD0 + 0.05);
-	railRun(HW0 + 0.05, HD0 + 0.05, HW0 + 0.05, WING.z1 - 0.05);
+	railRun(HW0 + 0.05, HD0 + 0.05, HW0 + 0.05, HGATE.z0);
+	railRun(HW0 + 0.05, HGATE.z1, HW0 + 0.05, AGATE.z0);
+	railRun(HW0 + 0.05, AGATE.z1, HW0 + 0.05, WING.z1 - 0.05);
 	railRun(HW1 - 0.05, HD0 + 0.05, HW1 - 0.05, HD1 - 0.05);
 	k.box(HW0, PGATE.x0, HD0, HD0 + 0.15);
 	k.box(PGATE.x1, HW1, HD0, HD0 + 0.15);
@@ -114,7 +124,20 @@ export function build(k) {
 		add(sg, new THREE.PlaneGeometry(0.76, 0.18), new THREE.MeshBasicMaterial({ map: k.tex.text("Fun Park", { w: 512, h: 128, color: "#fff4d6", font: "800 80px 'Caveat', 'Nunito', cursive" }), transparent: true, depthWrite: false }), 0, 1.22, -0.025, { cast: false, receive: false });
 		k.box(PGATE.x0 - 0.42, PGATE.x0 - 0.28, HD0 + 0.28, HD0 + 0.42);
 	}
-	k.box(HW0, HW0 + 0.15, HD0, WING.z1);
+	k.box(HW0, HW0 + 0.15, HD0, HGATE.z0);
+	k.box(HW0, HW0 + 0.15, HGATE.z1, AGATE.z0);
+	k.box(HW0, HW0 + 0.15, AGATE.z1, WING.z1);
+	// signposts by the two doors in the west railing
+	for (const [z, a, b] of [[HGATE.z1 + 0.35, "Haunted Mansion", "Garden"], [AGATE.z0 - 0.35, "Aquarium", "Garden"]]) {
+		const sg = group(g, HW0 + 0.35, 0, z, Math.PI / 2);
+		add(sg, new THREE.CylinderGeometry(0.03, 0.03, 1.2, 8), mat("#5b4636", 0.7), 0, 0.6, 0);
+		add(sg, rbox(0.82, 0.24, 0.04, 0.02), mat(a === "Aquarium" ? "#2f6f9f" : "#4a2a5c", 0.6), 0, 1.22, 0);
+		add(sg, new THREE.PlaneGeometry(0.76, 0.18), new THREE.MeshBasicMaterial({ map: k.tex.text(a, { w: 512, h: 128, color: "#fff4d6", font: "800 70px 'Caveat', 'Nunito', cursive" }), transparent: true, depthWrite: false }), 0, 1.22, 0.025, { cast: false, receive: false });   // (read from the garden)
+		add(sg, new THREE.PlaneGeometry(0.76, 0.18), new THREE.MeshBasicMaterial({ map: k.tex.text(b, { w: 512, h: 128, color: "#fff4d6", font: "800 80px 'Caveat', 'Nunito', cursive" }), transparent: true, depthWrite: false }), 0, 1.22, -0.025, { ry: Math.PI, cast: false, receive: false });
+		k.box(HW0 + 0.28, HW0 + 0.42, z - 0.07, z + 0.07);
+	}
+	// the treehouse's trunks (the trees themselves are drawn by worldTree.js)
+	TRUNKS.forEach(([x, z]) => k.box(x - 0.45, x + 0.45, z - 0.45, z + 0.45));
 	k.box(HW1 - 0.15, HW1, HD0, HD1);
 
 	// ---------------------------------------------------------------- flowers (instanced: hundreds of them)

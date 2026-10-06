@@ -25,6 +25,7 @@
 const OX = 13.0, OZ = -48.0;                       // = ZONES.park ox / oz
 const X0 = -20.6, X1 = 20.6, Z0 = -18.0, Z1 = 17.9;
 const GATE = { x0: 6.1, x1: 7.9 };                 // the gap in the garden's south railing (world x 19.1..20.9)
+const KGATE = { z0: 5.4, z1: 7.0 };                // the gate in the west railing, out to the Bumper Karts (worldKarts.js)
 const CAROUSEL = { x: -3.0, z: 7.5, r: 3.6 };
 const FW = { x: -12.5, z: -3.0, R: 6.6, hub: 8.7, n: 10 };     // Ferris wheel (turns in the x-y plane)
 const DROP = { x: 14.5, z: 9.5, top: 21.0, H: 24.5 };          // drop tower
@@ -70,6 +71,7 @@ export function build(k) {
 	k.floor(() => 0);
 	k.walk(X0 + 0.15, X1 - 0.15, Z0 + 0.15, Z1);
 	k.walk(GATE.x0, GATE.x1, Z1 - 1.2, Z1 + 0.9);   // in through the gate from the garden
+	k.walk(X0 - 0.8, X0 + 1.2, KGATE.z0, KGATE.z1); // out through the west gate to the karts (their arena starts at X0; past it: no seam)
 	k.cam = { minX: X0 - 3, maxX: X1 + 3, minZ: Z0 - 3, maxZ: Z1 + 2, maxY: 16, minY: 0.2 };
 
 	const beam = (parent, a, b, r, m, opt) => {
@@ -167,10 +169,21 @@ export function build(k) {
 		for (let i = 0; i <= n; i++) add(rg, new THREE.BoxGeometry(0.06, 1.05, 0.06), postM, 0, 0.525, -len / 2 + (len * i) / n, { cast: false });
 	};
 	railRun(X0 + 0.05, Z0 + 0.05, X1 - 0.05, Z0 + 0.05);
-	railRun(X0 + 0.05, Z0 + 0.05, X0 + 0.05, Z1 - 0.05);
+	railRun(X0 + 0.05, Z0 + 0.05, X0 + 0.05, KGATE.z0);
+	railRun(X0 + 0.05, KGATE.z1, X0 + 0.05, Z1 - 0.05);
 	railRun(X1 - 0.05, Z0 + 0.05, X1 - 0.05, Z1 - 0.05);
 	k.box(X0, X1, Z0, Z0 + 0.15);
-	k.box(X0, X0 + 0.15, Z0, Z1);
+	k.box(X0, X0 + 0.15, Z0, KGATE.z0);
+	k.box(X0, X0 + 0.15, KGATE.z1, Z1);
+	// a signpost by the west gate
+	{
+		const sg = group(g, X0 + 0.35, 0, KGATE.z1 + 0.35, Math.PI / 2);
+		add(sg, new THREE.CylinderGeometry(0.03, 0.03, 1.2, 8), mat("#5b4636", 0.7), 0, 0.6, 0);
+		add(sg, rbox(0.82, 0.24, 0.04, 0.02), mat("#e63973", 0.6), 0, 1.22, 0);
+		add(sg, new THREE.PlaneGeometry(0.76, 0.18), sign("Bumper Karts", { w: 512, h: 128, color: "#fff4d6", font: "800 70px 'Caveat', 'Nunito', cursive" }), 0, 1.22, 0.025, { cast: false, receive: false });
+		add(sg, new THREE.PlaneGeometry(0.76, 0.18), sign("Fun Park", { w: 512, h: 128, color: "#fff4d6", font: "800 80px 'Caveat', 'Nunito', cursive" }), 0, 1.22, -0.025, { ry: Math.PI, cast: false, receive: false });
+		k.box(X0 + 0.28, X0 + 0.42, KGATE.z1 + 0.28, KGATE.z1 + 0.42);
+	}
 	k.box(X1 - 0.15, X1, Z0, Z1);
 
 	// ================================================================ the entrance arch
@@ -963,7 +976,9 @@ export function build(k) {
 	// over and over until you get off. Four places in the queue, a quarter of a go apart (on the ride clock, so
 	// everyone sees everyone in the same place, and Ride Control can speed it up)
 	const SL = { x: 17.6, z: 3.2, top: 3.2, lad: 18.65, x0: 16.9, x1: 10.6 };
-	const SL_CYCLE = 11, SL_N = 4;
+	const SL_CYCLE = 12, SL_N = 4;
+	// (the parts of a go: up the ladder, across the top, sit down at the top of the chute, down it, back round)
+	const SL_UP = 2.6, SL_ACROSS = 3.3, SL_SIT = 3.7, SL_DOWN = 7.2, SL_OFF = 7.6;
 	const slideIds = [];
 	// the chute's middle line at u (0 = the top, 1 = the end of the run-out), local coordinates
 	const slideAt = (u, out) => {
@@ -979,15 +994,28 @@ export function build(k) {
 	const slidePh = i => mod(rideT("slide") + i * SL_CYCLE / SL_N, SL_CYCLE);
 	// (where on the chute after s of the 3.5 s down it: faster and faster, then the run-out brakes you)
 	const slideU = s => s < 0.8 ? 0.87 * Math.pow(s / 0.8, 1.6) : 0.87 + 0.13 * (1 - Math.pow(1 - (s - 0.8) / 0.2, 2));
+	// how the body looks at each part (world.js asks every frame: climbing, walking, whizzing down)
+	const slideLook = i => { const ph = slidePh(i); return ph < SL_UP ? "climb" : ph < SL_ACROSS ? "walk" : ph < SL_DOWN + 0.15 ? "slide" : ph < SL_OFF ? null : "walk"; };
 	function slidePose(i, pos, quat) {
 		const ph = slidePh(i);
-		if (ph < 2.5) { pos.set(SL.lad, SL.top * ph / 2.5, SL.z); quat.setFromAxisAngle(Y, -Math.PI / 2); }
-		else if (ph < 3.5) {
-			const w = smooth(ph - 2.5);
-			pos.set(SL.lad + (SL.x0 + 0.05 - SL.lad) * w, SL.top - 0.36 * w, SL.z);
+		if (ph < SL_UP) {
+			// up the ladder rung by rung (a little pause on each), facing it
+			const u = ph / SL_UP, rung = Math.floor(u * 9), f = u * 9 - rung;
+			pos.set(SL.lad, SL.top * (rung + smooth(Math.min(1, f * 1.4))) / 9, SL.z);
 			quat.setFromAxisAngle(Y, -Math.PI / 2);
-		} else if (ph < 7.6) {
-			const u = slideU(Math.min(1, (ph - 3.5) / 3.5));
+		} else if (ph < SL_ACROSS) {
+			// off the top of the ladder and across the deck to the chute
+			const w = smooth((ph - SL_UP) / (SL_ACROSS - SL_UP));
+			pos.set(SL.lad + (SL.x0 + 0.35 - SL.lad) * w, SL.top, SL.z);
+			quat.setFromAxisAngle(Y, -Math.PI / 2);
+		} else if (ph < SL_SIT) {
+			// sit down at the top of the chute
+			const w = smooth((ph - SL_ACROSS) / (SL_SIT - SL_ACROSS));
+			slideAt(0, _sp);
+			pos.set(SL.x0 + 0.35 + (_sp.x - SL.x0 - 0.35) * w, SL.top + (_sp.y - 0.36 - SL.top) * w, SL.z + (_sp.z - SL.z) * w);
+			quat.setFromAxisAngle(Y, -Math.PI / 2);
+		} else if (ph < SL_OFF) {
+			const u = slideU(Math.min(1, (ph - SL_SIT) / (SL_DOWN - SL_SIT)));
 			slideAt(u, _sp); slideAt(Math.min(1.02, u + 0.01), _sn);
 			_st.subVectors(_sn, _sp).normalize();
 			_su.set(0, 1, 0).addScaledVector(_st, -_st.y).normalize();
@@ -997,7 +1025,7 @@ export function build(k) {
 			pos.copy(_sp).addScaledVector(_su, -0.36);
 		} else {
 			// off at the bottom and back round to the ladder
-			let d = smooth((ph - 7.6) / (SL_CYCLE - 7.6)) * BACK_LEN, j = 0;
+			let d = smooth((ph - SL_OFF) / (SL_CYCLE - SL_OFF)) * BACK_LEN, j = 0;
 			while (j < BACK.length - 2 && d > Math.hypot(BACK[j + 1][0] - BACK[j][0], BACK[j + 1][1] - BACK[j][1])) { d -= Math.hypot(BACK[j + 1][0] - BACK[j][0], BACK[j + 1][1] - BACK[j][1]); j++; }
 			const a = BACK[j], b = BACK[j + 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, f = Math.min(1, d / l);
 			pos.set(a[0] + (b[0] - a[0]) * f, 0, a[1] + (b[1] - a[1]) * f);
@@ -1044,7 +1072,7 @@ export function build(k) {
 		// the seats: four places in the queue
 		for (let i = 0; i < SL_N; i++) {
 			const id = "slide" + i;
-			k.spot({ id, x: 11.8 + i * 1.6, z: SL.z + 2.0, y: 0, h: 0, ride: (pos2, quat) => slidePose(i, pos2, quat) });
+			k.spot({ id, x: 11.8 + i * 1.6, z: SL.z + 2.0, y: 0, h: 0, ride: (pos2, quat) => slidePose(i, pos2, quat), ridePose: () => slideLook(i) });
 			slideIds.push(id);
 		}
 		k.box(T0.x0 - 0.15, SL.lad - 0.1, T0.z0 - 0.15, T0.z1 + 0.15);
@@ -1455,7 +1483,8 @@ export function build(k) {
 		}
 		if (seated("teacup") && sfxT <= 0 && spOf(cfgOf("cups")) > 0) { ctx.sfx("roll", 0.2); sfxT = 2.4; }
 		const mySl = ctx.me().sit && ctx.me().sit.indexOf("slide") === 0 ? slidePh(+ctx.me().sit.slice(5)) : -1;
-		if (mySl >= 3.5 && prevSl >= 0 && prevSl < 3.5) { ctx.sfx("whoosh", 0.7); ctx.doUpper("cheer", 2200); }
+		if (mySl >= SL_SIT && prevSl >= 0 && prevSl < SL_SIT) ctx.sfx("whoosh", 0.7);
+		if (mySl >= SL_DOWN && prevSl >= 0 && prevSl < SL_DOWN) ctx.sfx("pop", 0.4);
 		prevSl = mySl;
 		prevS = C.s; prevPh = C.ph; prevDrop = D.stage; prevSw = S.w; prevShipA = SP.A; prevShipTh = SP.th;
 	}

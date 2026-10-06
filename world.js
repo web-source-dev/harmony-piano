@@ -216,6 +216,7 @@ const me = {
 	carrying: null, carriedBy: null   // bridal carry: who we're holding / who is holding us
 };
 const myAvatar = new Avatar(Object.assign({}, profile, { name: profile.name || "You" }));
+myAvatar._who = { id: MY_ID, isMe: true, get sitT() { return me.sitT || 0; } };
 myAvatar.setMood(profile.mood);
 scene.add(myAvatar.root);
 const cam = { yaw: 0.35, pitch: 0.38, dist: 4.2, tx: me.x, ty: 1.2, tz: me.z };
@@ -374,7 +375,8 @@ function upsertPeer(id, lk) {
 		const av = new Avatar(look);
 		av.root.userData.peerId = id;
 		scene.add(av.root);
-		p = { avatar: av, look, x: 0, z: 2, h: 0, tx: 0, tz: 2, th: 0, anim: "idle", upper: null, sit: null, last: now(), speed: 0, fresh: true };
+		p = { avatar: av, look, x: 0, z: 2, h: 0, tx: 0, tz: 2, th: 0, anim: "idle", upper: null, sit: null, last: now(), speed: 0, fresh: true, id, isMe: false, sitT: 0 };
+		av._who = p;   // (a ride's seat is told whose body it's carrying: see placeAvatar)
 		peers.set(id, p);
 	} else if (JSON.stringify(p.look) !== JSON.stringify(look)) {
 		p.look = look;
@@ -385,12 +387,14 @@ function upsertPeer(id, lk) {
 }
 const BASE_ANIMS = ["idle", "sit", "sleep", "floor"];
 const UPPER_ANIMS = ["wave", "dance", "clap", "heart", "drink", "paint", "write", "tug", "piano", "laugh", "cry", "kiss", "hug", "highfive", "jump", "bow", "cheer", "think", "shrug", "facepalm", "yawn", "warm", "telescope", "shake", "give", "stumble",
-	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash", "handhold"];
+	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash", "handhold", "kart", "kick", "scoop", "throw"];
 const PROPS = ["mug", "brush", "remote", "flower", "ring", "popcorn", "fork", "spoon", "sponge"].concat(FOOD_PROPS);
 function applyPose(p, d, snap) {
 	if (typeof d.x !== "number") return;
 	const wasIn = p.fresh ? null : house.regionOf(areaOf(p.tx, p.tz));
+	const prevSit = p.sit;
 	p.tx = d.x; p.tz = d.z; p.th = d.h; p.sit = d.s || null;
+	if (p.sit !== prevSit) p.sitT = Date.now();
 	// went through a door: jump straight there (no gliding through walls), and say where they went
 	if (Math.hypot(p.tx - p.x, p.tz - p.z) > 6) snap = true;
 	const nowIn = house.regionOf(areaOf(p.tx, p.tz));
@@ -470,6 +474,7 @@ function applyKey(k, remote) {
 	else if (k.indexOf("letter:") === 0) onLetter(k, v, remote);
 	else if (k.indexOf("opened:") === 0) onOpened(k, v, remote);
 	else if (k.indexOf("z:") === 0) house.applyKey(k, remote);   // the other rooms of the house
+	else if ((k === "weather" || k === "snowmen") && weather) weather.applyKey(k, remote);
 }
 function applyAll() { Object.keys(Object.assign({}, DEFAULTS, S)).forEach(k => applyKey(k, null)); }
 
@@ -774,7 +779,7 @@ function sitOn(ids) {
 	if (me.carrying) endCarry();
 	if (me.carriedBy) hopDown();
 	if (me.sit && me.sit !== spot.id) standUp(true);
-	me.sit = spot.id; me.anim = spot.lie ? "sleep" : "sit";
+	me.sit = spot.id; me.anim = spot.lie ? "sleep" : "sit"; me.sitT = Date.now();
 	if (me.upper !== "drink") me.upper = null;
 	me.x = spot.x; me.z = spot.z; me.h = spot.h;
 	me.target = null;
@@ -802,8 +807,10 @@ function standUp(quiet) {
 	if (me.upper === "piano") me.upper = null;
 	if (SEATED_LOVE.includes(me.upper)) { me.upper = null; me.partner = null; me.upperUntil = 0; }
 	if (spot) {
-		// find the closest open floor next to the seat (in front first, then the sides, then behind)
-		const p = freeFloorNear(spot.x, spot.z, spot.lie ? spot.h + Math.PI : spot.h);
+		// where the seat says to stand (a bed's side), or else the closest open floor next to it (in front first, then
+		// the sides, then behind) - in the same room: never out through a wall onto the lawn behind it
+		const own = spot.side || spot.stand;
+		const p = own && !blocked(own[0], own[1], true) ? { x: own[0], z: own[1] } : freeFloorNear(spot.x, spot.z, spot.lie ? spot.h + Math.PI : spot.h);
 		me.x = p.x; me.z = p.z;
 	}
 	cam.dist = 4.2; cam.pitch = 0.38;
@@ -813,11 +820,15 @@ function standUp(quiet) {
 }
 function freeFloorNear(x, z, h) {
 	const dirs = [0, Math.PI / 2, -Math.PI / 2, Math.PI / 4, -Math.PI / 4, Math.PI, 3 * Math.PI / 4, -3 * Math.PI / 4];
-	for (let r = 0.6; r <= 3; r += 0.15) for (const d of dirs) {
+	// (first only in the room the seat is in - the Box of Shame's bed is right against its wall, and the lawn is just
+	// the other side of it - then anywhere, if the room has no space left at all)
+	const here = areaOf(x, z);
+	for (const same of [true, false]) for (let r = 0.6; r <= 3; r += 0.15) for (const d of dirs) {
 		const a = h + d, nx = x + Math.sin(a) * r, nz = z + Math.cos(a) * r;
+		if (same && areaOf(nx, nz) !== here) continue;
 		if (!blocked(nx, nz, true) && (waterAt(nx, nz) <= 0 || waterAt(x, z) > 0)) return { x: nx, z: nz };
 	}
-	return areaOf(x, z) === "room" ? { x: 0.5, z: 1.5 } : { x, z };
+	return here === "room" ? { x: 0.5, z: 1.5 } : { x, z };
 }
 
 // ---------- the bed: sit on it, lie down, sit up, wake / kiss whoever is asleep
@@ -2142,6 +2153,7 @@ function onFx(d, p) {
 		case "smooch": if (p) heartsFx(p.avatar.root, 3, "#ff2d55", heartY(p.anim)); break;
 		case "sys": if (d.text) addLog(esc(String(d.text).slice(0, 120)), true); break;
 		case "zfx": house.onFx(d, p); break;   // something in another room of the house
+		case "wx": if (weather) weather.onFx(d, p); break;   // a snowball, a snowman...
 	}
 }
 function emote(e) {
@@ -2999,6 +3011,8 @@ addEventListener("keydown", e => {
 	if (!entered) return;
 	const k = e.key.toLowerCase();
 	if (e.key === "Escape") {
+		const veh = !modalKind && !typing() && house.vehicle();
+		if (veh) { veh.exit(); return; }
 		if (document.querySelector(".bigphoto")) document.querySelector(".bigphoto").remove();
 		else if (modalKind) closeModal();
 		else if (typing()) document.activeElement.blur();
@@ -3029,11 +3043,12 @@ addEventListener("keydown", e => {
 	if (modalKind) return;
 	if (wheelKey(k, e)) return;
 	if (k === "enter" || k === "t") { e.preventDefault(); $("#chat").focus(); return; }
+	if ((k === "e" || k === " ") && house.vehicle()) { e.preventDefault(); keys.add(k); return; }
 	if (k === "e" || k === " ") { e.preventDefault(); const o = promptOpts.find(x => x.k === "E"); if (o) o.fn(); return; }
 	if (k === "1") emote("kiss"); else if (k === "2") emote("smooch"); else if (k === "3") emote("carry");
 	else if (k === "p") { callPetsNow(); return; }
 	else if (k === "c" && rideSpot()) { rideLook.yaw = 0; rideLook.pitch = 0; rideLook.fov = 72; cam.yaw = me.h + Math.PI; cam.pitch = 0.3; return; }
-	else if (k === "f" || k === "g" || k === "r") { const o = promptOpts.find(x => x.k === k.toUpperCase()); if (o) { e.preventDefault(); o.fn(); return; } }
+	else if (k === "f" || k === "g" || k === "r" || k === "q") { const o = promptOpts.find(x => x.k === k.toUpperCase()); if (o) { e.preventDefault(); o.fn(); return; } }
 	keys.add(k);
 	if (k.startsWith("arrow")) e.preventDefault();
 });
@@ -3206,12 +3221,20 @@ function makeGrid(x0, z0, w, h) {
 // the whole home is one floor plan (the cinema upstairs doesn't sit over anything), so one grid covers it
 // (upstairs is its own floor plan, 30 m south: see ZONES.loft)
 function gridFor(x, z) {
-	if (shiftAt(x, z)) return grids.up || (grids.up = makeGrid(16.0, 23.85, 37, 72));
-	// (from the cinema in the west to the bedroom in the east, the Fun Park in the south to the lounge in the north)
-	return grids.home || (grids.home = makeGrid(-23.0, -66.6, 285, 456));
+	if (shiftAt(x, z)) {
+		// (the loft and the disco share one; the treehouse has its own)
+		const a = areaOf(x, z), id = a === "disco" ? "loft" : a, Z = ZONES[id];
+		if (id === "loft") return grids.up || (grids.up = makeGrid(16.0, 23.85, 37, 72));
+		if (!Z) return null;
+		const b = Z.bounds, key = "up:" + id;
+		return grids[key] || (grids[key] = makeGrid(b[0] - 0.4, b[2] - 0.4, Math.ceil((b[1] - b[0] + 0.8) / 0.2), Math.ceil((b[3] - b[2] + 0.8) / 0.2)));
+	}
+	// (from the aquarium and the haunted mansion in the west to the bedroom in the east, the Fun Park in the south to
+	// the lounge in the north)
+	return grids.home || (grids.home = makeGrid(-31.4, -66.6, 326, 456));
 }
 // a room was just built (its furniture is now solid): the grid gets made fresh on the next walk
-function gridDirty() { delete grids.home; delete grids.up; }
+function gridDirty() { for (const k in grids) delete grids[k]; }
 function cellOf(x, z) { return [Math.floor((x - GRID.x0) / GRID.s), Math.floor((z - GRID.z0) / GRID.s)]; }
 function cellFree(i, j) { return i >= 0 && j >= 0 && i < GRID.w && j < GRID.h && !GRID.blocked[j * GRID.w + i]; }
 function nearestFree(i, j) {
@@ -3372,8 +3395,10 @@ function sendPose(force) {
 	}
 }
 // sitting up in bed is its own pose (legs stretched out on the mattress)
-function avatarAnim(anim, sit, carriedBy) {
+function avatarAnim(anim, sit, carriedBy, who) {
 	if (carriedBy && avatarOf(carriedBy)) return "carried";
+	// (a ride's ridePose(who): "climb", "slide", "zip", "walk" (-> walkride) or null for a plain sit)
+	if (anim === "sit" && sit) { const sp = spotById(sit); if (sp && sp.ridePose) { const r = sp.ridePose(who || null); if (r) return r === "walk" ? "walkride" : r; } }
 	if (anim === "sit" && sit && (sit.indexOf("bedSit") === 0 || (spotById(sit) || {}).bedsit)) return "bedsit";
 	if (anim === "sit" && sit && (spotById(sit) || {}).recline) return "lounge";
 	return anim;
@@ -3394,7 +3419,7 @@ function placeAvatar(av, x, z, h, sitId) {
 	const vp = visXZ(x, z);
 	av.root.position.set(vp[0], y, vp[1]);
 	// on a ride in the Fun Park (worldPark.js): the seat moves, and carries you along with it
-	if (spot && spot.ride) spot.ride(av.root.position, av.root.quaternion);
+	if (spot && spot.ride) spot.ride(av.root.position, av.root.quaternion, av._who || null);
 	// (face down on a massage table: spot.prone; the body still runs the same way, feet at the spot, head away from h)
 	else if (spot && spot.lie) { av.root.rotation.order = "YXZ"; if (spot.prone) av.root.rotation.set(Math.PI / 2, spot.h + Math.PI, 0); else av.root.rotation.set(-Math.PI / 2, spot.h, 0); }
 	else if (spot && spot.swing) {
@@ -3439,6 +3464,22 @@ function updateMe(dt) {
 	}
 	if (joy.id !== null) { ix += joy.dx; iz -= joy.dy; }
 	if (me.upper === "tug") { ix = 0; iz = 0; }
+	// a ride that's over (the zipline, once you've splashed down): off you get
+	const rsp = rideSpot();
+	if (rsp && rsp.rideFor && Date.now() - (me.sitT || 0) > rsp.rideFor * 1000) { standUp(true); if (rsp.onRideEnd) rsp.onRideEnd(); }
+	// driving (a bumper kart): the keys / joystick steer it instead of walking; the camera follows behind
+	const veh = !me.sit && house.vehicle();
+	if (veh) {
+		veh.drive(dt, { x: ix, z: iz, boost: keys.has(" ") || keys.has("e"), keys });
+		// (behind and a little above the kart, unless you're dragging to look round; the kart may ask for its own view)
+		if (!drag) {
+			const ch = veh.cam || {}, kk = Math.min(1, dt * 2.5);
+			cam.yaw = angleLerp(cam.yaw, me.h + Math.PI, kk);
+			cam.dist += ((ch.dist || 5.2) - cam.dist) * kk;
+			cam.pitch += ((ch.pitch || 0.32) - cam.pitch) * kk;
+		}
+		ix = 0; iz = 0; me.target = null; me.path = [];
+	}
 	// on a ride the keys / joystick look around instead of getting you off (Esc gets off)
 	if (rideSpot()) {
 		if (ridePOV()) { rideLook.yaw = wrapAngle(rideLook.yaw - ix * dt * 2.2); rideLook.pitch = Math.max(-1.35, Math.min(1.35, rideLook.pitch - iz * dt * 1.6)); }
@@ -3474,7 +3515,7 @@ function updateMe(dt) {
 		} else { mx = dx / l; mz = dz / l; want = Math.min(1.25, 0.4 + l + (me.path.length ? 1 : 0)) * (me.carrying ? 0.75 : 1); }
 	}
 	if (me.sit) want = 0;
-	me.speed += (want - me.speed) * Math.min(1, dt * 10);
+	if (!veh) me.speed += (want - me.speed) * Math.min(1, dt * 10);
 	if (me.speed > 0.02 && (mx || mz) && !me.sit) {
 		const v = me.speed * 2.6 * dt;
 		const nx = me.x + mx * v, nz = me.z + mz * v;
@@ -3505,7 +3546,11 @@ function updateMe(dt) {
 		else if (me.upper && !["paint", "piano", "tug", "telescope", "carry"].includes(me.upper)) { me.upper = null; me.partner = null; updateProps(); sendPose(true); }
 	}
 	// the stairs between floors: step into one end and you're on the other floor
-	if (!me.sit && !me.carriedBy) for (const P of house.portals) if (me.x > P.minX && me.x < P.maxX && me.z > P.minZ && me.z < P.maxZ) { crossFloor(P); break; }
+	if (!me.sit && !me.carriedBy) for (const P of house.portals) if (me.x > P.minX && me.x < P.maxX && me.z > P.minZ && me.z < P.maxZ) {
+		if (P.climb) { if (freeSpot([P.climb])) { me.target = null; me.path = []; sitOn([P.climb]); } }
+		else crossFloor(P);
+		break;
+	}
 	// keep facing whoever we're hugging / fighting / kissing / dancing with
 	if (me.partner && (["tug", "hug", "highfive", "give"].includes(me.upper) || (!me.sit && ["smooch", "cheekkiss", "slowdance", "propose"].includes(me.upper)))) {
 		const q = peers.get(me.partner);
@@ -3564,7 +3609,7 @@ function updateMe(dt) {
 	kissReach(myAvatar, me.upper, me.partner, dt);
 	loveAura(myAvatar, me.upper, me.anim, dt);
 	myAvatar.speed = me.sit ? 0 : me.speed;
-	myAvatar.anim = avatarAnim(me.anim, me.sit, me.carriedBy);
+	myAvatar.anim = avatarAnim(me.anim, me.sit, me.carriedBy, myAvatar._who);
 	myAvatar.upper = me.upper;
 	myAvatar.lookYaw = me.sit ? null : lookYawFor(me.x, me.z, me.h, peers.values());
 	sendPose(false);
@@ -3734,7 +3779,7 @@ function updatePeers(dt) {
 		loveAura(p.avatar, p.upper, p.anim, dt);
 		p.avatar.speed = p.sit ? 0 : p.speed;
 		const wasSleep = p.avatar.anim === "sleep";
-		p.avatar.anim = avatarAnim(p.anim, p.sit, p.carriedBy);
+		p.avatar.anim = avatarAnim(p.anim, p.sit, p.carriedBy, p);
 		p.avatar.upper = p.upper;
 		if (wasSleep !== (p.anim === "sleep")) refreshPeople();
 		const others = [{ x: me.x, z: me.z }].concat([...peers.values()].filter(q => q !== p));
@@ -3796,13 +3841,41 @@ function camReach(b, tx, ty, tz, px, py, pz) {
 	for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2; if (camOK(b, tx + (px - tx) * m, ty + (py - ty) * m, tz + (pz - tz) * m)) lo = m; else hi = m; }
 	return lo;
 }
+// how far out along the line from the target to the camera before it would pass into a wall (k.wall / k.camWall
+// in the rooms of the house), 0..1; (drawn: the target is where the body is drawn - on a ride - not the floor plan)
+const CAM_PAD = 0.22;
+function wallReach(drawn, tx, ty, tz, px, py, pz) {
+	const W = house.camWalls;
+	if (!W.length) return 1;
+	const dx = px - tx, dy = py - ty, dz = pz - tz;
+	let best = 1;
+	for (let i = 0; i < W.length; i++) {
+		const w = W[i], b = drawn ? w.v : w.p;
+		if (w.on && !w.on()) continue;   // (a door that's open)
+		const x0 = b.minX - CAM_PAD, x1 = b.maxX + CAM_PAD, z0 = b.minZ - CAM_PAD, z1 = b.maxZ + CAM_PAD, y0 = w.y0 - CAM_PAD, y1 = w.y1 + CAM_PAD;
+		// (a wall the target is already inside of - you're pressed right up to it - doesn't count)
+		if (tx > x0 && tx < x1 && ty > y0 && ty < y1 && tz > z0 && tz < z1) continue;
+		let t0 = 0, t1 = best;
+		const slab = (o, d, lo, hi) => {
+			if (Math.abs(d) < 1e-9) return o > lo && o < hi;
+			let a = (lo - o) / d, c = (hi - o) / d;
+			if (a > c) { const q = a; a = c; c = q; }
+			if (a > t0) t0 = a;
+			if (c < t1) t1 = c;
+			return t0 <= t1;
+		};
+		if (slab(tx, dx, x0, x1) && slab(ty, dy, y0, y1) && slab(tz, dz, z0, z1) && t0 < best) best = Math.max(0, t0 - 0.02);
+	}
+	return best;
+}
 // sitting down with your back to a wall: turn the view round to where there's room to see you
 function roomyYaw(base, pitch, dist) {
 	const b = camBox(me.x, me.z), ty = floorAt(me.x, me.z) + (me.anim === "sleep" ? 0.75 : 1.0);
 	let best = base, bf = -1;
 	for (const off of [0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5, 2.2, -2.2, Math.PI]) {
 		const y = base + off;
-		const f = camReach(b, me.x, ty, me.z, me.x + Math.sin(y) * dist * Math.cos(pitch), ty + Math.sin(pitch) * dist, me.z + Math.cos(y) * dist * Math.cos(pitch));
+		const qx = me.x + Math.sin(y) * dist * Math.cos(pitch), qy = ty + Math.sin(pitch) * dist, qz = me.z + Math.cos(y) * dist * Math.cos(pitch);
+		const f = Math.min(camReach(b, me.x, ty, me.z, qx, qy, qz), wallReach(false, me.x, ty, me.z, qx, qy, qz));
 		if (f >= 0.9) return y;
 		if (f > bf) { bf = f; best = y; }
 	}
@@ -3839,7 +3912,9 @@ function updateCamera(dt, t) {
 	// never through a wall, the floor or the ceiling: slide in along the line toward you instead
 	// (so the view keeps its angle - it just comes closer), and ease back out when there's room again
 	// (up on a ride you're out in the open air: nothing to bump into)
-	const f = ride ? 1 : camReach(camBox(cam.tx, cam.tz), cam.tx, cam.ty, cam.tz, px, py, pz);
+	let f = ride ? 1 : camReach(camBox(cam.tx, cam.tz), cam.tx, cam.ty, cam.tz, px, py, pz);
+	// ...and never through a wall inside a room (the mansion's rooms, the aquarium's tunnel, the cardboard box)
+	f = Math.min(f, wallReach(ride, cam.tx, cam.ty, cam.tz, px, py, pz));
 	cam.pull = cam.pull === undefined || f < cam.pull ? f : cam.pull + (f - cam.pull) * Math.min(1, dt * 3);
 	px = cam.tx + (px - cam.tx) * cam.pull; py = cam.ty + (py - cam.ty) * cam.pull; pz = cam.tz + (pz - cam.tz) * cam.pull;
 	let fov = 55;
@@ -3896,6 +3971,43 @@ function updateCamera(dt, t) {
 	// the camera, so you never fly out through the sky (close in it stays put: the telescope aims at its painted moon)
 	const cpos = camera.position, off = Math.hypot(cpos.x, cpos.z + 3), sf = Math.min(1, Math.max(0, (off - 20) / 20));
 	room.sky.position.set(cpos.x * sf, 0, -3 + (cpos.z + 3) * sf);
+}
+
+// ============================================================ weather (worldWeather.js): rain, storms, snow, blossom, autumn
+let weather = null;
+{
+	const R = (x0, x1, z0, z1, y) => ({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, y: y || 0 });
+	// the rooms with a roof (drawn where they're drawn: the loft and the disco over the lounge)
+	const indoorRects = [R(ROOM.minX, ROOM.maxX, ROOM.minZ, ROOM.maxZ)];
+	for (const id in ZONES) {
+		const Z = ZONES[id], b = Z.bounds;
+		if (Z.outdoor) continue;
+		const sx = Z.vis ? Z.ox - Z.vis[0] : 0, sz = Z.vis ? Z.oz - Z.vis[1] : 0;
+		indoorRects.push(R(b[0] - sx, b[1] - sx, b[2] - sz, b[3] - sz));
+	}
+	// the open-air floors (not under the Box of Shame, not on the pool's water)
+	const groundRects = [
+		R(TERRACE.minX, TERRACE.maxX, TERRACE.minZ, TERRACE.maxZ),
+		R(5.5, 23.2, -18.0, -6.25), R(23.2, 33.6, -18.0, -8.7),                         // the pool deck
+		R(-7.0, 24.9, -30.1, -18.1), R(24.9, 32.3, -30.1, -27.6), R(24.9, 32.3, -21.6, -18.1), R(32.3, 33.6, -30.1, -18.1),
+		R(-7.0, 5.45, -18.1, -12.1),                                                         // the garden and its west wing
+		R(-7.6, 33.6, -66.0, -30.1),                                                         // the Fun Park
+		R(-26.0, -7.6, -52.0, -30.2)                                                         // the kart arena
+	];
+	const waterRects = [R(13.55, 21.55, -15.0, -10.1, -0.12)];
+	import("./worldWeather.js").then(mod => {
+		weather = mod.createWeather({
+			THREE, scene, camera, room, hemi, moon, renderer,
+			get: k => get(k), setShared: (k, v) => setShared(k, v), send: o => send(o),
+			sfx: (n, v) => { if (audio) audio.sfx(n, v); }, notice: h => addLog(h, true), toast: (...a) => toast(...a), esc,
+			me: () => me, myAvatar: () => myAvatar, peers: () => peers, MY_ID, profile: () => profile,
+			doUpper: (u, ms, p) => doUpper(u, ms, p), sendPose: f => sendPose(f),
+			openModal: (...a) => openModal(...a), closeModal: () => closeModal(), modalKind: () => modalKind,
+			outdoorAt: (x, z) => house.outdoorAt(x, z), indoorRects, groundRects, waterRects, floorAt, visXZ
+		});
+		["weather", "snowmen"].forEach(k => weather.applyKey(k, null));
+	}).catch(err => console.error("[world] no weather:", err));
+	$("#b-weather").onclick = () => { if (weather) weather.openPanel(); };
 }
 
 // ============================================================ HUD prompt
@@ -3956,6 +4068,7 @@ function updatePrompt() {
 	}
 	// whatever the room of the house you're in offers right here (feed the pets, cook, popcorn...)
 	if (!busyNow) house.promptOpts(opts);
+	if (!busyNow && weather && !house.vehicle()) weather.promptOpts(opts);
 	// coffee: pick up a mug someone set down, or sip / hand over / put down the one you hold
 	if (!busyNow && !me.carriedBy && me.anim !== "sleep") {
 		const free = k => !opts.some(o => o.k === k);
@@ -4353,6 +4466,8 @@ function frameBody() {
 		if (conn) send({ t: "hello", lk: lookPayload(), pose: poseMsg() });
 	}
 	if (G.shadows && frameNo++ % G.every === 0) renderer.shadowMap.needsUpdate = true;
+	// (last: it tints the lights everything else has set this frame)
+	if (weather) weather.update(dt, t);
 	renderer.render(scene, camera);
 	if (yt || house.cssActive()) cssRenderer.render(cssScene, camera);
 }

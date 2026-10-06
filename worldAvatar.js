@@ -769,15 +769,18 @@ export class Avatar {
 		// "lounge" (a pool lounger) the same, lying right back against the backrest
 		const lounge = this.anim === "lounge";
 		const bedsit = this.anim === "bedsit" || lounge;
-		const base = bedsit ? "sit" : this.anim, up = this.upper;
+		// "walkride": walking along while a ride carries you (back round to the slide's ladder): a walk at a steady pace
+		const walkRide = this.anim === "walkride";
+		const base = bedsit ? "sit" : walkRide ? "idle" : this.anim, up = this.upper;
 		if (up !== this._lastUp) { this._lastUp = up; this.upperT = 0; }
 		this.upperT += dt;
 		const ut = this.upperT;
 		const mood = this.mood;
-		const moving = this.speed > 0.05 && base === "idle";
-		this.phase += dt * (moving ? 6.2 + this.speed * 3.4 : 0);
+		const speed = walkRide ? 1 : this.speed;
+		const moving = speed > 0.05 && base === "idle";
+		this.phase += dt * (moving ? 6.2 + speed * 3.4 : 0);
 		const ph = this.phase;
-		const amp = moving ? Math.min(1.25, this.speed) : 0;
+		const amp = moving ? Math.min(1.25, speed) : 0;
 		const breathe = Math.sin(t * 1.8) * 0.012;
 
 		const P = {
@@ -831,6 +834,30 @@ export class Avatar {
 			P.headX = -0.08; P.headY = 0.55;
 			P.arm[0].x = -0.55; P.arm[0].z = -0.3; P.arm[0].e = -1.2;
 			P.arm[1].x = -1.7; P.arm[1].e = -1.1;
+		} else if (base === "climb") {
+			// up (or down) a ladder, facing it: hand over hand, one knee up then the other
+			const c = t * 5.2;
+			for (let i = 0; i < 2; i++) {
+				const s2 = Math.sin(c + i * Math.PI);
+				P.arm[i].x = -2.55 - s2 * 0.32; P.arm[i].z = (i ? 1 : -1) * 0.16; P.arm[i].e = -0.35 - Math.max(0, s2) * 0.55;
+				P.leg[i].x = -0.35 - Math.max(0, s2) * 0.95; P.leg[i].k = 0.25 + Math.max(0, s2) * 1.35; P.leg[i].z = (i ? 1 : -1) * 0.06;
+				P.foot[i] = 0.15;
+			}
+			P.torsoX = 0.06; P.headX = -0.25; P.bodyY = -0.04 + Math.abs(Math.sin(c)) * 0.04;
+		} else if (base === "slide") {
+			// whizzing down a slide: sat back, legs out straight, hands up in the air
+			P.bodyY = -0.42;
+			P.leg[0].x = P.leg[1].x = -1.45; P.leg[0].k = P.leg[1].k = 0.08; P.foot[0] = P.foot[1] = -0.35;
+			P.leg[0].z = -0.07; P.leg[1].z = 0.07;
+			P.torsoX = -0.38 + breathe; P.headX = 0.15;
+			const w = Math.sin(t * 9) * 0.12;
+			P.arm[0].z = -2.6 + w; P.arm[1].z = 2.6 - w; P.arm[0].e = P.arm[1].e = -0.2;
+		} else if (base === "zip") {
+			// hanging from a zipline's handle: arms straight up, legs dangling and swinging a little
+			P.arm[0].x = P.arm[1].x = -2.95; P.arm[0].z = -0.12; P.arm[1].z = 0.12; P.arm[0].e = P.arm[1].e = -0.08;
+			const sw2 = Math.sin(t * 3.1) * 0.18;
+			P.leg[0].x = -0.35 + sw2; P.leg[1].x = -0.2 - sw2; P.leg[0].k = 0.35; P.leg[1].k = 0.2; P.foot[0] = P.foot[1] = 0.3;
+			P.torsoX = -0.05; P.headX = -0.1;
 		} else if (base === "sleep") {
 			P.leg[0].z = -0.04; P.leg[1].z = 0.04; P.leg[0].k = P.leg[1].k = 0.12;
 			P.arm[0].z = -0.12; P.arm[1].z = 0.12; P.arm[0].e = P.arm[1].e = -0.2;
@@ -985,6 +1012,35 @@ export class Avatar {
 				P.arm[i].z = (i ? 1 : -1) * (0.18 + Math.sin(t * 1.3 + i) * 0.06);
 			}
 			P.headX = 0.22;
+		} else if (up === "kick") {
+			// a big kick with the right foot (a snowman, a ball): wind back, swing through, arms out for balance
+			const c = Math.min(1, ut / 0.75);
+			const swing = c < 0.3 ? -c / 0.3 * 0.55 : c < 0.55 ? -0.55 + (c - 0.3) / 0.25 * 2.25 : 1.7 * (1 - (c - 0.55) / 0.45);
+			P.leg[1].x = -swing; P.leg[1].k = c < 0.3 ? 0.9 : c < 0.55 ? 0.25 : 0.2 + (c - 0.55);
+			P.leg[0].k = 0.12; P.torsoX = -0.12 * Math.max(0, swing);
+			P.arm[0].z = -1.0; P.arm[1].z = 0.9; P.arm[0].x = -0.4 * swing; P.arm[1].x = 0.3 * swing; P.arm[0].e = P.arm[1].e = -0.3;
+		} else if (up === "scoop") {
+			// crouching to scoop up a handful of snow and pat it into a ball
+			const c = ut;
+			const down = c < 0.35 ? c / 0.35 : c < 1.05 ? 1 : Math.max(0, 1 - (c - 1.05) / 0.3);
+			P.bodyY = -0.42 * down;
+			P.leg[0].x = P.leg[1].x = -1.25 * down; P.leg[0].k = P.leg[1].k = 2.0 * down + 0.04;
+			P.foot[0] = P.foot[1] = 0.55 * down;
+			P.torsoX = 0.55 * down; P.headX = 0.25 * down;
+			const pat = c > 0.5 && c < 1.1 ? Math.sin(c * 30) * 0.12 : 0;
+			for (let i = 0; i < 2; i++) { P.arm[i].x = -1.0 * down - 0.4; P.arm[i].z = (i ? 1 : -1) * (0.05 + pat); P.arm[i].e = -0.9 - pat; }
+		} else if (up === "throw") {
+			// an overarm throw with the right hand: back over the shoulder, then whip it forward
+			const c = Math.min(1, ut / 0.6);
+			const r = c < 0.4 ? c / 0.4 : 1;
+			const f = c < 0.4 ? 0 : Math.min(1, (c - 0.4) / 0.2);
+			P.arm[1].x = -2.7 * r + 2.0 * f; P.arm[1].e = -1.6 * r + 1.3 * f; P.arm[1].z = 0.25;
+			P.arm[0].x = -0.9 * r + 0.5 * f; P.arm[0].z = -0.35; P.arm[0].e = -0.5;
+			P.torsoY = 0.35 * r - 0.7 * f; P.torsoX = -0.08 * r + 0.18 * f;
+			P.leg[0].x = -0.35 * r; P.leg[1].x = 0.25 * r;
+		} else if (up === "kart") {
+			// both hands on a bumper kart's steering wheel
+			for (let i = 0; i < 2; i++) { P.arm[i].x = -0.95; P.arm[i].e = -0.8; P.arm[i].z = (i ? 1 : -1) * 0.22; }
 		}
 
 		else if (up === "laugh") {

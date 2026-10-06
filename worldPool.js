@@ -38,6 +38,7 @@ export function build(k) {
 	k.floor(floorY);
 	k.walk(XA0, 4.3, ZN, ZA1);
 	k.walk(3.0, XB1, ZN, 4.0);
+	k.box(-3.0, -2.5, 4.85, 5.35);   // the zipline's pole from the treehouse (drawn by worldTree.js, at world 16.8, -7.0)
 	k.walk(1.5, 3.0, 4.0, 6.7);   // to the lounge's glass doors
 	k.cam = { minX: XA0 - 3, maxX: XB1, minZ: ZN - 1.5, maxZ: ZA1 + 0.2, maxY: 9, minY: 0.2 };
 

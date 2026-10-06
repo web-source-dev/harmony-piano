@@ -9,6 +9,9 @@
  * the sky, and past the pool deck (or straight out from the terrace) the garden, with the Box of Shame in it.
  * Behind the lounge, a short hallway to the game room and the spa. Biscuit and Mochi wander the whole house (worldPets.js).
  * South of the garden, the Fun Park (worldPark.js): rides, and a roller coaster that runs right round the house.
+ * Up in the garden's trees, the Treehouse (worldTree.js), with rope bridges and a zipline down into the pool. Off the
+ * garden's west side, the Aquarium (worldAquarium.js) and the Haunted Mansion (worldHaunted.js); off the Fun Park's
+ * west side, the Bumper Kart arena (worldKarts.js). The weather (worldWeather.js) is the same everywhere outdoors.
  *
  * Each room is its own module and its own group. They're all built in the
  * background shortly after you arrive (a tenth of a second each), but a room is
@@ -45,16 +48,25 @@ export const ZONES = {
 	bath:    { name: "Bathroom", ox: 27.4,   oy: 0,    oz: 4.7,   bounds: [23.25, 31.6, 0.95, 8.4],    see: ["lounge", "loft"], file: "./worldBath.js" },
 	// (the deck reaches right up to the lounge's back wall: with a gap between the two areas, the doorway between
 	// the lounge and the pool deck had a strip that belonged to no room, and nobody could walk through it)
-	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.05],  see: ["main", "lounge", "bedroom", "loft", "garden", "shame", "park"], outdoor: true, file: "./worldPool.js" },
+	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.05],  see: ["main", "lounge", "bedroom", "loft", "garden", "shame", "park", "tree"], outdoor: true, file: "./worldPool.js" },
+	// up in the garden's three big trees: drawn over the garden (vis), but on the floor plan 80 m further east, so the
+	// platforms never mix with the lawn under them (like the loft). The ladder on the middle tree carries you across.
+	tree:    { name: "Treehouse", ox: 94.3,  oy: 4.4,  oz: -24.1, vis: [14.3, -24.1], bounds: [85.0, 104.5, -28.6, -17.8], see: ["garden", "pool", "main", "shame", "park", "aquarium", "haunted"], outdoor: true, file: "./worldTree.js" },
 	// in the garden, south of the hot tub: the Box of Shame (a cardboard box you can go into: a bed of roses, the Cute Corner)
 	// (before the garden: it sits inside the garden's area, and the first area that holds a point wins)
 	shame:   { name: "Box of Shame", ox: 28.6, oy: 0,   oz: -24.6, bounds: [24.9, 32.3, -27.6, -21.6], see: ["garden"], file: "./worldShame.js" },   // (inside, only the garden shows through the door: keeps it light)
 	// past the pool deck, through the gap in its south railing (or the gap in the terrace's south railing): a rooftop
 	// garden (outdoors too). It wraps round the pool deck: from in front of the terrace in the west to under the hot tub in the east
-	garden:  { name: "Garden",   ox: 14.3,   oy: 0,    oz: -24.1, bounds: [-7.6, 33.6, -30.1, -12.1], see: ["pool", "main", "shame", "park"], outdoor: true, file: "./worldGarden.js" },
+	garden:  { name: "Garden",   ox: 14.3,   oy: 0,    oz: -24.1, bounds: [-7.6, 33.6, -30.1, -12.1], see: ["pool", "main", "shame", "park", "tree", "aquarium", "haunted"], outdoor: true, file: "./worldGarden.js" },
+	// off the garden's west side, through the gaps in its west railing: the Aquarium (by the west wing) and the
+	// Haunted Mansion (at the west end of the long lawn); you see their outsides from the garden
+	aquarium: { name: "Aquarium", ox: -19.3, oy: 0,    oz: -13.6, bounds: [-31.0, -7.6, -19.6, -8.9],  see: ["garden"], file: "./worldAquarium.js" },
+	haunted: { name: "Haunted Mansion", ox: -19.3, oy: 0, oz: -21.65, bounds: [-31.0, -7.6, -30.1, -19.7], see: ["garden"], file: "./worldHaunted.js" },
 	// south of the garden, through the gate in its south railing: the Fun Park (a carousel, a Ferris wheel, a drop tower,
 	// a swing ride, and the station of a roller coaster that runs all the way round the house)
-	park:    { name: "Fun Park", ox: 13.0,   oy: 0,    oz: -48.0, bounds: [-7.6, 33.6, -66.0, -30.1], see: ["garden", "pool", "main", "shame"], outdoor: true, file: "./worldPark.js" },
+	park:    { name: "Fun Park", ox: 13.0,   oy: 0,    oz: -48.0, bounds: [-7.6, 33.6, -66.0, -30.1], see: ["garden", "pool", "main", "shame", "karts", "haunted", "tree"], outdoor: true, file: "./worldPark.js" },
+	// off the Fun Park's west side, through the gate in its west railing: the Bumper Kart arena (drive, ram, kick)
+	karts:   { name: "Bumper Karts", ox: -16.8, oy: 0,  oz: -41.8, bounds: [-26.0, -7.6, -52.0, -30.2], see: ["park", "garden", "haunted"], outdoor: true, file: "./worldKarts.js" },
 	// the wing behind the lounge (through the door by the dining table): a short hallway, with the game room off
 	// its west side and the spa off its east side
 	hall:    { name: "Hallway",  ox: 13.35,  oy: 0,    oz: 10.35, bounds: [12.05, 14.65, 8.05, 12.55], see: ["lounge", "games", "spa"], file: "./worldHall.js" },
@@ -62,8 +74,8 @@ export const ZONES = {
 	spa:     { name: "Spa",      ox: 18.75,  oy: 0,    oz: 11.15, bounds: [14.65, 22.95, 8.15, 14.05], see: ["hall", "games"], file: "./worldSpa.js" }
 };
 // what you can see from the living room / terrace
-const MAIN_SEES = ["lounge", "pool", "cinema", "loft", "garden", "shame", "park"];
-const BUILD_ORDER = ["lounge", "loft", "pool", "garden", "shame", "park", "bedroom", "bath", "cinema", "disco", "hall", "games", "spa"];
+const MAIN_SEES = ["lounge", "pool", "cinema", "loft", "garden", "shame", "park", "tree"];
+const BUILD_ORDER = ["lounge", "loft", "pool", "garden", "shame", "park", "tree", "bedroom", "bath", "cinema", "disco", "hall", "games", "spa", "aquarium", "haunted", "karts"];
 
 export function createHouse(ctx) {
 	const { scene, room, renderer, camera } = ctx;
@@ -257,9 +269,13 @@ export function createHouse(ctx) {
 	// Stepping into a portal's box moves you across the floor plan by (dx, dz): from the top of the lounge's
 	// stairs onto the loft and back. It looks seamless because the loft is drawn right there (see ZONES.vis).
 	const portals = [];
+	// every room's camera walls (k.wall / k.camWall), in one list: the camera stops short of them (world.js)
+	const camWalls = [];
 	// the living room's doors to the lounge
-	addDoor("living", room.livingDoor, { minX: 6.95, maxX: 7.3, minZ: 2.9, maxZ: 4.6 }, [[6.2, 3.75], [8.1, 3.75]]);
-	addDoor("cinema", room.cinemaDoor, { minX: -7.3, maxX: -6.95, minZ: -4.2, maxZ: -2.8 }, [[-6.2, -3.5], [-8.1, -3.5]]);
+	for (const [did, fd, col, st] of [["living", room.livingDoor, { minX: 6.95, maxX: 7.3, minZ: 2.9, maxZ: 4.6 }, [[6.2, 3.75], [8.1, 3.75]]], ["cinema", room.cinemaDoor, { minX: -7.3, maxX: -6.95, minZ: -4.2, maxZ: -2.8 }, [[-6.2, -3.5], [-8.1, -3.5]]]]) {
+		const door = addDoor(did, fd, col, st);
+		camWalls.push({ p: col, v: col, y0: 0, y1: 2.3, zone: "main", on: () => !door.isOpen() });
+	}
 
 	function makeKit(id) {
 		const Z = ZONES[id], ox = Z.ox, oy = Z.oy || 0, oz = Z.oz, ry = Z.ry || 0;
@@ -312,6 +328,15 @@ export function createHouse(ctx) {
 			// a framed photo on the wall: one of the shared photo slots (see world.js photoFrame)
 			photo(slot, x, y, z, rot, o) { return ctx.photoFrame(g, slot, x, y, z, rot, o || {}, shift); },
 			box(x0, x1, z0, z1) { room.colliders.push(rect(x0, x1, z0, z1)); },
+			// a wall: solid to walk into (like box) AND the camera never goes through it (local coords, y from the
+			// room's floor); camWall is the camera part alone (glass, a ceiling, the water round a tunnel, a roof)
+			wall(x0, x1, z0, z1, y0 = 0, y1 = 3.6) { k.box(x0, x1, z0, z1); return k.camWall(x0, x1, z0, z1, y0, y1); },
+			camWall(x0, x1, z0, z1, y0 = 0, y1 = 3.6) {
+				const a = Wv([x0, z0]), b = Wv([x1, z1]);
+				const w = { p: rect(x0, x1, z0, z1), v: { minX: Math.min(a[0], b[0]), maxX: Math.max(a[0], b[0]), minZ: Math.min(a[1], b[1]), maxZ: Math.max(a[1], b[1]) }, y0: y0 + oy, y1: y1 + oy, zone: id };
+				camWalls.push(w);
+				return w;
+			},
 			walk(x0, x1, z0, z1) { Z.area.rects.push(rect(x0, x1, z0, z1)); },
 			floor(fn) { Z.area.floor = (x, z) => { const l = toLocal(x, z); return fn(l[0], l[1]) + oy; }; },
 			spot(s) {
@@ -362,11 +387,16 @@ export function createHouse(ctx) {
 			// French doors in this room's wall (local position), shared open / closed; col: local doorway box [x0, x1, z0, z1]
 			frenchDoor(did, o, col, stands) {
 				const fd = frenchDoor(g, o);
-				addDoor(did, fd, rect(col[0], col[1], col[2], col[3]), stands.map(W));
+				const door = addDoor(did, fd, rect(col[0], col[1], col[2], col[3]), stands.map(W));
+				k.camWall(col[0], col[1], col[2], col[3], 0, (o && o.h) || 2.4).on = () => !door.isOpen();   // (shut: the camera can't look through it)
 				return fd;
 			},
 			// any other kind of door (the bedroom's sliding glass wall): fd = { leaves, curtains, update(dt, open, curtainsOpen) }
-			addDoor(did, fd, col, stands, labels) { return addDoor(did, fd, rect(col[0], col[1], col[2], col[3]), stands.map(W), labels); },
+			addDoor(did, fd, col, stands, labels) {
+				const door = addDoor(did, fd, rect(col[0], col[1], col[2], col[3]), stands.map(W), labels);
+				k.camWall(col[0], col[1], col[2], col[3], 0, 2.4).on = () => !door.isOpen();
+				return door;
+			},
 			tex: makeTextures(kit),
 			shell: (opt) => makeShell(k, opt)
 		});
@@ -413,7 +443,7 @@ export function createHouse(ctx) {
 	}
 
 	const houseApi = {
-		ZONES, built, ensure, update, addDoor, portals,
+		ZONES, built, ensure, update, addDoor, portals, camWalls,
 		start: pump,
 		// call after the camera has moved: hides the ceilings it's up at (see cutaway)
 		cutaway,
@@ -434,6 +464,10 @@ export function createHouse(ctx) {
 		// a seat that watches a screen (cinema): the camera looks at this from your eyes
 		screenFor(sitId) { for (const id in built) { const Z = built[id]; if (Z.screenFor) { const s = Z.screenFor(sitId); if (s) return s; } } return null; },
 		promptOpts(opts) { const Z = built[region]; if (Z && Z.promptOpts) Z.promptOpts(opts); if (pets) pets.promptOpts(opts); },
+		// something you're driving (a bumper kart): it moves you instead of walking (see world.js updateMe)
+		vehicle() { for (const id in built) { const Z = built[id]; if (Z.vehicle) { const v = Z.vehicle(); if (v) return v; } } return null; },
+		// is this floor-plan point out under the sky (the terrace, the pool deck, the garden, the park...)?
+		outdoorAt(x, z) { const a = areaOf(x, z); return a === "terrace" || !!(ZONES[a] && ZONES[a].outdoor); },
 		// someone said something in the chat (a room can show it)
 		onChat(id, who, text) { for (const zid in built) if (visibleSet.has(zid) && built[zid].onChat) built[zid].onChat(id, who, text); },
 		musicAt(x, z) { const Z = built[region]; return Z && Z.musicAt ? Z.musicAt(x, z) : 0; },

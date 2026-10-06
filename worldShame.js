@@ -53,6 +53,17 @@ export function build(k) {
 	k.walk(-HW, HW, -HD, HD);
 	k.walk(-HW - 0.9, -HW + 1.0, -0.66, 0.66);   // out to the garden
 	k.cam = { minX: -HW + 0.2, maxX: HW - 0.2, minZ: -HD + 0.2, maxZ: HD - 0.2, maxY: H - 0.2 };
+	// the cardboard walls (wallpaper inside, cardboard skin 0.23 m out): the camera stays out of them, from inside and
+	// from the garden (the door's own camera wall comes with k.addDoor below: only while it's shut)
+	{
+		const T = 0.26, DW = DOOR.w / 2;
+		k.camWall(-HW - T, HW + T, HD, HD + T, 0, H + 0.1);
+		k.camWall(-HW - T, HW + T, -HD - T, -HD, 0, H + 0.1);
+		k.camWall(HW, HW + T, -HD, HD, 0, H + 0.1);
+		k.camWall(-HW - T, -HW, -HD, -DW, 0, H + 0.1);
+		k.camWall(-HW - T, -HW, DW, HD, 0, H + 0.1);
+		k.camWall(-HW - T, -HW, -DW, DW, DOOR.h, H + 0.1);
+	}
 	// the walls are pink wallpaper inside; outside, a skin of cardboard (a little way out from the walls, so the two
 	// never flicker through each other)
 	const OUT = 0.23, side = HD - DOOR.w / 2 + 0.2;
