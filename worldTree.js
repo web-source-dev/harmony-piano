@@ -2,7 +2,7 @@
  * Harmony World — the Treehouse: up in three big old trees in the garden, with rope bridges between them and a
  * zipline from the tallest one right down into the pool.
  *
- * Local coordinates are the garden's (origin at world 14.3, -24.1); y is from the platforms (4.4 m up), so the lawn
+ * Local coordinates are the garden's (origin at world 14.3, -44.1); y is from the platforms (4.4 m up), so the lawn
  * is at y -4.4. The treehouse is drawn over the garden, but on the floor plan it sits 80 m further east
  * (ZONES.tree in worldHouse.js: vis), so up here and down there never mix; the ladder moves you across (k.portal).
  *
@@ -17,14 +17,15 @@
  * (who.sitT), asks ridePose(who) how to hold the body, and stands them up when it's over (spot.rideFor) at spot.side.
  */
 const TR = [{ x: -6.2, z: 2.2 }, { x: 0.6, z: 2.2 }, { x: 8.8, z: 2.2 }];   // T3, T2, T1 (garden-local: trunks on the lawn)
+// (big decks: room to walk round, sit, and look out from all three trees)
 const DECK = [
-	{ x0: -7.8, x1: -4.6, z0: 0.6, z1: 3.8 },      // T3
-	{ x0: -1.3, x1: 2.6, z0: 0.0, z1: 5.9 },       // T2 (the cabin is on its north half)
-	{ x0: 7.3, x1: 10.2, z0: 0.6, z1: 4.4 }        // T1
+	{ x0: -9.6, x1: -4.6, z0: -1.0, z1: 4.8 },     // T3: the lookout
+	{ x0: -1.3, x1: 2.6, z0: -2.6, z1: 7.8 },      // T2 (the cabin is on its north half)
+	{ x0: 7.3, x1: 11.8, z0: -1.8, z1: 4.4 }       // T1: the zipline (its frame on the north edge)
 ];
 const BRIDGES = [{ x0: -4.6, x1: -1.3 }, { x0: 2.6, x1: 7.3 }];
 const BZ0 = 1.75, BZ1 = 2.65, BSAG = 0.14;         // the bridges' width (z) and how far they dip in the middle
-const CABIN = { x0: -0.9, x1: 2.4, z0: 3.4, z1: 5.9, door0: 0.3, door1: 1.2, h: 2.1, peak: 3.0 };
+const CABIN = { x0: -1.0, x1: 2.4, z0: 3.4, z1: 7.6, door0: 0.3, door1: 1.2, h: 2.4, peak: 3.5 };
 const LADDER = { x: 2.6, z0: 2.7, z1: 3.1 };       // on T2's east edge: the z of the boxes you step into at the top and the foot
 const LX = 2.66, CLIMB_X = 2.96, LZ = 2.9;         // the ladder's rails (x), where your feet go on it (facing it, west), its middle (z)
 const GROUND = -4.4, RUNGS = 14, RUNG = 4.4 / 14;  // the lawn, and the rungs (the 14th is the deck)
@@ -54,7 +55,7 @@ export function build(k) {
 	k.walk(BRIDGES[0].x0 - 0.6, BRIDGES[0].x1 + 0.6, BZ0, BZ1);
 	k.walk(BRIDGES[1].x0 - 0.6, BRIDGES[1].x1 + 0.6, BZ0, BZ1);
 	// (the camera stays under the canopies: up in the leaves you'd see nothing)
-	k.cam = { minX: -11.5, maxX: 12.5, minZ: -6.5, maxZ: 8.5, maxY: 3.0, minY: -4.2 };
+	k.cam = { minX: -12.5, maxX: 14.0, minZ: -6.5, maxZ: 10.0, maxY: 3.4, minY: -4.2 };
 
 	// ---------------------------------------------------------------- the ladder: lawn <-> T2's deck
 	// step into the box at its foot (on the lawn, just east of it) and you climb up; walk to the deck's edge at the top
@@ -292,10 +293,10 @@ export function build(k) {
 	// ---------------------------------------------------------------- T3: a hammock for two, binoculars, bunting
 	let hammock = null;   // (it rocks in update(): declared out here so update can reach it)
 	{
-		const d = DECK[0], hz = d.z1 - 0.55;
-		for (const x of [d.x0 + 0.3, d.x1 - 0.3]) add(g, new THREE.CylinderGeometry(0.06, 0.07, 1.5, 8), darkWood, x, 0.75, hz);
+		const d = DECK[0], hz = d.z1 - 0.55, hxA = -7.5, hxB = -4.9;
+		for (const x of [hxA, hxB]) add(g, new THREE.CylinderGeometry(0.06, 0.07, 1.5, 8), darkWood, x, 0.75, hz);
 		// the cloth: hangs from the post tops (1.3) down to 0.5 in the middle, curling up a little at its sides
-		const hx0 = d.x0 + 0.3, hl = d.x1 - d.x0 - 0.6;
+		const hx0 = hxA, hl = hxB - hxA;
 		const cloth = new THREE.PlaneGeometry(1, 1, 20, 6), cp = cloth.attributes.position;
 		for (let n = 0; n < cp.count; n++) {
 			const u = cp.getX(n) + 0.5, v = cp.getY(n);           // u along, v across (-0.5..0.5)
@@ -307,10 +308,10 @@ export function build(k) {
 		hammock = group(g, 0, 0, hz);
 		hammock.add(net);
 		for (const x of [hx0, hx0 + hl]) add(g, new THREE.SphereGeometry(0.05, 8, 6), ropeM, x, 1.3, hz, { cast: false });
-		k.box(d.x0 + 0.2, d.x1 - 0.2, hz - 0.35, d.z1);
+		k.box(hxA - 0.1, hxB + 0.1, hz - 0.35, d.z1);
 		k.spot({ id: "treeHammock0", x: -6.75, z: hz - 0.05, h: Math.PI, y: 0.12, recline: true, hands: true });
 		k.spot({ id: "treeHammock1", x: -5.65, z: hz - 0.05, h: Math.PI, y: 0.12, recline: true, hands: true });
-		k.interact("tree:hammock", { label: "Swing in the hammock", stand: [-6.2, 1.15], sit: ["treeHammock0", "treeHammock1"] }, net);
+		k.interact("tree:hammock", { label: "Swing in the hammock", stand: [-6.2, hz - 1.0], sit: ["treeHammock0", "treeHammock1"] }, net);
 		// binoculars on a post at the south-west corner, looking out over the garden
 		const bn = group(g, d.x0 + 0.35, 0, d.z0 + 0.35);
 		add(bn, new THREE.CylinderGeometry(0.04, 0.05, 1.1, 8), mat("#3e3a3a", 0.5, 0.5), 0, 0.55, 0);

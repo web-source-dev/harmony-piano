@@ -1,8 +1,8 @@
 /**
  * Harmony World — the pool deck: outdoors behind the house, under the night sky.
  *
- * A big rooftop deck that wraps round the back of the house: in from the
- * terrace (the gap in its east railing), along the back of the lounge (its
+ * A big deck in the courtyard that wraps round the back of the house: in from the
+ * patio behind the living room (the gate in its west railing), along the back of the lounge (its
  * glass doors open onto it) and round to the bedroom (its whole north wall is
  * sliding glass). Open on every outer side behind glass railings.
  *
@@ -93,6 +93,13 @@ export function build(k) {
 	railRun(GG1, ZN + 0.05, XB1 - 0.05, ZN + 0.05);
 	railRun(XB1 - 0.05, ZN + 0.05, XB1 - 0.05, ZB1 - 0.05);
 	railRun(XA0 + 0.05, ZN + 0.05, XA0 + 0.05, 0.1);
+	// (the west side, past the end of the pool, faces the patio behind the living room: a railing with a gate in it)
+	const WG0 = 1.8, WG1 = 3.8;
+	railRun(XA0 + 0.05, 0.1, XA0 + 0.05, WG0);
+	railRun(XA0 + 0.05, WG1, XA0 + 0.05, ZA1 - 0.05);
+	k.box(XA0, XA0 + 0.12, 0.1, WG0);
+	k.box(XA0, XA0 + 0.12, WG1, ZA1);
+	k.walk(XA0 - 1.3, XA0 + 1.0, WG0, WG1);   // in through the gate from the patio
 	k.box(XA0, GG0, ZN, ZN + 0.12);
 	k.box(GG1, XB1, ZN, ZN + 0.12);
 	k.walk(GG0, GG1, ZN - 0.6, ZN + 1.2);

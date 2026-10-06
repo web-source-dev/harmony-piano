@@ -7,7 +7,8 @@
  * to a balcony with the cinema's doors. Off the back of the lounge: the bedroom
  * and the bathroom. Out through the gap in the terrace railing: the pool, under
  * the sky, and past the pool deck (or straight out from the terrace) the garden, with the Box of Shame in it.
- * Behind the lounge, a short hallway to the game room and the spa. Biscuit and Mochi wander the whole house (worldPets.js).
+ * Across the front of the house, the Gallery (a long hallway) with the game room, the spa and the other rooms off it.
+ * Biscuit and Mochi wander the whole house (worldPets.js).
  * South of the garden, the Fun Park (worldPark.js): rides, and a roller coaster that runs right round the house.
  * Up in the garden's trees, the Treehouse (worldTree.js), with rope bridges and a zipline down into the pool. Off the
  * garden's west side, the Aquarium (worldAquarium.js) and the Haunted Mansion (worldHaunted.js); off the Fun Park's
@@ -36,27 +37,29 @@ import * as THREE from "three";
 import { kit, registerArea, floorAt, areaOf, frenchDoor, visXZ } from "./worldRoom.js";
 import { roundRect } from "./worldAvatar.js";
 import { createPets } from "./worldPets.js";
-import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, COURTS, GATES, inRect } from "./worldEstate.js";
+import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, HOUSE_RECT, COURTS, GATES, ROOF_FP, ROOF_FLOOR, ROOF_PLAN, STAIR, WING, inRect } from "./worldEstate.js";
 
+// a rooftop room's area on the roof's floor plan: its inside (WING) and its walls
+function roofRoom(id) { const r = WING[id]; return [r[0] - 0.3 + ROOF_FP[0], r[1] + 0.3 + ROOF_FP[0], r[2] - 0.3 + ROOF_FP[1], r[3] + 0.3 + ROOF_FP[1]]; }
 // where each room sits in the world (its local origin), the area it covers [minX, maxX, minZ, maxZ],
 // and which rooms you can see into from it through open doors
 // (ry turns a room round: the cinema is built facing +z and turned so its doors face the living room)
 // (parts: an area that isn't a plain rect - the garden's L - is these rects of its bounds)
 export const ZONES = {
-	lounge:  { name: "Lounge",   ox: 15.2,   oy: 0,    oz: 1.0,   bounds: [7.1, 23.25, -6.05, 8.05],   see: ["main", "bedroom", "bath", "pool", "loft", "hall", "grounds", "garden", "tree"], file: "./worldLounge.js" },
+	lounge:  { name: "Lounge",   ox: 15.2,   oy: 0,    oz: 1.0,   bounds: [7.1, 23.25, -6.05, 8.05],   see: ["main", "bedroom", "bath", "pool", "loft", "gallery", "grounds", "garden", "tree"], file: "./worldLounge.js" },
 	// upstairs, over the east half of the lounge: drawn there (vis), but on the floor plan it's 230 m further north,
 	// well clear of the grounds, so the two floors never overlap (see shiftAt). The stairs carry you across (portals in worldLoft.js).
 	disco:   { name: "Disco",    ox: 15.2,   oy: 3.6,  oz: 231.0, vis: [15.2, 1.0], bounds: [18.4, 23.15, 232.2, 237.95], see: ["loft"], file: "./worldDisco.js" },
 	loft:    { name: "Upstairs", ox: 15.2,   oy: 3.6,  oz: 231.0, vis: [15.2, 1.0], bounds: [16.2, 23.15, 224.05, 237.95], see: ["lounge", "disco", "pool", "main", "grounds", "garden", "tree"], borrow: "lounge", file: "./worldLoft.js" },
 	cinema:  { name: "Cinema",   ox: -13.25, oy: -1.8, oz: -3.5,  ry: Math.PI / 2, bounds: [-22.6, -7.05, -8.8, 1.8], see: ["main"], file: "./worldCinema.js" },
-	bedroom: { name: "Bedroom",  ox: 28.4,   oy: 0,    oz: -4,    bounds: [23.25, 33.6, -8.62, 0.75],  see: ["lounge", "pool", "loft", "grounds"], file: "./worldBedroom.js" },
+	bedroom: { name: "Bedroom",  ox: 28.4,   oy: 0,    oz: -4,    bounds: [23.25, 33.6, -8.62, 0.75],  see: ["lounge", "pool", "loft", "grounds", "closet"], file: "./worldBedroom.js" },
 	bath:    { name: "Bathroom", ox: 27.4,   oy: 0,    oz: 4.7,   bounds: [23.25, 31.6, 0.95, 8.4],    see: ["lounge", "loft"], file: "./worldBath.js" },
 	// (the deck reaches right up to the lounge's back wall: with a gap between the two areas, the doorway between
 	// the lounge and the pool deck had a strip that belonged to no room, and nobody could walk through it)
 	pool:    { name: "Pool",     ox: 19.55,  oy: 0,    oz: -12.1, bounds: [5.45, 33.6, -18.1, -6.05],  see: ["main", "lounge", "bedroom", "loft"], outdoor: true, file: "./worldPool.js" },
 	// up in the garden's three big trees: drawn over the garden (vis), but on the floor plan 80 m further east, so the
 	// platforms never mix with the lawn under them (like the loft). The ladder on the middle tree carries you across.
-	tree:    { name: "Treehouse", ox: 94.3,  oy: 4.4,  oz: -44.1, vis: [14.3, -44.1], bounds: [85.0, 104.5, -48.6, -37.8], see: [], outdoor: true, file: "./worldTree.js" },
+	tree:    { name: "Treehouse", ox: 94.3,  oy: 4.4,  oz: -44.1, vis: [14.3, -44.1], bounds: [84.4, 106.4, -47.0, -36.0], see: [], outdoor: true, file: "./worldTree.js" },
 	// in the garden, east of the gazebo: the Box of Shame (a cardboard box you can go into: a bed of roses, the Cute Corner)
 	// (before the garden: it sits inside the garden's area, and the first area that holds a point wins)
 	shame:   { name: "Box of Shame", ox: 28.6, oy: 0,   oz: -44.6, bounds: [24.9, 32.3, -47.6, -41.6], see: ["garden", "grounds"], file: "./worldShame.js" },   // (inside, only out through the door shows)
@@ -73,34 +76,48 @@ export const ZONES = {
 	park:    { name: "Fun Park", ox: 13.0,   oy: 0,    oz: -92.0, bounds: [-7.6, 33.6, -110.0, -74.1], see: [], outdoor: true, file: "./worldPark.js" },
 	// off the Fun Park's west side, down the path from the gate in its west railing: the Bumper Kart arena (drive, ram, kick)
 	karts:   { name: "Bumper Karts", ox: -36.8, oy: 0,  oz: -85.8, bounds: [-46.0, -27.6, -96.0, -74.2], see: [], outdoor: true, file: "./worldKarts.js" },
-	// the wing behind the lounge (through the door by the dining table): a short hallway, with the game room off
-	// its west side and the spa off its east side
-	hall:    { name: "Hallway",  ox: 13.35,  oy: 0,    oz: 10.35, bounds: [12.05, 14.65, 8.05, 12.55], see: ["lounge", "games", "spa"], file: "./worldHall.js" },
-	games:   { name: "Game Room", ox: 7.95,  oy: 0,    oz: 13.15, bounds: [3.75, 12.05, 8.05, 18.15], see: ["hall", "spa"], file: "./worldGameRoom.js" },
-	spa:     { name: "Spa",      ox: 18.75,  oy: 0,    oz: 11.15, bounds: [14.65, 22.95, 8.15, 14.05], see: ["hall", "games"], file: "./worldSpa.js" },
+	// along the north side of the hall, each with its door straight off it: the game room and the spa (their own shells,
+	// local coordinates round their middles; their doors are in their south walls, out to the hall)
+	games:   { name: "Game Room", ox: 8.95,  oy: 0,    oz: 18.41, bounds: [3.85, 14.15, 12.3, 24.5], see: ["gallery"], file: "./worldGameRoom.js" },
+	spa:     { name: "Spa",      ox: 18.7,   oy: 0,    oz: 18.41, bounds: [14.15, 23.2, 12.3, 24.5], see: ["gallery"], file: "./worldSpa.js" },
+	// the long hallway right across the house (with the bit in front of the living room's doorway, and the double-height
+	// foyer with the grand staircase up to the roof): parts, not one rect
+	gallery: { name: "Gallery", ox: 0,       oy: 0,    oz: 0,     bounds: [-23.9, 35.2, 6.05, 24.5], parts: [[-23.9, 35.2, 8.05, 12.3], [-7.3, 7.05, 6.1, 8.3], [-8.15, 3.85, 12.3, 24.5]], see: ["main", "lounge", "dining", "powder", "library", "games", "spa", "music", "grounds", "garden"], file: "./worldGallery.js" },
+	powder:  { name: "Powder Room", ox: 0,   oy: 0,    oz: 0,     bounds: [-11.52, -7.3, 1.81, 8.3],   see: ["gallery"], file: "./worldPowder.js" },
+	music:   { name: "Music Room", ox: 0,    oy: 0,    oz: 0,     bounds: [23.2, 33.55, 12.3, 24.5],   see: ["gallery", "grounds"], file: "./worldMusic.js" },
+	dining:  { name: "Dining Room", ox: 0,   oy: 0,    oz: 0,     bounds: [-22.4, -11.52, 1.81, 8.3],  see: ["gallery", "grounds"], file: "./worldDining.js" },
+	library: { name: "Library",  ox: 0,      oy: 0,    oz: 0,     bounds: [-22.4, -8.15, 12.3, 24.5],  see: ["gallery", "grounds"], file: "./worldLibrary.js" },
+	// up on the roof: the roof deck (drawn over the house, on the floor plan ROOF_FP away: see worldEstate.js), with the gym
+	// and the playroom in pavilions on it (built in drawn coordinates: their zones' origin is the floor plan's offset)
+	// (their bounds: WING.gym / WING.playroom and their walls, on the roof's floor plan)
+	gym:     { name: "Gym",      ox: ROOF_FP[0], oy: ROOF_FLOOR, oz: ROOF_FP[1], vis: [0, 0], bounds: roofRoom("gym"), see: ["roof", "grounds"], file: "./worldGym.js" },
+	playroom: { name: "Playroom", ox: ROOF_FP[0], oy: ROOF_FLOOR, oz: ROOF_FP[1], vis: [0, 0], bounds: roofRoom("playroom"), see: ["roof", "grounds"], file: "./worldPlayroom.js" },
+	closet:  { name: "Wardrobe", ox: 0,      oy: 0,    oz: 0,     bounds: [31.71, 33.55, 0.75, 8.51],  see: ["bedroom", "grounds"], file: "./worldCloset.js" },
+	roof:    { name: "Roof Deck", ox: ROOF_FP[0], oy: ROOF_FLOOR, oz: ROOF_FP[1], vis: [0, 0], bounds: [477.45, 533.7, -8.8, 24.7], see: ["gym", "playroom"], outdoor: true, file: "./worldRoof.js" },
 	// last: everything outdoors that isn't one of the places above (the lawns, the paths, the trees round the house),
 	// and the house's own outside. Its area is the whole estate except the house and its courtyard.
 	grounds: { name: "Grounds",     ox: 0,   oy: 0,    oz: 0,     bounds: ESTATE.slice(), see: [], outdoor: true, file: "./worldGrounds.js" }
 };
 // Outdoors you see everything out there, near and far: the outdoor places, the outsides of the buildings, and (through
 // the courtyard's glass) the rooms that open onto it. The living room / terrace sees all of it too.
-const OUTSIDE = ["main", "grounds", "pool", "garden", "shame", "tree", "park", "karts", "aquarium", "haunted", "lounge", "bedroom", "loft"];
+const OUTSIDE = ["main", "grounds", "pool", "garden", "shame", "tree", "park", "karts", "aquarium", "haunted", "lounge", "bedroom", "loft", "roof", "gym", "playroom", "dining", "library", "music", "gallery", "closet"];
 const MAIN_SEES = OUTSIDE.concat(["cinema"]);
 // built first to last on the loading screen (the grounds first: they're what you see first, out of every window)
-const BUILD_ORDER = ["grounds", "lounge", "loft", "pool", "garden", "shame", "tree", "park", "bedroom", "bath", "cinema", "disco", "hall", "games", "spa", "aquarium", "haunted", "karts"];
+const BUILD_ORDER = ["grounds", "lounge", "loft", "gallery", "roof", "pool", "garden", "shame", "tree", "park", "bedroom", "bath", "cinema", "disco", "games", "spa", "dining", "library", "music", "powder", "gym", "playroom", "closet", "aquarium", "haunted", "karts"];
 // Level of detail, by distance from the camera: each room's small things (and, in a building, everything inside its
 // walls) go on a render layer of its own, and the camera only draws that layer while it's near enough to see them.
 // INSIDE: up to what height (world y) a building's insides are, and from how far off you could still see them (through
 // its doors and windows); outdoor places only lose their small things (beyond DETAIL_NEAR).
 // (small: under SMALL_R across, or thin - a post, a rail, a trim, a sign - under THIN thick and a couple of metres long)
 const INSIDE = {
-	lounge: [6.9, 20], loft: [6.5, 20], disco: [6.6, 16], bedroom: [3.0, 18], bath: [3.0, 14], cinema: [4.7, 14], hall: [3.0, 14],
-	games: [3.6, 14], spa: [3.2, 14], aquarium: [5.3, 12], haunted: [3.8, 10], shame: [3.4, 10]
+	lounge: [6.9, 20], loft: [6.5, 20], disco: [6.6, 16], bedroom: [3.0, 18], bath: [3.0, 14], cinema: [4.7, 14],
+	games: [3.6, 14], spa: [3.2, 14], aquarium: [5.3, 12], haunted: [3.8, 10], shame: [3.4, 10],
+	gallery: [5.3, 16], dining: [3.4, 14], library: [3.6, 14], music: [3.4, 14], powder: [3.0, 10], gym: [ROOF_FLOOR + 3.3, 14], playroom: [ROOF_FLOOR + 3.3, 14], closet: [3.0, 10]
 };
 // the living room (it isn't a zone): its insides, and the terrace's small things
 const MAIN_RECT = [-7.2, 7.2, -6.3, 6.3], MAIN_INSIDE = [3.4, 18];
 const DETAIL_NEAR = 30, SMALL_R = 0.25, THIN = 0.09, THIN_R = 1.3;
-const LABEL = { grounds: "the grounds and the house", lounge: "the lounge and the kitchen", loft: "upstairs", pool: "the pool", garden: "the garden", shame: "the Box of Shame", tree: "the treehouse", park: "the Fun Park", bedroom: "the bedroom", bath: "the bathroom", cinema: "the cinema", disco: "the disco", hall: "the hallway", games: "the game room", spa: "the spa", aquarium: "the aquarium", haunted: "the Haunted Mansion", karts: "the bumper karts" };
+const LABEL = { grounds: "the grounds and the house", lounge: "the lounge and the kitchen", loft: "upstairs", pool: "the pool", garden: "the garden", shame: "the Box of Shame", tree: "the treehouse", park: "the Fun Park", bedroom: "the bedroom", bath: "the bathroom", cinema: "the cinema", disco: "the disco", games: "the game room", spa: "the spa", aquarium: "the aquarium", haunted: "the Haunted Mansion", karts: "the bumper karts", gallery: "the Gallery and the grand staircase", roof: "the roof deck", music: "the music room", powder: "the powder room", dining: "the dining room", library: "the library", gym: "the gym", playroom: "the playroom", closet: "the walk-in wardrobe" };
 
 export function createHouse(ctx) {
 	const { scene, room, renderer, camera } = ctx;
@@ -126,6 +143,19 @@ export function createHouse(ctx) {
 		G.walkFn = (x, z, r) => {
 			if (!inRect(inner, x, z, -r)) return false;
 			for (const q of GATES) if (inRect(q.r, x, z, -r)) return true;
+			for (const q of solid) if (inRect(q, x, z, r)) return false;
+			return true;
+		};
+	}
+	// The roof deck: anywhere inside the parapet that's clear of the courtyard, the lounge's upper storey, the stairwell's
+	// pavilion and the rooftop rooms (their walls), and through their doors (all on the roof's floor plan: ROOF_FP away)
+	{
+		const P = ROOF_PLAN, F = r => [r[0] + ROOF_FP[0], r[1] + ROOF_FP[0], r[2] + ROOF_FP[1], r[3] + ROOF_FP[1]];
+		const inner = F(P.inner), gates = [P.landing, P.gymDoor, P.playDoor, P.terraceGap].map(F);
+		const solid = [P.notch, P.upper, P.pavilion].map(F).concat(["gym", "playroom"].map(id => ZONES[id].bounds));
+		ZONES.roof.area.walkFn = (x, z, r) => {
+			for (const q of gates) if (inRect(q, x, z, -r)) return true;
+			if (!inRect(inner, x, z, -r)) return false;
 			for (const q of solid) if (inRect(q, x, z, r)) return false;
 			return true;
 		};
@@ -540,7 +570,18 @@ export function createHouse(ctx) {
 				return door;
 			},
 			tex: makeTextures(kit),
-			shell: (opt) => makeShell(k, opt)
+			shell: (opt) => makeShell(k, opt),
+			// the inside of a room that fills part of the house (see makeRoom)
+			room: (opt) => makeRoom(k, opt),
+			// stairs to somewhere that's drawn here but sits elsewhere on the floor plan (the roof terrace): step into the
+			// box (local) and you're moved (dx, dz) across the floor plan; world: the box is already in world coordinates
+			link(x0, x1, z0, z1, dx, dz, world) {
+				const a = world ? [x0, z0] : W([x0, z0]), b = world ? [x1, z1] : W([x1, z1]);
+				const r = { minX: Math.min(a[0], b[0]), maxX: Math.max(a[0], b[0]), minZ: Math.min(a[1], b[1]), maxZ: Math.max(a[1], b[1]), dx, dz };
+				r.goal = [(r.minX + r.maxX) / 2, (r.minZ + r.maxZ) / 2];
+				portals.push(r);
+				return r;
+			}
 		});
 		return k;
 	}
@@ -845,6 +886,182 @@ function drawIcon(g, icon, color) {
 			P([[-48, 0], [0, -40], [48, 0]]); P([[-36, -8], [-36, 38], [36, 38], [36, -8]]); g.strokeRect(-10, 12, 20, 26);
 			break;
 	}
+}
+
+// ---------------------------------------------------------------- a room's inside, for the rooms that fill the house
+// The newer rooms (the Grand Hall, the dining room, the library, the gym, the playroom, the wardrobe) are built in world
+// coordinates (their zone's origin is the world's) and only draw their own side of each wall: single-sided panels facing
+// into the room, so a wall between two rooms is the two rooms' panels back to back, and an outside wall is the room's
+// panel inside and the house's facade outside (worldGrounds.js). Openings get reveals across the wall's depth.
+// opt: { x0, x1, z0, z1 (the inside), h, floor, ceil (false: none), wall (material, or { n, s, e, w }), trim (skirting),
+//        depth: { n, s, e, w } (how thick each wall is: to the next room's panel, or out to the facade),
+//        holes: [{ wall: "n"|"s"|"e"|"w", a, b (along the wall: x for n / s, z for e / w), y0, y1, glass }],
+//        ceilHoles: [[x0, x1, z0, z1]], floorHoles: [[x0, x1, z0, z1]],
+//        exterior: material (a free-standing room - the rooftop pavilions - gets its outside too: walls facing out, depth
+//        away, through the same openings, and a flat roof with a charcoal fascia), roofM }
+// (a hole's own depth: q.depth, where a wall is thicker than the rest of that side)
+// walls: n is z = z0 (facing +z), s is z = z1, w is x = x0 (facing +x), e is x = x1
+function makeRoom(k, opt) {
+	const { THREE, add, mat, g } = k;
+	const { x0, x1, z0, z1, h } = opt, S = opt.uv || 2.0;
+	const depth = Object.assign({ n: 0.22, s: 0.22, e: 0.22, w: 0.22 }, opt.depth || {});
+	const parts = new Map();
+	const quad = (m, p, n, uvs) => {
+		let P = parts.get(m);
+		if (!P) parts.set(m, P = { pos: [], nor: [], uv: [], idx: [] });
+		const b = P.pos.length / 3;
+		p.forEach((v, i) => { P.pos.push(v[0], v[1], v[2]); P.nor.push(n[0], n[1], n[2]); P.uv.push(uvs[i][0], uvs[i][1]); });
+		P.idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+	};
+	// an upright rect from a to b (x, z), y0..y1, facing n; u0: metres along for the texture
+	const upright = (m, a, b, ya, yb, n, u0 = 0) => {
+		if (-(b[1] - a[1]) * n[0] + (b[0] - a[0]) * n[1] < 0) { const t = a; a = b; b = t; }
+		const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+		if (len < 0.005 || yb - ya < 0.005) return;
+		quad(m, [[a[0], ya, a[1]], [b[0], ya, b[1]], [b[0], yb, b[1]], [a[0], yb, a[1]]], [n[0], 0, n[1]], [[u0 / S, ya / S], [(u0 + len) / S, ya / S], [(u0 + len) / S, yb / S], [u0 / S, yb / S]]);
+	};
+	const flatQ = (m, r, y, up) => {
+		const [a0, a1, b0, b1] = r;
+		if (a1 - a0 < 0.005 || b1 - b0 < 0.005) return;
+		if (up) quad(m, [[a0, y, b1], [a1, y, b1], [a1, y, b0], [a0, y, b0]], [0, 1, 0], [[a0 / S, -b1 / S], [a1 / S, -b1 / S], [a1 / S, -b0 / S], [a0 / S, -b0 / S]]);
+		else quad(m, [[a0, y, b0], [a1, y, b0], [a1, y, b1], [a0, y, b1]], [0, -1, 0], [[a0 / S, b0 / S], [a1 / S, b0 / S], [a1 / S, b1 / S], [a0 / S, b1 / S]]);
+	};
+	const cut = (r, holes) => {
+		// r minus holes, cut on a grid of their edges
+		const hs = (holes || []).map(q => [Math.max(r[0], q[0]), Math.min(r[1], q[1]), Math.max(r[2], q[2]), Math.min(r[3], q[3])]).filter(q => q[1] > q[0] && q[3] > q[2]);
+		const xs = [...new Set([r[0], r[1], ...hs.flatMap(q => [q[0], q[1]])])].sort((a, b) => a - b);
+		const zs = [...new Set([r[2], r[3], ...hs.flatMap(q => [q[2], q[3]])])].sort((a, b) => a - b);
+		const out = [];
+		for (let i = 0; i < xs.length - 1; i++) for (let j = 0; j < zs.length - 1; j++) {
+			const cx = (xs[i] + xs[i + 1]) / 2, cz = (zs[j] + zs[j + 1]) / 2;
+			if (!hs.some(q => cx > q[0] && cx < q[1] && cz > q[2] && cz < q[3])) out.push([xs[i], xs[i + 1], zs[j], zs[j + 1]]);
+		}
+		return out;
+	};
+	const wallM = side => (opt.wall && opt.wall.isMaterial ? opt.wall : opt.wall[side]);
+	const SIDES = {
+		n: { a: [x0, z0], b: [x1, z0], n: [0, 1], along: 0, len: x1 - x0 },
+		s: { a: [x0, z1], b: [x1, z1], n: [0, -1], along: 0, len: x1 - x0 },
+		w: { a: [x0, z0], b: [x0, z1], n: [1, 0], along: 1, len: z1 - z0 },
+		e: { a: [x1, z0], b: [x1, z1], n: [-1, 0], along: 1, len: z1 - z0 }
+	};
+	const revealM = opt.reveal || mat("#f4efe6", 0.7, 0, { side: THREE.DoubleSide }), frameM = opt.frame || mat("#2e2a31", 0.5, 0.3);
+	const glassM = new THREE.MeshPhysicalMaterial({ color: "#d8ecff", transparent: true, opacity: 0.16, roughness: 0.05, metalness: 0.1, depthWrite: false, side: THREE.DoubleSide });
+	const trimM = opt.trim || mat("#fbf7f0", 0.5);
+	for (const side in SIDES) {
+		const W = SIDES[side], m = wallM(side);
+		if (!m) continue;
+		const base = W.along ? z0 : x0;
+		const at = u => W.along ? [W.a[0], u] : [u, W.a[1]];
+		const hs = (opt.holes || []).filter(q => q.wall === side).sort((p, q) => p.a - q.a);
+		let u = base;
+		const seg = (ua, ub, ya, yb) => upright(m, at(ua), at(ub), ya, yb, W.n, ua - base);
+		for (const q of hs) {
+			seg(u, q.a, 0, h);
+			seg(q.a, q.b, 0, q.y0 || 0);
+			seg(q.a, q.b, q.y1, h);
+			u = q.b;
+		}
+		seg(u, base + W.len, 0, h);
+		// a free-standing room's outside face, out past the wall's thickness, through the same openings
+		if (opt.exterior) {
+			const d0 = depth[side], on = [-W.n[0], -W.n[1]], ext = (opt.extTop || 0.35);
+			const ato = uu => { const p = at(uu); return [p[0] + on[0] * d0, p[1] + on[1] * d0]; };
+			const oseg = (ua, ub, ya, yb) => upright(opt.exterior, ato(ua), ato(ub), ya, yb, on, ua - base);
+			let v = base - d0;
+			for (const q of hs) { oseg(v, q.a, 0, h + ext); oseg(q.a, q.b, 0, q.y0 || 0); oseg(q.a, q.b, q.y1, h + ext); v = q.b; }
+			oseg(v, base + W.len + d0, 0, h + ext);
+		}
+		// skirting along the bottom, broken at doorways
+		if (opt.trim !== false) {
+			let s0 = base;
+			const run = (ua, ub) => {
+				if (ub - ua < 0.05) return;
+				const a = at(ua), b = at(ub), cx = (a[0] + b[0]) / 2 + W.n[0] * 0.012, cz = (a[1] + b[1]) / 2 + W.n[1] * 0.012;
+				add(g, new THREE.BoxGeometry(W.along ? 0.024 : ub - ua, 0.11, W.along ? ub - ua : 0.024), trimM, cx, 0.055, cz, { cast: false });
+			};
+			for (const q of hs) { if (!(q.y0 > 0.05)) { run(s0, q.a); s0 = q.b; } }
+			run(s0, base + W.len);
+		}
+		// each opening: reveals across the wall, and glass (and a frame) if it's a window
+		for (const q of hs) {
+			const d = q.depth || depth[side], o = [-W.n[0] * d, -W.n[1] * d];
+			const a = at(q.a), b = at(q.b), ya = q.y0 || 0, yb = q.y1;
+			const ao = [a[0] + o[0], a[1] + o[1]], bo = [b[0] + o[0], b[1] + o[1]];
+			// jambs face into the opening
+			const dir = W.along ? [0, 1] : [1, 0];
+			upright(revealM, a, ao, ya, yb, dir);
+			upright(revealM, b, bo, ya, yb, [-dir[0], -dir[1]]);
+			const mid = (x, y) => [x, y];
+			quad(revealM, [[a[0], yb, a[1]], [ao[0], yb, ao[1]], [bo[0], yb, bo[1]], [b[0], yb, b[1]]], [0, -1, 0], [[0, 0], [1, 0], [1, 1], [0, 1]]);
+			if (ya > 0.05) quad(revealM, [[a[0], ya, a[1]], [b[0], ya, b[1]], [bo[0], ya, bo[1]], [ao[0], ya, ao[1]]], [0, 1, 0], [[0, 0], [1, 0], [1, 1], [0, 1]]);
+			void mid;
+			if (q.glass) {
+				const cx = (a[0] + b[0]) / 2 + o[0] * 0.55, cz = (a[1] + b[1]) / 2 + o[1] * 0.55, w = q.b - q.a, hh = yb - ya;
+				const pane = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), glassM);
+				pane.position.set(cx, (ya + yb) / 2, cz);
+				pane.rotation.y = W.along ? Math.PI / 2 : 0;
+				pane.renderOrder = 2;
+				g.add(pane);
+				// a slim frame and a mullion or two
+				const fr = (fw, fh, x, y, z) => add(g, new THREE.BoxGeometry(W.along ? 0.05 : fw, fh, W.along ? fw : 0.05), frameM, x, y, z, { cast: false });
+				const ax = W.along ? cx : null;
+				const pt = t => W.along ? [cx, q.a + t * w] : [q.a + t * w, cz];
+				fr(w, 0.06, cx, ya + 0.03, cz); fr(w, 0.06, cx, yb - 0.03, cz);
+				for (const t of [0, 1]) { const p = pt(t); fr(0.06, hh, W.along ? cx : p[0] + (t ? -0.03 : 0.03), (ya + yb) / 2, W.along ? p[1] + (t ? -0.03 : 0.03) : cz); }
+				const nm = Math.max(0, Math.round(w / 1.1) - 1);
+				for (let i = 1; i <= nm; i++) { const p = pt(i / (nm + 1)); fr(0.045, hh, p[0], (ya + yb) / 2, p[1]); }
+				if (hh > 2.2) fr(w, 0.045, cx, ya + hh * 0.78, cz);
+				void ax;
+				// a sill inside
+				const sa = at(q.a - 0.06), sb = at(q.b + 0.06);
+				if (ya > 0.2) add(g, new THREE.BoxGeometry(W.along ? 0.18 : q.b - q.a + 0.12, 0.04, W.along ? q.b - q.a + 0.12 : 0.18), trimM, (sa[0] + sb[0]) / 2 + W.n[0] * 0.05, ya - 0.02, (sa[1] + sb[1]) / 2 + W.n[1] * 0.05, { cast: false });
+			} else if (!(q.y0 > 0.05) && opt.doorTrim !== false) {
+				// a doorway: a painted architrave round it, on this side
+				const tm = trimM, t = 0.09, off = 0.015;
+				const A = at(q.a - t / 2), B = at(q.b + t / 2), n = W.n;
+				add(g, new THREE.BoxGeometry(W.along ? 0.03 : 0.09, yb + 0.09, W.along ? 0.09 : 0.03), tm, A[0] + n[0] * off, (yb + 0.09) / 2, A[1] + n[1] * off, { cast: false });
+				add(g, new THREE.BoxGeometry(W.along ? 0.03 : 0.09, yb + 0.09, W.along ? 0.09 : 0.03), tm, B[0] + n[0] * off, (yb + 0.09) / 2, B[1] + n[1] * off, { cast: false });
+				const c = at((q.a + q.b) / 2);
+				add(g, new THREE.BoxGeometry(W.along ? 0.03 : q.b - q.a + 0.18, 0.09, W.along ? q.b - q.a + 0.18 : 0.03), tm, c[0] + n[0] * off, yb + 0.045, c[1] + n[1] * off, { cast: false });
+			}
+		}
+	}
+	// floor and ceiling
+	let floorMesh = null;
+	if (opt.floor) for (const r of cut([x0, x1, z0, z1], opt.floorHoles)) flatQ(opt.floor, r, 0, true);
+	if (opt.ceil) for (const r of cut([x0, x1, z0, z1], opt.ceilHoles)) flatQ(opt.ceil, r, h, false);
+	if (opt.exterior) {
+		// the flat roof over a free-standing room, and a charcoal fascia round its top
+		const ext = opt.extTop || 0.35, rx0 = x0 - depth.w, rx1 = x1 + depth.e, rz0 = z0 - depth.n, rz1 = z1 + depth.s;
+		flatQ(opt.roofM || opt.exterior, [rx0, rx1, rz0, rz1], h + ext, true);
+		const fm = opt.fascia || mat("#2e2a31", 0.55, 0.25);
+		add(g, new THREE.BoxGeometry(rx1 - rx0 + 0.12, 0.3, 0.06), fm, (rx0 + rx1) / 2, h + ext - 0.13, rz0 - 0.03, { cast: false });
+		add(g, new THREE.BoxGeometry(rx1 - rx0 + 0.12, 0.3, 0.06), fm, (rx0 + rx1) / 2, h + ext - 0.13, rz1 + 0.03, { cast: false });
+		add(g, new THREE.BoxGeometry(0.06, 0.3, rz1 - rz0), fm, rx0 - 0.03, h + ext - 0.13, (rz0 + rz1) / 2, { cast: false });
+		add(g, new THREE.BoxGeometry(0.06, 0.3, rz1 - rz0), fm, rx1 + 0.03, h + ext - 0.13, (rz0 + rz1) / 2, { cast: false });
+	}
+	if (opt.ceil && opt.cornice !== false) {
+		// a crown moulding round the top
+		const cm = opt.cornice || trimM;
+		add(g, new THREE.BoxGeometry(x1 - x0, 0.08, 0.06), cm, (x0 + x1) / 2, h - 0.04, z0 + 0.03, { cast: false });
+		add(g, new THREE.BoxGeometry(x1 - x0, 0.08, 0.06), cm, (x0 + x1) / 2, h - 0.04, z1 - 0.03, { cast: false });
+		add(g, new THREE.BoxGeometry(0.06, 0.08, z1 - z0), cm, x0 + 0.03, h - 0.04, (z0 + z1) / 2, { cast: false });
+		add(g, new THREE.BoxGeometry(0.06, 0.08, z1 - z0), cm, x1 - 0.03, h - 0.04, (z0 + z1) / 2, { cast: false });
+	}
+	for (const [m, P] of parts) {
+		const geo = new THREE.BufferGeometry();
+		geo.setAttribute("position", new THREE.Float32BufferAttribute(P.pos, 3));
+		geo.setAttribute("normal", new THREE.Float32BufferAttribute(P.nor, 3));
+		geo.setAttribute("uv", new THREE.Float32BufferAttribute(P.uv, 2));
+		geo.setIndex(P.idx);
+		if (m.map) { m.map.wrapS = m.map.wrapT = THREE.RepeatWrapping; m.map.repeat.set(1, 1); m.map.needsUpdate = true; }
+		const mesh = new THREE.Mesh(geo, m);
+		mesh.castShadow = false; mesh.receiveShadow = true;
+		g.add(mesh);
+		if (m === opt.floor) { mesh.userData.floor = true; floorMesh = mesh; }
+	}
+	return floorMesh;
 }
 
 // ---------------------------------------------------------------- a room's walls, floor and ceiling

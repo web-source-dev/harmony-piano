@@ -66,7 +66,7 @@ export function build(k) {
 	k.walk(7.0, 8.6, -3.35, -1.65);  // bedroom
 	k.walk(7.0, 8.6, 2.95, 4.45);    // bathroom
 	k.walk(5.85, 7.35, -7.6, -6.0);  // out to the pool deck
-	k.walk(-2.6, -1.1, 6.0, 7.7);    // to the hallway (its French doors are the hallway's: worldHall.js)
+	k.walk(-2.6, -1.1, 6.0, 7.7);    // out to the Gallery (worldGallery.js)
 	k.cam = { minX: -HW + 0.2, maxX: HW - 0.2, minZ: -HD + 0.2, maxZ: HD - 0.2, maxY: H - 0.3 };
 	const brass = mat("#c9a05a", 0.3, 0.9);
 	const frameM = mat("#fbf8f2", 0.45);

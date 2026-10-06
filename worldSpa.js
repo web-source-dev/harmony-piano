@@ -1,17 +1,20 @@
 /**
- * Harmony World — the spa, off the hallway behind the lounge (worldHall.js; the game room is across it).
+ * Harmony World — the spa, on the north side of the Gallery (worldGallery.js), its own door straight off the hall.
  *
- * Local coordinates (origin at world 18.75, 11.15): x -4..4, z -2.7..2.7, ceiling 3.2 m. The door is in the
- * west wall (x -4) at z 0, out to the hallway.
+ * Local coordinates (origin at world 18.7, 18.41): x -4.35..4.35, z -5.99..5.99 (WING.spa), ceiling 3.2 m.
+ * The door is in the shell's north wall (z -5.99, the hall's side) at x 0. An aisle runs from it straight down the
+ * middle of the room to the zen water wall.
  *
- *   a wooden sauna for two (pour water on the stones: a cloud of steam for everyone in there)
- *   two massage tables: lie face down (head in the face cradle), and whoever's beside you can give you a massage
- *   two spa recliners side by side (hold hands), a treatment mirror (face masks and a glow-up),
- *   herbal tea and fruit, a zen water wall, candles and plants.
+ *   by the door: a treatment mirror (face masks and a glow-up) and a tea bar (herbal tea and fruit)
+ *   the middle: two massage tables (lie face down, and whoever's beside you can give you a massage), two spa recliners
+ *     side by side (hold hands), and a foot spa for two
+ *   the far end: a wooden sauna for three (pour water on the stones: a cloud of steam for everyone in there), a hot tub
+ *     for four, and the zen water wall; photo frames on the walls (slots 75-78), candles and plants
  */
-const W = 8.0, D = 5.4, H = 3.2, HW = W / 2, HD = D / 2;
-const SAUNA = { x0: 1.6, x1: HW, z0: 0.4, z1: HD, h: 2.3, door0: 1.0, door1: 1.9 };
-const TABLES = [{ id: "massage0", x: 0.6, z: -1.5 }, { id: "massage1", x: 2.9, z: -1.5 }];
+const W = 8.7, D = 11.98, H = 3.2, HW = W / 2, HD = D / 2;
+const SAUNA = { x0: 1.6, x1: HW, z0: 2.4, z1: HD, h: 2.3, door0: 2.9, door1: 4.0 };
+const TABLES = [{ id: "massage0", x: -2.5, z: -2.0 }, { id: "massage1", x: 2.5, z: -2.0 }];
+const TUB = { x: -2.3, z: 3.9, r: 1.2 };
 
 export function build(k) {
 	const { THREE, add, mat, group, rbox, g, ctx, canvasTex, rng, tex } = k;
@@ -23,18 +26,23 @@ export function build(k) {
 		floor: mat("#ffffff", 0.35, 0, { map: tex.tiles("#e9e1d3", "#e1d8c8", "#cbbfac", W / 1.2, D / 1.2, 4) }),
 		wall: mat("#ffffff", 0.9, 0, { map: tex.wall("#eadccb", "panel", "rgba(150,120,90,0.10)", W / 2, H / 2) }),
 		ceil: mat("#f3ebe0", 0.95),
-		holes: [{ wall: "w", at: 0, w: 1.5, y1: 2.3 }]
+		holes: [{ wall: "n", at: 0, w: 1.6, y1: 2.3 }]   // out to the Gallery
 	});
 	k.floor(() => 0);
 	k.walk(-HW, HW, -HD, HD);
-	k.walk(-HW - 0.9, -HW + 1.0, -0.7, 0.7);     // out to the hallway
-	k.frenchDoor("spahall", { x: -HW - 0.13, z: 0, ry: -Math.PI / 2, w: 1.46, h: 2.3, depth: 0.45, side: 1, curtain: "#5f8f8a" }, [-HW - 0.3, -HW, -0.75, 0.75], [[-HW + 1.0, 0], [-HW - 1.3, 0]]);
+	k.walk(-0.8, 0.8, -HD - 1.0, -HD + 1.0);     // out to the Gallery
+	k.frenchDoor("spahall", { x: 0, z: -HD - 0.13, ry: Math.PI, w: 1.56, h: 2.3, depth: 0.45, side: -1, curtain: "#5f8f8a" }, [-0.8, 0.8, -HD - 0.3, -HD], [[0, -HD + 1.0], [0, -HD - 1.3]]);
 	{
-		const st = tex.sign("Hallway", "home");
-		add(g, new THREE.PlaneGeometry(0.9, 0.225), new THREE.MeshStandardMaterial({ map: st, roughness: 0.45, emissive: "#ffffff", emissiveMap: st, emissiveIntensity: 0.3 }), -HW + 0.04, 2.62, 0, { ry: Math.PI / 2, cast: false });
+		const st = tex.sign("Gallery", "home");
+		add(g, new THREE.PlaneGeometry(0.9, 0.225), new THREE.MeshStandardMaterial({ map: st, roughness: 0.45, emissive: "#ffffff", emissiveMap: st, emissiveIntensity: 0.3 }), 0, 2.62, -HD + 0.04, { cast: false });
 	}
 	k.cam = { minX: -HW + 0.2, maxX: HW - 0.2, minZ: -HD + 0.2, maxZ: HD - 0.2, maxY: H - 0.2 };
-	k.lightSwitch(-1.95, 1.25, -HD + 0.02, 0);
+	k.lightSwitch(1.35, 1.25, -HD + 0.02, 0);
+	// photo frames: your own pictures (click one to choose)
+	for (const [slot, x, y, z, ry, w, h] of [
+		[75, -HW + 0.03, 1.75, 0.9, Math.PI / 2, 0.8, 0.6], [76, HW - 0.03, 1.75, 0.9, -Math.PI / 2, 0.8, 0.6],
+		[77, -2.6, 1.7, -HD + 0.03, 0, 0.7, 0.55], [78, 2.6, 1.85, -HD + 0.03, 0, 0.6, 0.45]
+	]) k.photo(slot, x, y, z, ry, { w, h, frame: "#c9a05a", metal: 0.7 });
 	const wood = mat("#c8955f", 0.7), woodD = mat("#9c6b3f", 0.7), stone = mat("#8f8a84", 0.9);
 
 	// ---------------------------------------------------------------- the sauna
@@ -53,7 +61,7 @@ export function build(k) {
 	add(benchG, rbox(0.55, 0.08, S.z1 - S.z0 - 0.3, 0.02), wood, S.x1 - 0.3, 0.45, (S.z0 + S.z1) / 2);
 	add(benchG, rbox(0.5, 0.42, S.z1 - S.z0 - 0.3, 0.02), woodD, S.x1 - 0.3, 0.21, (S.z0 + S.z1) / 2);
 	add(benchG, rbox(0.12, 0.6, S.z1 - S.z0 - 0.3, 0.02), wood, S.x1 - 0.06, 0.85, (S.z0 + S.z1) / 2);
-	const HX = 1.98, HZ = 2.6;
+	const HX = S.x0 + 0.38, HZ = S.z1 - 0.45;
 	add(cab, rbox(0.42, 0.55, 0.42, 0.03), mat("#2e2b2b", 0.5, 0.6), HX, 0.28, HZ);
 	const stoneGlow = new THREE.MeshStandardMaterial({ color: "#6e625a", roughness: 0.9, emissive: "#ff5a1f", emissiveIntensity: 0.35 });
 	for (let i = 0; i < 9; i++) add(cab, new THREE.DodecahedronGeometry(0.07 + R() * 0.03, 0), stoneGlow, HX + (R() - 0.5) * 0.28, 0.6 + R() * 0.06, HZ + (R() - 0.5) * 0.28, { cast: false });
@@ -65,13 +73,14 @@ export function build(k) {
 	k.box(S.x0 - 0.07, S.x0 + 0.07, S.door1, S.z1);
 	k.box(S.x1 - 0.6, S.x1, S.z0 + 0.15, S.z1 - 0.15);
 	k.box(HX - 0.24, HX + 0.24, HZ - 0.24, HZ + 0.24);
-	k.spot({ id: "sauna0", x: S.x1 - 0.32, z: 1.15, h: -Math.PI / 2, y: 0.01 });
-	k.spot({ id: "sauna1", x: S.x1 - 0.32, z: 2.1, h: -Math.PI / 2, y: 0.01 });
-	k.interact("spa:saunabench", { label: "Sit in the sauna", stand: [2.6, 1.5], sit: ["sauna0", "sauna1"] }, benchG);
+	k.spot({ id: "sauna0", x: S.x1 - 0.32, z: S.z0 + 0.8, h: -Math.PI / 2, y: 0.01 });
+	k.spot({ id: "sauna1", x: S.x1 - 0.32, z: S.z0 + 1.7, h: -Math.PI / 2, y: 0.01 });
+	k.spot({ id: "sauna2", x: S.x1 - 0.32, z: S.z0 + 2.6, h: -Math.PI / 2, y: 0.01 });
+	k.interact("spa:saunabench", { label: "Sit in the sauna", stand: [2.8, S.z0 + 1.1], sit: ["sauna0", "sauna1", "sauna2"] }, benchG);
 	const STEAM = "z:spa:steam";
 	const steamy = () => { const s = ctx.get(STEAM); return s ? Math.max(0, 1 - (Date.now() - s.at) / 25000) : 0; };
 	k.interact("spa:stones", {
-		label: "Pour water on the hot stones", stand: [2.55, 2.2], face: Math.PI / 2 + 0.6, reach: 2.4,
+		label: "Pour water on the hot stones", stand: [2.6, HZ - 0.65], face: Math.atan2(HX - 2.6, 0.65), reach: 2.4,
 		use: () => { ctx.setShared(STEAM, { at: Date.now(), by: ctx.profile().name }); ctx.doUpper("give", 1200); ctx.sfx("steam", 0.7); ctx.notice("Sssss... the sauna fills with steam."); }
 	}, bucket);
 	const puffs = [];
@@ -88,11 +97,13 @@ export function build(k) {
 		for (const sx of [-0.8, 0.8]) for (const sz of [-0.28, 0.28]) add(t, new THREE.CylinderGeometry(0.03, 0.03, 0.62, 8), woodD, sx, 0.31, sz);
 		// a rolled towel and a little dish of oils on a stool beside it
 		add(t, new THREE.CylinderGeometry(0.06, 0.06, 0.5, 12), mat(i ? "#bde0fe" : "#ffc8d6", 0.95), 0.6, 0.8, 0, { rx: Math.PI / 2, cast: false });
-		const st = group(g, T.x + 0.4, 0, T.z + 0.7);
+		const sx0 = T.x - 1.25, sz0 = T.z + 0.45;   // (the oils stool, by the face cradle)
+		const st = group(g, sx0, 0, sz0);
 		add(st, new THREE.CylinderGeometry(0.16, 0.16, 0.04, 16), woodD, 0, 0.5, 0);
 		add(st, new THREE.CylinderGeometry(0.02, 0.02, 0.5, 6), woodD, 0, 0.25, 0);
 		for (let j = 0; j < 3; j++) add(st, new THREE.CylinderGeometry(0.02, 0.025, 0.1, 10), new THREE.MeshPhysicalMaterial({ color: ["#ffd166", "#c77dff", "#7bdff2"][j], transparent: true, opacity: 0.8, roughness: 0.1 }), -0.07 + j * 0.07, 0.57, 0, { cast: false });
 		k.box(T.x - 0.98, T.x + 0.98, T.z - 0.4, T.z + 0.4);
+		k.box(sx0 - 0.18, sx0 + 0.18, sz0 - 0.18, sz0 + 0.18);
 		// lying face down along the table: feet at the +x end, face in the cradle at the -x end
 		// (a lying spot is where the feet are, and the body runs away from h)
 		k.spot({ id: T.id, x: T.x + 0.84, z: T.z, h: Math.PI / 2, y: 0.86, lie: true, prone: true, awake: true });
@@ -126,11 +137,11 @@ export function build(k) {
 		k.spot({ id: "spaRecliner" + i, x: x - 0.42, z, h: Math.PI / 2, y: 0.0, recline: true, hands: true });
 		k.interact("spa:recliner" + i, { label: "Relax on the recliner", stand: [x + 1.45, z], sit: ["spaRecliner" + i] }, lg);
 	};
-	recliner(0, -3.0, -2.2);
-	recliner(1, -3.0, -1.2);
+	recliner(0, -3.0, 0.4);
+	recliner(1, -3.0, 1.4);
 
 	// ---------------------------------------------------------------- the treatment mirror (west wall)
-	const VZ = 1.8;
+	const VZ = -4.2;
 	const van = group(g, -HW + 0.25, 0, VZ, Math.PI / 2);
 	add(van, rbox(1.3, 0.08, 0.5, 0.02), mat("#f7f3ec", 0.4), 0, 0.82, 0);
 	add(van, rbox(1.2, 0.78, 0.46, 0.02), wood, 0, 0.4, 0);
@@ -150,7 +161,7 @@ export function build(k) {
 	}, van);
 
 	// ---------------------------------------------------------------- tea and fruit
-	const cart = group(g, -1.6, 0, HD - 0.6);
+	const TX = 2.6, cart = group(g, TX, 0, -HD + 0.6);
 	add(cart, rbox(0.9, 0.05, 0.5, 0.02), wood, 0, 0.78, 0);
 	add(cart, rbox(0.9, 0.04, 0.5, 0.02), wood, 0, 0.32, 0);
 	for (const sx of [-0.4, 0.4]) for (const sz of [-0.2, 0.2]) add(cart, new THREE.CylinderGeometry(0.02, 0.02, 0.78, 6), woodD, sx, 0.39, sz);
@@ -158,8 +169,8 @@ export function build(k) {
 	add(cart, new THREE.CylinderGeometry(0.012, 0.02, 0.12, 6), mat("#f2ede4", 0.3), -0.08, 0.93, 0, { rz: -0.9, cast: false });
 	for (let i = 0; i < 2; i++) add(cart, new THREE.CylinderGeometry(0.04, 0.03, 0.06, 12), mat("#f2ede4", 0.3), 0.05 + i * 0.12, 0.83, 0.12, { cast: false });
 	for (let i = 0; i < 6; i++) add(cart, new THREE.SphereGeometry(0.04, 10, 8), mat(["#e63946", "#8ac926", "#ffd166"][i % 3], 0.45), 0.25 + Math.cos(i) * 0.08, 0.83, -0.08 + Math.sin(i) * 0.08, { cast: false });
-	k.box(-2.1, -1.1, HD - 0.88, HD - 0.32);
-	k.interact("spa:tea", { label: "Have some tea and fruit", stand: [-1.6, HD - 1.3], face: 0, use: () => ctx.foodMenu("Tea and fruit", ["juice", "strawberry", "apple", "cookie"]) }, cart);
+	k.box(TX - 0.5, TX + 0.5, -HD + 0.32, -HD + 0.88);
+	k.interact("spa:tea", { label: "Have some tea and fruit", stand: [TX, -HD + 1.4], face: Math.PI, use: () => ctx.foodMenu("Tea and fruit", ["juice", "strawberry", "apple", "cookie"]) }, cart);
 
 	// ---------------------------------------------------------------- the zen water wall (south wall), bamboo, candles
 	const flowTex = canvasTex(128, 512, (c, w, h) => {
@@ -169,12 +180,13 @@ export function build(k) {
 		for (let i = 0; i < 60; i++) { c.strokeStyle = `rgba(255,255,255,${0.15 + r() * 0.35})`; c.lineWidth = 1 + r() * 2; const x = r() * w; c.beginPath(); c.moveTo(x, r() * h); c.lineTo(x + (r() - 0.5) * 4, r() * h); c.stroke(); }
 	}, 1, 2);
 	const FX = 0.0;
-	add(g, rbox(1.3, 2.2, 0.12, 0.03), stone, FX, 1.1, HD - 0.08);
+	const wallSlab = add(g, rbox(1.3, 2.2, 0.12, 0.03), stone, FX, 1.1, HD - 0.08);
 	const flowM = new THREE.MeshStandardMaterial({ map: flowTex, transparent: true, opacity: 0.85, roughness: 0.05, emissive: "#3a7f8c", emissiveIntensity: 0.25 });
 	add(g, new THREE.PlaneGeometry(1.0, 1.9), flowM, FX, 1.2, HD - 0.15, { ry: Math.PI, cast: false });
 	add(g, rbox(1.5, 0.3, 0.45, 0.04), stone, FX, 0.15, HD - 0.3);
 	add(g, new THREE.PlaneGeometry(1.35, 0.32), new THREE.MeshPhysicalMaterial({ color: "#7bc6d4", transparent: true, opacity: 0.6, roughness: 0.05, depthWrite: false }), FX, 0.301, HD - 0.3, { rx: -Math.PI / 2, cast: false, receive: false });
 	k.box(FX - 0.78, FX + 0.78, HD - 0.55, HD);
+	k.interact("spa:water", { label: "Dip your hands in the water", stand: [FX, HD - 1.2], face: 0, use: () => { ctx.doUpper("wash", 2500); ctx.sfx("water", 0.3); } }, wallSlab);
 	const bamboo = (x, z) => {
 		const b = group(g, x, 0, z);
 		add(b, new THREE.CylinderGeometry(0.22, 0.18, 0.4, 14), mat("#d8cfc4", 0.7), 0, 0.2, 0);
@@ -188,14 +200,49 @@ export function build(k) {
 	bamboo(-1.0, HD - 0.35);
 	bamboo(1.05, HD - 0.35);
 	bamboo(HW - 0.35, -HD + 0.35);
+	bamboo(-HW + 0.35, -HD + 0.35);
+	bamboo(-HW + 0.35, HD - 0.35);
 	const candleFl = [];
 	for (const [x, z] of [[-0.6, HD - 0.3], [0.6, HD - 0.3], [-HW + 0.3, VZ - 0.5], [-HW + 0.3, VZ + 0.5]]) {
 		add(g, new THREE.CylinderGeometry(0.04, 0.04, 0.12, 12), mat("#fff8ec", 0.5), x, 0.36, z, { cast: false });
 		candleFl.push(add(g, new THREE.SphereGeometry(0.014, 8, 6), new THREE.MeshBasicMaterial({ color: "#ffd27a", toneMapped: false }), x, 0.44, z, { cast: false }));
 	}
 	// pebbles and a soft rug in the middle
-	const rug = add(g, new THREE.PlaneGeometry(3.0, 1.6), mat("#ffffff", 1, 0, { map: tex.carpet("#d8c7b5", "#a3b18a") }), -0.6, 0.006, 1.2, { rx: -Math.PI / 2, cast: false });
+	const rug = add(g, new THREE.PlaneGeometry(2.0, 7.4), mat("#ffffff", 1, 0, { map: tex.carpet("#d8c7b5", "#a3b18a") }), 0, 0.006, -0.6, { rx: -Math.PI / 2, cast: false });
 	rug.userData.floor = true;
+
+	// ---------------------------------------------------------------- a hot tub for four (south-west corner)
+	const tub = group(g, TUB.x, 0, TUB.z);
+	add(tub, new THREE.CylinderGeometry(TUB.r, TUB.r + 0.05, 0.55, 40), mat("#d8cfc4", 0.6), 0, 0.275, 0);
+	add(tub, new THREE.TorusGeometry(TUB.r - 0.05, 0.07, 10, 40), mat("#f2ede4", 0.5), 0, 0.56, 0, { rx: Math.PI / 2 });
+	const tubWaterM = new THREE.MeshPhysicalMaterial({ color: "#5fd0f0", transparent: true, opacity: 0.7, roughness: 0.05, emissive: "#1aa0d0", emissiveIntensity: 0.5, depthWrite: false });
+	add(tub, new THREE.CircleGeometry(TUB.r - 0.1, 40), tubWaterM, 0, 0.47, 0, { rx: -Math.PI / 2, cast: false, receive: false });
+	const bubbles = [];
+	for (let i = 0; i < 30; i++) { const b = add(tub, new THREE.SphereGeometry(0.02 + R() * 0.025, 8, 6), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, opacity: 0.7, toneMapped: false }), 0, 0.48, 0, { cast: false, receive: false }); b.userData = { a: R() * 6.28, r: R() * (TUB.r - 0.2), ph: R() }; bubbles.push(b); }
+	k.box(TUB.x - TUB.r - 0.05, TUB.x + TUB.r + 0.05, TUB.z - TUB.r - 0.05, TUB.z + TUB.r + 0.05);
+	const tubIds = [];
+	for (let i = 0; i < 4; i++) {
+		const a = -Math.PI / 2 + i * Math.PI / 2, id = "spaTub" + i;
+		k.spot({ id, x: TUB.x + Math.sin(a) * 0.55, z: TUB.z + Math.cos(a) * 0.55, h: a + Math.PI, y: -0.05 });
+		tubIds.push(id);
+	}
+	k.interact("spa:tub", { label: "Get in the hot tub", stand: [TUB.x + TUB.r + 0.55, TUB.z], sit: tubIds }, tub);
+
+	// ---------------------------------------------------------------- a foot spa for two (east wall)
+	{
+		const fz = 0.9, fs = group(g, HW - 0.3, 0, fz, -Math.PI / 2);
+		add(fs, rbox(1.5, 0.45, 0.5, 0.04), wood, 0, 0.225, 0);
+		add(fs, rbox(1.5, 0.5, 0.1, 0.03), woodD, 0, 0.7, -0.22);
+		add(fs, rbox(1.4, 0.06, 0.45, 0.03), mat("#e9dccb", 0.85), 0, 0.48, 0, { cast: false });
+		for (const sx of [-0.38, 0.38]) {
+			add(fs, new THREE.CylinderGeometry(0.22, 0.18, 0.22, 24), mat("#f2ede4", 0.4), sx, 0.11, 0.5);
+			add(fs, new THREE.CircleGeometry(0.19, 24), tubWaterM, sx, 0.215, 0.5, { rx: -Math.PI / 2, cast: false, receive: false });
+		}
+		k.box(HW - 1.05, HW, fz - 0.8, fz + 0.8);
+		const fi = ["spaFoot0", "spaFoot1"];
+		fi.forEach((id, j) => k.spot({ id, x: HW - 0.35, z: fz + (j ? 0.38 : -0.38), h: -Math.PI / 2, y: 0.02 }));
+		k.interact("spa:footspa", { label: "Soak your feet", stand: [HW - 1.7, fz], sit: fi }, fs);
+	}
 
 	// ---------------------------------------------------------------- light
 	const L = {
@@ -204,7 +251,8 @@ export function build(k) {
 		t1: k.light(TABLES[1].x, 2.4, TABLES[1].z, "#ffe2c0", 2.4, 4.5),
 		vanity: k.light(-HW + 0.9, 1.7, VZ, "#fff0dc", 1.8, 3.5),
 		water: k.light(FX, 1.2, HD - 0.8, "#8fd3ff", 1.2, 3.5),
-		rec: k.light(-3.0, 2.4, -1.7, "#ffd9b0", 1.6, 4)
+		rec: k.light(-3.0, 2.4, 0.9, "#ffd9b0", 1.6, 4),
+		tub: k.light(TUB.x, 2.2, TUB.z, "#8fd3ff", 1.8, 4.5)
 	};
 	void L;   // (the house moves its light pool onto these while you're in here)
 	k.key.pos.copy(k.V(0, H - 0.15, 0)); k.key.target.copy(k.V(0, 0, 0.2));
@@ -223,6 +271,7 @@ export function build(k) {
 			p.material.opacity = (0.05 + st * 0.3) * Math.sin(f * Math.PI);
 		});
 		flowTex.offset.y = -t * 0.35;
+		bubbles.forEach(b => { const u = b.userData, f = (t * 0.6 + u.ph) % 1; b.position.set(Math.cos(u.a + t * 0.3) * u.r, 0.46 + f * 0.04, Math.sin(u.a + t * 0.3) * u.r); b.material.opacity = 0.7 * Math.sin(f * Math.PI); });
 		candleFl.forEach((c, i) => { c.scale.y = 1 + Math.sin(t * 14 + i * 2) * 0.25; });
 		vBulbs.forEach((b, i) => { b.material.emissiveIntensity = 1.4 + Math.sin(t * 1.3 + i * 0.5) * 0.2; });
 	}
@@ -237,7 +286,7 @@ export function build(k) {
 			}
 		},
 		applyKey(key, remote) {
-			if (key === STEAM && remote) { const s = ctx.get(STEAM); const me = ctx.me(); if (s && Math.hypot(me.x - (k.ox + 2.8), me.z - (k.oz + 1.7)) < 2.4) ctx.sfx("steam", 0.5); }
+			if (key === STEAM && remote) { const s = ctx.get(STEAM); const me = ctx.me(); if (s && Math.hypot(me.x - (k.ox + (SAUNA.x0 + SAUNA.x1) / 2), me.z - (k.oz + (SAUNA.z0 + SAUNA.z1) / 2)) < 2.4) ctx.sfx("steam", 0.5); }
 		},
 		promptOpts(opts) {
 			const me = ctx.me();

@@ -1,25 +1,29 @@
 import { createPC, PC_GAMES } from "./worldPCGames.js";
 
 /**
- * Harmony World — the game room, off the hallway behind the lounge (worldHall.js).
+ * Harmony World — the game room, on the north side of the Gallery (worldGallery.js), its door straight off the hall.
  *
- * Local coordinates (origin at world 7.95, 13.15): x -4..4, z -4.8..4.8, ceiling 3.6 m.
- * The door is in the east wall, out to the hallway (and across it, the spa).
+ * Local coordinates (origin at world 8.95, 18.41): x -5..5, z -5.99..5.99 (inside: WING.games), ceiling 3.6 m.
+ * The only door is in the n wall (local z -5.99, world z 12.42) at x -0.8..0.8, out to the hall.
  *
- *   a bowling lane along the west wall (bowl, watch the pins go, a scoreboard with everyone's best)
+ *   a bowling lane along the west wall: bowl from the door end, the pins at the far (north) end, a scoreboard over them
  *   a billiard table in the middle (take a shot from wherever you stand; the balls roll the same on every screen)
- *   a dartboard on the east wall (three darts a turn, scored like the real thing)
- *   a snack machine, a sofa to watch from (and cuddle on)
- *   two gaming PCs side by side on the south wall: sit down and play (worldPCGames.js), or take on each other
+ *   a dartboard on the east wall (three darts a turn, scored like the real thing), a sofa to watch from (and cuddle on)
+ *   a foosball table, a jukebox, a snack machine and a trophy cabinet by the door
+ *   two gaming PCs side by side on the north wall: sit down and play (worldPCGames.js), or take on each other
+ *   four photo frames (slots 71-74) for your own pictures
  *
  * Shared keys: z:games:bowl (the last roll), z:games:bowlScores, z:games:pool (the last shot), z:games:darts,
- * z:games:pc0 / z:games:pc1 (what's on each PC's screen), z:games:pcBest (the high scores).
+ * z:games:pc0 / z:games:pc1 (what's on each PC's screen), z:games:pcBest (the high scores), z:games:foos (the last goal).
  */
-const W = 8.0, D = 9.6, H = 3.6, HW = W / 2, HD = D / 2;
-const LANE = { x: -3.0, w: 1.05, foul: 1.6, pinZ: -3.3 };
-const TB = { x: 1.4, z: -1.0, hw: 0.6, hl: 1.15, y: 0.82, r: 0.03 };
-const DART = { z: 3.0, y: 1.73, line: 1.5, R: 0.2 };
-const PCS = [{ id: "pc0", x: -3.1 }, { id: "pc1", x: -1.55 }], PCZ = 4.38;   // the two desks, against the south wall
+const W = 10.0, D = 11.98, H = 3.6, HW = W / 2, HD = D / 2;
+const DOOR = { x: 0, w: 1.6 };                              // in the n wall, onto the hall
+const LANE = { x: -4.1, w: 1.05, foul: -2.0, pinZ: 4.6 };   // (the ball rolls toward +z)
+const TB = { x: 0.6, z: 0.6, hw: 0.6, hl: 1.15, y: 0.82, r: 0.03 };
+const DART = { z: 3.4, y: 1.73, line: 2.6, R: 0.2 };
+const PCS = [{ id: "pc0", x: -1.2 }, { id: "pc1", x: 0.4 }], PCZ = HD - 0.38;   // the two desks, against the north wall
+const SOFA = { x: HW - 0.5, z: 1.0 };                       // against the east wall, facing west
+const FOOS = { x: 2.3, z: -2.4 };
 const DART_ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
 
 export function build(k) {
@@ -34,24 +38,29 @@ export function build(k) {
 		wall: mat("#ffffff", 0.9, 0, { map: tex.wall("#2c2a45", "stripes", "rgba(255,255,255,0.035)", W / 2, H / 2) }),
 		ceil: mat("#1d1b2e", 0.95),
 		holes: [
-			{ wall: "e", at: -2.0, w: 1.5, y1: 2.3 }    // out to the hallway (the lounge, the spa)
+			{ wall: "n", at: DOOR.x, w: DOOR.w, y1: 2.3 }    // out to the Gallery
 		]
 	});
 	k.floor(() => 0);
 	k.walk(-HW, HW, -HD, HD);
-	k.walk(HW - 1.0, HW + 0.9, -2.7, -1.3); // out to the hallway
+	k.walk(DOOR.x - DOOR.w / 2, DOOR.x + DOOR.w / 2, -HD - 1.0, -HD + 1.0);   // through the door to the hall
 	k.cam = { minX: -HW + 0.2, maxX: HW - 0.2, minZ: -HD + 0.2, maxZ: HD - 0.2, maxY: H - 0.25 };
-	k.frenchDoor("gameshall", { x: HW + 0.13, z: -2.0, ry: Math.PI / 2, w: 1.46, h: 2.3, depth: 0.45, side: 1, curtain: "#3d5a80" }, [HW, HW + 0.3, -2.75, -1.25], [[HW - 1.0, -2.0], [HW + 1.3, -2.0]]);
-	for (const [x, y, z, ry, text, icon] of [[HW - 0.04, 2.75, -2.0, -Math.PI / 2, "Lounge & Spa", "home"]]) {
-		const st = tex.sign(text, icon);
-		add(g, new THREE.PlaneGeometry(0.9, 0.225), new THREE.MeshStandardMaterial({ map: st, roughness: 0.45, emissive: "#ffffff", emissiveMap: st, emissiveIntensity: 0.3 }), x, y, z, { ry, cast: false });
+	k.frenchDoor("gameshall", { x: DOOR.x, z: -HD - 0.13, ry: Math.PI, w: DOOR.w - 0.04, h: 2.3, depth: 0.45, side: 1, curtain: "#3d5a80" }, [DOOR.x - DOOR.w / 2, DOOR.x + DOOR.w / 2, -HD - 0.3, -HD], [[DOOR.x, -HD + 1.0], [DOOR.x, -HD - 1.3]]);
+	{
+		const st = tex.sign("Gallery", "home");
+		add(g, new THREE.PlaneGeometry(0.9, 0.225), new THREE.MeshStandardMaterial({ map: st, roughness: 0.45, emissive: "#ffffff", emissiveMap: st, emissiveIntensity: 0.3 }), DOOR.x, 2.75, -HD + 0.04, { cast: false });
 	}
-	k.lightSwitch(HW - 0.02, 1.25, 0.6, -Math.PI / 2);
-	// a neon sign on the north wall
+	k.lightSwitch(DOOR.x + DOOR.w / 2 + 0.45, 1.25, -HD + 0.02, 0);
+	// a neon sign on the door's wall, east of the door
 	{
 		const neon = tex.text("GAME ROOM", { w: 1024, h: 256, color: "#d6fbff", glow: "#3ff0ff", font: "900 140px 'Nunito', sans-serif" });
-		add(g, new THREE.PlaneGeometry(2.0, 0.5), new THREE.MeshBasicMaterial({ map: neon, transparent: true, toneMapped: false, depthWrite: false }), 2.75, 2.7, -HD + 0.03, { cast: false, receive: false });
+		add(g, new THREE.PlaneGeometry(2.0, 0.5), new THREE.MeshBasicMaterial({ map: neon, transparent: true, toneMapped: false, depthWrite: false }), 2.9, 2.75, -HD + 0.03, { cast: false, receive: false });
 	}
+	// your own photos on the walls (the photo book's game room frames)
+	k.photo(71, -HW + 0.03, 2.05, -0.4, Math.PI / 2, { w: 0.7, h: 0.55, frame: "#c9a05a", metal: 0.7 });
+	k.photo(72, -HW + 0.03, 2.05, 2.2, Math.PI / 2, { w: 0.7, h: 0.55, frame: "#c9a05a", metal: 0.7 });
+	k.photo(73, -2.9, 1.75, -HD + 0.03, 0, { w: 0.8, h: 0.6, frame: "#c9a05a", metal: 0.7 });
+	k.photo(74, 3.4, 1.75, HD - 0.03, Math.PI, { w: 0.8, h: 0.6, frame: "#c9a05a", metal: 0.7 });
 
 	// ---------------------------------------------------------------- the bowling lane
 	const laneTex = canvasTex(128, 1024, (c, w, h) => {
@@ -60,27 +69,27 @@ export function build(k) {
 		c.fillStyle = "#2b2140";
 		for (let i = 0; i < 7; i++) { const x = 16 + i * 16; c.beginPath(); c.moveTo(x, h * 0.62); c.lineTo(x - 5, h * 0.67); c.lineTo(x + 5, h * 0.67); c.fill(); }
 	});
-	const laneLen = LANE.foul + HD;
-	const lane = add(g, new THREE.PlaneGeometry(LANE.w, laneLen), mat("#ffffff", 0.25, 0, { map: laneTex }), LANE.x, 0.012, (LANE.foul - HD) / 2, { rx: -Math.PI / 2, cast: false });
+	const laneLen = HD - LANE.foul;
+	const lane = add(g, new THREE.PlaneGeometry(LANE.w, laneLen), mat("#ffffff", 0.25, 0, { map: laneTex }), LANE.x, 0.012, (LANE.foul + HD) / 2, { rx: -Math.PI / 2, rz: Math.PI, cast: false });
 	lane.userData.floor = true;
-	for (const sx of [-1, 1]) add(g, new THREE.BoxGeometry(0.16, 0.06, laneLen), mat("#3b3550", 0.4), LANE.x + sx * (LANE.w / 2 + 0.08), 0.03, (LANE.foul - HD) / 2, { cast: false });
+	for (const sx of [-1, 1]) add(g, new THREE.BoxGeometry(0.16, 0.06, laneLen), mat("#3b3550", 0.4), LANE.x + sx * (LANE.w / 2 + 0.08), 0.03, (LANE.foul + HD) / 2, { cast: false });
 	add(g, new THREE.BoxGeometry(LANE.w + 0.32, 0.02, 0.05), mat("#e63946", 0.4), LANE.x, 0.02, LANE.foul, { cast: false });
 	// the pit at the end, dark, with a lit hood over the pins
-	add(g, new THREE.BoxGeometry(LANE.w + 0.4, 0.9, 0.5), mat("#14121d", 0.7), LANE.x, 1.75, -HD + 0.25, { cast: false });
-	add(g, new THREE.BoxGeometry(LANE.w + 0.4, 0.06, 0.06), new THREE.MeshBasicMaterial({ color: "#ff4fd8", toneMapped: false }), LANE.x, 1.3, -HD + 0.5, { cast: false });
-	k.box(LANE.x - LANE.w / 2 - 0.2, LANE.x + LANE.w / 2 + 0.2, -HD, LANE.foul);
+	add(g, new THREE.BoxGeometry(LANE.w + 0.4, 0.9, 0.5), mat("#14121d", 0.7), LANE.x, 1.75, HD - 0.25, { cast: false });
+	add(g, new THREE.BoxGeometry(LANE.w + 0.4, 0.06, 0.06), new THREE.MeshBasicMaterial({ color: "#ff4fd8", toneMapped: false }), LANE.x, 1.3, HD - 0.5, { cast: false });
+	k.box(LANE.x - LANE.w / 2 - 0.2, LANE.x + LANE.w / 2 + 0.2, LANE.foul, HD);
 	const pinGeo = new THREE.LatheGeometry([[0, 0], [0.05, 0], [0.06, 0.06], [0.055, 0.13], [0.03, 0.2], [0.028, 0.24], [0.04, 0.29], [0.035, 0.33], [0, 0.345]].map(p => new THREE.Vector2(p[0], p[1])), 14);
 	const pinM = mat("#fbf8f2", 0.3), stripeM = mat("#e63946", 0.4);
 	const pins = [];
 	for (let r = 0; r < 4; r++) for (let i = 0; i <= r; i++) {
-		const p = group(g, LANE.x + (i - r / 2) * 0.21, 0.012, LANE.pinZ - r * 0.19);
+		const p = group(g, LANE.x + (i - r / 2) * 0.21, 0.012, LANE.pinZ + r * 0.19);
 		add(p, pinGeo, pinM, 0, 0, 0, { cast: false });
 		add(p, new THREE.CylinderGeometry(0.03, 0.03, 0.02, 12), stripeM, 0, 0.225, 0, { cast: false });
 		p.userData = { home: p.position.clone(), row: r, dir: (R() - 0.5) * 2 };
 		pins.push(p);
 	}
 	// the ball rack beside the approach (the purple ball in the middle is the one you bowl)
-	const RACK = { x: LANE.x + 0.95, z: LANE.foul + 0.45 };
+	const RACK = { x: LANE.x + 0.95, z: LANE.foul - 0.45 };
 	const bowlBall = add(g, new THREE.SphereGeometry(0.11, 24, 16), mat("#5a189a", 0.15, 0.3), RACK.x, 0.91, RACK.z, { cast: false });
 	const rack = group(g, RACK.x, 0, RACK.z);
 	add(rack, rbox(0.4, 0.8, 0.6, 0.03), mat("#3b3550", 0.5), 0, 0.4, 0);
@@ -91,7 +100,7 @@ export function build(k) {
 	sbCanvas.width = 1024; sbCanvas.height = 384;
 	const sbTex = new THREE.CanvasTexture(sbCanvas);
 	sbTex.colorSpace = THREE.SRGBColorSpace;
-	add(g, new THREE.PlaneGeometry(2.6, 0.975), new THREE.MeshBasicMaterial({ map: sbTex, toneMapped: false }), LANE.x + 0.75, 2.75, -HD + 0.52, { cast: false, receive: false });
+	add(g, new THREE.PlaneGeometry(2.6, 0.975), new THREE.MeshBasicMaterial({ map: sbTex, toneMapped: false }), LANE.x + 0.75, 2.75, HD - 0.52, { ry: Math.PI, cast: false, receive: false });
 	const BK = "z:games:bowl", BS = "z:games:bowlScores";
 	const bowl = () => ctx.get(BK) || null;   // { id, by, name, at, off, hit: [10 x 0/1], n }
 	const bowlScores = () => ctx.get(BS) || {};
@@ -120,7 +129,7 @@ export function build(k) {
 		const b = bowl();
 		if (b && Date.now() < b.at + 5600) { ctx.notice("Wait for the pins to be set up again."); return; }
 		const me = ctx.me();
-		me.h = Math.PI;
+		me.h = 0;
 		ctx.doUpper("give", 1300);
 		// where it goes: straight-ish, with a bit of luck either way; pins near its line go down, and take their neighbours
 		const off = (R() - 0.5) * 0.5 * (R() < 0.35 ? 0.25 : 1);
@@ -145,7 +154,7 @@ export function build(k) {
 			else ctx.notice(n ? `${n} pin${n === 1 ? "" : "s"}.` : "Gutter ball!");
 		}, 2500);
 	}
-	k.interact("games:bowl", { label: () => { const b = bowl(); return b && Date.now() < b.at + 5600 ? "Wait for the pins..." : "Bowl!"; }, stand: [LANE.x, LANE.foul + 0.55], face: Math.PI, use: roll }, rack);
+	k.interact("games:bowl", { label: () => { const b = bowl(); return b && Date.now() < b.at + 5600 ? "Wait for the pins..." : "Bowl!"; }, stand: [LANE.x, LANE.foul - 0.55], face: 0, use: roll }, rack);
 	let lastBowl = "", bowlSounded = "";
 
 	// ---------------------------------------------------------------- the billiard table (nine balls)
@@ -295,7 +304,7 @@ export function build(k) {
 	const dsTex = new THREE.CanvasTexture(dsCanvas);
 	dsTex.colorSpace = THREE.SRGBColorSpace;
 	add(board, new THREE.PlaneGeometry(0.8, 0.25), new THREE.MeshBasicMaterial({ map: dsTex, toneMapped: false }), 0, -0.5, 0.01, { cast: false, receive: false });
-	add(g, new THREE.BoxGeometry(0.6, 0.01, 0.04), mat("#ffd166", 0.4), DART.line, 0.006, DART.z, { cast: false });
+	add(g, new THREE.BoxGeometry(0.04, 0.01, 0.6), mat("#ffd166", 0.4), DART.line, 0.006, DART.z, { cast: false });
 	const DK = "z:games:darts";
 	const darts = () => ctx.get(DK) || null;   // { id, by, name, list: [{ u, v, pts, at, fx, fz }] }
 	function scoreOf(u, v) {
@@ -348,33 +357,99 @@ export function build(k) {
 	k.interact("games:darts", { label: () => { const d = darts(); return d && d.by === ctx.MY_ID && d.list.length < 3 ? `Throw dart ${d.list.length + 1} of 3` : "Throw darts"; }, stand: [DART.line - 0.25, DART.z], face: Math.PI / 2, reach: 3.2, use: throwDart }, board);
 	let dartSig = "";
 
-	// ---------------------------------------------------------------- a snack machine, a sofa to watch from
-	const vm = group(g, HW - 0.42, 0, -3.9, -Math.PI / 2);
+	// ---------------------------------------------------------------- by the door: a snack machine, a jukebox, trophies
+	const vm = group(g, HW - 0.42, 0, -4.6, -Math.PI / 2);
 	add(vm, rbox(0.8, 1.9, 0.7, 0.03), mat("#e63946", 0.4), 0, 0.95, 0);
 	add(vm, new THREE.PlaneGeometry(0.55, 1.15), new THREE.MeshBasicMaterial({ color: "#cfe9ff", toneMapped: false, transparent: true, opacity: 0.85 }), -0.06, 1.15, 0.352, { cast: false });
 	for (let r = 0; r < 4; r++) for (let i = 0; i < 4; i++) add(vm, new THREE.BoxGeometry(0.09, 0.14, 0.05), mat(["#ffd166", "#06d6a0", "#ef476f", "#8338ec"][(r + i) % 4], 0.5), -0.27 + i * 0.13, 0.72 + r * 0.27, 0.3, { cast: false });
 	add(vm, new THREE.PlaneGeometry(0.62, 0.18), new THREE.MeshBasicMaterial({ map: tex.text("SNACKS", { w: 512, h: 128, color: "#ffffff", glow: "#ff4fd8", font: "900 90px Nunito, sans-serif" }), transparent: true, toneMapped: false }), 0, 1.78, 0.352, { cast: false });
-	k.box(HW - 0.8, HW, -4.32, -3.48);
-	k.interact("games:snacks", { label: "Get a snack", stand: [HW - 1.25, -3.9], face: Math.PI / 2, use: () => { ctx.sfx("clack", 0.4); ctx.foodMenu("Snack machine", ["cookie", "icecream", "juice", "sandwich"]); } }, vm);
+	k.box(HW - 0.8, HW, -5.02, -4.18);
+	k.interact("games:snacks", { label: "Get a snack", stand: [HW - 1.3, -4.6], face: Math.PI / 2, use: () => { ctx.sfx("clack", 0.4); ctx.foodMenu("Snack machine", ["cookie", "icecream", "juice", "sandwich"]); } }, vm);
+	// the jukebox: put a song on and dance
+	const jbLights = [];
+	const jb = group(g, HW - 0.35, 0, -2.6, -Math.PI / 2);
+	{
+		const jbM = mat("#7b2cbf", 0.35, 0.2), chromeM = mat("#d9dde2", 0.2, 1);
+		add(jb, rbox(0.9, 1.2, 0.55, 0.05), jbM, 0, 0.6, 0);
+		const arch = add(jb, new THREE.CylinderGeometry(0.45, 0.45, 0.55, 28, 1, false, -Math.PI / 2, Math.PI), jbM, 0, 1.2, 0, { rx: Math.PI / 2 });
+		void arch;
+		add(jb, new THREE.PlaneGeometry(0.6, 0.35), new THREE.MeshBasicMaterial({ color: "#ffe9b0", toneMapped: false }), 0, 0.95, 0.28, { cast: false });
+		for (let i = 0; i < 5; i++) {
+			const m = new THREE.MeshBasicMaterial({ color: ["#ff4fd8", "#3ff0ff", "#ffd166", "#06d6a0", "#ff8500"][i], toneMapped: false });
+			jbLights.push(m);
+			add(jb, new THREE.BoxGeometry(0.06, 0.5, 0.02), m, -0.32 + i * 0.16, 0.42, 0.285, { cast: false });
+		}
+		add(jb, new THREE.TorusGeometry(0.4, 0.02, 6, 28, Math.PI), chromeM, 0, 1.2, 0.28, { cast: false });
+	}
+	k.box(HW - 0.65, HW, -3.08, -2.12);
+	const JK = "z:games:juke";
+	k.interact("games:juke", {
+		label: () => (ctx.get(JK) && Date.now() - ctx.get(JK).at < 30000 ? "Dance to the jukebox" : "Put a song on the jukebox"),
+		stand: [HW - 1.35, -2.6], face: Math.PI / 2,
+		use: () => { const j = ctx.get(JK); if (!j || Date.now() - j.at > 30000) { ctx.setShared(JK, { at: Date.now(), by: myName() }); ctx.sfx("switch", 0.4); } ctx.doUpper("dance", 5000); }
+	}, jb);
+	// a trophy cabinet on the west wall, by the door
+	const tc = group(g, -HW + 0.25, 0, -4.5, Math.PI / 2);
+	{
+		const wood = mat("#4a2c1c", 0.45), gold = mat("#d4a84b", 0.25, 0.9), silver = mat("#d9dde2", 0.2, 1);
+		add(tc, rbox(1.4, 1.9, 0.45, 0.03), wood, 0, 0.95, 0);
+		add(tc, new THREE.PlaneGeometry(1.25, 1.6), new THREE.MeshPhysicalMaterial({ color: "#d8ecff", transparent: true, opacity: 0.18, roughness: 0.05, depthWrite: false }), 0, 1.0, 0.23, { cast: false });
+		for (const y of [0.55, 1.05, 1.55]) add(tc, new THREE.BoxGeometry(1.25, 0.03, 0.38), wood, 0, y, 0, { cast: false });
+		for (let i = 0; i < 9; i++) {
+			const x = -0.45 + (i % 3) * 0.45, y = [0.57, 1.07, 1.57][Math.floor(i / 3)], m = i % 2 ? silver : gold;
+			add(tc, new THREE.CylinderGeometry(0.06, 0.03, 0.12, 12), m, x, y + 0.16, 0, { cast: false });
+			add(tc, new THREE.CylinderGeometry(0.012, 0.012, 0.08, 6), m, x, y + 0.06, 0, { cast: false });
+			add(tc, new THREE.BoxGeometry(0.1, 0.03, 0.1), wood, x, y + 0.015, 0, { cast: false });
+		}
+	}
+	k.box(-HW, -HW + 0.5, -5.2, -3.8);
+	k.interact("games:trophies", { label: "Admire the trophies", stand: [-HW + 1.2, -4.5], face: -Math.PI / 2, use: () => { ctx.doUpper("cheer", 2000); ctx.notice("Bowling, darts, billiards... one day your name goes on one of these."); } }, tc);
+
+	// ---------------------------------------------------------------- a foosball table
+	const FK = "z:games:foos";
+	const rods = [];
+	const ft = group(g, FOOS.x, 0, FOOS.z);
+	{
+		const wood = mat("#2a6f4e", 0.5), dark = mat("#1c1b29", 0.5), chromeM = mat("#d9dde2", 0.2, 1);
+		add(ft, rbox(1.2, 0.25, 0.7, 0.03), wood, 0, 0.82, 0);
+		add(ft, new THREE.PlaneGeometry(1.1, 0.6), mat("#1b7a4a", 0.95), 0, 0.951, 0, { rx: -Math.PI / 2, cast: false });
+		for (const sx of [-0.55, 0.55]) for (const sz of [-0.3, 0.3]) add(ft, new THREE.BoxGeometry(0.07, 0.72, 0.07), dark, sx, 0.36, sz);
+		for (let i = 0; i < 4; i++) {
+			const x = -0.4 + i * 0.27;
+			const rod = group(ft, x, 0.98, 0);
+			add(rod, new THREE.CylinderGeometry(0.01, 0.01, 1.1, 6), chromeM, 0, 0, 0, { rx: Math.PI / 2, cast: false });
+			for (const pz of i % 2 ? [-0.15, 0.15] : [-0.2, 0, 0.2]) add(rod, new THREE.BoxGeometry(0.03, 0.1, 0.04), mat(i < 2 ? "#e63946" : "#1d4ed8", 0.5), 0, -0.03, pz, { cast: false });
+			rods.push(rod);
+		}
+	}
+	const foosBall = add(ft, new THREE.SphereGeometry(0.018, 10, 8), mat("#ffffff", 0.3), 0, 0.97, 0, { cast: false });
+	k.box(FOOS.x - 0.68, FOOS.x + 0.68, FOOS.z - 0.4, FOOS.z + 0.4);
+	k.interact("games:foos", {
+		label: "Play foosball", nearest: true, stand: [FOOS.x, FOOS.z - 1.0], stands: [[FOOS.x, FOOS.z - 1.0], [FOOS.x, FOOS.z + 1.0]],
+		use: () => {
+			const me = ctx.me(), side = me.z - k.oz < FOOS.z ? 1 : -1;
+			me.h = side > 0 ? 0 : Math.PI;
+			ctx.doUpper("shake", 1200);
+			const goal = R() < 0.4;
+			ctx.setShared(FK, { at: Date.now(), by: myName(), goal, dir: side });
+			ctx.sfx("clack", 0.5);
+			if (goal) setTimeout(() => { ctx.notice("<b>GOAL!</b>"); ctx.doUpper("cheer", 1600); }, 700);
+		}
+	}, ft);
+
+	// ---------------------------------------------------------------- a sofa to watch from (east wall, facing the table)
 	const sofaM = mat("#3a3a6a", 0.85), sofaD = mat("#2c2c55", 0.85);
-	const sofa = group(g, 2.3, 0, HD - 0.5, Math.PI);
+	const sofa = group(g, SOFA.x, 0, SOFA.z, -Math.PI / 2);
 	add(sofa, rbox(2.0, 0.3, 0.9, 0.06), sofaD, 0, 0.27, 0);
 	for (const sx of [-0.47, 0.47]) { add(sofa, rbox(0.92, 0.18, 0.7, 0.08), sofaM, sx, 0.5, 0.06); add(sofa, rbox(0.9, 0.42, 0.16, 0.08), sofaM, sx, 0.76, -0.24, { rx: -0.12 }); }
 	add(sofa, rbox(2.0, 0.6, 0.22, 0.08), sofaD, 0, 0.64, -0.36, { rx: -0.06 });
 	for (const sx of [-1.0, 1.0]) add(sofa, rbox(0.18, 0.5, 0.9, 0.08), sofaD, sx, 0.45, 0);
-	k.box(1.2, 3.4, HD - 0.95, HD);
-	k.spot({ id: "gameSofa0", x: 2.3 + 0.47, z: HD - 0.56, h: Math.PI, y: 0.15 });
-	k.spot({ id: "gameSofa1", x: 2.3 - 0.47, z: HD - 0.56, h: Math.PI, y: 0.15 });
-	k.interact("games:sofa", { label: "Sit on the sofa", stand: [2.3, HD - 1.45], sit: ["gameSofa0", "gameSofa1"] }, sofa);
-	// a rug and a couple of posters
-	const rug = add(g, new THREE.PlaneGeometry(3.0, 2.0), mat("#ffffff", 1, 0, { map: tex.carpet("#3d2c5c", "#ffd166") }), 2.1, 0.006, 3.4, { rx: -Math.PI / 2, cast: false });
+	k.box(HW - 0.95, HW, SOFA.z - 1.1, SOFA.z + 1.1);
+	k.spot({ id: "gameSofa0", x: SOFA.x - 0.06, z: SOFA.z - 0.47, h: -Math.PI / 2, y: 0.15 });
+	k.spot({ id: "gameSofa1", x: SOFA.x - 0.06, z: SOFA.z + 0.47, h: -Math.PI / 2, y: 0.15 });
+	k.interact("games:sofa", { label: "Sit on the sofa", stand: [SOFA.x - 0.95, SOFA.z], sit: ["gameSofa0", "gameSofa1"] }, sofa);
+	const rug = add(g, new THREE.PlaneGeometry(2.4, 3.2), mat("#ffffff", 1, 0, { map: tex.carpet("#3d2c5c", "#ffd166") }), SOFA.x - 1.4, 0.006, SOFA.z, { rx: -Math.PI / 2, cast: false });
 	rug.userData.floor = true;
-	[[-HW + 0.03, 1.8, -2.4, Math.PI / 2, 2], [-HW + 0.03, 1.8, -0.4, Math.PI / 2, 4]].forEach(([x, y, z, ry, seed]) => {
-		const pg = group(g, x, y, z, ry);
-		add(pg, rbox(0.62, 0.82, 0.03, 0.01), mat("#111", 0.4), 0, 0, 0, { cast: false });
-		add(pg, new THREE.PlaneGeometry(0.54, 0.74), new THREE.MeshStandardMaterial({ map: tex.art(seed), roughness: 0.6 }), 0, 0, 0.017, { cast: false });
-	});
-
 
 	// ---------------------------------------------------------------- two gaming PCs on the south wall
 	// sit down and the PC's screen opens (worldPCGames.js); the monitor shows your game, or for everyone else your
@@ -476,17 +551,17 @@ export function build(k) {
 
 	// ---------------------------------------------------------------- light
 	const L = {
-		lane: k.light(LANE.x, H - 0.4, -1.5, "#d6e4ff", 3.0, 7),
-		pins: k.light(LANE.x, 2.0, LANE.pinZ + 0.6, "#ffffff", 2.4, 3.5),
+		lane: k.light(LANE.x + 0.4, H - 0.4, 1.0, "#d6e4ff", 3.4, 8),
+		pins: k.light(LANE.x, 2.0, LANE.pinZ - 0.6, "#ffffff", 2.4, 3.5),
 		table: k.light(TB.x, 1.75, TB.z, "#fff1d6", 3.2, 4.5),
 		darts: k.light(DART.line + 1.2, 2.6, DART.z, "#ffe2c0", 2.0, 4),
-		neon: k.light(2.75, 2.6, -HD + 0.6, "#3ff0ff", 1.6, 4.5),
-		sofa: k.light(2.3, 2.4, HD - 1.2, "#ffcf8a", 1.8, 5),
+		neon: k.light(2.6, 2.6, -HD + 1.2, "#3ff0ff", 2.2, 6),
+		sofa: k.light(SOFA.x - 1.2, 2.4, SOFA.z, "#ffcf8a", 1.8, 5),
 		pcs: k.light((PCS[0].x + PCS[1].x) / 2, 2.2, PCZ - 0.9, "#c77dff", 1.6, 4)
 	};
 	k.lamp("table", L.table, [poolBulb], [pl], [TB.x + TB.hw + 0.75, TB.z + 0.8], "light over the table");
 	k.key.pos.copy(k.V(0, H - 0.2, 0)); k.key.target.copy(k.V(0, 0, 0.3));
-	k.key.angle = 1.25; k.key.intensity = 20; k.key.distance = 14; k.key.color.set("#ffe8cc");
+	k.key.angle = 1.3; k.key.intensity = 24; k.key.distance = 16; k.key.color.set("#ffe8cc");
 	k.fill.pos.copy(k.V(0, 2.6, 1)); k.fill.intensity = 4; k.fill.distance = 16;
 	k.hemi = 0.4; k.env = 0.28; k.exposure = 1.05;
 
@@ -500,6 +575,13 @@ export function build(k) {
 		if (playing) drawMonitor(monitors[myPc], t);
 		if (monT > 0.25) { monT = 0; monitors.forEach(M => { if (!(playing && M.i === myPc)) drawMonitor(M, t); }); }
 		rgbM.forEach((m, i) => m.color.setHSL((t * 0.12 + i * 0.13) % 1, 0.9, 0.6));
+		// the jukebox's lights dance while a song plays; the foosball rods spin and the ball shoots off after a kick
+		const jk = ctx.get(JK), playingSong = jk && T - jk.at < 30000;
+		jbLights.forEach((m, i) => m.color.setHSL(((playingSong ? t * 0.6 : t * 0.05) + i * 0.2) % 1, 0.9, playingSong ? 0.55 + Math.sin(t * 8 + i) * 0.15 : 0.35));
+		const fs = ctx.get(FK), fu = fs ? (T - fs.at) / 1000 : 99;
+		rods.forEach((r, i) => { r.rotation.z = fu < 0.6 ? Math.sin(fu * 30 + i) * 1.2 : r.rotation.z * 0.85; });
+		if (fu < 1.2) { const q = Math.min(1, fu / 0.8); foosBall.position.set(fs.dir * q * (fs.goal ? 0.62 : 0.3) * 1, 0.97, fs.goal ? 0 : Math.sin(q * 6) * 0.15); foosBall.visible = !(fs.goal && q >= 1); }
+		else { foosBall.position.set(0, 0.97, 0); foosBall.visible = true; }
 		// got up from the PC: its screen goes back to idle for everyone
 		if (myPc >= 0 && ctx.me().sit !== PCS[myPc].id) { ctl.close(); if (ctx.get(PK0 + myPc)) ctx.setShared(PK0 + myPc, null); myPc = -1; }
 		// bowling: the ball rolls down, the pins fly, the rack resets
@@ -509,7 +591,7 @@ export function build(k) {
 		if (b && u < 5.6) {
 			if (bowlSounded !== b.id && u < 0.6) { bowlSounded = b.id; ctx.sfx("roll", 0.5); setTimeout(() => ctx.sfx(b.n ? "pins" : "thunk", b.n ? 0.6 : 0.3), Math.max(0, 1950 - u * 1000)); setTimeout(drawScoreboard, Math.max(0, 2650 - u * 1000)); }
 			const p = Math.min(1, Math.max(0, (u - 0.3) / 2.1));
-			bowlBall.position.set(LANE.x + b.off * 1.3 * p * p, 0.11, LANE.foul - 0.2 - p * (LANE.foul - 0.2 + HD - 0.3));
+			bowlBall.position.set(LANE.x + b.off * 1.3 * p * p, 0.11, LANE.foul + 0.2 + p * (HD - 0.3 - LANE.foul - 0.2));
 			bowlBall.rotation.x -= dt * 14 * (p < 1 ? 1 : 0);
 			bowlBall.visible = p < 1;
 			pins.forEach((pin, i) => {
@@ -518,7 +600,7 @@ export function build(k) {
 				const sweep = u > 4.6 ? Math.min(1, (u - 4.6) / 0.6) : 0;
 				pin.rotation.set(-down * 1.45 * (1 - sweep), 0, pin.userData.dir * down * 0.6 * (1 - sweep));
 				pin.position.copy(pin.userData.home);
-				pin.position.z -= down * 0.18 * (1 - sweep);
+				pin.position.z += down * 0.18 * (1 - sweep);
 				pin.position.x += pin.userData.dir * down * 0.08 * (1 - sweep);
 				pin.visible = !(b.hit[i] && u > 3.8 && u < 4.6);
 			});

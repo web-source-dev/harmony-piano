@@ -13,17 +13,26 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { roundRect } from "./worldAvatar.js";
 import { buildTerrace } from "./worldTerrace.js";
+import { ROOF_FP, ROOF_FLOOR } from "./worldEstate.js";
 
 export const ROOM = { minX: -7, maxX: 7, minZ: -6, maxZ: 6, H: 3.4 };
-// French doors in the back wall lead out to the rooftop terrace
+// French doors in the back wall lead out to the patio in the courtyard (and on to the pool deck and the grounds)
 export const DOOR = { x0: -6.1, x1: -4.5, h: 2.3 };
-export const TERRACE = { minX: -7, maxX: 5.5, minZ: -12, maxZ: -6.2 };
+// The terrace is at roof level, cantilevered out from the roof deck's south edge over the lawn (nothing under it), in
+// front of the cinema; you walk onto it from the roof deck (worldRoof.js) through the gap in its north railing.
+// worldTerrace.js builds it in its own coordinates (x -7..5.5, z -12..-6.2, where it used to stand behind the living
+// room); it's drawn TERRACE_AT from there and TERRACE_Y up, and on the floor plan it sits with the roof (ROOF_FP), so
+// the roof deck and the terrace are one floor, and neither mixes with what's under them (the loft's trick).
+export const TERRACE_Y = ROOF_FLOOR;
+export const TERRACE_AT = [-13, -2.6];
+export const TERRACE_FP = [TERRACE_AT[0] + ROOF_FP[0], TERRACE_AT[1] + ROOF_FP[1]];
+export const TERRACE = { minX: -7 + TERRACE_FP[0], maxX: 5.5 + TERRACE_FP[0], minZ: -12 + TERRACE_FP[1], maxZ: -6.2 + TERRACE_FP[1] };
+// the gap in its north railing, onto the roof deck (terrace coordinates)
+export const TSTAIR = { x0: -6.3, x1: -4.3, z0: -6.9, z1: -5.0 };
+// the doorway in the living room's front wall, through to the Gallery (worldGallery.js)
+export const GDOOR = { x0: 1.15, x1: 2.55, h: 2.3 };
 // the French doors in the right wall, through to the lounge
 export const LDOOR = { z0: 2.9, z1: 4.6, h: 2.3 };
-// the gap in the terrace's east railing, out to the pool deck
-export const POOLGAP = { z0: -10.3, z1: -8.3 };
-// the gap in the terrace's south railing, down into the garden (worldGarden.js)
-export const TGAP = { x0: -5.5, x1: -4.0 };
 // the French doors in the left wall, into the cinema
 export const CDOOR = { z0: -4.21, z1: -2.79, h: 2.3 };
 // The other rooms of the house (lounge, bedroom, bathroom, cinema, pool) sit around the living room
@@ -33,21 +42,31 @@ export const CDOOR = { z0: -4.21, z1: -2.79, h: 2.3 };
 // its own; walkFn: an area too big for walk rects - the grounds - says where a body of radius r can stand itself)
 const AREAS = [];   // { id, bounds: {minX,maxX,minZ,maxZ}, rects: [...], floor?: (x, z) => y, contains?: (x, z) => bool, walkFn?: (x, z, r) => bool }
 export function registerArea(a) { a.rects = a.rects || []; AREAS.push(a); return a; }
+// the terrace, on the roof: its own floor (and where it's drawn: shift = floor plan - drawn)
+registerArea({
+	id: "terrace",
+	bounds: { minX: TERRACE.minX - 0.2, maxX: TERRACE.maxX + 0.2, minZ: TERRACE.minZ - 0.2, maxZ: TERRACE.maxZ },
+	rects: [
+		{ minX: TERRACE.minX, maxX: TERRACE.maxX, minZ: TERRACE.minZ, maxZ: TERRACE.maxZ },
+		{ minX: TSTAIR.x0 + TERRACE_FP[0], maxX: TSTAIR.x1 + TERRACE_FP[0], minZ: TSTAIR.z0 + TERRACE_FP[1], maxZ: TSTAIR.z1 + TERRACE_FP[1] }   // (out onto the roof deck)
+	],
+	floor: () => TERRACE_Y,
+	shift: [TERRACE_FP[0] - TERRACE_AT[0], TERRACE_FP[1] - TERRACE_AT[1]]
+});
 function areaAt(x, z) {
 	for (const a of AREAS) { const b = a.bounds; if (x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ && (!a.contains || a.contains(x, z))) return a; }
 	return null;
 }
-// Where can a body of radius r stand? (inside the room, in the doorway, on the terrace, or in another room of the house)
+// Where can a body of radius r stand? (inside the room, in a doorway, or in another room of the house: the terrace, the
+// grounds and the rest are areas of their own)
 export function walkable(x, z, r) {
 	if (x > ROOM.minX + r && x < ROOM.maxX - r && z > ROOM.minZ + r && z < ROOM.maxZ - r) return true;
-	if (x > DOOR.x0 + r && x < DOOR.x1 - r && z > -6.6 && z < -5.5) return true;
-	if (x > TERRACE.minX + r && x < TERRACE.maxX - r && z > TERRACE.minZ + r && z < TERRACE.maxZ - r) return true;
-	// through the French doors to the lounge, and through the railing gap to the pool deck
+	// out of the back door to the patio, through the French doors to the lounge and the cinema, and through to the Grand Hall
 	// (each doorway reaches well into the rooms on both sides, so there's no seam to get stuck on)
+	if (x > DOOR.x0 + r && x < DOOR.x1 - r && z > -7.0 && z < -5.5) return true;
 	if (x > 6.0 && x < 8.2 && z > LDOOR.z0 + r && z < LDOOR.z1 - r) return true;
-	if (x > 4.4 && x < 6.6 && z > POOLGAP.z0 + r && z < POOLGAP.z1 - r) return true;
 	if (x > -7.8 && x < -6.0 && z > CDOOR.z0 + r && z < CDOOR.z1 - r) return true;
-	if (x > TGAP.x0 + r && x < TGAP.x1 - r && z > -12.9 && z < -11.3) return true;
+	if (x > GDOOR.x0 + r && x < GDOOR.x1 - r && z > 5.4 && z < 7.0) return true;
 	const a = areaAt(x, z);
 	if (a) {
 		for (const q of a.rects) if (x > q.minX + r && x < q.maxX - r && z > q.minZ + r && z < q.maxZ - r) return true;
@@ -60,7 +79,7 @@ export function walkable(x, z, r) {
 export function shiftAt(x, z) { const a = areaAt(x, z); return a && a.shift ? a.shift : null; }
 // where something standing at (x, z) on the floor plan is drawn
 export function visXZ(x, z) { const s = shiftAt(x, z); return s ? [x - s[0], z - s[1]] : [x, z]; }
-export function areaOf(x, z) { const a = areaAt(x, z); return a ? a.id : z < -6.1 ? "terrace" : "room"; }
+export function areaOf(x, z) { const a = areaAt(x, z); return a ? a.id : "room"; }
 // height of the floor under (x, z): 0 everywhere in the flat rooms
 export function floorAt(x, z) { const a = areaAt(x, z); return a && a.floor ? a.floor(x, z) : 0; }
 // moon position on the sky dome (matches the painted moon in skyTex)
@@ -465,7 +484,10 @@ export function buildRoom(scene) {
 	wallSeg(7 - win.x1, H, (7 + win.x1) / 2, H / 2, -6.1, 0);
 	wallSeg(win.x1 - win.x0, win.y0, (win.x0 + win.x1) / 2, win.y0 / 2, -6.1, 0);
 	wallSeg(win.x1 - win.x0, H - win.y1, (win.x0 + win.x1) / 2, (H + win.y1) / 2, -6.1, 0);
-	wallSeg(14, H, 0, H / 2, 6.1, Math.PI);
+	// front wall: the doorway through to the Gallery (between the piano and the door back to the piano page)
+	wallSeg(GDOOR.x0 + 7, H, (GDOOR.x0 - 7) / 2, H / 2, 6.1, Math.PI);
+	wallSeg(7 - GDOOR.x1, H, (7 + GDOOR.x1) / 2, H / 2, 6.1, Math.PI);
+	wallSeg(GDOOR.x1 - GDOOR.x0, H - GDOOR.h, (GDOOR.x0 + GDOOR.x1) / 2, (H + GDOOR.h) / 2, 6.1, Math.PI);
 	// left wall: an opening for the French doors into the cinema
 	wallSeg(CDOOR.z0 + 6.2, H, -7.1, H / 2, (CDOOR.z0 - 6.2) / 2, Math.PI / 2);
 	wallSeg(6.2 - CDOOR.z1, H, -7.1, H / 2, (CDOOR.z1 + 6.2) / 2, Math.PI / 2);
@@ -476,7 +498,7 @@ export function buildRoom(scene) {
 	wallSeg(LDOOR.z1 - LDOOR.z0, H - LDOOR.h, 7.1, (H + LDOOR.h) / 2, (LDOOR.z0 + LDOOR.z1) / 2, -Math.PI / 2);
 	// skirting + crown moulding
 	const trim = mat("#fbf7f0", 0.5);
-	[[0, -5.99, 14, 0], [0, 5.99, 14, 0]].forEach(([x, z, len, side]) => {
+	[[0, -5.99, 14, 0], [(GDOOR.x0 - 7) / 2, 5.99, GDOOR.x0 + 7, 0], [(7 + GDOOR.x1) / 2, 5.99, 7 - GDOOR.x1, 0]].forEach(([x, z, len, side]) => {
 		add(scene, new THREE.BoxGeometry(side ? 0.03 : len, 0.12, side ? len : 0.03), trim, x, 0.06, z);
 		add(scene, new THREE.BoxGeometry(side ? 0.06 : len, 0.08, side ? len : 0.06), trim, x, H - 0.04, z);
 	});
@@ -503,7 +525,7 @@ export function buildRoom(scene) {
 	brickSeg(win.x1 - win.x0, H + 0.6 - win.y1, (win.x0 + win.x1) / 2, (H + 0.6 + win.y1) / 2);
 	add(scene, new THREE.BoxGeometry(14.6, 0.25, 12.6), mat("#4a4048", 0.9), 0, H + 0.13, 0);
 	add(scene, new THREE.BoxGeometry(14.6, 0.35, 0.2), mat("#d8cfc4", 0.8), 0, H + 0.42, -6.25);
-	// French doors onto the terrace (open by default; anyone can close / open them)
+	// French doors out to the patio (open by default; anyone can close / open them)
 	const doorLeaves = [];
 	{
 		const dw = DOOR.x1 - DOOR.x0, dcx = (DOOR.x0 + DOOR.x1) / 2;
@@ -530,7 +552,7 @@ export function buildRoom(scene) {
 			add(hinge, new THREE.SphereGeometry(0.025, 10, 8), brass, ox + (side < 0 ? 1 : -1) * (leaf / 2 - 0.08), 1.05, 0.04);
 		}
 		// stand on whichever side you're on: inside the room, or out on the terrace
-		interact("terraceDoor", { label: "Close the terrace door", stand: [dcx, -5.45], standOut: [dcx, -6.95] }, ...doorLeaves);
+		interact("terraceDoor", { label: "Close the back door", stand: [dcx, -5.45], standOut: [dcx, -6.95] }, ...doorLeaves);
 	}
 	const terraceDoor = { open: true };
 	updaters.push(dt => {
@@ -1403,8 +1425,33 @@ export function buildRoom(scene) {
 	}
 	drawTVOff();
 
-	// ------------------------------------------------------------ rooftop terrace
-	const terrace = buildTerrace(scene, { add, mat, group, rbox, canvasTex, interact, box, sitSpots, updaters, rng, heartMesh, lightWood, wood, darkWood, brass, white, moonDir: MOON_DIR });
+	// ------------------------------------------------------------ a doorframe round the way through to the Gallery
+	{
+		const fm = mat("#fbf8f2", 0.45), dw = GDOOR.x1 - GDOOR.x0, dcx = (GDOOR.x0 + GDOOR.x1) / 2;
+		add(scene, new THREE.BoxGeometry(dw + 0.16, 0.1, 0.3), fm, dcx, GDOOR.h + 0.05, 6.1);
+		for (const x of [GDOOR.x0 - 0.04, GDOOR.x1 + 0.04]) add(scene, new THREE.BoxGeometry(0.08, GDOOR.h, 0.3), fm, x, GDOOR.h / 2, 6.1);
+		add(scene, new THREE.BoxGeometry(dw, 0.02, 0.3), mat("#b9a892", 0.6), dcx, 0.01, 6.1, { cast: false });
+	}
+
+	// ------------------------------------------------------------ the roof terrace
+	// built in its own coordinates into a group that's drawn up on the roof; everything it registers (seats, things to
+	// use, solid bits) is moved onto its floor plan (TERRACE_FP); its lights stay in the scene, moved up there
+	const tg = new THREE.Group();
+	tg.name = "roofTerrace";
+	tg.position.set(TERRACE_AT[0], TERRACE_Y, TERRACE_AT[1]);
+	scene.add(tg);
+	const FX = TERRACE_FP[0], FZ = TERRACE_FP[1];
+	const fp = p => p && [p[0] + FX, p[1] + FZ];
+	const tBox = (x0, x1, z0, z1) => box(x0 + FX, x1 + FX, z0 + FZ, z1 + FZ);
+	const tInteract = (id, def, ...objs) => {
+		if (def.stand) def.stand = fp(def.stand);
+		if (def.stands) def.stands = def.stands.map(fp);
+		if (def.standOut) def.standOut = fp(def.standOut);
+		return interact(id, def, ...objs);
+	};
+	const tSpots = { push: s => sitSpots.push(Object.assign({}, s, { x: s.x + FX, z: s.z + FZ, y: s.y + TERRACE_Y }, s.stand ? { stand: fp(s.stand) } : {})) };
+	const addLight = (...ls) => ls.forEach(l => { l.position.x += TERRACE_AT[0]; l.position.y += TERRACE_Y; l.position.z += TERRACE_AT[1]; if (!l.userData.notInScene) scene.add(l); });
+	const terrace = buildTerrace(tg, { add, mat, group, rbox, canvasTex, interact: tInteract, box: tBox, sitSpots: tSpots, updaters, rng, heartMesh, lightWood, wood, darkWood, brass, white, moonDir: MOON_DIR, addLight, fp });
 
 	// interactive light switch toggle visual
 	const setSwitch = on => { toggle.rotation.x = on ? -0.35 : 0.35; };

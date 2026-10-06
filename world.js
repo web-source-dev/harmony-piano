@@ -22,11 +22,11 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
 import { Avatar, SKIN_TONES, HAIR_COLORS, OUTFIT_COLORS, MOODS, drawMoodFace, FOOD_PROPS } from "./worldAvatar.js";
-import { buildRoom, ROOM, DOOR, TERRACE, MOON_DIR, walkable, areaOf, floorAt, heartMesh, makeMug, shiftAt, visXZ, makePhotoFrame, tickPhotoGlow } from "./worldRoom.js";
+import { buildRoom, ROOM, DOOR, TERRACE, TERRACE_Y, TERRACE_AT, TERRACE_FP, MOON_DIR, walkable, areaOf, floorAt, heartMesh, makeMug, shiftAt, visXZ, makePhotoFrame, tickPhotoGlow } from "./worldRoom.js";
 import { WorldAudio, TRACKS } from "./worldAudio.js";
 import * as Games from "./worldGames.js";
 import { createHouse, ZONES } from "./worldHouse.js";
-import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, COURTS, subtractRects } from "./worldEstate.js";
+import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, COURTS, ROOF_Y, LOUNGE_TOP, ROOF_FLOOR, ROOF_PLAN, ROOF_DECK, WING, subtractRects } from "./worldEstate.js";
 
 const esc = Games.esc;
 const $ = s => document.querySelector(s);
@@ -253,7 +253,7 @@ const S = lsGet(LS_STATE, {});
 delete S.remote; delete S.fight;
 function get(k) { return S[k] ? S[k].v : (k in DEFAULTS ? DEFAULTS[k] : undefined); }
 let saveTimer = 0;
-// (50 photos can be more than the browser lets a page keep: if the full copy doesn't fit, keep everything but the
+// (100 photos can be more than the browser lets a page keep: if the full copy doesn't fit, keep everything but the
 // uploaded pictures - those are safe on the server - instead of silently keeping nothing at all)
 function persist() {
 	clearTimeout(saveTimer);
@@ -575,8 +575,8 @@ function flushChat() {
 		.catch(() => { chatFlushing = false; clearTimeout(chatRetryT); chatRetryT = setTimeout(flushChat, 10000); });
 }
 // the wall photos + captions are saved on the server too, so they're there whenever anyone comes back
-const WORLD_SAVED = /^(photo|cap)([0-9]|[1-4][0-9])$/;
-const PHOTO_KEY = /^photo([0-9]|[1-4][0-9])$/, CAP_KEY = /^cap([0-9]|[1-4][0-9])$/;
+const WORLD_SAVED = /^(photo|cap)([0-9]|[1-9][0-9])$/;
+const PHOTO_KEY = /^photo([0-9]|[1-9][0-9])$/, CAP_KEY = /^cap([0-9]|[1-9][0-9])$/;
 const worldSaveT = {};
 // (keeps trying until the server has it: a photo that only lived in this browser was gone the next day)
 function saveWorldKey(k, tries) {
@@ -722,7 +722,7 @@ function labelOf(id) {
 	if (room.interactables[id].lie && room.interactables[id].sit) return freeSpot(room.interactables[id].sit) ? "Sit on the bed" : "The bed is full";
 	if (id === "piano" && whoSits("bench")) return whoSits("bench").look.name + " is playing - wait your turn";
 	if (id === "telescope" && whoDoes("telescope")) return whoDoes("telescope").look.name + " is stargazing";
-	if (id === "terraceDoor") return get("terraceDoor") ? "Close the terrace door" : "Open the terrace door";
+	if (id === "terraceDoor") return get("terraceDoor") ? "Close the back door" : "Open the back door";
 	if (id === "flowers") return me.holding === "flower" ? "Pick another flower" : "Pick a flower";
 	if (id === "armchair" && whoSits("armchair") && me.sit !== "armchair") return "Sit on " + whoSits("armchair").look.name + "'s lap";
 	const l = room.interactables[id].label;
@@ -1399,17 +1399,28 @@ function compressImage(file, maxChars) {
 		img.src = URL.createObjectURL(file);
 	});
 }
-// 50 frames around the house; which slots hang where (the rooms add their own frames: see k.photo in worldHouse.js)
-const PHOTO_COUNT = 50;
+// 96 frames around the house; which slots hang where (the rooms add their own frames: see k.photo in worldHouse.js)
+const PHOTO_COUNT = 96;   // (the keys go up to photo99: room to hang more)
 const PHOTO_PLACES = [
 	{ name: "Living room", slots: [0, 1, 2, 47, 48, 49] },
 	{ name: "The photo wall (upstairs)", slots: range(3, 26) },
 	{ name: "Upstairs", slots: [32, 33, 34] },
 	{ name: "Lounge", slots: [27, 28, 29, 30, 31] },
-	{ name: "Bedroom", slots: [35, 36, 37, 38, 39] },
+	{ name: "Bedroom", slots: [35, 36, 37, 38, 39, 94, 95] },
 	{ name: "Bathroom", slots: [40, 41] },
 	{ name: "Disco", slots: [42, 43, 44] },
-	{ name: "Cinema", slots: [45, 46] }
+	{ name: "Cinema", slots: [45, 46] },
+	{ name: "Gallery & foyer", slots: range(50, 61) },
+	{ name: "Dining room", slots: [62, 63, 64] },
+	{ name: "Powder room", slots: [65, 66] },
+	{ name: "Library", slots: [67, 68, 69, 70] },
+	{ name: "Game room", slots: [71, 72, 73, 74] },
+	{ name: "Spa", slots: [75, 76, 77, 78] },
+	{ name: "Music room", slots: [79, 80, 81, 82] },
+	{ name: "Wardrobe", slots: [83, 84] },
+	{ name: "Gym", slots: [85, 86, 87] },
+	{ name: "Playroom", slots: [88, 89, 90, 91] },
+	{ name: "Roof deck", slots: [92, 93] }
 ];
 function range(a, b) { const o = []; for (let i = a; i <= b; i++) o.push(i); return o; }
 const placeOf = slot => (PHOTO_PLACES.find(p => p.slots.includes(slot)) || { name: "" }).name;
@@ -1485,7 +1496,7 @@ function libraryImages() {
 		.then(j => { const list = (j && j.images) || []; libCache = list.length ? list : null; return list; });
 }
 const shuffled = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-// One button for all 50 frames: the first time it fills every empty frame (pictures from the media library, ones not
+// One button for every frame: the first time it fills every empty frame (pictures from the media library, ones not
 // on the walls yet first); once they're all full, each click shuffles the photos round the house (captions go with them).
 let filling = false;
 function fillAllFrames(btn) {
@@ -3153,6 +3164,8 @@ canvas.addEventListener("pointerup", e => {
 // a click on something drawn upstairs: where that is on the floor plan
 function planXZ(h) {
 	for (let o = h.object; o; o = o.parent) {
+		// (the roof terrace: drawn up on the roof, on the floor plan far off - see TERRACE in worldRoom.js)
+		if (o.name === "roofTerrace") return [h.point.x + TERRACE_FP[0] - TERRACE_AT[0], h.point.z + TERRACE_FP[1] - TERRACE_AT[1]];
 		const m = o.name && /^zone:(.+)$/.exec(o.name);
 		if (m) { const Z = ZONES[m[1]], s = Z && Z.area && Z.area.shift; return s ? [h.point.x + s[0], h.point.z + s[1]] : [h.point.x, h.point.z]; }
 	}
@@ -3187,11 +3200,12 @@ function walkTo(x, z, act) {
 	if (drawOpen) closeDraw();
 	stopScope();
 	if (me.anim === "floor") me.anim = "idle";
-	// going between indoors and outdoors (the terrace, the pool, the grounds and everything on them) with the terrace
-	// door shut: open it on the way (the house's own rooms are indoors; everything else is out past the courtyard)
-	const HOUSE_ROOMS = ["room", "lounge", "loft", "disco", "cinema", "bedroom", "bath", "hall", "games", "spa"];
+	// going between the living room and the courtyard (the patio, the pool deck, the grounds and everything on them)
+	// with the back door shut: open it on the way (the house's other rooms, and the roof terrace, have their own ways)
+	const HOUSE_ROOMS = ["room", "lounge", "loft", "disco", "cinema", "bedroom", "bath", "games", "spa", "gallery", "dining", "library", "music", "powder", "closet", "roof", "gym", "playroom", "terrace"];
 	const outdoors = a => !HOUSE_ROOMS.includes(a);
-	if (!get("terraceDoor") && outdoors(areaOf(x, z)) !== outdoors(areaOf(me.x, me.z))) {
+	const fromRoom = areaOf(me.x, me.z) === "room", toRoom = areaOf(x, z) === "room";
+	if (!get("terraceDoor") && ((fromRoom && outdoors(areaOf(x, z))) || (toRoom && outdoors(areaOf(me.x, me.z))))) {
 		const st = standOf("terraceDoor");
 		if (Math.hypot(st[0] - me.x, st[1] - me.z) > 0.3) { walkTo(st[0], st[1], () => { setShared("terraceDoor", true); walkTo(x, z, act); }); return; }
 		setShared("terraceDoor", true);
@@ -3223,12 +3237,19 @@ function makeGrid(x0, z0, w, h) {
 // the ground floor is one floor plan (the cinema's tiers don't sit over anything), so one grid covers all of it
 // (upstairs is its own floor plan, 230 m north: see ZONES.loft; the treehouse's is 80 m east)
 function gridFor(x, z) {
-	if (shiftAt(x, z)) {
-		// (the loft and the disco share one; the treehouse has its own)
-		const a = areaOf(x, z), id = a === "disco" ? "loft" : a, Z = ZONES[id];
-		if (!Z) return null;
-		const b = id === "loft" ? [16.0, 23.4, 223.85, 238.25] : Z.bounds, key = "up:" + id;
-		return grids[key] || (grids[key] = makeGrid(b[0] - 0.4, b[2] - 0.4, Math.ceil((b[1] - b[0] + 0.8) / 0.2), Math.ceil((b[3] - b[2] + 0.8) / 0.2)));
+	const sh = shiftAt(x, z);
+	if (sh) {
+		// one grid per floor: everything drawn somewhere else by the same shift (the loft and the disco; the roof deck, the
+		// terrace and the rooftop rooms; the treehouse on its own)
+		const key = "up:" + sh.join(",");
+		if (grids[key]) return grids[key];
+		const same = s => s && s[0] === sh[0] && s[1] === sh[1];
+		const b = [Infinity, -Infinity, Infinity, -Infinity];
+		const grow = r => { b[0] = Math.min(b[0], r[0]); b[1] = Math.max(b[1], r[1]); b[2] = Math.min(b[2], r[2]); b[3] = Math.max(b[3], r[3]); };
+		for (const id in ZONES) if (same(ZONES[id].area && ZONES[id].area.shift)) grow(ZONES[id].bounds);
+		if (same(shiftAt(TERRACE.minX + 1, TERRACE.minZ + 1))) grow([TERRACE.minX, TERRACE.maxX, TERRACE.minZ, TERRACE.maxZ + 1.4]);
+		if (!isFinite(b[0])) return null;
+		return (grids[key] = makeGrid(b[0] - 0.4, b[2] - 0.4, Math.ceil((b[1] - b[0] + 0.8) / 0.2), Math.ceil((b[3] - b[2] + 0.8) / 0.2)));
 	}
 	// (everything inside the hedge round the estate)
 	return grids.home || (grids.home = makeGrid(ESTATE[0], ESTATE[2], Math.ceil((ESTATE[1] - ESTATE[0]) / 0.2), Math.ceil((ESTATE[3] - ESTATE[2]) / 0.2)));
@@ -3410,7 +3431,7 @@ function doorShut(x, z) {
 function standOf(id) {
 	const def = room.interactables[id];
 	if (def.nearest && def.stands) return def.stands.slice().sort((a, b) => Math.hypot(a[0] - me.x, a[1] - me.z) - Math.hypot(b[0] - me.x, b[1] - me.z))[0];
-	return def.standOut && areaOf(me.x, me.z) === "terrace" ? def.standOut : def.stand;
+	return def.standOut && areaOf(me.x, me.z) !== "room" ? def.standOut : def.stand;
 }
 function angleLerp(a, b, k) { return a + angleDiff(a, b) * k; }
 function angleDiff(a, b) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2; return d; }
@@ -3863,7 +3884,7 @@ function updateBall(dt) {
 function camBox(x, z) {
 	const a = areaOf(x, z);
 	if (house.built[a]) return house.built[a].cam;
-	if (a === "terrace") return { minX: TERRACE.minX - 2, maxX: TERRACE.maxX + 2, minZ: TERRACE.minZ - 2.5, maxZ: TERRACE.maxZ - 0.15, minY: 0.3, maxY: 6 };
+	if (a === "terrace") return { minX: TERRACE.minX - 2, maxX: TERRACE.maxX + 3, minZ: TERRACE.minZ - 2.5, maxZ: TERRACE.maxZ + 2, minY: TERRACE_Y + 0.3, maxY: TERRACE_Y + 6 };
 	return { minX: ROOM.minX + 0.25, maxX: ROOM.maxX - 0.25, minZ: ROOM.minZ + 0.25, maxZ: ROOM.maxZ - 0.25, minY: 0.3, maxY: ROOM.H - 0.2 };
 }
 function camOK(b, x, y, z) { return x >= b.minX && x <= b.maxX && z >= b.minZ && z <= b.maxZ && y <= b.maxY && y >= Math.max(b.minY === undefined ? -99 : b.minY, floorAt(x, z) + 0.25); }
@@ -4010,19 +4031,18 @@ function updateCamera(dt, t) {
 let weather = null;
 {
 	const R = (x0, x1, z0, z1, y) => ({ minX: x0, maxX: x1, minZ: z0, maxZ: z1, y: y || 0 });
-	// the rooms with a roof (drawn where they're drawn: the loft and the disco over the lounge)
-	const indoorRects = [R(ROOM.minX, ROOM.maxX, ROOM.minZ, ROOM.maxZ)];
-	for (const id in ZONES) {
-		const Z = ZONES[id], b = Z.bounds;
-		if (Z.outdoor) continue;
-		const sx = Z.vis ? Z.ox - Z.vis[0] : 0, sz = Z.vis ? Z.oz - Z.vis[1] : 0;
-		indoorRects.push(R(b[0] - sx, b[1] - sx, b[2] - sz, b[3] - sz));
-	}
+	// under a roof: the house (its flat roof, and the lounge's higher one: rain falls on the roof terrace up there), and
+	// the buildings out on the grounds
+	const indoorRects = HOUSE_BLOCKS.map(b => Object.assign(R(...b), { top: ROOF_Y + 0.05 }));
+	indoorRects.push(Object.assign(R(6.75, 23.65, -6.32, 8.25), { top: LOUNGE_TOP }));
+	for (const id of ["shame", "aquarium", "haunted"]) indoorRects.push(R(...ZONES[id].bounds));
+	for (const id of ["gym", "playroom"]) indoorRects.push(Object.assign(R(WING[id][0] - 0.3, WING[id][1] + 0.3, WING[id][2] - 0.3, WING[id][3] + 0.3), { top: ROOF_FLOOR + 3.8 }));
 	// the open-air floors (not under the Box of Shame, not on the pool's water): the terrace, the pool deck, the garden,
 	// the Fun Park, the kart arena, and the lawns and paths of the grounds between them (not the buildings)
 	const zr = id => { const Z = ZONES[id]; return (Z.parts || [Z.bounds]); };
 	const groundRects = [
-		R(TERRACE.minX, TERRACE.maxX, TERRACE.minZ, TERRACE.maxZ),
+		R(-7 + TERRACE_AT[0], 5.5 + TERRACE_AT[0], -12 + TERRACE_AT[1], -6.2 + TERRACE_AT[1], TERRACE_Y),   // (drawn up on the roof)
+		...subtractRects(ROOF_DECK, [[-7.27, 23.42, -8.8, -6.1], ROOF_PLAN.upper, ROOF_PLAN.pavilion, WING.gym, WING.playroom]).map(r => R(...r, ROOF_FLOOR)),   // the roof deck
 		R(5.5, 23.2, -18.0, -6.25), R(23.2, 33.6, -18.0, -8.7),                         // the pool deck
 		...subtractRects(ZONES.garden.parts[0], [ZONES.shame.bounds]).map(r => R(...r)), R(...ZONES.garden.parts[1]),
 		R(...ZONES.park.bounds), R(...ZONES.karts.bounds),

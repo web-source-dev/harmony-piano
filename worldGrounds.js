@@ -6,22 +6,27 @@
  * front of the courtyard, avenues of trees and groves in the open lawn, street lamps, benches for two, signposts at
  * the crossings, a clipped hedge all round, and a dark wood beyond it.
  *
- * The house's outside: one clean rectangle (x -22.55..33.7, z -8.8..18.25) under one flat roof at one height, with a
+ * The house's outside: one clean rectangle (x -22.55..33.7, z -8.8..24.7) under one flat roof at one height, with a
  * continuous charcoal parapet all round, white walls on a dark plinth, tall lit windows and timber panels, solar
- * panels and skylights up on the roof; the lounge's double-height volume rises out of the middle of it. The rooms
+ * a walkable roof deck on top (worldRoof.js); the lounge's double-height volume rises out of the middle of it. The rooms
  * keep their own walls inside: this is a skin round all of them, single-sided (facing out), so it never shows from
  * indoors - a window in a room still looks out.
  *
  * Walking here is the grounds' walkFn (worldHouse.js), not walk rects: anywhere inside the hedge that's clear of the
  * house and every place's railings, and through their gates.
  */
-import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, HOUSE_RECT, ROOF_Y, PARAPET_Y, LOUNGE_TOP, COURTS, GATES, PATHS, PLAZA, subtractRects, pathDist, inRect } from "./worldEstate.js";
+import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, HOUSE_RECT, ROOF_Y, PARAPET_Y, LOUNGE_TOP, COURTS, PATIO, GATES, PATHS, PLAZA, WINDOWS, STAIR, subtractRects, pathDist, inRect } from "./worldEstate.js";
+import { TERRACE_AT } from "./worldRoom.js";
 import { trackPoints } from "./worldPark.js";
 
 // the lounge's two storeys (with its own roof's overhang): the flat roof stops round it, its walls rise out of it
 const UPPER = [6.75, 23.65, -6.32, 8.25];
-// the courtyard's notch in the house's south side (the living room's and the lounge's back walls face the terrace and the pool)
+// the courtyard's notch in the house's south side (the living room's and the lounge's back walls face the patio and the pool)
 const NOTCH = [-6.97, 23.12, -8.8, -6.4];
+// the terrace, cantilevered out at roof level over the lawn in front of the cinema (nothing tall under it), and the gap
+// in the parapet where you step onto it from the roof deck
+const TERRACE_OVER = [-7 + TERRACE_AT[0] - 0.4, 5.5 + TERRACE_AT[0] + 0.4, -12 + TERRACE_AT[1] - 0.4, -8.8];
+const TERRACE_GAP = [-19.3, -17.3];
 // where each place's own floor is (the lawn stops at its edge)
 const FOOT = [
 	[-7.0, 33.6, -50.1, -38.1], [-7.0, 5.45, -38.1, -32.1],     // the garden
@@ -141,6 +146,7 @@ export function build(k) {
 			flat("path", [x0 - hw, x0 + hw, za - lo, zb + hi], PATH_Y, 2.6);
 		}
 	}
+	flat("path", PATIO, PATH_Y, 2.6);   // the patio, where the terrace used to be: out of the living room's back door
 	const pathMesh = finish("path", mat("#ffffff", 0.85, 0, { map: paverTex }));
 	pathMesh.userData.floor = true;
 	// the plaza: rings of paving, a glowing ring, and the Harmony sculpture on its plinth
@@ -183,7 +189,7 @@ export function build(k) {
 		const curve = new THREE.CatmullRomCurve3(trackPoints().map(([x, y, z]) => new THREE.Vector3(x, y, z)), true, "centripetal");
 		return curve.getSpacedPoints(900);
 	})();
-	const solid = HOUSE_BLOCKS.concat(COURTS, FOOT);
+	const solid = HOUSE_BLOCKS.concat(COURTS, FOOT, [TERRACE_OVER]);
 	const inner = [ESTATE[0] + HEDGE_IN + 0.8, ESTATE[1] - HEDGE_IN - 0.8, ESTATE[2] + HEDGE_IN + 0.8, ESTATE[3] - HEDGE_IN - 0.8];
 	const taken = [];   // [x, z, r]: things already placed
 	// is (x, z) clear for something of radius r, standing h metres tall? (path: how far off a path's edge it must be)
@@ -207,7 +213,7 @@ export function build(k) {
 			[-12.0, -23.6, 0], [26.0, -23.6, 0],               // along the cross walk, facing the house
 			[-17.8, -52.0, -Math.PI / 2], [-17.8, -73.0, -Math.PI / 2],   // the west avenue
 			[37.1, 6.0, Math.PI / 2], [37.1, -40.0, Math.PI / 2],         // the east walk
-			[-6.0, 27.9, Math.PI], [24.0, 27.9, Math.PI],      // behind the house
+			[-6.0, 31.1, Math.PI], [24.0, 31.1, Math.PI],      // behind the house (across the path, facing it)
 			[6.0, -60.1, Math.PI]                              // the south walk
 		];
 		BENCHES.forEach(([x, z, h], i) => {
@@ -452,16 +458,19 @@ export function build(k) {
 		});
 		const litT = winTex(true), dimT = winTex(false);
 		const S = 2.4;   // metres per texture repeat on the walls
-		// the faces of the skin: from p to q, facing n; full: down to the ground (else only from y0), holes: [u0, u1, y0, y1]
-		// (u along the face from p), win: tall windows along it
+		const HN = HOUSE_RECT[3];   // the house's back (north) face
+		// the faces of the skin: from p to q, facing n; y0: from there up (else from the ground); holes: [u0, u1, y0, y1]
+		// (u along the face from p) - the real windows of the rooms behind (WINDOWS in worldEstate.js); clad: [u0, u1]
+		// panels of vertical timber on the long blank stretches (the cinema, the game room, the bedroom)
+		const holesOn = (face, u) => WINDOWS.filter(w => w.face === face).map(w => { const a = u(w.a), b = u(w.b); return [Math.min(a, b), Math.max(a, b), w.y0, w.y1]; });
 		const FACES = [
-			{ p: [-22.55, -8.8], q: [-22.55, 18.25], n: [-1, 0], win: true },                         // west
-			{ p: [-22.55, 18.25], q: [33.7, 18.25], n: [0, 1], win: true },                           // north (the back)
-			{ p: [33.7, 18.25], q: [33.7, -8.8], n: [1, 0], win: true, holes: [[20.55, 22.75, 0.75, 2.45]] },   // east (the bedroom's window)
+			{ p: [-22.55, -8.8], q: [-22.55, HN], n: [-1, 0], holes: holesOn("w", z => z + 8.8), clad: [[1.4, 3.8], [6.4, 8.8]] },              // west
+			{ p: [-22.55, HN], q: [33.7, HN], n: [0, 1], holes: holesOn("n", x => x + 22.55), clad: [[27.3, 30.3], [32.2, 35.2], [37.8, 40.8], [41.8, 44.8]] },     // north (the back: the game room, the spa)
+			{ p: [33.7, HN], q: [33.7, -8.8], n: [1, 0], holes: holesOn("e", z => HN - z), clad: [[HN - 0.6, HN + 1.4], [HN + 5.6, HN + 8.0]] },      // east
 			{ p: [33.7, -8.8], q: [23.12, -8.8], n: [0, -1], holes: [[0.5, 8.3, 0, 2.75]] },        // the bedroom's glass wall onto the pool deck
 			{ p: [23.12, -8.8], q: [23.12, -6.32], n: [-1, 0] },                                      // beside it, onto the deck
-			{ p: [-6.97, -6.4], q: [-6.97, -8.8], n: [1, 0] },                                        // the cinema's end, onto the terrace
-			{ p: [-6.97, -8.8], q: [-22.55, -8.8], n: [0, -1], win: true },                           // the cinema's front, onto the lawn
+			{ p: [-6.97, -6.4], q: [-6.97, -8.8], n: [1, 0] },                                        // the cinema's end, onto the patio
+			{ p: [-6.97, -8.8], q: [-22.55, -8.8], n: [0, -1], clad: [[2.83, 5.23], [13.0, 15.0]], pgap: [-6.97 - TERRACE_GAP[1], -6.97 - TERRACE_GAP[0]] }, // the cinema's front, onto the lawn (the terrace juts out over it)
 			{ p: [6.75, -6.4], q: [-6.97, -6.4], n: [0, -1], y0: 3.3 }                                // over the living room's back wall (and its old roof's edge)
 		];
 		const TOP = PARAPET_Y - 0.9;   // where the walls meet the parapet's band
@@ -501,22 +510,20 @@ export function build(k) {
 			const out = 0.06, inn = 0.3;
 			const bx = pn[0] ? [pn[0] > 0 ? lo[0] - inn : lo[0] - out, pn[0] > 0 ? lo[1] + out : lo[1] + inn] : [lo[0], lo[1]];
 			const bz = pn[1] ? [pn[1] > 0 ? lo[2] - inn : lo[2] - out, pn[1] > 0 ? lo[3] + out : lo[3] + inn] : [lo[2], lo[3]];
-			box("fascia", bx[0], bx[1], TOP, PARAPET_Y, bz[0], bz[1], 1);
-			// tall windows (and a timber panel in every third bay), lit or dark
-			if (F.win) {
-				const BAY = 4.4, nb = Math.floor((len - 2.2) / BAY), start = (len - nb * BAY) / 2;
-				for (let i = 0; i < nb; i++) {
-					const uc = start + (i + 0.5) * BAY;
-					if (hs.some(h => uc + 1.2 > h[0] - 0.4 && uc - 1.2 < h[1] + 0.4)) continue;
-					const o = 0.025, off = p => [p[0] + F.n[0] * o, p[1] + F.n[1] * o];
-					if (i % 3 === 1) { wallQuad("wood", off(at(uc - 0.8)), off(at(uc + 0.8)), PL, TOP, F.n, 1.6, uc - 0.8); continue; }
-					const lit = R() < 0.72;
-					wallQuad(lit ? "winLit" : "winDim", off(at(uc - 0.8)), off(at(uc + 0.8)), 0.6, 3.3, F.n, 1, 0, true);
-					// a slim sill under it
-					const sa = at(uc - 0.9), sb = at(uc + 0.9);
-					box("fascia", Math.min(sa[0], sb[0]) + (F.n[0] ? Math.min(0, F.n[0] * 0.12) : 0), Math.max(sa[0], sb[0]) + (F.n[0] ? Math.max(0, F.n[0] * 0.12) : 0), 0.53, 0.6,
-						Math.min(sa[1], sb[1]) + (F.n[1] ? Math.min(0, F.n[1] * 0.12) : 0), Math.max(sa[1], sb[1]) + (F.n[1] ? Math.max(0, F.n[1] * 0.12) : 0), 1);
-				}
+			if (F.pgap) {
+				const [g0, g1] = F.pgap, ga = at(g0), gb = at(g1);
+				const along = Math.abs(F.n[0]) < 0.5;   // (the face runs along x)
+				const lo0 = along ? Math.min(ga[0], gb[0]) : Math.min(ga[1], gb[1]), hi0 = along ? Math.max(ga[0], gb[0]) : Math.max(ga[1], gb[1]);
+				if (along) { box("fascia", bx[0], lo0, TOP, PARAPET_Y, bz[0], bz[1], 1); box("fascia", hi0, bx[1], TOP, PARAPET_Y, bz[0], bz[1], 1); box("fascia", lo0, hi0, TOP, ROOF_Y + 0.1, bz[0], bz[1], 1); }
+				else { box("fascia", bx[0], bx[1], TOP, PARAPET_Y, bz[0], lo0, 1); box("fascia", bx[0], bx[1], TOP, PARAPET_Y, hi0, bz[1], 1); box("fascia", bx[0], bx[1], TOP, ROOF_Y + 0.1, lo0, hi0, 1); }
+			} else box("fascia", bx[0], bx[1], TOP, PARAPET_Y, bz[0], bz[1], 1);
+			// timber panels, and a slim sill under each window
+			const o = 0.025, off = p => [p[0] + F.n[0] * o, p[1] + F.n[1] * o];
+			for (const [u0, u1] of F.clad || []) wallQuad("wood", off(at(u0)), off(at(u1)), PL, TOP, F.n, 1.6, u0);
+			for (const h of hs) if (h[2] > 0.3) {
+				const sa = at(h[0] - 0.1), sb = at(h[1] + 0.1);
+				box("fascia", Math.min(sa[0], sb[0]) + (F.n[0] ? Math.min(0, F.n[0] * 0.14) : 0), Math.max(sa[0], sb[0]) + (F.n[0] ? Math.max(0, F.n[0] * 0.14) : 0), h[2] - 0.17, h[2] - 0.1,
+					Math.min(sa[1], sb[1]) + (F.n[1] ? Math.min(0, F.n[1] * 0.14) : 0), Math.max(sa[1], sb[1]) + (F.n[1] ? Math.max(0, F.n[1] * 0.14) : 0), 1);
 			}
 		}
 		// the lounge's double-height volume, rising out of the roof: white walls on all sides but the pool's (brick, by
@@ -537,24 +544,9 @@ export function build(k) {
 			const o = 0.025;
 			wallQuad("winLit", [a[0] + n[0] * o, a[1] + n[1] * o], [b[0] + n[0] * o, b[1] + n[1] * o], ROOF_Y + 0.55, ROOF_Y + 1.25, n, 1, 0, true);
 		}
-		// the flat roof, all one height (the courtyard's notch and the lounge cut out of it)
-		subtractRects(HOUSE_RECT, [NOTCH, UPPER]).forEach(r => flat("roof", r, ROOF_Y, 3));
-		// up on it: rows of solar panels on the wings, skylights over the back
-		const panels = [];
-		for (let x = -21.4; x < -8.6; x += 1.25) for (let z = -7.4; z < 16.8; z += 2.3) panels.push([x, z]);
-		for (let x = 24.4; x < 32.6; x += 1.25) for (let z = -7.4; z < 16.8; z += 2.3) panels.push([x, z]);
-		const pd = new THREE.Object3D();
-		const pv = new THREE.InstancedMesh(new THREE.BoxGeometry(1.1, 0.05, 1.75), new THREE.MeshStandardMaterial({
-			color: "#ffffff", roughness: 0.25, metalness: 0.5,
-			map: canvasTex(128, 192, (c, w, h) => { c.fillStyle = "#1b2a4a"; c.fillRect(0, 0, w, h); c.strokeStyle = "#7d8db0"; c.lineWidth = 2; for (let x = 0; x <= w; x += w / 4) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke(); } for (let y = 0; y <= h; y += h / 6) { c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke(); } })
-		}), panels.length);
-		panels.forEach(([x, z], i) => { pd.position.set(x, ROOF_Y + 0.42, z); pd.rotation.set(-0.3, 0, 0); pd.updateMatrix(); pv.setMatrixAt(i, pd.matrix); });
-		pv.castShadow = false; pv.instanceMatrix.needsUpdate = true;
-		g.add(pv);
-		for (const [x0, x1, z0, z1] of [[-3, 3, 9.5, 15.5], [9, 13, 10, 16], [15.5, 21.5, 10, 16]]) {
-			box("fascia", x0 - 0.12, x1 + 0.12, ROOF_Y, ROOF_Y + 0.35, z0 - 0.12, z1 + 0.12, 1);
-			flat("skylight", [x0, x1, z0, z1], ROOF_Y + 0.37, 1.5);
-		}
+		// the flat roof, all one height (the courtyard's notch, the lounge and the stairwell cut out of it); the roof deck
+		// (worldRoof.js) is laid over it, and the stairwell's glass pavilion stands over the hole
+		subtractRects(HOUSE_RECT, [NOTCH, UPPER, [STAIR.x0, STAIR.x1, STAIR.hole, STAIR.top]]).forEach(r => flat("roof", r, ROOF_Y, 3));
 		const walls = finish("render", mat("#ffffff", 0.88, 0, { map: renderTex }));
 		finish("plinth", mat("#4e4955", 0.9));
 		finish("fascia", mat("#2e2a31", 0.55, 0.25));

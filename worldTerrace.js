@@ -1,14 +1,16 @@
 /**
- * Harmony World — the rooftop terrace behind the living room.
+ * Harmony World — the terrace: at roof level, cantilevered out from the roof deck's south edge over the lawn, with
+ * nothing under it but a slim slab and its steel beams.
  *
- * Reached through the French doors in the back wall. Built with the same
- * helpers as the room (passed in as `h`) and returns handles for the things
- * the world animates or reads: the swing, the fire, the telescope and the
- * painting easel.
+ * You walk onto it from the roof deck (worldRoof.js), through the gap in its north railing. Built with the same helpers
+ * as the room (passed in as `h`) and returns handles for the things the world animates or reads: the swing, the fire,
+ * the telescope and the painting easel.
  *
- * Terrace bounds: x -7..5.5, z -12..-6.2 (see TERRACE in worldRoom.js).
+ * Built in its own coordinates, x -7..5.5, z -12..-6.2, into a group that worldRoom.js lifts up onto the roof; the
+ * helpers move everything it registers onto its floor plan (TERRACE in worldRoom.js), and h.addLight its lights.
  */
 import * as THREE from "three";
+import { TSTAIR } from "./worldRoom.js";
 
 export function buildTerrace(scene, h) {
 	const { add, mat, group, rbox, canvasTex, interact, box, sitSpots, updaters, rng, lightWood, wood, darkWood, brass } = h;
@@ -50,21 +52,32 @@ export function buildTerrace(scene, h) {
 		const n = Math.max(1, Math.round(len / 1.25));
 		for (let i = 0; i <= n; i++) add(g, new THREE.BoxGeometry(0.06, 1.05, 0.06), postM, 0, 0.525, -len / 2 + (len * i) / n);
 	};
-	// (a gap in the south railing leads down into the garden: TGAP in worldRoom.js)
-	railRun(-6.95, -11.95, -5.5, -11.95);
-	railRun(-4.0, -11.95, 5.45, -11.95);
-	{
-		const sg = group(scene, -3.65, 0, -11.7);
-		add(sg, new THREE.CylinderGeometry(0.03, 0.03, 1.1, 8), mat("#5b4636", 0.7), 0, 0.55, 0);
-		add(sg, rbox(0.62, 0.22, 0.04, 0.02), mat("#8a5a3c", 0.6), 0, 1.15, 0);
-		const c = canvasTex(512, 128, (g, w, h) => { g.fillStyle = "#f6ecd2"; g.font = "800 84px 'Caveat', 'Nunito', cursive"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("Garden", w / 2, h / 2 + 4); });
-		add(sg, new THREE.PlaneGeometry(0.56, 0.16), new THREE.MeshBasicMaterial({ map: c, transparent: true, depthWrite: false }), 0, 1.15, 0.025, { cast: false, receive: false });
-		box(-3.72, -3.58, -11.77, -11.63);
-	}
+	// glass railings all round (a gap in the north one: the way in from the roof deck)
+	railRun(-6.95, -11.95, 5.45, -11.95);
+	railRun(-6.95, -6.25, TSTAIR.x0, -6.25);
+	railRun(TSTAIR.x1, -6.25, 5.45, -6.25);
 	railRun(-6.95, -6.25, -6.95, -11.95);
-	// (a gap in the east railing leads out to the pool deck)
-	railRun(5.45, -6.25, 5.45, -8.3);
-	railRun(5.45, -10.3, 5.45, -11.95);
+	railRun(5.45, -6.25, 5.45, -11.95);
+	box(-7.0, 5.5, -12.0, -11.9);
+	box(-7.0, TSTAIR.x0, -6.3, -6.2);
+	box(TSTAIR.x1, 5.5, -6.3, -6.2);
+	box(-7.0, -6.9, -12.0, -6.2);
+	box(5.4, 5.5, -12.0, -6.2);
+	// the cantilever: a slim slab under the deck, steel beams running back into the roof, a lit edge
+	{
+		const slabM = mat("#e9e3d8", 0.8), steel = mat("#2e2a31", 0.45, 0.5);
+		add(scene, new THREE.BoxGeometry(12.7, 0.32, 5.9), slabM, -0.75, -0.17, -9.1);
+		for (const x of [-5.6, -2.4, 0.9, 4.1]) add(scene, new THREE.BoxGeometry(0.22, 0.3, 7.6), steel, x, -0.48, -8.3);
+		add(scene, new THREE.BoxGeometry(12.72, 0.04, 0.04), new THREE.MeshBasicMaterial({ color: "#ffd9a0", toneMapped: false }), -0.75, -0.33, -12.06, { cast: false });
+	}
+	{
+		const sg = group(scene, TSTAIR.x1 + 0.45, 0, -6.6);
+		add(sg, new THREE.CylinderGeometry(0.03, 0.03, 1.1, 8), mat("#5b4636", 0.7), 0, 0.55, 0);
+		add(sg, rbox(0.82, 0.22, 0.04, 0.02), mat("#8a5a3c", 0.6), 0, 1.15, 0);
+		const c = canvasTex(512, 128, (g, w, h) => { g.fillStyle = "#f6ecd2"; g.font = "800 72px 'Caveat', 'Nunito', cursive"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("Terrace", w / 2, h / 2 + 4); });
+		add(sg, new THREE.PlaneGeometry(0.76, 0.16), new THREE.MeshBasicMaterial({ map: c, transparent: true, depthWrite: false }), 0, 1.15, 0.025, { cast: false, receive: false });
+		box(TSTAIR.x1 + 0.38, TSTAIR.x1 + 0.52, -6.67, -6.53);
+	}
 
 	// ---------- string lights overhead
 	const bulbs = [];
@@ -94,7 +107,7 @@ export function buildTerrace(scene, h) {
 	strand(tops[3], tops[0], 0.3);
 	const l1 = new THREE.PointLight("#ffcf8f", 5, 10, 1.8); l1.position.set(-3.2, 2.5, -9.2);
 	const l2 = new THREE.PointLight("#ffcf8f", 4, 10, 1.8); l2.position.set(2.8, 2.5, -9.6);
-	scene.add(l1, l2);
+	h.addLight(l1, l2);
 	updaters.push((dt, t) => bulbs.forEach(b => { b.material.emissiveIntensity = 1.8 + Math.sin(t * 1.7 + b.userData.ph) * 0.6; }));
 
 	// ---------- potted olive trees
@@ -151,6 +164,8 @@ export function buildTerrace(scene, h) {
 	add(bis, rbox(0.12, 0.18, 0.12, 0.02), mat("#1d1d22", 0.4, 0.5), 0, 0.85, 0);
 	const lanFlame = add(bis, new THREE.SphereGeometry(0.02, 8, 6), new THREE.MeshBasicMaterial({ color: "#ffcf6b", toneMapped: false }), 0, 0.84, 0, { cast: false });
 	const lanLight = new THREE.PointLight("#ffb45e", 1.2, 3, 2); lanLight.position.set(-2.6, 1.0, -10.8);
+	lanLight.userData.notInScene = true;   // (moved up with the rest, but never added: it only ever counted as a light slot)
+	h.addLight(lanLight);
 	updaters.push((dt, t) => { const f = 0.85 + Math.sin(t * 11) * 0.1 + Math.sin(t * 6.1) * 0.06; lanFlame.scale.set(1, 1.6 * f, 1); lanLight.intensity = 1.2 * f; });
 	const wineM = new THREE.MeshPhysicalMaterial({ color: "#ffffff", roughness: 0.05, transparent: true, opacity: 0.3, depthWrite: false });
 	for (const sx of [-0.18, 0.18]) {
@@ -197,7 +212,7 @@ export function buildTerrace(scene, h) {
 	}
 	const fireLight = new THREE.PointLight("#ff8a3d", 5, 7, 2);
 	fireLight.position.set(fx, 0.6, fz);
-	scene.add(fireLight);
+	h.addLight(fireLight);
 	// a fixed pool of embers, reused (creating and disposing meshes every few frames churned the GPU and GC)
 	const emberGeo = new THREE.SphereGeometry(0.01, 4, 3);
 	const embers = Array.from({ length: 20 }, () => {
@@ -327,8 +342,8 @@ export function buildTerrace(scene, h) {
 		lights: [l1, l2, fireLight],
 		minorLights: [lanLight],   // small accent lights the low graphics setting switches off
 		swing, easel: { canvas: easelCanvas, tex: easelTex, point: easelPoint, stands: easelStands, face: Math.PI },
-		telescope: { eyepiece, dir: MOON, stand: scopeStand },
-		fire: { x: fx, z: fz },
+		telescope: { eyepiece, dir: MOON, stand: h.fp(scopeStand) },
+		fire: { x: h.fp([fx, fz])[0], z: h.fp([fx, fz])[1] },
 		// dim the light rather than hiding it: a hidden light changes the light count and recompiles every shader
 		setFireOn: on => { fireOn = on; flames.forEach(f => { f.visible = on; }); }
 	};

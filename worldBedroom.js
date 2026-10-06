@@ -23,7 +23,8 @@ export function build(k) {
 		holes: [
 			{ wall: "w", at: 2.5, w: 1.7, y1: 2.3 },   // French doors from the lounge
 			{ wall: "e", at: 0.6, w: 2.2, y0: 0.75, y1: 2.45 },
-			{ wall: "n", at: 0.9, w: 7.8, y1: 2.75 }    // the sliding glass wall onto the pool deck
+			{ wall: "n", at: 0.9, w: 7.8, y1: 2.75 },   // the sliding glass wall onto the pool deck
+			{ wall: "s", at: 3.9, w: 0.9, y1: 2.2 }     // the walk-in wardrobe (worldCloset.js)
 		]
 	});
 	k.walk(-5, 5, -4.5, 4.5);
@@ -32,6 +33,7 @@ export function build(k) {
 		k.photo(slot, x, y, z, ry, { w, h, frame: slot % 2 ? "#fbf8f2" : "#c9a05a", metal: slot % 2 ? 0 : 0.7 });
 	k.walk(-5.6, -4.0, 1.65, 3.35);   // through the doors to the lounge
 	k.walk(-1.05, 2.85, -5.4, -3.6);  // through the glass wall to the pool deck
+	k.walk(3.45, 4.35, 3.6, 5.6);     // into the walk-in wardrobe
 	k.cam = { minX: -4.75, maxX: 4.75, minZ: -4.25, maxZ: 4.25, maxY: H - 0.15 };
 	// glow-in-the-dark stars on the ceiling (they light up when the big light goes off)
 	const starTex = canvasTex(1024, 1024, (c, w, h) => {
@@ -326,11 +328,8 @@ export function build(k) {
 	add(fl, new THREE.CylinderGeometry(0.16, 0.22, 0.26, 22, 1, true), floorShadeM, 0, 1.6, 0, { cast: false });
 	k.box(-4.8, -4.4, -2.8, -2.4);
 	// a few framed photos + a big art piece over the bed area wall
-	for (const [x, seed] of [[-3.4, 2], [-2.6, 6]]) {
-		const fr = group(g, x, 1.85, 4.47, Math.PI);
-		add(fr, rbox(0.5, 0.62, 0.04, 0.01), mat("#2b2230", 0.5), 0, 0, 0);
-		add(fr, new THREE.PlaneGeometry(0.42, 0.54), new THREE.MeshStandardMaterial({ map: tex.art(seed), roughness: 0.8 }), 0, 0, 0.025, { cast: false });
-	}
+	// (photo frames 94 and 95: your own photos, like every other frame in the house)
+	for (const [x, slot] of [[-3.4, 94], [-2.6, 95]]) k.photo(slot, x, 1.85, 4.47, Math.PI, { w: 0.45, h: 0.58, frame: "#2b2230" });
 	// dresser by the window with a plant and a little record player
 	const dr = group(g, 4.6, 0, 3.2, -Math.PI / 2);
 	add(dr, rbox(1.5, 0.85, 0.5, 0.02), frameW, 0, 0.425, 0);
