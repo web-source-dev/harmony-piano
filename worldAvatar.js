@@ -1041,6 +1041,14 @@ export class Avatar {
 		} else if (up === "kart") {
 			// both hands on a bumper kart's steering wheel
 			for (let i = 0; i < 2; i++) { P.arm[i].x = -0.95; P.arm[i].e = -0.8; P.arm[i].z = (i ? 1 : -1) * 0.22; }
+		} else if (up === "drive") {
+			// at the wheel of a car: leaning back in the seat, both hands up on the wheel
+			P.torsoX = -0.14;
+			for (let i = 0; i < 2; i++) { P.arm[i].x = -1.15; P.arm[i].e = -0.62; P.arm[i].z = (i ? 1 : -1) * 0.2; }
+		} else if (up === "carpass") {
+			// riding along: leaning back, hands in the lap
+			P.torsoX = -0.16; P.headX = -0.04;
+			for (let i = 0; i < 2; i++) { P.arm[i].x = -0.5; P.arm[i].e = -0.95; P.arm[i].z = (i ? 1 : -1) * 0.1; }
 		}
 
 		else if (up === "laugh") {

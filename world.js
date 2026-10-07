@@ -26,6 +26,7 @@ import { buildRoom, ROOM, DOOR, TERRACE, TERRACE_Y, TERRACE_AT, TERRACE_FP, MOON
 import { WorldAudio, TRACKS } from "./worldAudio.js";
 import * as Games from "./worldGames.js";
 import { createHouse, ZONES } from "./worldHouse.js";
+import { YT_RE, parseYouTube, ytKey, ytEmbedSrc, followPlaylist, playlistStep } from "./worldYT.js";
 import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, COURTS, ROOF_Y, LOUNGE_TOP, ROOF_FLOOR, ROOF_PLAN, ROOF_DECK, WING, subtractRects } from "./worldEstate.js";
 
 const esc = Games.esc;
@@ -45,6 +46,9 @@ const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } ca
 let MY_ID;
 try { MY_ID = sessionStorage.getItem("harmonyWorldId"); } catch (e) {}
 if (!MY_ID) { MY_ID = "w" + Math.random().toString(36).slice(2, 10); try { sessionStorage.setItem("harmonyWorldId", MY_ID); } catch (e) {} }
+// the piano account id this tab came from (?u=), so /manage's Close on the piano user also closes their world
+let PIANO_ID = (params.get("u") || "").slice(0, 64);
+try { if (PIANO_ID) sessionStorage.setItem("harmonyWorldPianoId", PIANO_ID); else PIANO_ID = sessionStorage.getItem("harmonyWorldPianoId") || ""; } catch (e) {}
 // stable per-browser person id (love notes remember who wrote/read them across visits)
 let ME_PID = lsGet("harmonyWorldPid", "");
 if (!ME_PID) { ME_PID = "p" + Math.random().toString(36).slice(2, 12); lsSet("harmonyWorldPid", ME_PID); }
@@ -175,6 +179,8 @@ const house = createHouse({
 	photoFrame: (...a) => photoFrame(...a), openPhotos: slot => openPhotos(slot),
 	foodMenu: (title, ids, extra) => foodMenu(title, ids, extra), takeFood: (id, from) => takeFood(id, from),
 	restoreMainLights() { room.setMain(!!get("mainLight")); applyNight(null); },
+	// can a car (a circle of radius r) be at (x, z)? out under the sky, on the ground, clear of everything solid
+	canDrive: (x, z, r) => canDrive(x, z, r),
 	onRegion() { refreshPeople(); },
 	onZoneBuilt() { gridDirty(); }
 });
@@ -305,10 +311,27 @@ function startNetwork() {
 			let d;
 			try { d = JSON.parse(s.slice(3)); } catch (e) { return; }
 			if (d && typeof d.id === "string" && d.id !== MY_ID) onNet(d);
-		}
+		},
+		onManageClose: id => { if (id && (id === MY_ID || id === PIANO_ID)) forceCloseWorldTab(); }
 	});
 	sync.start();
 	addEventListener("pagehide", () => send({ t: "bye" }));
+}
+// Remote-close from /manage (same idea as forceClosePianoTab in script.js): say bye, drop the relay, then try to
+// close the tab; browsers refuse that for tabs the user opened, so fall back to about:blank.
+let closingTab = false;
+function forceCloseWorldTab() {
+	if (closingTab) return;
+	closingTab = true;
+	try { send({ t: "bye" }); } catch (e) {}
+	try { sync.stop(); } catch (e) {}
+	try { if (audio && audio.ctx && audio.ctx.close) audio.ctx.close(); } catch (e) {}
+	const tryClose = () => {
+		try { window.open("", "_self", ""); } catch (e) {}
+		try { window.close(); } catch (e) {}
+	};
+	tryClose();
+	setTimeout(() => { tryClose(); try { location.replace("about:blank"); } catch (e) {} }, 80);
 }
 function sendSnapshot() {
 	// every key as its own frame keeps each one well under the relay's frame limit
@@ -389,7 +412,7 @@ function upsertPeer(id, lk) {
 }
 const BASE_ANIMS = ["idle", "sit", "sleep", "floor"];
 const UPPER_ANIMS = ["wave", "dance", "clap", "heart", "drink", "paint", "write", "tug", "piano", "laugh", "cry", "kiss", "hug", "highfive", "jump", "bow", "cheer", "think", "shrug", "facepalm", "yawn", "warm", "telescope", "shake", "give", "stumble",
-	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash", "handhold", "kart", "kick", "scoop", "throw"];
+	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash", "handhold", "kart", "drive", "carpass", "kick", "scoop", "throw"];
 const PROPS = ["mug", "brush", "remote", "flower", "ring", "popcorn", "fork", "spoon", "sponge"].concat(FOOD_PROPS);
 function applyPose(p, d, snap) {
 	if (typeof d.x !== "number") return;
@@ -981,10 +1004,9 @@ function noteHand(av, n) {
 $("#pianostand").onclick = () => standUp();
 
 // ---------- TV + remote
-const YT_RE = /(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/))([\w-]{11})/;
-const HOLE = new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0, blending: THREE.NoBlending, toneMapped: false });
+const HOLE =new THREE.MeshBasicMaterial({ color: 0x000000, opacity: 0, blending: THREE.NoBlending, toneMapped: false });
 const tvScreenMat = room.tv.screen.material;
-let yt = null; // { id, obj, iframe }
+let yt = null; // { id, obj, iframe, pl } (id: ytKey - the video and the playlist)
 let lastYt = "";
 function ytCmd(func, args) {
 	if (!yt || !yt.iframe.contentWindow) return;
@@ -992,14 +1014,13 @@ function ytCmd(func, args) {
 }
 function tvElapsed(tv) { return tv.paused ? (tv.pos || 0) : Math.max(0, (now() - tv.at) / 1000); }
 function mountYouTube(tv) {
-	if (yt && yt.id === tv.yt) return;
+	if (yt && yt.id === ytKey(tv)) return;
 	unmountYouTube();
 	const iframe = document.createElement("iframe");
 	iframe.width = "960"; iframe.height = "537";
 	iframe.style.cssText = "width:960px;height:537px;border:0;background:#000";
 	iframe.allow = "autoplay; encrypted-media; picture-in-picture";
-	const start = Math.floor(tvElapsed(tv));
-	iframe.src = `https://www.youtube.com/embed/${tv.yt}?enablejsapi=1&autoplay=1&controls=0&rel=0&playsinline=1&modestbranding=1&iv_load_policy=3&start=${start}&origin=${encodeURIComponent(location.origin)}`;
+	iframe.src = ytEmbedSrc(tv, tvElapsed(tv));
 	const obj = new CSS3DObject(iframe);
 	scene.updateMatrixWorld();
 	room.tv.screen.getWorldPosition(obj.position);
@@ -1007,8 +1028,10 @@ function mountYouTube(tv) {
 	obj.scale.setScalar(1.86 / 960);
 	cssScene.add(obj);
 	room.tv.screen.material = HOLE;
-	yt = { id: tv.yt, obj, iframe };
+	const mine = yt = { id: ytKey(tv), obj, iframe, pl: null };
 	iframe.addEventListener("load", () => {
+		if (yt !== mine) return;
+		if (!mine.pl && iframe.contentWindow) mine.pl = followPlaylist(iframe, () => get("tv"), p => setShared("tv", Object.assign({}, get("tv"), p)), ytCmd, tvElapsed);
 		try { iframe.contentWindow.postMessage(JSON.stringify({ event: "listening", id: 1 }), "*"); } catch (e) {}
 		setTimeout(() => syncYouTube(true), 800);
 		setTimeout(() => syncYouTube(true), 2500);
@@ -1016,6 +1039,7 @@ function mountYouTube(tv) {
 }
 function unmountYouTube() {
 	if (!yt) return;
+	if (yt.pl) yt.pl.stop();
 	cssScene.remove(yt.obj);
 	yt.iframe.src = "about:blank";
 	yt.obj.element.remove();
@@ -1028,17 +1052,18 @@ function syncYouTube(hard) {
 	ytCmd("unMute");
 	if (tv.paused) { ytCmd("seekTo", [tv.pos || 0, true]); ytCmd("pauseVideo"); }
 	else { if (hard) ytCmd("seekTo", [tvElapsed(tv), true]); ytCmd("playVideo"); }
+	if (yt.pl) yt.pl.sync();
 }
 function applyTV(remote) {
 	const tv = get("tv");
 	room.tv.light.intensity = tv.on ? 2.2 : 0;
-	if (tv.on && tv.yt && entered) { const fresh = !yt || yt.id !== tv.yt; mountYouTube(tv); if (!fresh) syncYouTube(true); }
+	if (tv.on && tv.yt && entered) { const fresh = !yt || yt.id !== ytKey(tv); mountYouTube(tv); if (!fresh) syncYouTube(true); }
 	else unmountYouTube();
 	if (!tv.on) room.tv.off();
-	if (remote && tv.on && tv.yt && tv.yt !== lastYt && entered) {
+	if (remote && tv.on && tv.yt && ytKey(tv) !== lastYt && entered) {
 		toast("A video just started on the TV", "Go watch", () => walkTo(room.interactables.sofa.stand[0], room.interactables.sofa.stand[1], "sofa"), 12000);
 	}
-	lastYt = tv.on ? tv.yt : "";
+	lastYt = tv.on && tv.yt ? ytKey(tv) : "";
 	renderRemote();
 }
 function drawTVFrame(t) {
@@ -1073,10 +1098,11 @@ function renderRemote() {
 	if (!remoteOpen) return;
 	const tv = get("tv");
 	const ch = room.tv.channels;
-	$("#rm-ch").textContent = !tv.on ? "TV is off" : tv.yt ? (tv.paused ? "YouTube (paused)" : "YouTube") : ch[tv.ch];
+	$("#rm-ch").textContent = !tv.on ? "TV is off" : tv.yt ? (tv.list ? "Playlist" + (tv.idx >= 0 ? " #" + (tv.idx + 1) : "") : "YouTube") + (tv.paused ? " (paused)" : "") : ch[tv.ch];
 	$("#rm-pow").classList.toggle("on", !!tv.on);
 	$("#rm-pause").textContent = tv.paused ? "Play" : "Pause";
 	$("#rm-pause").disabled = !(tv.on && tv.yt);
+	$("#rm-pl").classList.toggle("hidden", !(tv.on && tv.yt && tv.list));
 }
 function tvSet(patch) { setShared("tv", Object.assign({}, get("tv"), patch)); if (audio) audio.sfx("click"); }
 $("#rm-pow").onclick = () => { const tv = get("tv"); tvSet({ on: !tv.on, paused: false, at: now() - tvElapsed(tv) * 1000 }); };
@@ -1090,13 +1116,18 @@ $("#rm-pause").onclick = () => {
 };
 const ytGo = () => {
 	const inp = $("#rm-url");
-	const m = YT_RE.exec(inp.value.trim());
+	const m = parseYouTube(inp.value);
 	if (!m) { inp.classList.add("bad"); setTimeout(() => inp.classList.remove("bad"), 900); return; }
-	tvSet({ on: true, yt: m[1], at: now(), paused: false, pos: 0 });
+	tvSet({ on: true, yt: m.yt, list: m.list, idx: m.idx, at: now(), paused: false, pos: 0 });
 	inp.value = "";
-	send({ t: "fx", kind: "sys", text: profile.name + " put a video on the TV" });
-	addLog("You put a video on the TV", true);
+	const what = m.list ? "a playlist" : "a video";
+	send({ t: "fx", kind: "sys", text: profile.name + " put " + what + " on the TV" });
+	addLog("You put " + what + " on the TV", true);
 };
+// a playlist: skip back / on (everyone's TV follows)
+const tvStep = dir => { const tv = get("tv"), p = playlistStep(tv, dir, yt && yt.pl ? yt.pl.index() : -1); if (p) tvSet(p); };
+$("#rm-prev").onclick = () => tvStep(-1);
+$("#rm-next").onclick = () => tvStep(1);
 $("#rm-play").onclick = ytGo;
 $("#rm-url").addEventListener("keydown", e => { if (e.key === "Enter") ytGo(); });
 $("#rm-drop").onclick = () => { setShared("remote", { by: "", name: "" }); addLog("You put the remote back on the coffee table", true); };
@@ -3407,6 +3438,7 @@ function collidersNear(x, z) {
 }
 function blocked(x, z, ignorePeers, ignoreDoors) {
 	if (!walkable(x, z, RADIUS)) return true;
+	if (house.solidAt(x, z, RADIUS)) return true;
 	for (const c of collidersNear(x, z)) {
 		if (c.door && (ignoreDoors || c.door.isOpen())) continue;
 		if (x > c.minX - RADIUS && x < c.maxX + RADIUS && z > c.minZ - RADIUS && z < c.maxZ + RADIUS) { if (c.door) bumpDoor = c.door; return true; }
@@ -3419,6 +3451,23 @@ function blocked(x, z, ignorePeers, ignoreDoors) {
 		if (d < RADIUS * 1.8 && d < Math.hypot(me.x - p.x, me.z - p.z)) return true;
 	}
 	return false;
+}
+// where a car can go: outdoors (not the pool's water, not up on the roof), wherever a body that wide could stand,
+// clear of trees, lamps, benches, railings and shut doors (checked round its edge too: the collider index only
+// reaches a little way past each cell)
+function canDrive(x, z, r) {
+	const a = areaOf(x, z);
+	if (!house.outdoorAt(x, z) || a === "roof" || a === "tree" || a === "terrace" || waterAt(x, z) > 0.02 || !walkable(x, z, r)) return false;
+	const seen = new Set();
+	for (const [px, pz] of [[x, z], [x + r, z], [x - r, z], [x, z + r], [x, z - r]]) {
+		for (const c of collidersNear(px, pz)) {
+			if (seen.has(c)) continue;
+			seen.add(c);
+			if (c.door && c.door.isOpen()) continue;
+			if (x > c.minX - r && x < c.maxX + r && z > c.minZ - r && z < c.maxZ + r) return false;
+		}
+	}
+	return true;
 }
 // the closed terrace door is a wall across the doorway (stepping away from it is always fine)
 const DOOR_Z = -6.2;
@@ -4093,7 +4142,7 @@ function updatePrompt() {
 	let best = null;
 	const busyNow = modalKind || drawOpen || me.upper === "piano" || fightView || scopeOn || wheelKind;
 	if (busyNow) { /* nothing */ }
-	else if (!me.sit) {
+	else if (!me.sit && !house.vehicle()) {
 		best = nearestUsable();
 		const bed = best && room.interactables[best].lie && room.interactables[best].sit ? room.interactables[best] : null;
 		if (bed) {
@@ -4482,6 +4531,7 @@ function frameBody() {
 	room.terrace.swing.occupied = me.sit === "swing0" || me.sit === "swing1" || [...peers.values()].some(p => p.sit === "swing0" || p.sit === "swing1");
 	updateFightRemote(clock.elapsedTime);
 	updatePeers(dt);
+	house.lateUpdate(dt, t);
 	if (tvMode) peers.forEach(p => { if (p.avatar.label) p.avatar.label.visible = false; });
 	updateStars(dt);
 	updateBall(dt);

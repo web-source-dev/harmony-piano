@@ -30,6 +30,9 @@ export function build(k) {
 	k.walk(X0, X1, Z0, Z1);
 	k.walk(DOOR[0], DOOR[1], Z0 - 1.0, Z0 + 1.0);
 	k.cam = { minX: X0 + 0.2, maxX: X1 - 0.2, minZ: Z0 + 0.2, maxZ: Z1 - 0.2, maxY: H - 0.25 };
+	// French doors onto the Gallery (in the wall between the hall and the room), the curtains on the room's side
+	const DM = (DOOR[0] + DOOR[1]) / 2;
+	k.frenchDoor("libraryDoor", { x: DM, z: Z0 - 0.11, ry: Math.PI, w: DOOR[1] - DOOR[0] - 0.04, h: 2.4, depth: 0.3, side: -1, curtain: "#2f4a3a" }, [DOOR[0], DOOR[1], Z0 - 0.22, Z0], [[DM, Z0 + 0.9], [DM, Z0 - 1.2]]);
 
 	// ---------------------------------------------------------------- bookshelves, along every wall that's free
 	const shelfM = mat("#3e2618", 0.55);

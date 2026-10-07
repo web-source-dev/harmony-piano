@@ -18,6 +18,7 @@
 import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, HOUSE_RECT, ROOF_Y, PARAPET_Y, LOUNGE_TOP, COURTS, PATIO, GATES, PATHS, PLAZA, WINDOWS, STAIR, subtractRects, pathDist, inRect } from "./worldEstate.js";
 import { TERRACE_AT } from "./worldRoom.js";
 import { trackPoints } from "./worldPark.js";
+import { buildCars, PAD } from "./worldCars.js";
 
 // the lounge's two storeys (with its own roof's overhang): the flat roof stops round it, its walls rise out of it
 const UPPER = [6.75, 23.65, -6.32, 8.25];
@@ -192,6 +193,8 @@ export function build(k) {
 	const solid = HOUSE_BLOCKS.concat(COURTS, FOOT, [TERRACE_OVER]);
 	const inner = [ESTATE[0] + HEDGE_IN + 0.8, ESTATE[1] - HEDGE_IN - 0.8, ESTATE[2] + HEDGE_IN + 0.8, ESTATE[3] - HEDGE_IN - 0.8];
 	const taken = [];   // [x, z, r]: things already placed
+	// the cars' parking pad (worldCars.js) and the way off it onto the path: kept clear of trees and lamps
+	for (let x = PAD[0] + 0.6; x < PAD[1] + 0.5; x += 2.4) for (let z = PAD[2] + 0.4; z < PAD[3] + 0.5; z += 2.4) taken.push([x, z, 1.5]);
 	// is (x, z) clear for something of radius r, standing h metres tall? (path: how far off a path's edge it must be)
 	function clear(x, z, r, h, pathGap) {
 		if (!inRect(inner, x, z, -r)) return false;
@@ -564,9 +567,16 @@ export function build(k) {
 	if (ctx.debug) console.log(`[grounds] ${lawnRects.length} lawn pieces, ${treeCount} trees, ${lampCount} lamps`);
 
 	// ================================================================ every frame
+	// ================================================================ the cars (worldCars.js)
+	const cars = buildCars(k, { PATH_Y });
+
 	function update(dt, t) {
 		sculpt.rotation.y = t * 0.25;
 		sculpt.position.y = 2.25 + Math.sin(t * 0.9) * 0.06;
+		cars.update(dt, t);
 	}
-	return { update, houseWalls };
+	return {
+		update, houseWalls,
+		lateUpdate: cars.lateUpdate, vehicle: cars.vehicle, solidAt: cars.solidAt, onFx: cars.onFx, promptOpts: cars.promptOpts
+	};
 }

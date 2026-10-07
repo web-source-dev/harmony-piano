@@ -644,6 +644,7 @@ export function createHouse(ctx) {
 		if (pets) pets.update(dt, t, visibleSet);
 	}
 
+	function vehicleZone() { for (const id in built) { const Z = built[id]; if (Z.vehicle && Z.vehicle()) return Z; } return null; }
 	const houseApi = {
 		ZONES, built, ensure, update, addDoor, portals, camWalls,
 		start: pump, preload,
@@ -665,9 +666,20 @@ export function createHouse(ctx) {
 		cssActive: () => { for (const id in built) if (visibleSet.has(id) && built[id].cssActive && built[id].cssActive()) return true; return false; },
 		// a seat that watches a screen (cinema): the camera looks at this from your eyes
 		screenFor(sitId) { for (const id in built) { const Z = built[id]; if (Z.screenFor) { const s = Z.screenFor(sitId); if (s) return s; } } return null; },
-		promptOpts(opts) { const Z = built[region]; if (Z && Z.promptOpts) Z.promptOpts(opts); if (pets) pets.promptOpts(opts); },
-		// something you're driving (a bumper kart): it moves you instead of walking (see world.js updateMe)
-		vehicle() { for (const id in built) { const Z = built[id]; if (Z.vehicle) { const v = Z.vehicle(); if (v) return v; } } return null; },
+		promptOpts(opts) {
+			const Z = built[region];
+			if (Z && Z.promptOpts) Z.promptOpts(opts);
+			// (a car can be driven out of the room that owns it: its own prompts come along)
+			const V = vehicleZone();
+			if (V && V !== Z && V.promptOpts) V.promptOpts(opts);
+			if (pets) pets.promptOpts(opts);
+		},
+		// something you're driving (a bumper kart, a car): it moves you instead of walking (see world.js updateMe)
+		vehicle() { const V = vehicleZone(); return V ? V.vehicle() : null; },
+		// after everyone's been placed this frame (a car carries whoever's in it)
+		lateUpdate(dt, t) { for (const id in built) { const B = built[id]; if (B.lateUpdate && visibleSet.has(id)) { try { B.lateUpdate(dt, t); } catch (e) { if (!B.failedLate) { B.failedLate = true; console.error("[house] " + id + " lateUpdate failed:", e); } } } } },
+		// something solid that moves (a car): nobody walks through it
+		solidAt(x, z, r) { for (const id in built) { const B = built[id]; if (B.solidAt && B.solidAt(x, z, r)) return true; } return false; },
 		// is this floor-plan point out under the sky (the terrace, the pool deck, the garden, the park...)?
 		outdoorAt(x, z) { const a = areaOf(x, z); return a === "terrace" || !!(ZONES[a] && ZONES[a].outdoor); },
 		// someone said something in the chat (a room can show it)

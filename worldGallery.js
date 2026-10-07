@@ -85,6 +85,11 @@ export function build(k) {
 	k.link(STAIR.x0, STAIR.x1, STAIR.z1 + 0.15, STAIR.z1 + 0.4, ROOF_FP[0], ROOF_FP[1]);
 	k.link(STAIR.x0 + ROOF_FP[0], STAIR.x1 + ROOF_FP[0], STAIR.z1 - 0.2 + ROOF_FP[1], STAIR.z1 + 0.05 + ROOF_FP[1], -ROOF_FP[0], -ROOF_FP[1], true);
 
+	// ---------------------------------------------------------------- doors into the living room and the lounge
+	// (in the walls between them and the hall; the curtains hang on the rooms' side)
+	k.frenchDoor("hallLiving", { x: mid(D.living), z: 6.1, ry: 0, w: D.living[1] - D.living[0] - 0.04, h: 2.3, depth: 0.3, side: -1, curtain: "#b5677a" }, [D.living[0], D.living[1], 5.95, 6.25], [[mid(D.living), 5.2], [mid(D.living), 7.3]]);
+	k.frenchDoor("hallLounge", { x: mid(D.lounge), z: HZ0 - 0.14, ry: 0, w: D.lounge[1] - D.lounge[0] - 0.04, h: 2.3, depth: 0.32, side: -1, curtain: "#5f8f8a" }, [D.lounge[0], D.lounge[1], HZ0 - 0.3, HZ0], [[mid(D.lounge), HZ0 - 1.2], [mid(D.lounge), HZ0 + 1.0]]);
+
 	// ---------------------------------------------------------------- the front doors
 	k.frenchDoor("frontWest", { x: HX0 - 0.15, z: (E0 + E1) / 2, ry: -Math.PI / 2, w: E1 - E0 - 0.04, h: 2.55, depth: 0.45, side: 1, curtain: "#d8cfc4" }, [HX0 - 0.3, HX0, E0, E1], [[HX0 + 1.0, (E0 + E1) / 2], [HX0 - 1.2, (E0 + E1) / 2]]);
 	k.frenchDoor("frontEast", { x: HX1 + 0.15, z: (E0 + E1) / 2, ry: Math.PI / 2, w: E1 - E0 - 0.04, h: 2.55, depth: 0.45, side: 1, curtain: "#d8cfc4" }, [HX1, HX1 + 0.3, E0, E1], [[HX1 - 1.0, (E0 + E1) / 2], [HX1 + 1.2, (E0 + E1) / 2]]);

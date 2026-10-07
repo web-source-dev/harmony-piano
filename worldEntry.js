@@ -25,10 +25,20 @@
 		} catch (e) {}
 		return "";
 	}
+	// So /manage's Close on this piano user also reaches their world tab.
+	function myId() {
+		try {
+			var p = window.gClient && gClient.getOwnParticipant && gClient.getOwnParticipant();
+			if (p && p._id) return String(p._id);
+		} catch (e) {}
+		return "";
+	}
 	function go() {
 		var url = "./world.html?c=" + encodeURIComponent(roomName());
 		var n = myName();
 		if (n) url += "&n=" + encodeURIComponent(n.slice(0, 24));
+		var u = myId();
+		if (u) url += "&u=" + encodeURIComponent(u.slice(0, 64));
 		location.href = url;
 	}
 

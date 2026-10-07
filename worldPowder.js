@@ -26,6 +26,9 @@ export function build(k) {
 	k.walk(X0, X1, Z0, Z1);
 	k.walk(DOOR[0], DOOR[1], Z1 - 1.0, Z1 + 1.0);
 	k.cam = { minX: X0 + 0.15, maxX: X1 - 0.15, minZ: Z0 + 0.15, maxZ: Z1 - 0.15, maxY: H - 0.2 };
+	// French doors onto the Gallery, the curtains on the room's side
+	const DM = (DOOR[0] + DOOR[1]) / 2;
+	k.frenchDoor("powderDoor", { x: DM, z: Z1 + 0.11, ry: 0, w: DOOR[1] - DOOR[0] - 0.04, h: 2.2, depth: 0.3, side: -1, curtain: "#c9a5b4" }, [DOOR[0], DOOR[1], Z1, Z1 + 0.22], [[DM, Z1 - 0.9], [DM, Z1 + 1.2]]);
 
 	const marble = mat("#ffffff", 0.15, 0.05, { map: tex.tiles("#f3f0ea", "#ebe6de", "#d8d1c6", 1, 1, 1) }), brass = mat("#c9a05a", 0.3, 0.9), oak = mat("#6b4a33", 0.5);
 	// the vanity along the west wall, two basins, a lit mirror

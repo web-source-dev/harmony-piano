@@ -8,6 +8,7 @@
  * room, in sync (shared key z:cinema:movie, same scheme as the living-room TV).
  */
 import { CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
+import { parseYouTube, ytKey, ytEmbedSrc, ytThumb, followPlaylist, playlistStep } from "./worldYT.js";
 
 const ROWS = 4, COLS = 5;
 const ROW_Z = [-3.0, -1.1, 0.8, 2.7];   // middle of each row's legroom/seat platform
@@ -316,7 +317,6 @@ export function build(k) {
 	// LKEY: the house-lights mode from the projector (auto / on / off). (It used to share its key with the wall switch,
 	// which stores true / false there - each undid the other, so neither worked.) SWKEY: the wall switch.
 	const KEY = "z:cinema:movie", LKEY = "z:cinema:lightmode", SWKEY = "z:cinema:lights";
-	const YT_RE = /(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/))([\w-]{11})/;
 	let here = false, yt = null, volAcc = 0, idleAcc = 0, lastShown = "";
 	const movie = () => ctx.get(KEY) || { on: false, yt: "", at: 0, paused: false, pos: 0 };
 	const elapsed = m => m.paused ? (m.pos || 0) : Math.max(0, (Date.now() - m.at) / 1000);
@@ -326,13 +326,13 @@ export function build(k) {
 		try { yt.iframe.contentWindow.postMessage(JSON.stringify({ event: "command", func, args: args || [] }), "*"); } catch (e) { /* not ready yet */ }
 	}
 	function mount(m) {
-		if (yt && yt.id === m.yt) return;
+		if (yt && yt.id === ytKey(m)) return;
 		unmount();
 		const iframe = document.createElement("iframe");
 		iframe.width = "1280"; iframe.height = "720";
 		iframe.style.cssText = "width:1280px;height:720px;border:0;background:#000";
 		iframe.allow = "autoplay; encrypted-media; picture-in-picture";
-		iframe.src = `https://www.youtube.com/embed/${m.yt}?enablejsapi=1&autoplay=1&controls=0&rel=0&playsinline=1&modestbranding=1&iv_load_policy=3&start=${Math.floor(elapsed(m))}&origin=${encodeURIComponent(location.origin)}`;
+		iframe.src = ytEmbedSrc(m, elapsed(m));
 		const obj = new CSS3DObject(iframe);
 		g.updateMatrixWorld(true);
 		screen.getWorldPosition(obj.position);
@@ -340,8 +340,10 @@ export function build(k) {
 		obj.scale.setScalar(SCREEN.w / 1280);
 		ctx.cssScene.add(obj);
 		screen.material = HOLE;
-		yt = { id: m.yt, obj, iframe };
+		const mine = yt = { id: ytKey(m), obj, iframe, pl: null };
 		iframe.addEventListener("load", () => {
+			if (yt !== mine) return;
+			if (!mine.pl && iframe.contentWindow) mine.pl = followPlaylist(iframe, movie, p => ctx.setShared(KEY, Object.assign({}, movie(), p)), ytCmd, elapsed);
 			try { iframe.contentWindow.postMessage(JSON.stringify({ event: "listening", id: 1 }), "*"); } catch (e) { /* cross-origin hiccup */ }
 			setTimeout(() => sync(true), 800);
 			setTimeout(() => sync(true), 2500);
@@ -349,6 +351,7 @@ export function build(k) {
 	}
 	function unmount() {
 		if (!yt) return;
+		if (yt.pl) yt.pl.stop();
 		ctx.cssScene.remove(yt.obj);
 		yt.iframe.src = "about:blank";
 		yt.obj.element.remove();
@@ -361,19 +364,20 @@ export function build(k) {
 		ytCmd("unMute");
 		if (m.paused) { ytCmd("seekTo", [m.pos || 0, true]); ytCmd("pauseVideo"); }
 		else { if (hard) ytCmd("seekTo", [elapsed(m), true]); ytCmd("playVideo"); }
+		if (yt.pl) yt.pl.sync();
 	}
 	function applyMovie() {
 		const m = movie();
-		if (here && m.on && m.yt) { const fresh = !yt || yt.id !== m.yt; mount(m); if (!fresh) sync(true); }
+		if (here && m.on && m.yt) { const fresh = !yt || yt.id !== ytKey(m); mount(m); if (!fresh) sync(true); }
 		else unmount();
 		renderControls();
 	}
 	function setMovie(patch) { ctx.setShared(KEY, Object.assign({}, movie(), patch, { by: ctx.profile().name })); ctx.sfx("click"); }
 	function startLink(url) {
-		const mm = YT_RE.exec(String(url || "").trim());
+		const mm = parseYouTube(url);
 		if (!mm) return false;
-		setMovie({ on: true, yt: mm[1], at: Date.now(), paused: false, pos: 0 });
-		ctx.send({ t: "fx", kind: "sys", text: ctx.profile().name + " started a movie in the Cinema" });
+		setMovie({ on: true, yt: mm.yt, list: mm.list, idx: mm.idx, at: Date.now(), paused: false, pos: 0 });
+		ctx.send({ t: "fx", kind: "sys", text: ctx.profile().name + (mm.list ? " started a playlist in the Cinema" : " started a movie in the Cinema") });
 		return true;
 	}
 
@@ -382,8 +386,8 @@ export function build(k) {
 	function openControls() {
 		const body = ctx.openModal("cinema", "Cinema Projector", `<div class="cin">
 			<div class="cin-now" id="cin-now"></div>
-			<div class="row" style="gap:8px;margin-top:12px"><input id="cin-url" class="input" style="flex:1;min-width:0" placeholder="Paste a YouTube link (movie, trailer, music video...)"><button class="btn primary" id="cin-play">Play</button></div>
-			<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn" id="cin-pause">Pause</button><button class="btn" id="cin-restart">Restart</button><button class="btn" id="cin-stop">Stop</button></div>
+			<div class="row" style="gap:8px;margin-top:12px"><input id="cin-url" class="input" style="flex:1;min-width:0" placeholder="Paste a YouTube link (movie, trailer, music video, playlist...)"><button class="btn primary" id="cin-play">Play</button></div>
+			<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn" id="cin-prev">&#x23EE; Prev</button><button class="btn" id="cin-pause">Pause</button><button class="btn" id="cin-next">Next &#x23ED;</button><button class="btn" id="cin-restart">Restart</button><button class="btn" id="cin-stop">Stop</button></div>
 			<div class="row" style="gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap"><span class="muted" style="min-width:92px">House lights</span><button class="btn" data-l="auto">Auto</button><button class="btn" data-l="on">On</button><button class="btn" data-l="off">Off</button></div>
 			<p class="muted" style="margin:14px 0 0">The movie plays for everyone in the cinema, in sync. Sit in any seat and press <b>F</b> for movie view. Grab popcorn from the cart by the door.</p></div>`, 540, () => { ctlOpen = false; });
 		ctlOpen = true;
@@ -397,6 +401,9 @@ export function build(k) {
 			if (m.paused) setMovie({ paused: false, at: Date.now() - (m.pos || 0) * 1000 });
 			else setMovie({ paused: true, pos: elapsed(m) });
 		};
+		const step = dir => { const p = playlistStep(movie(), dir, yt && yt.pl ? yt.pl.index() : -1); if (p) setMovie(p); };
+		body.querySelector("#cin-prev").onclick = () => step(-1);
+		body.querySelector("#cin-next").onclick = () => step(1);
 		body.querySelector("#cin-restart").onclick = () => { const m = movie(); if (m.yt) setMovie({ on: true, at: Date.now(), paused: false, pos: 0 }); };
 		body.querySelector("#cin-stop").onclick = () => setMovie({ on: false, paused: false, pos: 0 });
 		// ("On" also flips the wall switch back on, or the room would stay dark)
@@ -409,10 +416,11 @@ export function build(k) {
 		const m = movie(), body = document.getElementById("mbody");
 		const now = body.querySelector("#cin-now");
 		if (now) now.innerHTML = m.on && m.yt
-			? `<img src="https://img.youtube.com/vi/${m.yt}/mqdefault.jpg" alt=""><div><b>${m.paused ? "Paused" : "Now showing"}</b><span>${m.by ? "Started by " + ctx.esc(m.by) : ""}</span></div>`
+			? `${ytThumb(m) ? `<img src="${ytThumb(m)}" alt="">` : ""}<div><b>${m.paused ? "Paused" : "Now showing"}${m.list ? " - playlist" + (m.idx >= 0 ? ", video " + (m.idx + 1) : "") : ""}</b><span>${m.by ? "Started by " + ctx.esc(m.by) : ""}</span></div>`
 			: `<div class="cin-off"><b>Nothing playing</b><span>Paste a link below to start a movie for everyone.</span></div>`;
 		const pb = body.querySelector("#cin-pause");
 		if (pb) { pb.textContent = m.paused ? "Resume" : "Pause"; pb.disabled = !(m.on && m.yt); }
+		for (const id of ["#cin-prev", "#cin-next"]) { const b = body.querySelector(id); if (b) b.classList.toggle("hidden", !(m.on && m.yt && m.list)); }
 		const lm = ctx.get(LKEY) || "auto";
 		body.querySelectorAll("[data-l]").forEach(b => b.classList.toggle("primary", b.dataset.l === lm));
 	}

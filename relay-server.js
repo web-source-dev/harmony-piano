@@ -793,8 +793,7 @@ function handleManageApi(req, res, route) {
 		withBody(function (data) {
 			var closeId = String(data._id == null ? "" : data._id).slice(0, MAX_ID);
 			if (!closeId) throw new Error("Missing user id");
-			broadcastAll({ m: "manage-close", _id: closeId });
-			done(null, {});
+			done(null, { cutOff: manageCloseUser(closeId) });
 		});
 		return;
 	}
@@ -1007,6 +1006,44 @@ function broadcastAll(frame) {
 	}
 }
 
+// /manage "Close": every Harmony tab with this id closes itself on "manage-close".
+// World tabs loaded before they knew that command (or that ignore it) would stay
+// open forever, so the server also drops their relay socket and refuses that tab
+// back for a while. World ids are per tab (world.js MY_ID), so this never locks
+// the person out — a new world tab gets a new id. Piano ids are per account, so
+// those are never blocked; piano tabs close themselves.
+var WORLD_CUTOFF_MS = 12 * 60 * 60 * 1000;
+var gCutOffWorldIds = new Map();   // world tab id -> expiry time
+function isWorldChannel(ch) { return typeof ch === "string" && ch.indexOf("world~") === 0; }
+function isCutOffWorldTab(p, ch) {
+	var id = sanitizeP(p)._id;
+	if (!id || !isWorldChannel(ch)) return false;
+	var until = gCutOffWorldIds.get(id);
+	if (!until) return false;
+	if (until < Date.now()) { gCutOffWorldIds.delete(id); return false; }
+	return true;
+}
+function cutOffSocket(s) {
+	s._cutOff = true;
+	leaveRoom(s);
+	// close() (not terminate) so a queued "manage-close" still reaches new-code tabs first.
+	try { s.close(4001, "Closed from /manage"); } catch (e) {}
+}
+function manageCloseUser(closeId) {
+	// Reach every Harmony tab with this account, regardless of room.
+	broadcastAll({ m: "manage-close", _id: closeId });
+	var cut = 0;
+	for (var ch in rooms) {
+		if (!isWorldChannel(ch)) continue;
+		rooms[ch].forEach(function (s) {
+			if (s._p && s._p._id === closeId) { cutOffSocket(s); cut++; }
+		});
+	}
+	if (cut || /^w[a-z0-9]{4,}$/.test(closeId)) gCutOffWorldIds.set(closeId, Date.now() + WORLD_CUTOFF_MS);
+	gCutOffWorldIds.forEach(function (until, id) { if (until < Date.now()) gCutOffWorldIds.delete(id); });
+	return cut;
+}
+
 // Reassigned by startMppLobbyNoobBot() once it runs; no-ops until then (or if
 // the bot is disabled entirely via MPP_NOOB_BOT=0).
 var gNoobBotStart = function () {};
@@ -1050,8 +1087,10 @@ wss.on("connection", function (socket) {
 		var m;
 		try { m = JSON.parse(raw.toString()); } catch (e) { return; }
 		if (!m || typeof m !== "object") return;
+		if (socket._cutOff) return;
 		switch (m.m) {
 			case "hi": case "join":
+				if (isCutOffWorldTab(m.p, m.ch)) { cutOffSocket(socket); return; }
 				rememberRelayIdentity(socket, m.p);
 				joinRoom(socket, m.ch);
 				// Sync the joining client with the current global state right away.
@@ -1078,8 +1117,7 @@ wss.on("connection", function (socket) {
 			case "manage-close-set": {
 				var closeId = String(m._id == null ? "" : m._id).slice(0, MAX_ID);
 				if (!closeId) break;
-				// Reach every Harmony tab with this account, regardless of room.
-				broadcastAll({ m: "manage-close", _id: closeId });
+				manageCloseUser(closeId);
 				break;
 			}
 		}

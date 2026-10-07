@@ -28,6 +28,9 @@ export function build(k) {
 	k.walk(X0, X1, Z0, Z1);
 	k.walk(DOOR[0], DOOR[1], Z1 - 1.0, Z1 + 1.0);
 	k.cam = { minX: X0 + 0.2, maxX: X1 - 0.2, minZ: Z0 + 0.2, maxZ: Z1 - 0.2, maxY: H - 0.25 };
+	// French doors onto the Gallery (in the wall between the room and the hall), the curtains on the room's side
+	const DM = (DOOR[0] + DOOR[1]) / 2;
+	k.frenchDoor("diningDoor", { x: DM, z: Z1 + 0.11, ry: 0, w: DOOR[1] - DOOR[0] - 0.04, h: 2.4, depth: 0.3, side: -1, curtain: "#7d2f3a" }, [DOOR[0], DOOR[1], Z1, Z1 + 0.22], [[DM, Z1 - 0.9], [DM, Z1 + 1.2]]);
 
 	// ---------------------------------------------------------------- the table and its ten chairs
 	const wood = mat("#4a2f22", 0.45), linen = mat("#f6f1e8", 0.9), velvet = mat("#a8475c", 0.85), brass = mat("#c9a05a", 0.3, 0.9);

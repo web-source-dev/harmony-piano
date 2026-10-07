@@ -31,6 +31,9 @@ export function build(k) {
 	k.walk(X0, X1, Z0, Z1);
 	k.walk(DOOR[0], DOOR[1], Z0 - 1.0, Z0 + 1.0);
 	k.cam = { minX: X0 + 0.2, maxX: X1 - 0.2, minZ: Z0 + 0.2, maxZ: Z1 - 0.2, maxY: H - 0.25 };
+	// French doors onto the Gallery, the curtains on the room's side
+	const DM = (DOOR[0] + DOOR[1]) / 2;
+	k.frenchDoor("musicDoor", { x: DM, z: Z0 - 0.11, ry: Math.PI, w: DOOR[1] - DOOR[0] - 0.04, h: 2.4, depth: 0.3, side: -1, curtain: "#5a3d7a" }, [DOOR[0], DOOR[1], Z0 - 0.22, Z0], [[DM, Z0 + 0.9], [DM, Z0 - 1.2]]);
 
 	const black = new THREE.MeshPhysicalMaterial({ color: "#0e0e10", roughness: 0.18, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.08 });
 	const chrome = mat("#d9dde2", 0.18, 1), dark = mat("#1d1b22", 0.6);

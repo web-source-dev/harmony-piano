@@ -28,6 +28,9 @@ export function build(k) {
 	k.walk(X0, X1, Z0, Z1);
 	k.walk(DOOR[0], DOOR[1], Z0 - 1.0, Z0 + 1.0);
 	k.cam = { minX: X0 + 0.1, maxX: X1 - 0.1, minZ: Z0 + 0.15, maxZ: Z1 - 0.15, maxY: H - 0.2 };
+	// French doors from the bedroom, the curtains on the wardrobe's side
+	const DM = (DOOR[0] + DOOR[1]) / 2;
+	k.frenchDoor("closetDoor", { x: DM, z: Z0 - 0.09, ry: Math.PI, w: DOOR[1] - DOOR[0] - 0.04, h: 2.2, depth: 0.25, side: -1, curtain: "#e3b5c0" }, [DOOR[0], DOOR[1], Z0 - 0.18, Z0], [[DM, Z0 + 0.8], [DM, Z0 - 1.0]]);
 
 	const brass = mat("#c9a05a", 0.3, 0.9), shelfM = mat("#fbf8f2", 0.6);
 	const CLOTH = ["#e63946", "#f1faee", "#a8dadc", "#457b9d", "#1d3557", "#ffb4a2", "#e5989b", "#6d6875", "#2a9d8f", "#e9c46a", "#264653", "#f4a261"];

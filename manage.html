@@ -539,7 +539,7 @@
     row.appendChild(name);
     row.appendChild(tags(u.where));
     if (u.where.indexOf("harmony") >= 0) {
-      var close = button("btn btn-sm btn-danger", "Close", null, "Close " + u.name + "'s Harmony piano tab");
+      var close = button("btn btn-sm btn-danger", "Close", null, "Close " + u.name + "'s Harmony tab");
       close.addEventListener("click", function () { closeUser(u, close); });
       row.appendChild(close);
     }
@@ -775,10 +775,10 @@
     return card;
   }
   function closeUser(u, btn) {
-    if (!confirm("Close the piano for " + u.name + "?\nThis closes their Harmony tab in every room.")) return;
+    if (!confirm("Close Harmony for " + u.name + "?\nThis closes their piano and World tabs in every room.")) return;
     btn.disabled = true;
     api("POST", "/close", { _id: u._id }).then(function () {
-      toast("Closing " + u.name + "'s piano…");
+      toast("Closing " + u.name + "'s tab…");
       setTimeout(loadOverview, 1500);
     }).catch(fail).then(function () { btn.disabled = false; });
   }

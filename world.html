@@ -549,7 +549,7 @@ body.touch #help { display: none; }
 		<div class="sc-row"><button class="btn" id="sc-open">Music</button><button class="btn" id="sc-stop">Stop</button></div>
 		<div class="sc-far">Too far from the speakers to hear</div>
 	</div>
-	<div id="help" class="chip"><b>WASD</b> / arrows to walk, <b>Shift</b> to run<br><b>Drag</b> to look around, <b>scroll</b> to zoom<br><b>Click</b> anything to walk there and use it<br><b>E</b> / <b>F</b> to use things, <b>Esc</b> to stand up<br><b>1</b> blow a kiss, <b>2</b> kiss, <b>3</b> pick up<br><b>Z</b> actions, <b>X</b> love, <b>C</b> mood<br><b>P</b> calls the pets from anywhere<br><b>Enter</b> to chat<br>Glass doors by the arcade: the <b>lounge</b> and the rest of the house<br>Past the pool (or off the terrace): the <b>garden</b> and the <b>Box of Shame</b>. By the lounge's dining table: a hallway to the <b>game room</b> and the <b>spa</b></div>
+	<div id="help" class="chip"><b>WASD</b> / arrows to walk, <b>Shift</b> to run<br><b>Drag</b> to look around, <b>scroll</b> to zoom<br><b>Click</b> anything to walk there and use it<br><b>E</b> / <b>F</b> to use things, <b>Esc</b> to stand up<br><b>1</b> blow a kiss, <b>2</b> kiss, <b>3</b> pick up<br><b>Z</b> actions, <b>X</b> love, <b>C</b> mood<br><b>P</b> calls the pets from anywhere<br><b>Enter</b> to chat<br>Glass doors by the arcade: the <b>lounge</b> and the rest of the house<br>Past the pool (or off the terrace): the <b>garden</b> and the <b>Box of Shame</b>. By the lounge's dining table: a hallway to the <b>game room</b> and the <b>spa</b><br>Out of the west front door: two <b>cars</b> to drive anywhere outside (bring a passenger!)</div>
 	<div id="joy"><i></i></div>
 	<div id="bottom">
 		<div id="log" class="empty" aria-live="polite"></div>
@@ -606,7 +606,8 @@ body.touch #help { display: none; }
 		<div class="rm-screen" id="rm-ch">TV is off</div>
 		<div class="rm-row"><button class="btn" id="rm-pow" title="Power">&#x23FB;</button><button class="btn" id="rm-down">CH -</button><button class="btn" id="rm-up">CH +</button></div>
 		<div class="rm-row"><button class="btn" id="rm-pause">Pause</button></div>
-		<div class="rm-yt"><input class="input" id="rm-url" placeholder="YouTube link"><button class="btn primary" id="rm-play">Play</button></div>
+		<div class="rm-row hidden" id="rm-pl"><button class="btn" id="rm-prev" title="Previous video in the playlist">&#x23EE; Prev</button><button class="btn" id="rm-next" title="Next video in the playlist">Next &#x23ED;</button></div>
+		<div class="rm-yt"><input class="input" id="rm-url" placeholder="YouTube video or playlist link"><button class="btn primary" id="rm-play">Play</button></div>
 	</div>
 	<div class="row" style="margin-top:10px;justify-content:space-between"><span class="muted">Only the person holding it can change the TV.</span><button class="btn ghost" id="rm-drop">Put down</button></div>
 </div>
