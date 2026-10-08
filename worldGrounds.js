@@ -15,7 +15,7 @@
  * Walking here is the grounds' walkFn (worldHouse.js), not walk rects: anywhere inside the hedge that's clear of the
  * house and every place's railings, and through their gates.
  */
-import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, HOUSE_RECT, ROOF_Y, PARAPET_Y, LOUNGE_TOP, COURTS, PATIO, GATES, PATHS, PLAZA, WINDOWS, STAIR, subtractRects, pathDist, inRect } from "./worldEstate.js";
+import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, HOUSE_RECT, ROOF_Y, PARAPET_Y, LOUNGE_TOP, COURTS, PATIO, GATES, PATHS, PLAZA, WINDOWS, STAIR, ROAD_W, DRIVE, MOUTHS, subtractRects, pathDist, inRect, roadAt, ringPath } from "./worldEstate.js";
 import { TERRACE_AT } from "./worldRoom.js";
 import { trackPoints } from "./worldPark.js";
 import { buildCars, PAD } from "./worldCars.js";
@@ -185,6 +185,64 @@ export function build(k) {
 		for (const sd of [-1, 1]) add(g, new THREE.PlaneGeometry(1.4, 0.26), nm, P.x, 0.27, P.z + sd * 1.43, { ry: sd > 0 ? 0 : Math.PI, cast: false, receive: false });
 	}
 
+	// ================================================================ the roads (worldEstate.js): asphalt with white edge lines and a dashed
+	// yellow centre line, round the outside of the grounds and in to the parking pad
+	{
+		const roadTex = repeat(canvasTex(256, 512, (c, w, h) => {
+			c.fillStyle = "#3b3a40"; c.fillRect(0, 0, w, h);
+			const r = rng(31);
+			for (let i = 0; i < 16000; i++) { const t = 38 + r() * 46; c.fillStyle = `rgba(${t + 8},${t + 6},${t + 12},0.55)`; c.fillRect(r() * w, r() * h, 2, 2); }
+			// tyre-worn lanes, a little darker
+			for (const u of [0.27, 0.73]) { const g2 = c.createLinearGradient((u - 0.12) * w, 0, (u + 0.12) * w, 0); g2.addColorStop(0, "rgba(0,0,0,0)"); g2.addColorStop(0.5, "rgba(0,0,0,0.13)"); g2.addColorStop(1, "rgba(0,0,0,0)"); c.fillStyle = g2; c.fillRect((u - 0.12) * w, 0, 0.24 * w, h); }
+			c.fillStyle = "#e9e6dc";
+			c.fillRect(w * 0.035, 0, w * 0.022, h); c.fillRect(w * 0.943, 0, w * 0.022, h);
+			c.fillStyle = "#f2c14e";
+			c.fillRect(w * 0.49, 0, w * 0.02, h * 0.5);
+		}));
+		// a ribbon along a centre line: pts [x, z, tx, tz]; v counts metres (8 m per tile: a 4 m dash, a 4 m gap)
+		const RY = PATH_Y - 0.003, hw = ROAD_W / 2, P = { pos: [], nor: [], uv: [], idx: [] };
+		const strip = (pts, closed) => {
+			const base = P.pos.length / 3, n = pts.length + (closed ? 1 : 0);
+			let along = 0;
+			for (let i = 0; i < n; i++) {
+				const [x, z, tx, tz] = pts[i % pts.length];
+				if (i) { const [px, pz] = pts[i - 1]; along += Math.hypot(x - px, z - pz); }
+				const nx = tz, nz = -tx;   // (to the right of the way along)
+				P.pos.push(x - nx * hw, RY, z - nz * hw, x + nx * hw, RY, z + nz * hw);
+				P.nor.push(0, 1, 0, 0, 1, 0);
+				P.uv.push(0, along / 8, 1, along / 8);
+				if (i) { const b = base + (i - 1) * 2; P.idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3); }
+			}
+		};
+		strip(ringPath(1.5), true);
+		const drive = [];
+		for (let x = DRIVE.x0 + hw; x <= DRIVE.x1 + 0.01; x += 2) drive.push([x, DRIVE.z, 1, 0]);
+		strip(drive, false);
+		const geo = new THREE.BufferGeometry();
+		geo.setAttribute("position", new THREE.Float32BufferAttribute(P.pos, 3));
+		geo.setAttribute("normal", new THREE.Float32BufferAttribute(P.nor, 3));
+		geo.setAttribute("uv", new THREE.Float32BufferAttribute(P.uv, 2));
+		geo.setIndex(P.idx);
+		// (the winding: make sure it faces up)
+		geo.computeVertexNormals();
+		if (geo.attributes.normal.getY(0) < 0) { const ix = P.idx; for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; } geo.setIndex(ix); }
+		geo.setAttribute("normal", new THREE.Float32BufferAttribute(P.nor, 3));
+		const roadM = mat("#ffffff", 0.9, 0, { map: roadTex });
+		const road = new THREE.Mesh(geo, roadM);
+		road.receiveShadow = true;
+		road.userData.floor = true;
+		g.add(road);
+		// the mouths: plain asphalt (no lines), a touch higher so the ring's edge line stops at the junction
+		for (const m of MOUTHS) {
+			const y = RY + 0.003, u0 = 0.2, u1 = 0.32;
+			quad("mouth", [[m.x0, y, m.z + m.h0], [m.x1, y, m.z + m.h1], [m.x1, y, m.z - m.h1], [m.x0, y, m.z - m.h0]], [0, 1, 0], [[u0, 0], [u1, 0], [u1, 1], [u0, 1]]);
+		}
+		const mouth = finish("mouth", roadM);
+		if (mouth) mouth.userData.floor = true;
+		// a "give way" line where the drive joins the ring
+		add(g, new THREE.PlaneGeometry(0.3, ROAD_W * 0.48), new THREE.MeshBasicMaterial({ color: "#e9e6dc", toneMapped: false, transparent: true, opacity: 0.85 }), MOUTHS[0].x1 - 0.4, RY + 0.006, DRIVE.z - ROAD_W * 0.25, { rx: -Math.PI / 2, cast: false, receive: false });
+	}
+
 	// ================================================================ where things may stand (trees, lamps, benches)
 	const track = (() => {
 		const curve = new THREE.CatmullRomCurve3(trackPoints().map(([x, y, z]) => new THREE.Vector3(x, y, z)), true, "centripetal");
@@ -202,6 +260,7 @@ export function build(k) {
 		for (const q of GATES) if (inRect(q.r, x, z, r + 1.2)) return false;
 		for (const p of PATHS) if (pathDist(p, x, z) < p[4] / 2 + pathGap) return false;
 		if (Math.hypot(x - PLAZA.x, z - PLAZA.z) < PLAZA.r + r + 0.4) return false;
+		if (roadAt(x, z, r + Math.max(0.6, pathGap))) return false;
 		if (segDist(ZIP[0], ZIP[1], x, z) < r + (h > 3 ? 3.0 : 0.8)) return false;
 		for (const p of track) if (p.y < h + 2.5 && Math.hypot(p.x - x, p.z - z) < r + 1.6) return false;
 		for (const t of taken) if (Math.hypot(t[0] - x, t[1] - z) < (t[2] + r) * 0.92) return false;
@@ -305,6 +364,21 @@ export function build(k) {
 				if (!clear(x, z, 0.25, 3.6, 0.3)) continue;
 				lamps.push([x, z]);
 				taken.push([x, z, 0.9]);
+			}
+		}
+		{
+			const ring = ringPath(1), every = 26, off = ROAD_W / 2 + 1.0;
+			for (let i = 0; i < ring.length; i += every) {
+				const [x, z, tx, tz] = ring[i];
+				// (inside the ring is to the left of the way round)
+				const lx = x - tz * off, lz = z + tx * off;
+				if (!clear(lx, lz, 0.25, 3.6, 0.3)) continue;
+				lamps.push([lx, lz]); taken.push([lx, lz, 0.9]);
+			}
+			for (let x = DRIVE.x0 + 14; x < DRIVE.x1 - 6; x += 16) for (const sd of [-1, 1]) {
+				const lz = DRIVE.z + sd * (ROAD_W / 2 + 1.0);
+				if (!clear(x, lz, 0.25, 3.6, 0.3)) continue;
+				lamps.push([x, lz]); taken.push([x, lz, 0.9]);
 			}
 		}
 		const n = lamps.length, d = new THREE.Object3D();

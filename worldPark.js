@@ -22,6 +22,7 @@
  * Riding is sitting: each ride seat is a sit spot with a ride(pos, quat) function that world.js calls to carry
  * your body along (see placeAvatar); the camera rides with you (F switches between your own eyes and from behind).
  */
+import { roadAt } from "./worldEstate.js";
 const OX = 13.0, OZ = -126.0;                      // = ZONES.park ox / oz
 const X0 = -20.6, X1 = 20.6, Z0 = -18.0, Z1 = 17.9;
 const GATE = { x0: 6.1, x1: 7.9 };                 // in line with the garden's south gate (world x 19.1..20.9), up the path
@@ -336,6 +337,7 @@ export function build(k) {
 			if (U[i].y < 0.75) continue;                         // (not under the top of the loop)
 			if (!inPark && i % 24) continue;                     // (out there, one every 6 m is plenty)
 			if (inPark && pp.y < 0.35) continue;
+			if (!inPark && roadAt(pp.x, pp.z, 1.2)) continue;   // (it spans the roads)
 			const top = pp.clone().addScaledVector(U[i], -0.38), base = inPark ? 0 : -24;
 			if (top.y - base < 0.3) continue;
 			cols.push([top.x, base, top.z, top.y - base]);

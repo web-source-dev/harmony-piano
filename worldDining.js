@@ -11,7 +11,7 @@ import { WING, HALL_DOORS, windowsOf } from "./worldEstate.js";
 const [X0, X1, Z0, Z1] = WING.dining;
 const H = 3.4;
 const DOOR = HALL_DOORS.dining;                      // (x: in its high-z wall, onto the Gallery)
-const T = { x: -14.8, z: (Z0 + Z1) / 2, len: 6.4, w: 1.25 };   // the table
+const T = { x: (X0 + X1) / 2, z: (Z0 + Z1) / 2, len: 6.0, w: 1.25 };   // the table (in the middle of the room: chairs and all clear of the walls)
 
 export function build(k) {
 	const { THREE, add, mat, group, rbox, g, tex, rng, ctx } = k;
@@ -114,7 +114,7 @@ export function build(k) {
 			k.box(x - 0.3, x + 0.3, z - 0.3, z + 0.3);
 		}
 		// photo frames either side of the mirror and on the east wall (your own photos)
-		[[62, -19.5, Z0 + 0.03, 0], [63, -10.1, Z0 + 0.03, 0], [64, X1 - 0.03, 5.0, -Math.PI / 2]].forEach(([slot, x, z, ry]) => k.photo(slot, x, 1.85, z, ry, { w: 1.2, h: 0.85, frame: "#c9a05a", metal: 0.7 }));
+		[[62, T.x - 2.6, Z0 + 0.03, 0], [63, T.x + 2.6, Z0 + 0.03, 0], [64, X1 - 0.03, 5.0, -Math.PI / 2]].forEach(([slot, x, z, ry]) => k.photo(slot, x, 1.85, z, ry, { w: 1.2, h: 0.85, frame: "#c9a05a", metal: 0.7 }));
 		// a rug under the table
 		const rug = add(g, new THREE.PlaneGeometry(T.len + 1.6, T.w + 2.2), mat("#ffffff", 1, 0, { map: tex.carpet("#6b2d3c", "#e8c27a") }), T.x, 0.006, T.z, { rx: -Math.PI / 2, cast: false });
 		rug.userData.floor = true;

@@ -22,6 +22,7 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
 import { Avatar, SKIN_TONES, HAIR_COLORS, OUTFIT_COLORS, MOODS, drawMoodFace, FOOD_PROPS } from "./worldAvatar.js";
+import { OUTFITS, HAIR_STYLES, GLASSES, EYE_COLORS, CLOTH_COLORS, outfitById, outfitColors, normalizeLook, defaultOutfit, defaultHairStyle } from "./worldOutfits.js";
 import { buildRoom, ROOM, DOOR, TERRACE, TERRACE_Y, TERRACE_AT, TERRACE_FP, MOON_DIR, walkable, areaOf, floorAt, heartMesh, makeMug, shiftAt, visXZ, makePhotoFrame, tickPhotoGlow } from "./worldRoom.js";
 import { WorldAudio, TRACKS } from "./worldAudio.js";
 import * as Games from "./worldGames.js";
@@ -58,6 +59,12 @@ const profile = Object.assign({
 	skin: SKIN_TONES[1], hair: HAIR_COLORS[1], top: OUTFIT_COLORS[0], bottom: OUTFIT_COLORS[4], mood: "happy"
 }, lsGet(LS_PROFILE, {}));
 if (!MOODS.some(m => m.id === profile.mood)) profile.mood = "happy";
+// what you wear: an outfit, each piece of it its own colour (older profiles only had top / bottom)
+{
+	const n = normalizeLook(profile);
+	Object.assign(profile, { outfit: n.outfit, colors: n.colors, hairStyle: n.hairStyle, eyes: n.eyes, glasses: n.glasses, top: n.top, bottom: n.bottom });
+	if (!profile.wardrobe || typeof profile.wardrobe !== "object") profile.wardrobe = {};
+}
 if (params.get("n") && !profile.name) profile.name = params.get("n").slice(0, 24);
 
 // ============================================================ graphics quality
@@ -223,6 +230,7 @@ const me = {
 	pu: 0.5, pv: 0.5, path: [], partner: null, holding: null, sips: 0,
 	carrying: null, carriedBy: null   // bridal carry: who we're holding / who is holding us
 };
+let handAuto = false;   // (holding hands: set while following - sitting / standing because the one leading did)
 const myAvatar = new Avatar(Object.assign({}, profile, { name: profile.name || "You" }));
 myAvatar._who = { id: MY_ID, isMe: true, get sitT() { return me.sitT || 0; } };
 myAvatar.setMood(profile.mood);
@@ -230,11 +238,12 @@ scene.add(myAvatar.root);
 const cam = { yaw: 0.35, pitch: 0.38, dist: 4.2, tx: me.x, ty: 1.2, tz: me.z };
 const RADIUS = 0.28;
 
-function lookPayload() { return { g: profile.gender, s: profile.skin, hr: profile.hair, t: profile.top, b: profile.bottom, n: profile.name, pid: ME_PID }; }
+function lookPayload() { return { g: profile.gender, s: profile.skin, hr: profile.hair, t: profile.top, b: profile.bottom, o: profile.outfit, c: profile.colors, hs: profile.hairStyle, ey: profile.eyes, gl: profile.glasses, n: profile.name, pid: ME_PID }; }
 const COLOR_RE = /^#[0-9a-f]{3,8}$/i;
 function lookFromPayload(l) {
 	const col = (c, d) => COLOR_RE.test(c) ? c : d;
-	return { gender: l.g === "male" ? "male" : "female", skin: col(l.s, SKIN_TONES[1]), hair: col(l.hr, HAIR_COLORS[1]), top: col(l.t, OUTFIT_COLORS[0]), bottom: col(l.b, OUTFIT_COLORS[4]), name: String(l.n || "Guest").slice(0, 24), pid: String(l.pid || "").slice(0, 20) };
+	const n = normalizeLook({ gender: l.g, skin: col(l.s, null), hair: col(l.hr, null), top: col(l.t, null), bottom: col(l.b, null), outfit: l.o, colors: l.c && typeof l.c === "object" ? l.c : null, hairStyle: l.hs, eyes: l.ey, glasses: l.gl });
+	return Object.assign(n, { name: String(l.n || "Guest").slice(0, 24), pid: String(l.pid || "").slice(0, 20) });
 }
 
 // ============================================================ shared state
@@ -294,7 +303,7 @@ function send(obj) {
 	sync.broadcast("W3|" + JSON.stringify(obj));
 }
 function poseMsg() {
-	return { t: "p", x: +me.x.toFixed(2), z: +me.z.toFixed(2), h: +me.h.toFixed(2), a: me.anim, u: me.upper, s: me.sit, sp: +me.speed.toFixed(2), pr: myAvatar.propKind, pu: +me.pu.toFixed(2), pv: +me.pv.toFixed(2), md: profile.mood, tg: me.partner, cb: me.carriedBy };
+	return { t: "p", x: +me.x.toFixed(2), z: +me.z.toFixed(2), h: +me.h.toFixed(2), a: me.anim, u: me.upper, s: me.sit, sp: +me.speed.toFixed(2), pr: myAvatar.propKind, pu: +me.pu.toFixed(2), pv: +me.pv.toFixed(2), md: profile.mood, tg: me.partner, cb: me.carriedBy, hl: me.upper === "handhold" && me.hand && me.hand.lead ? me.hand.claim : 0 };
 }
 function startNetwork() {
 	if (typeof RoomSync === "undefined" || !/^https?:$/.test(location.protocol)) {
@@ -412,7 +421,9 @@ function upsertPeer(id, lk) {
 }
 const BASE_ANIMS = ["idle", "sit", "sleep", "floor"];
 const UPPER_ANIMS = ["wave", "dance", "clap", "heart", "drink", "paint", "write", "tug", "piano", "laugh", "cry", "kiss", "hug", "highfive", "jump", "bow", "cheer", "think", "shrug", "facepalm", "yawn", "warm", "telescope", "shake", "give", "stumble",
-	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash", "handhold", "kart", "drive", "carpass", "kick", "scoop", "throw"];
+	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash", "handhold", "kart", "drive", "carpass", "kick", "scoop", "throw",
+	"foreheadkiss", "boop", "backhug", "neckkiss", "buttpat", "beckon", "flirty", "bitelip", "shy", "melt", "giggle", "eep",
+	"dz_hiphop", "dz_floss", "dz_robot", "dz_disco", "dz_salsa", "dz_shuffle", "dz_bootyshake", "dz_ballet", "dz_kpop", "dz_sway"];
 const PROPS = ["mug", "brush", "remote", "flower", "ring", "popcorn", "fork", "spoon", "sponge"].concat(FOOD_PROPS);
 function applyPose(p, d, snap) {
 	if (typeof d.x !== "number") return;
@@ -429,6 +440,7 @@ function applyPose(p, d, snap) {
 	p.upper = UPPER_ANIMS.includes(d.u) ? d.u : (UPPER_ANIMS.includes(d.a) ? d.a : null);
 	p.partner = typeof d.tg === "string" ? d.tg : null;
 	p.carriedBy = typeof d.cb === "string" ? d.cb : null;
+	p.hl = typeof d.hl === "number" ? d.hl : 0;
 	if (d.md && MOODS.some(m => m.id === d.md) && d.md !== p.avatar.mood) { p.avatar.setMood(d.md); refreshPeople(); }
 	if (!snap && !p.fresh && p.upper !== prevUpper) inviteFor(p);
 	p.avatar.setProp(PROPS.includes(d.pr) ? d.pr : null);
@@ -805,7 +817,8 @@ function sitOn(ids) {
 	if (me.carriedBy) hopDown();
 	if (me.sit && me.sit !== spot.id) standUp(true);
 	me.sit = spot.id; me.anim = spot.lie ? "sleep" : "sit"; me.sitT = Date.now();
-	if (me.upper !== "drink") me.upper = null;
+	if (me.upper === "handhold" && me.hand) { if (!handAuto) leadHands(); }
+	else if (me.upper !== "drink") me.upper = null;
 	me.x = spot.x; me.z = spot.z; me.h = spot.h;
 	me.target = null;
 	// look over your shoulder from behind the seat
@@ -825,6 +838,7 @@ function sitOn(ids) {
 }
 function standUp(quiet) {
 	exitTV();
+	if (me.sit && me.upper === "handhold" && me.hand && !handAuto) leadHands();
 	if (me.upper === "write") { me.upper = null; me.upperUntil = 0; updateProps(); }
 	const spot = room.sitSpots.find(s => s.id === me.sit);
 	const wasSleeping = me.anim === "sleep";
@@ -892,7 +906,7 @@ function sitUpInBed(quiet) {
 }
 // lying down isn't the same as asleep: cuddling / kissing in bed, or lying on the sofa, you're wide awake
 function isAsleep(o) {
-	if (!o || o.anim !== "sleep" || COUPLE_POSES.includes(o.upper)) return false;
+	if (!o || o.anim !== "sleep" || COUPLE_POSES.includes(o.upper) || o.upper === "handhold") return false;
 	const s = o.sit && spotById(o.sit);
 	// (lying on the sofa, or on the spa's massage tables (awake), you're not asleep)
 	return !(s && (s.sofaLie || s.awake));
@@ -2178,6 +2192,12 @@ function updateFx(dt) {
 }
 function onFx(d, p) {
 	const name = p ? p.look.name : "Someone";
+	if (d.kind === "jump") {
+		if (p && [d.sx, d.sz, d.ex, d.ez, d.y0, d.y1, d.h, d.d].every(n => typeof n === "number" && isFinite(n)) && d.d > 0 && d.d < 3) {
+			p.jump = { t: 0, dur: d.d, sx: d.sx, sz: d.sz, ex: d.ex, ez: d.ez, y0: d.y0, y1: d.y1, h: Math.min(1.2, d.h), drop: !!d.drop };
+		}
+		return;
+	}
 	// someone handed us a snack
 	if (FOODS[d.kind]) {
 		if (d.to === MY_ID) { me.holding = d.kind; me.sips = Math.max(1, Math.min(6, d.s | 0)); updateProps(); sendPose(true); heartsFx(myAvatar.root, 4); toast(`<b>${esc(name)}</b> gave you ${FOODS[d.kind].a}`, FOODS[d.kind].drink ? "Take a sip" : "Have a bite", eatFood, 7000); }
@@ -2218,6 +2238,13 @@ function emote(e) {
 	if (COUPLE_ACTS.includes(e)) { loveAct(e); return; }
 	if (e === "floor") { if (me.sit) standUp(true); me.anim = me.anim === "floor" ? "idle" : "floor"; me.upper = null; sendPose(true); return; }
 	if (e === "hug" || e === "highfive") { partnerEmote(e); return; }
+	if (FLIRT[e]) { flirtAct(e); return; }
+	if (e.startsWith("dz_")) {
+		if (me.sit) standUp(); if (me.anim === "floor") me.anim = "idle";
+		doUpper(e, 15000);
+		if (e === "dz_sway" && audio) audio.sfx("love", 0.3);
+		return;
+	}
 	if (me.anim === "floor" && ["dance", "jump", "bow"].includes(e)) me.anim = "idle";
 	if (["dance", "jump", "bow"].includes(e) && me.sit) standUp();
 	doUpper(e, EMOTE_MS[e] || 2400);
@@ -2230,11 +2257,33 @@ function emote(e) {
 	if (e === "laugh" && audio) audio.sfx("laugh");
 	if (e === "jump" && audio) setTimeout(() => audio.sfx("kick", 0.3), 650);
 }
-const EMOTE_MS = { wave: 2600, dance: 8000, clap: 2200, heart: 2200, laugh: 3000, cry: 4200, kiss: 1700, jump: 1800, bow: 2200, cheer: 3000, think: 4000, shrug: 2000, facepalm: 2500, yawn: 3000, blush: 3000, lovestruck: 4200, heartarms: 2800, wink: 1500 };
+const EMOTE_MS = { beckon: 3200, flirty: 3500, bitelip: 3000, shy: 3600, wave: 2600, dance: 8000, clap: 2200, heart: 2200, laugh: 3000, cry: 4200, kiss: 1700, jump: 1800, bow: 2200, cheer: 3000, think: 4000, shrug: 2000, facepalm: 2500, yawn: 3000, blush: 3000, lovestruck: 4200, heartarms: 2800, wink: 1500 };
 function nearestPeer(maxD) {
 	let best = null, bd = maxD;
 	peers.forEach((p, id) => { const d = Math.hypot(p.x - me.x, p.z - me.z); if (d < bd && !isAsleep(p) && !p.carriedBy) { bd = d; best = id; } });
 	return best;
+}
+// the love you do to someone (FLIRT): walk up to them (or round behind them), then do it - they react
+function flirtAct(e) {
+	const f = FLIRT[e], id = nearestPeer(12);
+	if (!id) { myAvatar.say(e === "boop" ? "Boop? Anyone?" : "Nobody here to love on..."); return; }
+	if (me.sit) standUp(true);
+	const p = peers.get(id);
+	if (p.sit && f.behind) { addLog(esc(p.look.name) + " is sitting down - try that when they're standing.", true); return; }
+	const start = () => {
+		const q = peers.get(id);
+		if (!q) return;
+		me.h = f.behind ? q.h : Math.atan2(q.x - me.x, q.z - me.z);
+		doUpper(e, f.ms, id);
+		me.lock = { id, behind: f.behind || 0 };
+		send({ t: "act", kind: e, to: id });
+		heartsFx(myAvatar.root, f.hearts);
+		if (audio) audio.sfx(e === "buttpat" ? "clap" : "love", 0.4);
+	};
+	let tx, tz;
+	if (f.behind) { tx = p.x - Math.sin(p.h) * (f.behind + 0.25); tz = p.z - Math.cos(p.h) * (f.behind + 0.25); }
+	else { const dx = me.x - p.x, dz = me.z - p.z, l = Math.hypot(dx, dz) || 1; tx = p.x + dx / l * Math.max(f.gap, 0.62); tz = p.z + dz / l * Math.max(f.gap, 0.62); }
+	if (Math.hypot(tx - me.x, tz - me.z) < 0.35) start(); else walkTo(tx, tz, start);
 }
 // hug / high-five: walk up to the closest person and actually touch them
 function partnerEmote(e) {
@@ -2263,6 +2312,18 @@ function onPartnerAct(d, p) {
 	if (d.kind === "yes") { onYes(p); return; }
 	if (onCarryAct(d, p)) return;
 	if (d.kind === "handhold" || d.kind === "letgo") { onHandAct(d, p); return; }
+	if (FLIRT[d.kind]) {
+		const f = FLIRT[d.kind];
+		if (me.sit || me.carriedBy || me.carrying || isAsleep(me)) return;
+		me.target = null; me.path = [];
+		if (!f.behind) me.h = Math.atan2(p.x - me.x, p.z - me.z);
+		doUpper(f.react, f.reactMs, d.id);
+		heartsFx(myAvatar.root, Math.ceil(f.hearts / 2));
+		const msg = { foreheadkiss: "kissed your forehead", boop: "booped your nose", backhug: "hugged you from behind", neckkiss: "kissed your neck", buttpat: "gave you a cheeky pat" }[d.kind];
+		addLog(`<b>${esc(p.look.name)}</b> ${msg}`, true);
+		if (audio) audio.sfx(d.kind === "buttpat" ? "pop" : "love", 0.4);
+		return;
+	}
 	// cuddles and kisses from the seat right next to you keep you sitting (or lying) there
 	const together = SEATED_LOVE.includes(d.kind) && me.sit && p.sit && seatDist(me, p) < NEAR_SEAT;
 	// kissed while asleep: stay asleep, just dream sweeter
@@ -2289,7 +2350,7 @@ function onPartnerAct(d, p) {
 // a lap in the armchair); the rest walk you up to the nearest person.
 const COUPLE_ACTS = ["smooch", "cheekkiss", "cuddle", "slowdance", "propose"];
 const SEATED_LOVE = ["cuddle", "smooch", "cheekkiss"];
-const IN_BED_OK = SEATED_LOVE.concat(["blush", "nightkiss", "shake"]);
+const IN_BED_OK = SEATED_LOVE.concat(["blush", "nightkiss", "shake", "handhold"]);
 const COUPLE_POSES = SEATED_LOVE.concat(["slowdance", "nightkiss"]);
 const NEAR_SEAT = 1.45;
 // where someone's body really is: a lying person's position is their feet, so use their middle
@@ -2549,23 +2610,60 @@ function loveAura(av, upper, anim, dt) {
 	heartsFx(av.root, 1, null, heartY(anim));
 }
 
-// ---------- holding hands: side by side, walking or swimming together
-// Take their hand -> they hold yours -> each of you stays at the other's side; whoever moves leads.
+// ---------- holding hands: anywhere - walking, swimming, side by side on a sofa, a bench, in bed
+// Take their hand -> they hold yours. One of you leads (whoever took the hand, then whoever moves, sits down or gets
+// up): the other walks in step beside them, sits down next to them, lies down beside them, gets up with them.
 const HAND_GAP = 0.62;
 function holdHands(id) {
 	if (me.upper === "handhold") { letGo(); return; }
 	id = id && peers.get(id) ? id : nearestPeer(3);
 	const q = id && peers.get(id);
 	if (!q) { myAvatar.say("Anyone want to hold hands?"); return; }
-	if (q.sit || q.carriedBy) { addLog(esc(q.look.name) + " is busy right now.", true); return; }
-	if (me.sit) standUp(true);
+	if (q.carriedBy || q.carrying) { addLog(esc(q.look.name) + " is busy right now.", true); return; }
 	if (me.carriedBy) hopDown();
+	// they're sitting / lying down: join them on the seat next to theirs (or stand right beside them)
+	if (q.sit && !(me.sit && seatDist(me, q) < NEAR_SEAT)) {
+		const nb = seatNextTo(q);
+		handAuto = true;
+		if (nb) sitOn([nb.id]); else if (me.sit) standUp(true);
+		handAuto = false;
+	} else if (me.sit && !q.sit) standUp(true);
 	doUpper("handhold", 1e9, id);
-	me.hand = { id, t: performance.now() };
+	me.hand = { id, t: performance.now(), lead: true, claim: Date.now() };
 	send({ t: "act", kind: "handhold", to: id });
 	heartsFx(myAvatar.root, 3, null, heartY(me.anim));
 	if (audio) audio.sfx("love", 0.4);
 	addLog("You took " + esc(q.look.name) + "'s hand", true);
+}
+// click someone: take their hand (walking over to them first), or let go if you're already holding it
+function handsWith(pid) {
+	const p = peers.get(pid);
+	if (!p) return;
+	if (me.upper === "handhold" && me.partner === pid) { letGo(); addLog("You let go of " + esc(p.look.name) + "'s hand", true); return; }
+	const dx = me.x - p.x, dz = me.z - p.z, l = Math.hypot(dx, dz) || 1;
+	if (l < 2.2 || (me.sit && p.sit && seatDist(me, p) < NEAR_SEAT)) { holdHands(pid); return; }
+	walkTo(p.x + dx / l * HAND_GAP, p.z + dz / l * HAND_GAP, () => holdHands(pid));
+}
+// I'm leading now (I moved, sat down, got up)
+function leadHands() {
+	const H = me.hand;
+	if (!H || H.lead) return;
+	H.lead = true; H.claim = Date.now();
+	sendPose(true);
+}
+// a free seat (or the other side of the bed) right next to where someone is sitting / lying
+function seatNextTo(q) {
+	const qs = q.sit && spotById(q.sit);
+	if (!qs) return null;
+	const taken = takenSpots(), qb = bodyXZ(q), here = areaOf(q.x, q.z);
+	let best = null, bd = NEAR_SEAT;
+	for (const s of room.sitSpots) {
+		if (s.id === q.sit || (taken.has(s.id) && s.id !== me.sit) || !!s.lie !== !!qs.lie || s.lap || s.ride || areaOf(s.x, s.z) !== here) continue;
+		if (qs.excl && qs.excl.includes(s.id)) continue;
+		const b = bodyXZ({ x: s.x, z: s.z, sit: s.id }), d = Math.hypot(b.x - qb.x, b.z - qb.z);
+		if (d > 0.2 && d < bd) { bd = d; best = s; }
+	}
+	return best;
 }
 function letGo() {
 	if (me.upper !== "handhold") return;
@@ -2576,10 +2674,12 @@ function letGo() {
 }
 function onHandAct(d, p) {
 	if (d.kind === "letgo") { if (me.upper === "handhold" && me.partner === d.id) { me.upper = null; me.partner = null; me.upperUntil = 0; me.hand = null; sendPose(true); } return; }
-	if (me.sit || me.carriedBy || me.carrying || me.anim === "sleep" || ["piano", "telescope", "tug"].includes(me.upper)) return;
+	if (me.carriedBy || me.carrying || isAsleep(me) || ["piano", "telescope", "tug", "drive", "carpass", "kart"].includes(me.upper)) return;
 	me.target = null; me.path = [];
+	// (sitting: stay put if they're right beside us, else get up and go to them)
+	if (me.sit && !(p.sit && seatDist(me, p) < NEAR_SEAT)) { handAuto = true; standUp(true); handAuto = false; }
 	doUpper("handhold", 1e9, d.id);
-	me.hand = { id: d.id, t: performance.now() };
+	me.hand = { id: d.id, t: performance.now(), lead: false, claim: 0 };
 	heartsFx(myAvatar.root, 3, null, heartY(me.anim));
 	if (audio) audio.sfx("love", 0.4);
 	addLog(`<b>${esc(p.look.name)}</b> took your hand`, true);
@@ -3088,7 +3188,8 @@ addEventListener("keydown", e => {
 	if (wheelKey(k, e)) return;
 	if (k === "enter" || k === "t") { e.preventDefault(); $("#chat").focus(); return; }
 	if ((k === "e" || k === " ") && house.vehicle()) { e.preventDefault(); keys.add(k); return; }
-	if (k === "e" || k === " ") { e.preventDefault(); const o = promptOpts.find(x => x.k === "E"); if (o) o.fn(); return; }
+	if (k === " ") { e.preventDefault(); if (!e.repeat) jump(); return; }
+	if (k === "e") { e.preventDefault(); const o = promptOpts.find(x => x.k === "E"); if (o) o.fn(); return; }
 	if (k === "1") emote("kiss"); else if (k === "2") emote("smooch"); else if (k === "3") emote("carry");
 	else if (k === "p") { callPetsNow(); return; }
 	else if (k === "c" && rideSpot()) { rideLook.yaw = 0; rideLook.pitch = 0; rideLook.fov = 72; cam.yaw = me.h + Math.PI; cam.pitch = 0.3; return; }
@@ -3174,7 +3275,7 @@ canvas.addEventListener("pointerup", e => {
 		if (p && (me.carrying === pid || me.carriedBy === pid)) { /* the one in your arms (or holding you): nothing to do */ }
 		else if (p && isAsleep(p)) wakePeer(pid);
 		else if (p && me.holding) giveHeld(pid);
-		else if (p) { if (!me.sit) me.h = Math.atan2(p.x - me.x, p.z - me.z); emote("wave"); }
+		else if (p) handsWith(pid);
 		return;
 	}
 	if (h.object.userData.cupId) { goPickCup(h.object.userData.cupId); return; }
@@ -3214,7 +3315,7 @@ function hoverAt(x, y) {
 		if (h.object.userData.note !== undefined) { pointer = true; label = me.upper === "piano" ? null : "Play the piano"; }
 		else {
 			const pid = findPeer(h.object);
-			if (pid) { const p = peers.get(pid); label = p ? (me.carrying === pid ? "Press Cuddle or click a bed / sofa / couch" : me.carriedBy === pid ? null : isAsleep(p) ? "Wake " + p.look.name + " up" : me.holding === "flower" ? "Give " + p.look.name + " your flower" : me.holding === "mug" ? "Give " + p.look.name + " your coffee" : me.holding === "popcorn" ? "Share your popcorn with " + p.look.name : FOODS[me.holding] ? "Give " + p.look.name + " your " + FOODS[me.holding].name : "Wave at " + p.look.name) : null; }
+			if (pid) { const p = peers.get(pid); label = p ? (me.carrying === pid ? "Press Cuddle or click a bed / sofa / couch" : me.carriedBy === pid ? null : isAsleep(p) ? "Wake " + p.look.name + " up" : me.holding === "flower" ? "Give " + p.look.name + " your flower" : me.holding === "mug" ? "Give " + p.look.name + " your coffee" : me.holding === "popcorn" ? "Share your popcorn with " + p.look.name : FOODS[me.holding] ? "Give " + p.look.name + " your " + FOODS[me.holding].name : me.upper === "handhold" && me.partner === pid ? "Let go of " + p.look.name + "'s hand" : "Hold hands with " + p.look.name) : null; }
 			else if (h.object.userData.cupId) label = me.holding === "mug" ? null : "Pick up the coffee";
 			else if (h.object.userData.photoIndex !== undefined) label = get("photo" + h.object.userData.photoIndex) ? "Change this photo" : "Put a photo in this frame";
 			else { const id = findInteract(h.object); if (id) label = labelOf(id); }
@@ -3404,6 +3505,7 @@ joyEl.addEventListener("pointerdown", e => { joy.id = e.pointerId; const r = joy
 joyEl.addEventListener("pointermove", e => { if (e.pointerId === joy.id) joyMove(e); });
 const joyEnd = e => { if (e.pointerId !== joy.id) return; joy.id = null; joy.dx = joy.dy = 0; knob.style.transform = ""; };
 joyEl.addEventListener("pointerup", joyEnd);
+$("#jumpbtn").addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); jump(); });
 joyEl.addEventListener("pointercancel", joyEnd);
 function joyMove(e) {
 	let dx = e.clientX - joy.x, dy = e.clientY - joy.y;
@@ -3618,7 +3720,9 @@ function updateMe(dt) {
 		}
 	}
 	if (me.sit) want = 0;
+	if (me.upper === "handhold") want = Math.min(want, 1.35);   // hand in hand: a stroll, not a sprint
 	if (!veh) me.speed += (want - me.speed) * Math.min(1, dt * 10);
+	if (me.jump) { mx = 0; mz = 0; me.speed = 0; }
 	if (me.speed > 0.02 && (mx || mz) && !me.sit) {
 		const v = me.speed * 2.6 * dt;
 		const nx = me.x + mx * v, nz = me.z + mz * v;
@@ -3672,7 +3776,27 @@ function updateMe(dt) {
 	}
 	// couple lock: whoever started a kiss / hug / dance eases in to exactly the right distance
 	// (walking stops a little short, and people are solid, so without this you'd hover half a metre away)
-	if (me.lock) {
+	if (me.lock && me.lock.behind) {
+		const q = peers.get(me.lock.id);
+		if (!q || me.sit || q.sit || me.partner !== me.lock.id || !FLIRT[me.upper]) me.lock = null;
+		else {
+			const k = Math.min(1, dt * 6), b = me.lock.behind;
+			const nx = me.x + (q.x - Math.sin(q.h) * b - me.x) * k, nz = me.z + (q.z - Math.cos(q.h) * b - me.z) * k;
+			if (!blocked(nx, nz, true)) { me.x = nx; me.z = nz; }
+			me.h = angleLerp(me.h, q.h, Math.min(1, dt * 8));
+		}
+	}
+	if (me.lock && !me.lock.behind && FLIRT[me.upper]) {
+		const q = peers.get(me.lock.id), gap = FLIRT[me.upper].gap;
+		if (!q || me.sit || q.sit) me.lock = null;
+		else {
+			const dx = me.x - q.x, dz = me.z - q.z, l = Math.hypot(dx, dz) || 1, k = Math.min(1, dt * 5);
+			const nx = me.x + (q.x + dx / l * gap - me.x) * k, nz = me.z + (q.z + dz / l * gap - me.z) * k;
+			if (!blocked(nx, nz, true)) { me.x = nx; me.z = nz; }
+			me.h = angleLerp(me.h, Math.atan2(q.x - me.x, q.z - me.z), Math.min(1, dt * 8));
+		}
+	}
+	if (me.lock && !me.lock.behind && !FLIRT[me.upper]) {
 		const q = peers.get(me.lock.id), gap = COUPLE_GAP[me.upper];
 		if (!q || me.sit || q.sit || me.partner !== me.lock.id || !gap) me.lock = null;
 		else {
@@ -3682,21 +3806,8 @@ function updateMe(dt) {
 			if (!blocked(nx, nz, true)) { me.x = nx; me.z = nz; }
 		}
 	}
-	// holding hands: stay at their side. Whoever steers leads, the other drifts along beside them
-	if (me.upper === "handhold") {
-		const q = peers.get(me.partner), fresh = me.hand && performance.now() - me.hand.t < 3000;
-		if (!q || me.sit || q.sit || me.carrying || me.carriedBy || (!fresh && (q.upper !== "handhold" || q.partner !== MY_ID)) || Math.hypot(q.x - me.x, q.z - me.z) > 2.6) letGo();
-		else if (Math.abs(ix) + Math.abs(iz) <= 0.08 && !me.target) {
-			const lx = Math.cos(q.h), lz = -Math.sin(q.h);
-			const sd = (me.x - q.x) * lx + (me.z - q.z) * lz < 0 ? -1 : 1;
-			const k = Math.min(1, dt * 4), ox = me.x, oz = me.z;
-			const nx = me.x + (q.x + lx * sd * HAND_GAP - me.x) * k, nz = me.z + (q.z + lz * sd * HAND_GAP - me.z) * k;
-			if (!blocked(nx, nz, true)) { me.x = nx; me.z = nz; }
-			me.h = angleLerp(me.h, q.h, Math.min(1, dt * 6));
-			// drifting along with them: swim / walk, don't glide
-			me.speed = Math.max(me.speed, Math.min(1.2, Math.hypot(me.x - ox, me.z - oz) / Math.max(dt, 0.001) / 2.6));
-		}
-	}
+	// holding hands: one leads, the other goes where they go
+	if (me.upper === "handhold") followHands(dt, Math.abs(ix) + Math.abs(iz) > 0.08 || !!me.target);
 	// they got up: the cuddle is over
 	if (SEATED_LOVE.includes(me.upper) && me.partner && me.sit) {
 		const q = peers.get(me.partner);
@@ -3705,6 +3816,7 @@ function updateMe(dt) {
 	// nobody left in the armchair = no lap to sit on
 	if (me.sit === "armchairLap" && !whoSits("armchair")) standUp();
 	placeBody(myAvatar, me.x, me.z, me.h, me.sit, me.carriedBy, dt);
+	if (me.jump && airborne(myAvatar, me.jump, dt)) me.jump = null;
 	myAvatar.carriedBy = me.carriedBy;
 	myAvatar.coupleRole = coupleRole(me.sit, me.partner, me.upper);
 	myAvatar.coupleSide = coupleSide(me.x, me.z, me.h, me.sit, me.partner, me.upper);
@@ -3716,6 +3828,118 @@ function updateMe(dt) {
 	myAvatar.upper = me.upper;
 	myAvatar.lookYaw = me.sit ? null : lookYawFor(me.x, me.z, me.h, peers.values());
 	sendPose(false);
+}
+function followHands(dt, steering) {
+	const H = me.hand || (me.hand = { id: me.partner, t: 0, lead: false, claim: 0 });
+	const q = peers.get(me.partner);
+	const theirs = !!q && q.upper === "handhold" && q.partner === MY_ID;
+	if (!q || me.carrying || me.carriedBy || (performance.now() - H.t > 3000 && !theirs)) { letGo(); return; }
+	// who leads: you take over by steering yourself; if you both claim it, the newer claim wins (a tie: the lower id)
+	const qc = theirs ? q.hl || 0 : 0;
+	if (steering && !H.lead) leadHands();
+	if (H.lead && qc && (qc > H.claim || (qc === H.claim && q.id < MY_ID))) { H.lead = false; H.claim = 0; addLog(`<b>${esc(q.look.name)}</b> is leading - you follow`, true); sendPose(true); }
+	if (!H.lead && theirs && !qc && performance.now() - H.t > 1500 && MY_ID < q.id) leadHands();   // (nobody was leading)
+	if (H.lead) {
+		// they can't keep up (a door, the stairs): if they're really far off, it's over
+		if (theirs && Math.hypot(q.x - me.x, q.z - me.z) > 14) letGo();
+		return;
+	}
+	if (!theirs) return;   // (they haven't taken it yet)
+	handAuto = true;
+	try {
+		if (q.sit) {
+			// they sat / lay down: sit / lie down right next to them (or stand at their side if there's no room)
+			if (!(me.sit && seatDist(me, q) < NEAR_SEAT) && performance.now() - (H.seatT || 0) > 1200) {
+				H.seatT = performance.now();
+				const nb = seatNextTo(q);
+				if (nb) { sitOn([nb.id]); if (nb.lie) addLog("You lie down beside " + esc(q.look.name) + ", hand in hand", true); }
+				else if (me.sit) standUp(true);
+			}
+			if (!me.sit) besideThem(q, dt, true);
+			return;
+		}
+		if (me.sit) standUp(true);   // they got up: so do you
+		besideThem(q, dt, false);
+	} finally { handAuto = false; }
+}
+// walk in step at their side (whichever side you're on); jump to them if they've gone through a door
+function besideThem(q, dt, still) {
+	const lx = Math.cos(q.h), lz = -Math.sin(q.h);
+	const sd = (me.x - q.x) * lx + (me.z - q.z) * lz < 0 ? -1 : 1;
+	let gx = q.x + lx * sd * HAND_GAP, gz = q.z + lz * sd * HAND_GAP;
+	if (blocked(gx, gz, true)) { gx = q.x - lx * sd * HAND_GAP; gz = q.z - lz * sd * HAND_GAP; }
+	const far = Math.hypot(gx - me.x, gz - me.z), ox = me.x, oz = me.z;
+	if (far > 3 && !blocked(gx, gz, true)) { me.x = gx; me.z = gz; }
+	else {
+		const k = Math.min(1, dt * 9), nx = me.x + (gx - me.x) * k, nz = me.z + (gz - me.z) * k;
+		if (!blocked(nx, me.z, true)) me.x = nx;
+		if (!blocked(me.x, nz, true)) me.z = nz;
+	}
+	me.h = angleLerp(me.h, q.h, Math.min(1, dt * 8));
+	// walking (or swimming) along with them, in step
+	const sp = Math.hypot(me.x - ox, me.z - oz) / Math.max(dt, 0.001) / 2.6;
+	me.speed = still ? 0 : sp > 0.05 ? Math.max(Math.min(1.4, sp), q.speed || 0) : 0;
+	if (me.speed > 0.05 && q.avatar) myAvatar.phase = q.avatar.phase;
+}
+// ---------- jumping (Space): on the spot, a running leap, over anything low in the way (railings, glass walls,
+// hedges, fences, the garden's walls, furniture), and off the roof deck or the terrace down onto the grounds below.
+// Never through the house's walls: you only land in the room you're in, or (outdoors) anywhere outdoors.
+function jump() {
+	if (!entered || me.jump || me.sit || me.carriedBy || me.carrying || house.vehicle() || waterAt(me.x, me.z) > 0.55) return;
+	if (me.upper && !["handhold", "drink"].includes(me.upper)) { me.upper = null; me.partner = null; updateProps(); }
+	const fx = Math.sin(me.h), fz = Math.cos(me.h);
+	const here = areaOf(me.x, me.z), up = here === "roof" || here === "terrace";
+	const outside = up || house.outdoorAt(me.x, me.z);
+	const running = me.speed > 0.3 || joy.dx || joy.dy || ["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].some(k => keys.has(k));
+	const free = (x, z) => walkable(x, z, RADIUS) && !blocked(x, z, true);
+	const okArea = (x, z) => { const a = areaOf(x, z); return a === here || (outside && (house.outdoorAt(x, z) || a === "roof" || a === "terrace")); };
+	const reach = running ? 1.5 + Math.min(1, me.speed) * 0.5 : 0.9;
+	// anything in the way just ahead?
+	let hit = -1;
+	for (let d = 0.15; d <= reach; d += 0.08) if (!free(me.x + fx * d, me.z + fz * d)) { hit = d; break; }
+	let land = null, drop = false, over = false;
+	if (hit < 0) land = running ? [me.x + fx * reach, me.z + fz * reach] : [me.x, me.z];
+	else {
+		// over it: the first clear spot on the far side
+		for (let d = hit + 0.15; d <= hit + 2.4; d += 0.08) {
+			const x = me.x + fx * d, z = me.z + fz * d;
+			if (free(x, z) && okArea(x, z)) { land = [x, z]; over = true; break; }
+		}
+		// off the edge of the roof / the terrace: down onto the ground under it
+		if (!land && up) {
+			const v0 = visXZ(me.x, me.z);
+			for (let d = hit + 0.3; d <= hit + 3.2; d += 0.08) {
+				const gx = v0[0] + fx * d, gz = v0[1] + fz * d, a = areaOf(gx, gz);
+				if (a !== "roof" && a !== "terrace" && !shiftAt(gx, gz) && house.outdoorAt(gx, gz) && free(gx, gz)) { land = [gx, gz]; drop = true; break; }
+			}
+		}
+		// nowhere to land: jump on the spot (or as far as the way is clear)
+		if (!land) land = hit > 0.5 && running ? [me.x + fx * (hit - 0.3), me.z + fz * (hit - 0.3)] : [me.x, me.z];
+	}
+	const s = visXZ(me.x, me.z), e = drop ? land : visXZ(land[0], land[1]);
+	const y0 = floorAt(me.x, me.z), y1 = drop ? floorAt(land[0], land[1]) : floorAt(land[0], land[1]);
+	const dist = Math.hypot(e[0] - s[0], e[1] - s[1]);
+	const h = over ? 0.75 : dist > 0.2 ? 0.5 : 0.42;
+	const dur = drop ? 0.6 + Math.sqrt(Math.max(0, y0 - y1)) * 0.22 : 0.5 + dist * 0.07 + (over ? 0.1 : 0);
+	const dx = land[0] - me.x, dz = land[1] - me.z;
+	me.jump = { t: 0, dur, sx: s[0], sz: s[1], ex: e[0], ez: e[1], y0, y1, h, drop };
+	me.x = land[0]; me.z = land[1];
+	me.target = null; me.path = []; me.targetAct = null; me.stuck = 0;
+	if (drop) { cam.tx += dx; cam.tz += dz; }   // (off the roof: onto the ground's floor plan, like the stairs)
+	send({ t: "fx", kind: "jump", sx: +s[0].toFixed(2), sz: +s[1].toFixed(2), ex: +e[0].toFixed(2), ez: +e[1].toFixed(2), y0: +y0.toFixed(2), y1: +y1.toFixed(2), h, d: +dur.toFixed(2), drop: drop ? 1 : 0 });
+	sendPose(true);
+	if (audio) audio.sfx("whoosh", 0.2);
+}
+// carry an avatar along its jump (drawn coordinates): true once it has landed
+function airborne(av, J, dt) {
+	J.t += dt;
+	const u = Math.min(1, J.t / J.dur);
+	const yb = J.drop ? J.y0 + (J.y1 - J.y0) * u * u : J.y0 + (J.y1 - J.y0) * u;
+	av.root.position.set(J.sx + (J.ex - J.sx) * u, yb + 4 * J.h * u * (1 - u) * (J.drop ? 0.4 : 1), J.sz + (J.ez - J.sz) * u);
+	av.air = u < 1 ? u : null;
+	av.speed = 0;
+	if (u >= 1) { av._fy = J.y1; if (av === myAvatar && audio) audio.sfx("kick", 0.15); return true; }
+	return false;
 }
 // Where should each hand be? (real contact with keys, paper, mouth, people, the remote)
 const _ik = [new THREE.Vector3(), new THREE.Vector3()], _ikB = [new THREE.Vector3(), new THREE.Vector3()];
@@ -3790,6 +4014,45 @@ function assignIK(av, upper, sit, partnerId, store) {
 		store[0].set(top.x - rx, top.y, top.z - rz);
 		store[1].set(top.x + rx, top.y, top.z + rz);
 		av.ik[0] = store[0]; av.ik[1] = store[1];
+	} else if (["foreheadkiss", "boop", "backhug", "neckkiss", "buttpat"].includes(upper) && partnerId) {
+		const pav = avatarOf(partnerId);
+		if (!pav) return;
+		const ph = pav.root.rotation.y, fx = Math.sin(ph), fz = Math.cos(ph), rx = Math.cos(ph), rz = -Math.sin(ph);
+		if (upper === "foreheadkiss") {
+			// cupping their face
+			pav.head.getWorldPosition(store[0]); store[1].copy(store[0]);
+			store[0].y += 0.06; store[1].y += 0.06;
+			const me3 = av.root.position, dx = pav.root.position.x - me3.x, dz = pav.root.position.z - me3.z, l = Math.hypot(dx, dz) || 1, sx = dz / l, sz = -dx / l;
+			store[0].x -= sx * 0.11; store[0].z -= sz * 0.11; store[1].x += sx * 0.11; store[1].z += sz * 0.11;
+			av.ik[0] = store[0]; av.ik[1] = store[1];
+		} else if (upper === "boop") {
+			// a fingertip on the tip of their nose
+			pav.face.localToWorld(store[0].set(0, -0.02, 0.17));
+			av.ik[0] = store[0]; av.ikReach[0] = 0.13;
+		} else if (upper === "buttpat") {
+			pav.hips.getWorldPosition(store[0]);
+			store[0].x += -fx * 0.16 + rx * 0.07; store[0].z += -fz * 0.16 + rz * 0.07;
+			store[0].y += 0.02 + Math.abs(Math.sin(performance.now() / 120)) * 0.05;
+			av.ik[0] = store[0];
+		} else {
+			// arms round them from behind, hands joined over their middle
+			pav.torso.getWorldPosition(store[0]); store[1].copy(store[0]);
+			for (const [i, s] of [[0, -1], [1, 1]]) { store[i].x += fx * 0.13 + rx * s * 0.06; store[i].z += fz * 0.13 + rz * s * 0.06; store[i].y += 0.12; av.ik[i] = store[i]; }
+		}
+	} else if (upper === "handhold" && partnerId && sit) {
+		// sitting / lying side by side: hand in hand, resting between you
+		const pav = avatarOf(partnerId);
+		if (!pav || !av.coupleSide) return;
+		const i = av.coupleSide < 0 ? 0 : 1;
+		av.hips.getWorldPosition(_tmpV); pav.hips.getWorldPosition(_tmpV2);
+		store[i].copy(_tmpV).add(_tmpV2).multiplyScalar(0.5);
+		const spot = room.sitSpots.find(s => s.id === sit);
+		if (spot && spot.lie) store[i].y += 0.05;
+		else { const h = av.root.rotation.y; store[i].x += Math.sin(h) * 0.16; store[i].z += Math.cos(h) * 0.16; store[i].y += 0.04; }
+		// (a touch toward your own side, palm to palm)
+		_tmpV2.subVectors(_tmpV, store[i]).setY(0);
+		if (_tmpV2.lengthSq() > 1e-6) store[i].addScaledVector(_tmpV2.normalize(), 0.03);
+		av.ik[i] = store[i];
 	} else if (upper === "handhold" && partnerId) {
 		// near hand meets theirs halfway between your shoulders, down by your sides (out to the side, swimming flat)
 		const pav = avatarOf(partnerId);
@@ -3874,6 +4137,7 @@ function updatePeers(dt) {
 		const sp = Math.hypot(p.x - ox, p.z - oz) / Math.max(dt, 0.001) / 2.6;
 		p.speed += (Math.min(1.8, sp) - p.speed) * Math.min(1, dt * 8);
 		placeBody(p.avatar, p.x, p.z, p.h, p.sit, p.carriedBy, dt);
+		if (p.jump && airborne(p.avatar, p.jump, dt)) p.jump = null;
 		p.avatar.carriedBy = p.carriedBy;
 		p.avatar.coupleRole = coupleRole(p.sit, p.partner, p.upper);
 		p.avatar.coupleSide = coupleSide(p.x, p.z, p.h, p.sit, p.partner, p.upper);
@@ -4252,8 +4516,22 @@ const EMOTES = [
 const LOVE_EMOTES = [
 	["smooch", "Kiss"], ["cheekkiss", "Cheek kiss"], ["cuddle", "Cuddle"], ["carry", "Pick up"], ["slowdance", "Slow dance"],
 	["goodnight", "Goodnight kiss"], ["propose", "Propose"], ["hug", "Hug"], ["kiss", "Blow a kiss"], ["heart", "Hearts"],
-	["heartarms", "Big heart"], ["lovestruck", "Lovestruck"], ["blush", "Blush"], ["wink", "Wink"]
+	["heartarms", "Big heart"], ["lovestruck", "Lovestruck"], ["blush", "Blush"], ["wink", "Wink"],
+	["foreheadkiss", "Forehead kiss"], ["backhug", "Hug from behind"], ["neckkiss", "Neck kiss"], ["boop", "Boop their nose"], ["buttpat", "Cheeky pat"],
+	["beckon", "Come here"], ["flirty", "Flirty pose"], ["bitelip", "Bite your lip"], ["shy", "Shy"]
 ];
+const DANCES = [
+	["dz_hiphop", "Hip hop"], ["dz_floss", "Floss"], ["dz_robot", "Robot"], ["dz_disco", "Disco"], ["dz_salsa", "Salsa"],
+	["dz_shuffle", "Shuffle"], ["dz_kpop", "K-pop"], ["dz_ballet", "Ballet"], ["dz_sway", "Slow sway"], ["dz_bootyshake", "Booty shake"]
+];
+// love you do to someone: where you stand (gap from them; behind: at their back), how long, how they react
+const FLIRT = {
+	foreheadkiss: { gap: 0.32, ms: 2600, react: "blush", reactMs: 2600, hearts: 5 },
+	boop: { gap: 0.55, ms: 1400, react: "giggle", reactMs: 2000, hearts: 2 },
+	backhug: { behind: 0.3, ms: 5000, react: "melt", reactMs: 5000, hearts: 6 },
+	neckkiss: { behind: 0.3, ms: 3000, react: "melt", reactMs: 3000, hearts: 5 },
+	buttpat: { behind: 0.5, ms: 1300, react: "eep", reactMs: 1500, hearts: 2 }
+};
 // little line-drawn icons for the action menu
 const EI = {
 	wave: '<path d="M7 13V7a1.5 1.5 0 0 1 3 0v4M10 10V5a1.5 1.5 0 0 1 3 0v5M13 10V6a1.5 1.5 0 0 1 3 0v6M16 11a1.5 1.5 0 0 1 3 0v3a7 7 0 0 1-7 7h-1a6 6 0 0 1-5-3l-2.5-4a1.5 1.5 0 0 1 2.5-1.5L7 14"/>',
@@ -4284,24 +4562,45 @@ const EI = {
 	blush: '<circle cx="12" cy="12" r="9"/><path d="M8.5 10h.01M15.5 10h.01M10 15.5c1.2.7 2.8.7 4 0M6 13.5h2M16 13.5h2"/>',
 	wink: '<circle cx="12" cy="12" r="9"/><path d="M7.5 10h3M15.5 9.5v1M8 14.5c2.2 2.2 5.8 2.2 8 0"/>',
 	goodnight: '<path d="M14 3a7 7 0 1 0 7 9 5.5 5.5 0 0 1-7-9z"/><path d="M6.5 17.5c-.8-1-2.4-.5-2.2.8.1.8 1.2 1.4 2.2 2.1 1-.7 2.1-1.3 2.2-2.1.2-1.3-1.4-1.8-2.2-.8z"/>',
+	foreheadkiss: '<circle cx="12" cy="13" r="7"/><path d="M12 2.5c-.9-1.2-2.8-.6-2.5 1 .2 1 1.4 1.7 2.5 2.5 1.1-.8 2.3-1.5 2.5-2.5.3-1.6-1.6-2.2-2.5-1zM9.5 13v.5M14.5 13v.5M10 16.5c1.2.8 2.8.8 4 0"/>',
+	backhug: '<circle cx="10" cy="5" r="2.3"/><circle cx="14.5" cy="6.5" r="2.3"/><path d="M5 21v-6a5 5 0 0 1 5-5M19.5 21v-5.5a5 5 0 0 0-4-4.9M8 14h9"/>',
+	neckkiss: '<circle cx="9" cy="7" r="3"/><path d="M9 10v4M15 9c2-2 4-2 5 0-1 2-3 3-5 3"/><path d="M4 21c1-4 3-6 5-7 2 1 4 3 5 7"/>',
+	boop: '<circle cx="15" cy="12" r="7"/><circle cx="12" cy="13" r="1.2"/><path d="M2 13h7M16 10v.5M19 11v.5"/>',
+	buttpat: '<path d="M6 16c0-3 2.5-5 6-5s6 2 6 5-2.5 4-6 4-6-1-6-4zM12 11v9"/><path d="M15 3v5M18 4l-1.5 3.5M12 4l1.5 3.5"/>',
+	beckon: '<path d="M8 21v-8l-2-4V6M8 13h4a3 3 0 0 0 3-3V7a2 2 0 0 1 4 0v1"/><path d="M15 7c0-2 2-3 3-1"/>',
+	flirty: '<circle cx="12" cy="4.5" r="2"/><path d="M12 7l-1 6 3 8M11 13l-3 8M12 8l4-1 2-4M12 9l-4 2 1 3"/>',
+	bitelip: '<circle cx="12" cy="12" r="9"/><path d="M8 9.5h2M14 9.5h2M8.5 15c2 1.3 5 1.3 7 0M11 15.5v1.5M13 15.5v1.5"/>',
+	shy: '<circle cx="12" cy="12" r="9"/><path d="M8.5 11l1.5 1M15.5 11l-1.5 1M10 16h4M6 14h2M16 14h2"/>',
+	dz_hiphop: '<circle cx="12" cy="4" r="2"/><path d="M12 7v6M12 9l-5 2-1-3M12 9l5 2 1-3M9 21l3-8 3 8"/>',
+	dz_floss: '<circle cx="12" cy="4" r="2"/><path d="M12 7v7l-3 7M12 14l3 7M5 12l7-3 7 1"/>',
+	dz_robot: '<rect x="9" y="2" width="6" height="5" rx="1"/><path d="M12 7v7M6 9h12M6 9v4M18 9V5M9 21v-7h6v7"/>',
+	dz_disco: '<circle cx="12" cy="5" r="2"/><path d="M12 8v6l-3 7M12 14l3 7M12 9l6-6M12 10l-5 3"/>',
+	dz_salsa: '<circle cx="9" cy="4" r="2"/><path d="M9 7v7l-2 7M9 14l4 6M9 9l5-1 3 3M9 10l-4 2"/><path d="M17 17c2-1 3-3 2-5"/>',
+	dz_shuffle: '<circle cx="12" cy="4" r="2"/><path d="M12 7v6M8 10l4-2 4 2M12 13l-5 4M12 13l3 8M3 21h4M15 21h5"/>',
+	dz_kpop: '<circle cx="12" cy="5" r="2"/><path d="M12 8v6l-3 7M12 14l3 7M9 4c-2-2-5 0-3 2l3 3 3-3"/>',
+	dz_ballet: '<circle cx="12" cy="4" r="2"/><path d="M12 7v7l-1 7M12 14l6 2M8 8c1-3 7-3 8 0M12 10l-3-2M12 10l3-2"/>',
+	dz_sway: '<circle cx="12" cy="6" r="2"/><path d="M12 9c-2 3 2 5 0 8l-2 4M12 17l2 4M9 3c-1 2 0 4 3 6 3-2 4-4 3-6"/>',
+	dz_bootyshake: '<circle cx="9" cy="5" r="2"/><path d="M10 8l4 5-2 8M14 13l3 8M10 9l-3 5M17 10c1 1 2 2 1 4M19 8c2 2 2 5 0 7"/>',
 	wakeup: '<circle cx="12" cy="13" r="7"/><path d="M12 9.5V13l2.5 1.5M5 4L2.5 6.5M19 4l2.5 2.5"/>',
 	callpets: '<ellipse cx="12" cy="15" rx="4.5" ry="3.8"/><ellipse cx="6.5" cy="9.5" rx="1.8" ry="2.3"/><ellipse cx="10" cy="6.5" rx="1.8" ry="2.3"/><ellipse cx="14" cy="6.5" rx="1.8" ry="2.3"/><ellipse cx="17.5" cy="9.5" rx="1.8" ry="2.3"/>',
 	dice: '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.2"/><circle cx="15" cy="15" r="1.2"/><circle cx="12" cy="12" r="1.2"/>'
 };
 function emoteIcon(id) { return `<svg viewBox="0 0 24 24" fill="none" stroke="#ffd9b0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${EI[id] || ""}</svg>`; }
 // ---------- action / love / mood wheels (Z / X / C), opened in the middle of the screen
-const WHEEL_TITLES = { act: "Actions", love: "Love", mood: "Your mood" };
+const WHEEL_TITLES = { act: "Actions", love: "Love", mood: "Your mood", dance: "Dance" };
 const WHEEL_SUB = {
 	smooch: "Walks you over to the nearest person", slowdance: "Walks you over to the nearest person", propose: "Down on one knee in front of them",
 	cuddle: "Sit next to someone, or pick them up and carry them to the bed or sofa", hug: "Walks you over to the nearest person",
 	carry: "Asks the nearest person if you can carry them - then lie down together on the bed or sofa",
+	foreheadkiss: "Walks you over to the nearest person", boop: "Walks you over to the nearest person", backhug: "Sneaks up behind the nearest person",
+	neckkiss: "Sneaks up behind the nearest person", buttpat: "Sneaks up behind the nearest person - cheeky!",
 	goodnight: "Sit by someone asleep in bed and kiss them - they stay asleep", wakeup: "Sit on the bed and gently shake them awake",
 	floor: "Sit right down where you stand", dice: "Everyone sees the roll", callpets: "Biscuit and Mochi come running, wherever you are in the house", highfive: "Walks you over to the nearest person"
 };
 let wheelKind = null, wheelSel = -1, wheelItems = [];
 function wheelList(kind) {
 	if (kind === "mood") return MOODS.map(m => ({ id: m.id, label: m.label, icon: moodImg(m.id), on: profile.mood === m.id, fn: () => setMood(m.id) }));
-	const src = kind === "love" ? LOVE_EMOTES : EMOTES;
+	const src = kind === "love" ? LOVE_EMOTES : kind === "dance" ? DANCES : EMOTES;
 	return src.map(([id, label]) => ({ id, label, icon: emoteIcon(id), fn: () => emote(id) }));
 }
 function openWheel(kind) {
@@ -4353,7 +4652,7 @@ function pickWheel(i) {
 	it.fn();
 }
 // keyboard: Z / X / C open the wheels; while one is open, numbers pick, arrows move, E / Enter confirm
-const WHEEL_KEYS = { z: "act", x: "love", c: "mood" };
+const WHEEL_KEYS = { z: "act", x: "love", c: "mood", v: "dance" };
 function wheelKey(k, e) {
 	if (WHEEL_KEYS[k] && !e.repeat) { e.preventDefault(); toggleWheel(WHEEL_KEYS[k]); return true; }
 	if (!wheelKind) return false;
@@ -4405,8 +4704,60 @@ function swatches(el, list, key) {
 function rebuildMe() {
 	myAvatar.build(Object.assign({}, profile, { name: profile.name || "You" }));
 	updateProps();
-	$("#lbl-top").textContent = profile.gender === "female" ? "Dress" : "Shirt";
-	$("#lbl-bottom").textContent = profile.gender === "female" ? "Shoes & belt" : "Trousers";
+}
+// colour pickers drag through many colours a second: rebuild at most once a frame
+let rebuildQueued = false;
+function rebuildSoon() { if (rebuildQueued) return; rebuildQueued = true; requestAnimationFrame(() => { rebuildQueued = false; rebuildMe(); }); }
+// the outfit's main colours (the name tag's dot, the chat colour, and what older clients draw)
+function syncMainColors() { const n = normalizeLook(profile); profile.top = n.top; profile.bottom = n.bottom; }
+function renderHairStyles() {
+	const el = $("#hairstyles");
+	el.innerHTML = HAIR_STYLES.filter(h => h.g === (profile.gender === "male" ? "m" : "f")).map(h => `<button class="opt ${profile.hairStyle === h.id ? "on" : ""}" data-id="${h.id}">${esc(h.name)}</button>`).join("");
+	el.querySelectorAll("button").forEach(b => b.onclick = () => { profile.hairStyle = b.dataset.id; renderHairStyles(); rebuildMe(); });
+}
+function renderGlasses() {
+	const el = $("#glasses");
+	el.innerHTML = GLASSES.map(x => `<button class="opt ${profile.glasses === x.id ? "on" : ""}" data-id="${x.id}">${esc(x.name)}</button>`).join("");
+	el.querySelectorAll("button").forEach(b => b.onclick = () => { profile.glasses = b.dataset.id; renderGlasses(); rebuildMe(); });
+}
+function renderOutfits() {
+	const g = profile.gender === "male" ? "m" : "f";
+	const list = OUTFITS.filter(o => o.g === g);
+	const el = $("#outfits");
+	el.innerHTML = list.map(o => {
+		const cs = o.id === profile.outfit ? profile.colors : outfitColors(o.id, profile.wardrobe[o.id]);
+		return `<button class="opt ${o.id === profile.outfit ? "on" : ""}" data-id="${o.id}"><span class="dots">${o.parts.map(p => `<i style="background:${cs[p[0]]}"></i>`).join("")}</span>${esc(o.name)}</button>`;
+	}).join("");
+	el.querySelectorAll("button").forEach(b => b.onclick = () => wearOutfit(b.dataset.id));
+}
+function wearOutfit(id) {
+	if (!outfitById(id) || id === profile.outfit) return;
+	profile.wardrobe[profile.outfit] = profile.colors;   // (each outfit remembers its own colours)
+	profile.outfit = id;
+	profile.colors = outfitColors(id, profile.wardrobe[id]);
+	syncMainColors();
+	renderOutfits(); renderParts(); rebuildMe();
+}
+// every piece of the outfit: a row of swatches, and a picker for any colour at all
+function renderParts() {
+	const o = outfitById(profile.outfit), el = $("#parts");
+	el.innerHTML = o.parts.map(([k, label]) => `<div class="part" data-k="${k}"><div class="pl"><span>${esc(label)}</span><label class="pick" title="Any colour"><span>Custom</span><input type="color" value="${profile.colors[k]}" aria-label="Pick any colour for the ${esc(label.toLowerCase())}"></label></div><div class="swatches sm">${CLOTH_COLORS.map(c => `<button class="sw ${profile.colors[k] === c ? "on" : ""}" style="background:${c}" data-c="${c}" aria-label="${esc(label)} ${c}"></button>`).join("")}</div></div>`).join("");
+	el.querySelectorAll(".part").forEach(row => {
+		const k = row.dataset.k, inp = row.querySelector("input");
+		row.querySelectorAll(".sw").forEach(b => b.onclick = () => { setPart(k, b.dataset.c); inp.value = b.dataset.c; });
+		inp.addEventListener("input", () => setPart(k, inp.value));
+	});
+}
+function setPart(k, c) {
+	if (!/^#[0-9a-f]{6}$/i.test(c)) return;
+	profile.colors = Object.assign({}, profile.colors, { [k]: c.toLowerCase() });
+	profile.wardrobe[profile.outfit] = profile.colors;
+	syncMainColors();
+	const row = document.querySelector(`#parts .part[data-k="${k}"]`);
+	if (row) row.querySelectorAll(".sw").forEach(b => b.classList.toggle("on", b.dataset.c === profile.colors[k]));
+	const dots = document.querySelector(`#outfits button[data-id="${profile.outfit}"] .dots`);
+	if (dots) dots.innerHTML = outfitById(profile.outfit).parts.map(p => `<i style="background:${profile.colors[p[0]]}"></i>`).join("");
+	rebuildSoon();
 }
 function showLobby(edit) {
 	editing = !!edit;
@@ -4417,11 +4768,23 @@ function showLobby(edit) {
 	document.querySelectorAll("#gender button").forEach(b => b.classList.toggle("on", b.dataset.g === profile.gender));
 	swatches($("#sw-skin"), SKIN_TONES, "skin");
 	swatches($("#sw-hair"), HAIR_COLORS, "hair");
-	swatches($("#sw-top"), OUTFIT_COLORS, "top");
-	swatches($("#sw-bottom"), OUTFIT_COLORS, "bottom");
+	swatches($("#sw-eyes"), EYE_COLORS, "eyes");
+	renderHairStyles(); renderGlasses(); renderOutfits(); renderParts();
 	rebuildMe();
 }
-document.querySelectorAll("#gender button").forEach(b => b.onclick = () => { profile.gender = b.dataset.g; document.querySelectorAll("#gender button").forEach(x => x.classList.toggle("on", x === b)); rebuildMe(); });
+document.querySelectorAll("#gender button").forEach(b => b.onclick = () => {
+	const was = profile.gender;
+	profile.gender = b.dataset.g;
+	document.querySelectorAll("#gender button").forEach(x => x.classList.toggle("on", x === b));
+	if (was === profile.gender) return;
+	// men and women each have their own hairstyles and clothes
+	const g = profile.gender === "male" ? "m" : "f";
+	if (!HAIR_STYLES.some(h => h.id === profile.hairStyle && h.g === g)) profile.hairStyle = defaultHairStyle(profile.gender);
+	renderHairStyles();
+	if (outfitById(profile.outfit).g !== g) { wearOutfit(defaultOutfit(profile.gender)); return; }
+	renderOutfits();
+	rebuildMe();
+});
 $("#nm").addEventListener("input", () => { profile.name = $("#nm").value.trim().slice(0, 24); });
 $("#nm").addEventListener("keydown", e => { if (e.key === "Enter") $("#enter").click(); });
 
@@ -4466,7 +4829,6 @@ $("#enter").onclick = async () => {
 		setTimeout(() => toast("New: the glass doors by the arcade open into the lounge (kitchen, cinema upstairs, bedroom, bathroom), and the pool is out past the terrace. The pets roam everywhere.", "Take me there", () => walkTo(8.6, 3.75, null), 14000), 2500);
 	}
 	pendingLetters.splice(0).forEach(v => onLetter("letter:" + v.id, v, false));
-	setTimeout(() => $("#help").classList.add("gone"), 45000);
 };
 // keep-alive pose even when the tab is in the background (rAF pauses there)
 setInterval(() => { if (entered) send(poseMsg()); }, 5000);

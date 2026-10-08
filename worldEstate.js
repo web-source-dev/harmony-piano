@@ -138,8 +138,10 @@ export const GATES = [
 	{ id: "karts", r: [-28.6, -26.0, -120.6, -119.0] },
 	{ id: "aquarium", r: [-30.6, -28.0, -22.25, -20.75] },
 	{ id: "haunted", r: [-30.6, -28.0, -42.4, -40.9] },
-	{ id: "frontWest", r: [-23.9, -21.6, 9.5, 11.1] },        // the Gallery's front doors, at each end of the house
-	{ id: "frontEast", r: [32.9, 35.2, 9.5, 11.1] }
+	// the Gallery's front doors, at each end of the house (reaching well past the hall's own area, whose edge the
+	// grounds keep a body's width away from: short of that there was a strip outside each door nobody could stand on)
+	{ id: "frontWest", r: [-25.2, -21.6, 9.5, 11.1] },
+	{ id: "frontEast", r: [32.9, 36.5, 9.5, 11.1] }
 ];
 
 // the paths: [x0, z0, x1, z1, width] (straight, along x or z)
@@ -160,6 +162,47 @@ export const PATHS = [
 	[-27.0, 10.3, -22.55, 10.3, 2.0],       // to the front door at the west end of the Gallery
 	[33.7, 10.3, 39.0, 10.3, 2.0]           // to the front door at its east end
 ];
+// The roads (for the cars - people can walk on them too): a ring road all round the outside of the grounds, just
+// inside the hedge and outside everything else (the roller coaster runs over it here and there), and a drive in from
+// its west side to the cars' parking pad by the house's west front door. The white paths are for walking.
+export const ROAD_W = 6.4;
+// the ring's centre line: a rounded rectangle
+export const RING = { x0: -87.2, x1: 50.2, z0: -160.6, z1: 35.0, r: 12 };
+// the drive: from the ring (its west side) east along z to the parking pad's west edge
+export const DRIVE = { x0: -87.2, x1: -37.8, z: 10.3 };
+// where the drive meets the ring and the pad, widened so a car can swing in: x0..x1, half-width h0 at x0 to h1 at x1
+export const MOUTHS = [
+	{ x0: -84.0, x1: -77.5, z: 10.3, h0: 7.0, h1: ROAD_W / 2 },
+	{ x0: -44.5, x1: -37.8, z: 10.3, h0: ROAD_W / 2, h1: 5.7 }
+];
+function ringSd(x, z) {
+	const cx = (RING.x0 + RING.x1) / 2, cz = (RING.z0 + RING.z1) / 2;
+	const qx = Math.abs(x - cx) - ((RING.x1 - RING.x0) / 2 - RING.r), qz = Math.abs(z - cz) - ((RING.z1 - RING.z0) / 2 - RING.r);
+	return Math.hypot(Math.max(qx, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qz), 0) - RING.r;
+}
+// is (x, z) on a road? (pad: that much further out; negative: that far inside its edges)
+export function roadAt(x, z, pad = 0) {
+	const hw = ROAD_W / 2 + pad;
+	if (Math.abs(ringSd(x, z)) < hw) return true;
+	if (x > DRIVE.x0 && x < DRIVE.x1 && Math.abs(z - DRIVE.z) < hw) return true;
+	for (const m of MOUTHS) if (x > m.x0 - Math.max(0, pad) && x < m.x1 + Math.max(0, pad)) {
+		const t = Math.max(0, Math.min(1, (x - m.x0) / (m.x1 - m.x0)));
+		if (Math.abs(z - m.z) < m.h0 + (m.h1 - m.h0) * t + pad) return true;
+	}
+	return false;
+}
+// points along the ring's centre line every ~step metres: [x, z, tangent x, tangent z] (anticlockwise seen from above)
+export function ringPath(step = 2) {
+	const { x0, x1, z0, z1, r } = RING, out = [];
+	const line = (ax, az, bx, bz) => { const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.round(L / step)); for (let i = 0; i < n; i++) out.push([ax + (bx - ax) * i / n, az + (bz - az) * i / n, (bx - ax) / L, (bz - az) / L]); };
+	const arc = (cx, cz, a0) => { const n = Math.max(4, Math.round(r * Math.PI / 2 / step)); for (let i = 0; i < n; i++) { const a = a0 + i / n * Math.PI / 2; out.push([cx + Math.cos(a) * r, cz + Math.sin(a) * r, -Math.sin(a), Math.cos(a)]); } };
+	line(x0 + r, z0, x1 - r, z0); arc(x1 - r, z0 + r, -Math.PI / 2);
+	line(x1, z0 + r, x1, z1 - r); arc(x1 - r, z1 - r, 0);
+	line(x1 - r, z1, x0 + r, z1); arc(x0 + r, z1 - r, Math.PI / 2);
+	line(x0, z1 - r, x0, z0 + r); arc(x0 + r, z0 + r, Math.PI);
+	return out;
+}
+
 // the plaza on the lawn in front of the courtyard (with the Harmony sculpture in the middle)
 export const PLAZA = { x: 3.5, z: -26.5, r: 4.4, core: 1.5 };
 

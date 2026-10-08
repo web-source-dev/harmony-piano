@@ -1,8 +1,9 @@
 /**
  * Harmony World — two open-top cars, parked on a paved pad on the west lawn by the house's west front door.
  *
- * Get in (the driver's door) and drive anywhere out on the grounds: the lawns, the paths, round the house, down the
- * avenues (not indoors, not into the pool, and only through gateways wide enough for a car). Someone else can hop in
+ * Get in (the driver's door) and drive anywhere out on the grounds: down the drive and round the ring road that runs all
+ * the way round the outside (worldEstate.js), or off across the lawns and the paths, round the house, down the avenues
+ * (not indoors, not into the pool, and only through gateways wide enough for a car). Someone else can hop in
  * the passenger seat and ride along. W / S (or the arrow keys, or the joystick) for the pedals, A / D to steer, Shift
  * for a burst of speed, Space for the handbrake, R (or E) for the horn, Esc to get out - the car stays where you left it.
  *
@@ -15,12 +16,13 @@
  * the side, the floor at y = 0.
  */
 import { floorAt } from "./worldRoom.js";
+import { DRIVE, ROAD_W } from "./worldEstate.js";
 
 // the parking pad (a car's length of paving in front of it joins the path down the west side of the house)
 export const PAD = [-37.8, -28.0, 4.6, 16.0];
 const CARS = [
-	{ id: "cherry", name: "Cherry", paint: "#b10f2e", seats: "#efe0c8", trim: "#f4efe8", plate: "LOVE 01", x: -32.6, z: 7.8, h: Math.PI / 2 },
-	{ id: "midnight", name: "Midnight", paint: "#173a6b", seats: "#7a4b32", trim: "#c9a05a", plate: "LOVE 02", x: -32.6, z: 12.8, h: Math.PI / 2 }
+	{ id: "cherry", name: "Cherry", paint: "#b10f2e", seats: "#efe0c8", trim: "#f4efe8", plate: "LOVE 01", x: -32.6, z: 7.8, h: -Math.PI / 2 },
+	{ id: "midnight", name: "Midnight", paint: "#173a6b", seats: "#7a4b32", trim: "#c9a05a", plate: "LOVE 02", x: -32.6, z: 12.8, h: -Math.PI / 2 }
 ];
 const SEAT = [0.37, -0.26], PSEAT = [-0.37, -0.26];   // where the driver / the passenger sits (their avatar's root)
 const WB = 2.56, FZ = 1.28, RZ = -1.28, TW = 0.79, WR = 0.34;
@@ -46,7 +48,9 @@ export function buildCars(k, { PATH_Y }) {
 		add(g, new THREE.PlaneGeometry(x1 - x0, z1 - z0), mat("#ffffff", 0.92, 0, { map: asphalt }), (x0 + x1) / 2, PATH_Y + 0.004, (z0 + z1) / 2, { rx: -Math.PI / 2, cast: false }).userData.floor = true;
 		// a kerb of pale stone round it, and painted bays
 		const kerb = mat("#cfc8bb", 0.8);
-		for (const [w, d, x, z] of [[x1 - x0 + 0.3, 0.15, (x0 + x1) / 2, z0], [x1 - x0 + 0.3, 0.15, (x0 + x1) / 2, z1], [0.15, z1 - z0, x0, (z0 + z1) / 2]]) add(g, new THREE.BoxGeometry(w, 0.1, d), kerb, x, 0.05, z, { cast: false });
+		// (open on the west side, where the drive comes in)
+		const gz0 = DRIVE.z - ROAD_W / 2 - 0.3, gz1 = DRIVE.z + ROAD_W / 2 + 0.3;
+		for (const [w, d, x, z] of [[x1 - x0 + 0.3, 0.15, (x0 + x1) / 2, z0], [x1 - x0 + 0.3, 0.15, (x0 + x1) / 2, z1], [0.15, gz0 - z0, x0, (z0 + gz0) / 2], [0.15, z1 - gz1, x0, (gz1 + z1) / 2]]) add(g, new THREE.BoxGeometry(w, 0.1, d), kerb, x, 0.05, z, { cast: false });
 		const paint = new THREE.MeshBasicMaterial({ color: "#efe9dc", toneMapped: false, transparent: true, opacity: 0.75 });
 		for (const z of [5.4, 10.3, 15.2]) add(g, new THREE.PlaneGeometry(5.2, 0.12), paint, -33.4, PATH_Y + 0.008, z, { rx: -Math.PI / 2, cast: false, receive: false });
 		add(g, new THREE.PlaneGeometry(0.12, 9.92), paint, -36.0, PATH_Y + 0.008, 10.3, { rx: -Math.PI / 2, cast: false, receive: false });
@@ -330,7 +334,7 @@ export function buildCars(k, { PATH_Y }) {
 			c.v = 0; c.steer = 0;
 			m.upper = "drive";
 			setState(c, { d: ctx.MY_ID, x: c.x, z: c.z, h: c.h });
-			ctx.notice(`You get behind the wheel of <b>${c.def.name}</b>. <b>W/S</b> to drive, <b>A/D</b> to steer, <b>Shift</b> to go faster, <b>Space</b> handbrake, <b>R</b> horn, <b>Esc</b> to get out.`);
+			ctx.notice(`You get behind the wheel of <b>${c.def.name}</b>. Drive anywhere - the ring road goes all the way round the grounds. <b>W/S</b> to drive, <b>A/D</b> to steer, <b>Shift</b> to go faster, <b>Space</b> handbrake, <b>R</b> horn, <b>Esc</b> to get out.`);
 		}
 		ctx.sfx("door", 0.45);
 		place(c);

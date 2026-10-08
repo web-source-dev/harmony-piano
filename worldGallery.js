@@ -18,6 +18,7 @@ const H = 3.4, HF = 5.25;
 const [HX0, HX1, HZ0, HZ1] = GALLERY.hall;
 const [BX0, BX1, BZ0] = GALLERY.bump;
 const [FX0, FX1, , FZ1] = GALLERY.foyer;
+const FEW = FX1 - 0.07;   // the face of the foyer's east wall
 const [E0, E1] = GALLERY.entrance;
 const D = HALL_DOORS;
 const RUN = (STAIR.z1 - STAIR.z0) / STAIR.n, RISE = 5.52 / STAIR.n;
@@ -44,7 +45,7 @@ export function build(k) {
 			{ wall: "n", a: D.lounge[0], b: D.lounge[1], y1: 2.3, depth: 0.27 },
 			// the north side (its s wall, z = 12.2)
 			{ wall: "s", a: D.library[0], b: D.library[1], y1: 2.4 },
-			{ wall: "s", a: FX0, b: FX1, y1: H },
+			{ wall: "s", a: FX0, b: FEW, y1: H },
 			{ wall: "s", a: D.games[0], b: D.games[1], y1: 2.3 },
 			{ wall: "s", a: D.spa[0], b: D.spa[1], y1: 2.3 },
 			{ wall: "s", a: D.music[0], b: D.music[1], y1: 2.4 },
@@ -58,10 +59,12 @@ export function build(k) {
 		holes: [{ wall: "n", a: D.living[0], b: D.living[1], y1: 2.3 }], cornice: false
 	});
 	// the foyer, double height, with the stairwell cut out of its ceiling
+	// (its east wall stands a little in from the game room's own walls and roof next door, which reach right up to
+	// FX1: where the two met in the same plane the wall flickered)
 	k.room({
-		x0: FX0, x1: FX1, z0: HZ1, z1: FZ1, h: HF, floor: floorM, ceil: ceilM, wall: wallM,
+		x0: FX0, x1: FEW, z0: HZ1, z1: FZ1, h: HF, floor: floorM, ceil: ceilM, wall: wallM,
 		depth: { n: 0.22, s: 0.3, w: 0.2, e: 0.2 },
-		holes: [{ wall: "n", a: FX0, b: FX1, y1: H }].concat(win("n", FX0, FX1).map(w => ({ wall: "s", a: w.a, b: w.b, y0: w.y0, y1: w.y1, glass: true }))),
+		holes: [{ wall: "n", a: FX0, b: FEW, y1: H }].concat(win("n", FX0, FX1).map(w => ({ wall: "s", a: w.a, b: w.b, y0: w.y0, y1: w.y1, glass: true }))),
 		ceilHoles: [[STAIR.x0, STAIR.x1, STAIR.hole, STAIR.top]]
 	});
 
@@ -75,8 +78,10 @@ export function build(k) {
 	for (const id of ["dining", "powder", "lounge"]) k.walk(D[id][0], D[id][1], HZ0 - 1.0, HZ0 + 1.0);
 	for (const id of ["library", "games", "spa", "music"]) k.walk(D[id][0], D[id][1], HZ1 - 1.0, HZ1 + 1.2);
 	k.walk(D.living[0], D.living[1], BZ0 - 0.8, BZ0 + 1.0);
-	k.walk(HX0 - 1.6, HX0 + 1.0, E0, E1);   // out of the front doors
-	k.walk(HX1 - 1.0, HX1 + 1.6, E0, E1);
+	// out of the front doors: right across the hall's own area, which reaches 1.65 m out past each end wall (short of
+	// that, there was a strip outside each door that was nobody's to stand on, so you couldn't get through)
+	k.walk(HX0 - 2.3, HX0 + 1.0, E0, E1);
+	k.walk(HX1 - 1.0, HX1 + 2.3, E0, E1);
 	k.cam = { minX: HX0 + 0.2, maxX: HX1 - 0.2, minZ: BZ0 + 0.2, maxZ: FZ1 - 0.2, maxY: 9.5 };
 	// the rooms either side are solid to the camera (it stays in the hallway)
 	for (const r of [WING.dining, WING.powder, WING.library, WING.games, WING.spa, WING.music, [7.05, 23.35, -6.15, 8.15], [-22.45, -7.05, -8.7, 1.7], [23.2, 33.6, -8.7, 8.4]]) k.camWall(r[0], r[1], r[2], r[3], -2, 5.3);
@@ -91,8 +96,9 @@ export function build(k) {
 	k.frenchDoor("hallLounge", { x: mid(D.lounge), z: HZ0 - 0.14, ry: 0, w: D.lounge[1] - D.lounge[0] - 0.04, h: 2.3, depth: 0.32, side: -1, curtain: "#5f8f8a" }, [D.lounge[0], D.lounge[1], HZ0 - 0.3, HZ0], [[mid(D.lounge), HZ0 - 1.2], [mid(D.lounge), HZ0 + 1.0]]);
 
 	// ---------------------------------------------------------------- the front doors
-	k.frenchDoor("frontWest", { x: HX0 - 0.15, z: (E0 + E1) / 2, ry: -Math.PI / 2, w: E1 - E0 - 0.04, h: 2.55, depth: 0.45, side: 1, curtain: "#d8cfc4" }, [HX0 - 0.3, HX0, E0, E1], [[HX0 + 1.0, (E0 + E1) / 2], [HX0 - 1.2, (E0 + E1) / 2]]);
-	k.frenchDoor("frontEast", { x: HX1 + 0.15, z: (E0 + E1) / 2, ry: Math.PI / 2, w: E1 - E0 - 0.04, h: 2.55, depth: 0.45, side: 1, curtain: "#d8cfc4" }, [HX1, HX1 + 0.3, E0, E1], [[HX1 - 1.0, (E0 + E1) / 2], [HX1 + 1.2, (E0 + E1) / 2]]);
+	// (side -1: the doors swing in, and the curtains hang, on the hall's side - not out on the lawn)
+	k.frenchDoor("frontWest", { x: HX0 - 0.15, z: (E0 + E1) / 2, ry: -Math.PI / 2, w: E1 - E0 - 0.04, h: 2.55, depth: 0.45, side: -1, curtain: "#d8cfc4" }, [HX0 - 0.3, HX0, E0, E1], [[HX0 + 1.0, (E0 + E1) / 2], [HX0 - 1.2, (E0 + E1) / 2]]);
+	k.frenchDoor("frontEast", { x: HX1 + 0.15, z: (E0 + E1) / 2, ry: Math.PI / 2, w: E1 - E0 - 0.04, h: 2.55, depth: 0.45, side: -1, curtain: "#d8cfc4" }, [HX1, HX1 + 0.3, E0, E1], [[HX1 - 1.0, (E0 + E1) / 2], [HX1 + 1.2, (E0 + E1) / 2]]);
 
 	// ---------------------------------------------------------------- the grand staircase
 	{
@@ -171,11 +177,11 @@ export function build(k) {
 			k.box(x - 0.38, x + 0.38, z - 0.38, z + 0.38);
 		}
 		// a big photo on the foyer's east wall (frame 50), and two more beside it
-		k.photo(50, FX1 - 0.03, 2.6, 18.6, -Math.PI / 2, { w: 2.2, h: 1.5, frame: "#c9a05a", metal: 0.7 });
-		k.photo(51, FX1 - 0.03, 2.2, 15.4, -Math.PI / 2, { w: 0.9, h: 1.1, frame: "#fbf8f2" });
-		k.photo(52, FX1 - 0.03, 2.2, 21.8, -Math.PI / 2, { w: 0.9, h: 1.1, frame: "#fbf8f2" });
+		k.photo(50, FEW - 0.03, 2.6, 18.6, -Math.PI / 2, { w: 2.2, h: 1.5, frame: "#c9a05a", metal: 0.7 });
+		k.photo(51, FEW - 0.03, 2.2, 15.4, -Math.PI / 2, { w: 0.9, h: 1.1, frame: "#fbf8f2" });
+		k.photo(52, FEW - 0.03, 2.2, 21.8, -Math.PI / 2, { w: 0.9, h: 1.1, frame: "#fbf8f2" });
 		// a grandfather clock against the east wall: it ticks, and chimes when you ask it the time
-		const ck = group(g, FX1 - 0.3, 0, 20.5, -Math.PI / 2);
+		const ck = group(g, FEW - 0.3, 0, 20.5, -Math.PI / 2);
 		const wood = mat("#4a2f22", 0.45);
 		add(ck, rbox(0.55, 2.1, 0.35, 0.03), wood, 0, 1.05, 0);
 		add(ck, rbox(0.62, 0.25, 0.4, 0.03), wood, 0, 2.2, 0);
