@@ -4947,10 +4947,14 @@ body.media-library-viewer-open {
 
 /* ── Responsive ── */
 @media (max-width: 720px) {
-    .screen-share-panel.ss-lg { width: 98vw; height: 58vw; }
-    .screen-share-panel.ss-md { width: 98vw; height: 60vw; }
-    .screen-share-panel.ss-sm { width: 98vw; height: 62vw; }
-    .ss-source-chip { display: none; }
+    .screen-share-panel.ss-lg,
+    .screen-share-panel.ss-md,
+    .screen-share-panel.ss-sm {
+        width: calc(100vw - 12px);
+        height: min(52vh, 420px);
+        max-width: calc(100vw - 12px);
+    }
+    .ss-source-chip { max-width: 90px; }
 }
 #rename .submit:active { transform: translateY(1px); }
 
@@ -5041,6 +5045,97 @@ body.media-library-viewer-open {
     border-color: rgba(255, 255, 255, 0.18);
     color: rgba(255, 255, 255, 0.8);
 }
+
+@media (max-width: 760px) {
+    #ss-watch-bar {
+        top: calc(env(safe-area-inset-top, 0px) + 48px);
+        max-width: calc(100vw - 16px);
+        white-space: normal;
+        flex-wrap: wrap;
+        box-sizing: border-box;
+    }
+    .ss-watch-lbl { max-width: none; }
+    .ss-watch-btn, .ss-watch-x { min-height: 36px; }
+}
+
+.ss-unmute {
+    position: absolute;
+    left: 50%;
+    bottom: 12px;
+    transform: translateX(-50%);
+    z-index: 3;
+    height: 36px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(20, 24, 32, 0.9);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-shadow: none;
+}
+.ss-unmute[hidden] { display: none; }
+
+#ss-source-sheet {
+    position: fixed;
+    inset: 0;
+    z-index: 100045;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.48);
+    padding: 0;
+}
+#ss-source-sheet[hidden] { display: none !important; }
+.ss-source-card {
+    width: min(480px, 100%);
+    box-sizing: border-box;
+    padding: 18px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    background: #121820;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.45);
+}
+.ss-source-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: none;
+}
+.ss-source-sub {
+    margin: 6px 0 14px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.62);
+    text-shadow: none;
+}
+.ss-source-opt, .ss-source-cancel {
+    display: block;
+    width: 100%;
+    min-height: 48px;
+    margin: 0 0 8px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    text-shadow: none;
+    touch-action: manipulation;
+}
+.ss-source-opt {
+    color: #fff;
+    background: rgba(59, 130, 246, 0.22);
+    border: 1px solid rgba(59, 130, 246, 0.5);
+}
+.ss-source-opt:hover, .ss-source-opt:focus-visible { background: rgba(59, 130, 246, 0.34); }
+.ss-source-cancel {
+    color: rgba(255, 255, 255, 0.75);
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    margin-bottom: 0;
+}
+.ss-source-cancel:hover, .ss-source-cancel:focus-visible { background: rgba(255, 255, 255, 0.06); }
 
 /* ── Share Image panel ── */
 .share-image-panel {
@@ -6471,10 +6566,9 @@ body.love-got-kiss .love-layer { animation: loveBlush 1s ease-out; }
 		word-break: break-word;
 	}
 
-	/* Piano-only tools do nothing without a piano (and phones can't screen-share). */
+	/* Piano-only tools do nothing without a piano. Share stays — phones and tablets use it too. */
 	#play-alone-btn, #midi-btn, #record-btn, #synth-btn, #sheet-btn, #learn-btn,
 	#sound-btn, #cursor-looks-btn, #learn-panel { display: none !important; }
-	html.no-screen-share #screen-share-btn { display: none !important; }
 
 	/* Room picker: a clean button; tapping it opens the All Rooms dialog. */
 	#room {

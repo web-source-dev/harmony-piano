@@ -2417,10 +2417,6 @@ Rect.prototype.contains = function(x, y) {
 	(function setupMobileMenu() {
 		var $btn = $("#mobile-menu-btn");
 		if(!$btn.length) return;
-		// Phone browsers can't share their screen; hide the button there.
-		if(!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)) {
-			document.documentElement.classList.add("no-screen-share");
-		}
 		function setOpen(open) {
 			document.body.classList.toggle("mobile-menu-open", open);
 			$btn.attr("aria-expanded", open ? "true" : "false").text(open ? "✕ Close" : "☰ Menu");

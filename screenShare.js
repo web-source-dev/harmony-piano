@@ -1,8 +1,9 @@
 /**
- * Screen Share — share your screen/window/tab with everyone in the room.
- * Sharer: getDisplayMedia → WebRTC peer connections (one per viewer).
- * Viewers: receive WebRTC stream, display in a floating viewer panel.
- * Signaling travels over the MPP room-chat channel with the "SS|" prefix.
+ * Screen Share — share with everyone in the room from any device.
+ * Desktop: getDisplayMedia (screen, window, or tab) → WebRTC.
+ * Phones and tablets: the same when the browser allows it; otherwise a live
+ * capture of this page, or the front/back camera. Viewers get a floating panel.
+ * Signaling travels over the room relay with the "SS|" prefix.
  */
 (function (global) {
     'use strict';
@@ -24,6 +25,11 @@
     var sizeIdx    = 1;
     var _peerConns = {};       // viewerId → RTCPeerConnection  (sharer sends stream)
     var _reannTimer = null;
+    var _shareGen   = 0;    // bumps on stop so a late camera/mic grant can't restart sharing
+    var _pageRaf    = 0;
+    var _pageOn     = false;
+    var _pageCanvas = null;
+    var _sourceSheet = null;
 
     // ── viewer state ──────────────────────────────────────────────────────────────
     var viewPanel     = null;  // remote viewer panel
@@ -288,6 +294,7 @@
             '</div>' +
             '<div class="ss-stage">' +
                 '<video class="ss-video" autoplay playsinline></video>' +
+                '<button type="button" class="ss-unmute" hidden>Tap for sound</button>' +
             '</div>';
 
         document.body.appendChild(viewPanel);
@@ -313,19 +320,55 @@
             viewPanel.classList.add(SIZE_NAMES[vSizeIdx]);
         });
         viewPanel.querySelector('.ss-btn-stop').addEventListener('click', _closeViewer);
+        var unmute = viewPanel.querySelector('.ss-unmute');
+        unmute.addEventListener('click', function () {
+            viewVideoEl.muted = false;
+            var p = viewVideoEl.play && viewVideoEl.play();
+            if (p && p.catch) p.catch(function () {});
+            unmute.setAttribute('hidden', '');
+        });
     }
 
     function _showViewStream(s) {
         _buildViewPanel();
         viewVideoEl.srcObject = s;
+        viewVideoEl.muted = false;
+        var unmute = viewPanel.querySelector('.ss-unmute');
+        if (unmute) unmute.setAttribute('hidden', '');
         viewPanel.removeAttribute('hidden');
+        _playRemote(viewVideoEl);
+    }
+
+    // Phones block unmuted autoplay once the Watch tap is over. Play muted, then
+    // unmute on the next tap so the picture still shows.
+    function _playRemote(el) {
+        if (!el) return;
+        el.playsInline = true;
+        el.setAttribute('playsinline', '');
+        el.setAttribute('webkit-playsinline', '');
+        var pending = el.play && el.play();
+        if (!pending || !pending.catch) return;
+        pending.catch(function () {
+            el.muted = true;
+            var again = el.play && el.play();
+            if (again && again.catch) again.catch(function () {});
+            var btn = viewPanel && viewPanel.querySelector('.ss-unmute');
+            if (btn) btn.removeAttribute('hidden');
+        });
     }
 
     function _closeViewer() {
         if (_viewConn) { try { _viewConn.close(); } catch (e) {} _viewConn = null; }
         _sharerId = null;
-        if (viewVideoEl) viewVideoEl.srcObject = null;
-        if (viewPanel) viewPanel.setAttribute('hidden', '');
+        if (viewVideoEl) {
+            viewVideoEl.srcObject = null;
+            viewVideoEl.muted = false;
+        }
+        if (viewPanel) {
+            viewPanel.setAttribute('hidden', '');
+            var unmute = viewPanel.querySelector('.ss-unmute');
+            if (unmute) unmute.setAttribute('hidden', '');
+        }
         var bar = document.getElementById('ss-watch-bar');
         if (bar) bar.setAttribute('hidden', '');
     }
@@ -491,7 +534,9 @@
         if (!el) return;
         if (!label) { el.hidden = true; return; }
         el.hidden = false;
-        var icon = /window/i.test(label) ? '🪟' :
+        var icon = /camera/i.test(label) ? '📷' :
+                   /page|this screen/i.test(label) ? '📱' :
+                   /window/i.test(label) ? '🪟' :
                    /tab|chrome|firefox|edge|brave|safari/i.test(label) ? '📑' : '🖥️';
         var short = label.replace(/^(entire\s+)?(screen|monitor|display)\s*/i, '').trim();
         el.textContent = icon + ' ' + (short || label).slice(0, 34);
@@ -515,10 +560,24 @@
     function _toggleAudio(btn) {
         if (!stream) return;
         var tracks = stream.getAudioTracks();
-        if (!tracks.length) { _setStatus('No audio — share a browser tab with "Share tab audio" ticked.'); return; }
+        if (!tracks.length) {
+            _setStatus('Asking for the microphone…');
+            _requestMic().then(function (mic) {
+                if (!mic || !stream) {
+                    if (mic) _stopTracks(mic);
+                    _setStatus('Microphone blocked — video is still sharing.');
+                    return;
+                }
+                mic.getAudioTracks().forEach(function (t) { _addAudioTrack(t); });
+                btn.textContent = '🔊 Audio on';
+                btn.classList.add('ss-audio-active');
+                _setStatus('Microphone is on for viewers.');
+            });
+            return;
+        }
         var on = !tracks[0].enabled;
         tracks.forEach(function (t) { t.enabled = on; });
-        videoEl.muted = !on;
+        if (videoEl) videoEl.muted = true; // local preview stays quiet so the mic doesn't howl
         btn.textContent = on ? '🔊 Audio on' : '🔇 Audio off';
         btn.classList.toggle('ss-audio-active', on);
     }
@@ -549,6 +608,10 @@
     // ──────────────────────────────────────────────────────────────────────────────
     document.addEventListener('keydown', function (e) {
         var tag = (document.activeElement || {}).tagName;
+        if (e.key === 'Escape' && _sourceSheet && !_sourceSheet.hasAttribute('hidden')) {
+            _closeSourceSheet();
+            return;
+        }
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
         // Sharer panel shortcuts
         if (stream && panel && !panel.hasAttribute('hidden')) {
@@ -566,60 +629,445 @@
     // CORE START / STOP
     // ──────────────────────────────────────────────────────────────────────────────
     function isSupported() {
-        return !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+        try {
+            var md = navigator.mediaDevices;
+            if (md && (typeof md.getDisplayMedia === 'function' || typeof md.getUserMedia === 'function')) return true;
+            return typeof document.createElement('canvas').captureStream === 'function';
+        } catch (e) { return false; }
     }
 
-    function start() {
-        if (!isSupported()) {
-            alert('Screen sharing needs Chrome, Edge, or Firefox.\nYour browser does not support getDisplayMedia().');
-            return;
-        }
+    // Phones, tablets, and iPadOS (which pretends to be a desktop Mac).
+    function _isHandheld() {
+        var ua = navigator.userAgent || '';
+        if (/Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(ua)) return true;
+        if (/Macintosh/i.test(ua) && (navigator.maxTouchPoints || 0) > 1) return true;
+        var touch = (navigator.maxTouchPoints || 0) > 0;
+        var shortSide = Math.min(screen.width || 0, screen.height || 9999);
+        return touch && shortSide <= 1024;
+    }
+
+    function _alive(gen) { return gen === _shareGen; }
+
+    function _stopTracks(media) {
+        if (!media) return;
+        try {
+            media.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
+        } catch (e) {}
+    }
+
+    function _requestMic() {
+        try {
+            if (!window.isSecureContext) return Promise.resolve(null);
+            if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') return Promise.resolve(null);
+            return navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(function () { return null; });
+        } catch (e) { return Promise.resolve(null); }
+    }
+
+    // A mic granted after viewers already connected needs a fresh offer.
+    function _addAudioTrack(track) {
+        if (!stream || !track) return;
+        try { stream.addTrack(track); } catch (e) { return; }
+        var me = _myId();
+        Object.keys(_peerConns).forEach(function (id) {
+            var pc = _peerConns[id];
+            if (!pc) return;
+            try { pc.addTrack(track, stream); } catch (e) { return; }
+            pc.createOffer()
+                .then(function (o) { return pc.setLocalDescription(o); })
+                .then(function () {
+                    _sig({ t: 'offer', to: id, from: me, sdp: pc.localDescription.sdp });
+                })
+                .catch(function () {});
+        });
+    }
+
+    function _prepare(maskMsg) {
+        var gen = ++_shareGen;
+        _closeSourceSheet();
         _buildPanel();
         if (stream) _teardown(true);
-
         _safeInit();
         panel.removeAttribute('hidden');
         _showMask(true);
-        _setStatus('Waiting for permission…');
+        var msg = panel.querySelector('.ss-mask-msg');
+        var sub = panel.querySelector('.ss-mask-sub');
+        if (msg) msg.textContent = maskMsg || 'Starting…';
+        if (sub) sub.textContent = 'Everyone in the room can watch';
+        _setStatus('Starting…');
         _setChip('');
         _setLive(false);
         _resetAudioBtn();
         _setViewerCount(0);
         _updateToolbarBtn(true);
+        return gen;
+    }
 
-        navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-            .then(function (s) {
-                stream = s;
-                videoEl.srcObject = stream;
-                videoEl.muted = true;
+    function _cancel(gen) {
+        if (!_alive(gen)) return;
+        _shareGen++;
+        _teardown(false);
+    }
 
-                var vt = stream.getVideoTracks();
-                _setChip((vt[0] && vt[0].label) || '');
-                _showMask(false);
-                _setStatus('Sharing — viewers will see a "Watch" button');
-                _setLive(true);
+    function _fail(gen, msg) {
+        if (!_alive(gen)) return;
+        _shareGen++;
+        _teardown(false);
+        if (msg) alert(msg);
+    }
 
-                // Disable audio button if no audio was captured
-                var hasAudio = stream.getAudioTracks().length > 0;
-                var ab = panel.querySelector('.ss-btn-audio');
-                if (ab) { ab.disabled = !hasAudio; }
+    function _goLive(gen, s, statusMsg, chip) {
+        if (!_alive(gen)) {
+            _stopTracks(s);
+            _stopPageLoop();
+            return;
+        }
+        stream = s;
+        videoEl.srcObject = stream;
+        videoEl.muted = true;
+        videoEl.playsInline = true;
+        var playP = videoEl.play && videoEl.play();
+        if (playP && playP.catch) playP.catch(function () {});
 
-                // Browser's native "Stop sharing" bar kills the track
-                vt.forEach(function (t) {
-                    t.addEventListener('ended', function () { stop(); });
-                });
+        var vt = stream.getVideoTracks();
+        _setChip(chip || (vt[0] && vt[0].label) || '');
+        _showMask(false);
+        _setStatus(statusMsg || 'Sharing — viewers will see a Watch button');
+        _setLive(true);
 
-                // Announce to room so viewers get the Watch notification
-                _announce();
-                _reannTimer = setInterval(_announce, REANNOUNCE_MS);
-            })
-            .catch(function (err) {
-                _teardown(false);
-                _updateToolbarBtn(false);
-                if (err.name !== 'NotAllowedError' && err.name !== 'AbortError') {
-                    alert('Screen sharing failed: ' + (err.message || err.name));
-                }
+        var hasAudio = stream.getAudioTracks().length > 0;
+        var ab = panel.querySelector('.ss-btn-audio');
+        if (ab) {
+            ab.disabled = false;
+            ab.textContent = hasAudio ? '🔊 Audio on' : '🎤 Add mic';
+            ab.classList.toggle('ss-audio-active', hasAudio);
+        }
+
+        vt.forEach(function (t) {
+            t.addEventListener('ended', function () { if (stream === s) stop(); });
+        });
+
+        _announce();
+        clearInterval(_reannTimer);
+        _reannTimer = setInterval(_announce, REANNOUNCE_MS);
+    }
+
+    // ── real screen / window / tab, with a video-only retry ─────────────────────
+    function _requestDisplay(gen, withAudio, canRetry) {
+        var t0 = Date.now();
+        var pending;
+        try {
+            pending = navigator.mediaDevices.getDisplayMedia({ video: true, audio: !!withAudio });
+        } catch (err) {
+            if (canRetry && withAudio) { _requestDisplay(gen, false, false); return; }
+            _startPage(gen);
+            return;
+        }
+        pending.then(function (s) {
+            if (!_alive(gen)) { _stopTracks(s); return; }
+            var label = (s.getVideoTracks()[0] && s.getVideoTracks()[0].label) || 'Screen';
+            _goLive(gen, s, 'Sharing — viewers will see a Watch button', label);
+        }).catch(function (err) {
+            if (!_alive(gen)) return;
+            var name = (err && err.name) || '';
+            var cancel = name === 'NotAllowedError' || name === 'AbortError';
+            var fast = (Date.now() - t0) < 450;
+            // audio:true rejects on some browsers and would otherwise cancel the whole share
+            if (canRetry && withAudio && !cancel) { _requestDisplay(gen, false, false); return; }
+            // A real picker was closed. Don't silently switch sources.
+            if (cancel && !fast) { _cancel(gen); return; }
+            _startPage(gen);
+        });
+    }
+
+    function _startScreen() {
+        var gen = _prepare('Starting screen share…');
+        var md = navigator.mediaDevices;
+        if (!md || typeof md.getDisplayMedia !== 'function') { _startPage(gen); return; }
+        _requestDisplay(gen, true, true);
+    }
+
+    // ── camera (every phone and tablet) ─────────────────────────────────────────
+    function _startCamera(facing) {
+        _closeSourceSheet();
+        if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function' || !window.isSecureContext) {
+            alert('The camera needs a secure page (HTTPS). Sharing the screen still works.');
+            return;
+        }
+        var gen = _prepare(facing === 'user' ? 'Starting front camera…' : 'Starting back camera…');
+        var videoP;
+        try {
+            videoP = navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: facing }, width: { ideal: 1280 }, height: { ideal: 720 } },
+                audio: false
             });
+        } catch (err) {
+            _fail(gen, 'The camera is not available in this browser.');
+            return;
+        }
+        var micP = _requestMic();
+        videoP.then(function (cam) {
+            return micP.then(function (mic) {
+                if (!_alive(gen)) {
+                    _stopTracks(cam);
+                    if (mic) _stopTracks(mic);
+                    return;
+                }
+                if (mic) mic.getAudioTracks().forEach(function (t) { cam.addTrack(t); });
+                var label = facing === 'user' ? 'Front camera' : 'Back camera';
+                _goLive(gen, cam, 'Sharing your camera — viewers can tap Watch', label);
+            });
+        }).catch(function (err) {
+            micP.then(function (mic) { if (mic) _stopTracks(mic); });
+            var name = (err && err.name) || '';
+            if (name === 'NotAllowedError' || name === 'AbortError') { _cancel(gen); return; }
+            _fail(gen, 'Camera failed: ' + ((err && (err.message || name)) || 'unavailable'));
+        });
+    }
+
+    // ── live capture of this page (phones and tablets have no system picker) ───
+    function _stopPageLoop() {
+        _pageOn = false;
+        if (_pageRaf) { cancelAnimationFrame(_pageRaf); _pageRaf = 0; }
+    }
+
+    function _startPage(gen) {
+        if (!_alive(gen)) return;
+        _stopPageLoop();
+        var canvas = _pageCanvas;
+        if (!canvas) {
+            canvas = document.createElement('canvas');
+            canvas.id = 'ss-capture-canvas';
+            canvas.setAttribute('aria-hidden', 'true');
+            canvas.style.cssText = 'position:fixed;left:-12000px;top:0;width:2px;height:2px;pointer-events:none';
+            document.body.appendChild(canvas);
+            _pageCanvas = canvas;
+        }
+        if (typeof canvas.captureStream !== 'function') {
+            _fail(gen, 'This browser cannot share the screen.');
+            return;
+        }
+        var ctx = canvas.getContext('2d', { alpha: false });
+        var pageStream;
+        try { pageStream = canvas.captureStream(8); }
+        catch (err) { _fail(gen, 'This browser cannot share the screen.'); return; }
+
+        var track = pageStream.getVideoTracks()[0];
+        _pageOn = true;
+        var last = 0;
+        function frame(ts) {
+            if (!_pageOn || !_alive(gen)) return;
+            _pageRaf = requestAnimationFrame(frame);
+            if (ts - last < 110) return;
+            last = ts;
+            try { _paintPage(canvas, ctx); } catch (e) {}
+            if (track && track.requestFrame) { try { track.requestFrame(); } catch (e2) {} }
+        }
+        try { _paintPage(canvas, ctx); } catch (e) {}
+        if (track && track.requestFrame) { try { track.requestFrame(); } catch (e) {} }
+        _pageRaf = requestAnimationFrame(frame);
+
+        var maskMsg = panel && panel.querySelector('.ss-mask-msg');
+        if (maskMsg) maskMsg.textContent = 'Sharing this page…';
+        _setStatus('Allow the microphone to add sound, or block it to share video only.');
+
+        _requestMic().then(function (mic) {
+            if (!_alive(gen)) {
+                _stopPageLoop();
+                _stopTracks(pageStream);
+                if (mic) _stopTracks(mic);
+                return;
+            }
+            if (mic) mic.getAudioTracks().forEach(function (t) { pageStream.addTrack(t); });
+            _goLive(gen, pageStream, 'Sharing your screen — viewers can tap Watch', 'This page');
+        });
+    }
+
+    function _paintPage(canvas, ctx) {
+        var w = Math.max(1, window.innerWidth);
+        var h = Math.max(1, window.innerHeight);
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+        if (w * dpr > 1280) dpr = 1280 / w;
+        if (h * dpr > 1280) dpr = Math.min(dpr, 1280 / h);
+        if (dpr < 0.25) dpr = 0.25;
+        var pw = Math.max(1, Math.round(w * dpr));
+        var ph = Math.max(1, Math.round(h * dpr));
+        if (canvas.width !== pw || canvas.height !== ph) {
+            canvas.width = pw;
+            canvas.height = ph;
+        }
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.fillStyle = '#14201f';
+        ctx.fillRect(0, 0, pw, ph);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.textBaseline = 'top';
+        var bodyBg = getComputedStyle(document.body).backgroundColor;
+        if (bodyBg && bodyBg !== 'rgba(0, 0, 0, 0)' && bodyBg !== 'transparent') {
+            ctx.fillStyle = bodyBg;
+            ctx.fillRect(0, 0, w, h);
+        }
+        _paintEl(ctx, document.body);
+    }
+
+    var _SKIP_TAGS = { SCRIPT: 1, STYLE: 1, LINK: 1, META: 1, NOSCRIPT: 1, TEMPLATE: 1, HEAD: 1, BR: 1, WBR: 1 };
+    var _SKIP_IDS = {
+        'ss-capture-canvas': 1, 'ss-source-sheet': 1, 'screen-share-panel': 1,
+        'ss-viewer-panel': 1, 'ss-watch-bar': 1, 'harmony-gate': 1
+    };
+
+    function _paintEl(ctx, el) {
+        if (!el || el.nodeType !== 1) return;
+        var tag = (el.tagName || '').toUpperCase();
+        if (_SKIP_TAGS[tag] || _SKIP_IDS[el.id]) return;
+        var style;
+        try { style = getComputedStyle(el); } catch (e) { return; }
+        if (!style || style.display === 'none' || style.visibility === 'hidden') return;
+        var op = parseFloat(style.opacity);
+        if (op === 0) return;
+        var r = el.getBoundingClientRect();
+        if (r.width < 1 || r.height < 1) return;
+        if (r.bottom < -20 || r.top > window.innerHeight + 20 || r.right < -20 || r.left > window.innerWidth + 20) return;
+
+        ctx.save();
+        if (op < 1) ctx.globalAlpha *= op;
+
+        var bg = style.backgroundColor;
+        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+            ctx.fillStyle = bg;
+            ctx.fillRect(r.left, r.top, r.width, r.height);
+        }
+
+        var clip = style.overflowX !== 'visible' || style.overflowY !== 'visible';
+        if (clip) {
+            ctx.beginPath();
+            ctx.rect(r.left, r.top, r.width, r.height);
+            ctx.clip();
+        }
+
+        if (tag === 'IMG' && el.complete && el.naturalWidth) {
+            try { ctx.drawImage(el, r.left, r.top, r.width, r.height); } catch (e) {}
+        } else if (tag === 'CANVAS' && el.width && el.height) {
+            try { ctx.drawImage(el, r.left, r.top, r.width, r.height); } catch (e) {}
+        } else if (tag === 'VIDEO' && el.readyState >= 2 && !el.classList.contains('ss-video')) {
+            try { ctx.drawImage(el, r.left, r.top, r.width, r.height); } catch (e) {}
+        } else if ((tag === 'INPUT' || tag === 'TEXTAREA') && el.type !== 'range' && el.type !== 'password') {
+            var val = el.value || el.getAttribute('placeholder') || '';
+            if (val) {
+                ctx.fillStyle = el.value ? style.color : 'rgba(255,255,255,0.45)';
+                ctx.font = (style.fontStyle || 'normal') + ' ' + (style.fontWeight || '400') + ' ' + (style.fontSize || '14px') + ' ' + (style.fontFamily || 'sans-serif');
+                ctx.fillText(String(val).slice(0, 200), r.left + 10, r.top + Math.max(4, (r.height - (parseFloat(style.fontSize) || 14)) / 2), Math.max(8, r.width - 20));
+            }
+        } else {
+            _paintTexts(ctx, el, style, r);
+        }
+
+        if (tag !== 'IMG' && tag !== 'CANVAS' && tag !== 'VIDEO' && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'IFRAME') {
+            var kids = el.children;
+            for (var i = 0; i < kids.length; i++) _paintEl(ctx, kids[i]);
+        }
+        ctx.restore();
+    }
+
+    function _paintTexts(ctx, el, style, r) {
+        var nodes = el.childNodes;
+        var hasText = false;
+        for (var i = 0; i < nodes.length; i++) {
+            if (nodes[i].nodeType === 3 && nodes[i].textContent && nodes[i].textContent.trim()) { hasText = true; break; }
+        }
+        if (!hasText) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(r.left, r.top, r.width, r.height);
+        ctx.clip();
+        var text = '';
+        for (var j = 0; j < nodes.length; j++) {
+            if (nodes[j].nodeType === 3) text += nodes[j].textContent;
+        }
+        text = text.replace(/\s+/g, ' ').trim();
+        if (!text) { ctx.restore(); return; }
+        ctx.fillStyle = style.color || '#fff';
+        ctx.font = (style.fontStyle || 'normal') + ' ' + (style.fontWeight || '400') + ' ' + (style.fontSize || '14px') + ' ' + (style.fontFamily || 'sans-serif');
+        var padL = parseFloat(style.paddingLeft) || 0;
+        var padT = parseFloat(style.paddingTop) || 0;
+        var x = r.left + padL;
+        var y = r.top + padT;
+        var maxW = Math.max(8, r.width - padL - (parseFloat(style.paddingRight) || 0));
+        var maxH = Math.max(8, r.height - padT - (parseFloat(style.paddingBottom) || 0));
+        var fs = parseFloat(style.fontSize) || 14;
+        var lineH = parseFloat(style.lineHeight);
+        if (!isFinite(lineH) || lineH < fs) lineH = fs * 1.35;
+        if (maxH < lineH * 1.7) {
+            ctx.fillText(text.slice(0, 400), x, y, maxW);
+            ctx.restore();
+            return;
+        }
+        var words = text.split(' ');
+        var line = '';
+        var yy = y;
+        var limit = y + maxH;
+        for (var w = 0; w < words.length; w++) {
+            var test = line ? line + ' ' + words[w] : words[w];
+            if (line && ctx.measureText(test).width > maxW) {
+                ctx.fillText(line, x, yy);
+                yy += lineH;
+                if (yy > limit) { ctx.restore(); return; }
+                line = words[w];
+            } else {
+                line = test;
+            }
+        }
+        if (line && yy <= limit) ctx.fillText(line, x, yy, maxW);
+        ctx.restore();
+    }
+
+    // ── source picker (phones and tablets) ──────────────────────────────────────
+    function _buildSourceSheet() {
+        var sheet = document.createElement('div');
+        sheet.id = 'ss-source-sheet';
+        sheet.setAttribute('hidden', '');
+        sheet.setAttribute('role', 'dialog');
+        sheet.setAttribute('aria-label', 'Choose what to share');
+        sheet.innerHTML =
+            '<div class="ss-source-card">' +
+                '<div class="ss-source-title">Share</div>' +
+                '<p class="ss-source-sub">Share your screen, or a camera. Everyone in the room can watch.</p>' +
+                '<button type="button" class="ss-source-opt" data-src="screen">Share screen</button>' +
+                '<button type="button" class="ss-source-opt" data-src="user">Front camera</button>' +
+                '<button type="button" class="ss-source-opt" data-src="environment">Back camera</button>' +
+                '<button type="button" class="ss-source-cancel">Cancel</button>' +
+            '</div>';
+        document.body.appendChild(sheet);
+        _sourceSheet = sheet;
+        sheet.addEventListener('click', function (e) {
+            if (e.target === sheet) { _closeSourceSheet(); return; }
+            var opt = e.target.closest && e.target.closest('[data-src]');
+            if (opt) {
+                var src = opt.getAttribute('data-src');
+                if (src === 'screen') _startScreen();
+                else _startCamera(src === 'user' ? 'user' : 'environment');
+                return;
+            }
+            if (e.target.classList && e.target.classList.contains('ss-source-cancel')) _closeSourceSheet();
+        });
+    }
+    function _openSourceSheet() {
+        if (!_sourceSheet) _buildSourceSheet();
+        _sourceSheet.removeAttribute('hidden');
+    }
+    function _closeSourceSheet() {
+        if (_sourceSheet) _sourceSheet.setAttribute('hidden', '');
+    }
+
+    function start() {
+        if (!isSupported()) {
+            alert('Sharing is not available in this browser.');
+            return;
+        }
+        if (_sourceSheet && !_sourceSheet.hasAttribute('hidden')) {
+            _closeSourceSheet();
+            return;
+        }
+        if (_isHandheld()) { _openSourceSheet(); return; }
+        _startScreen();
     }
 
     function _announce() {
@@ -632,10 +1080,12 @@
 
         clearInterval(_reannTimer);
         _reannTimer = null;
+        _stopPageLoop();
 
         if (stream) {
-            stream.getTracks().forEach(function (t) { t.stop(); });
-            stream = null;
+            var dying = stream;
+            stream = null; // before stop(), so the track's "ended" handler doesn't call stop()
+            _stopTracks(dying);
         }
         if (videoEl) videoEl.srcObject = null;
 
@@ -649,6 +1099,8 @@
     }
 
     function stop() {
+        _shareGen++;
+        _closeSourceSheet();
         _sig({ t: 'bye', from: _myId() });
         _teardown(false);
         _setStatus('Stopped.');
@@ -665,7 +1117,7 @@
         var btn = document.getElementById('screen-share-btn');
         if (!btn) return;
         if (!isSupported()) {
-            btn.title         = 'Screen sharing needs Chrome, Edge, or Firefox';
+            btn.title         = 'Sharing is not available in this browser';
             btn.style.opacity = '0.45';
             btn.style.cursor  = 'not-allowed';
             return;
