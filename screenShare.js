@@ -30,6 +30,8 @@
     var _pageOn     = false;
     var _pageCanvas = null;
     var _sourceSheet = null;
+    var _floatOnHide = false; // real device capture: pop the preview out when they leave the app
+    var _keepCtx = null;
 
     // ── viewer state ──────────────────────────────────────────────────────────────
     var viewPanel     = null;  // remote viewer panel
@@ -406,7 +408,7 @@
                     '<span class="ss-source-chip" hidden></span>' +
                 '</div>' +
                 '<div class="ss-head-right">' +
-                    '<button type="button" class="ss-btn ss-btn-pip"  title="Picture in Picture (P)">&#x229F;</button>' +
+                    '<button type="button" class="ss-btn ss-btn-pip"  title="Pop out a small preview you can move over other apps">&#x229F;</button>' +
                     '<button type="button" class="ss-btn ss-btn-full" title="Fullscreen (F)">&#x26F6;</button>' +
                     '<button type="button" class="ss-btn ss-btn-size" title="Cycle size (S)">&#x2922;</button>' +
                     '<button type="button" class="ss-btn ss-btn-stop" title="Stop sharing">&#x2715;</button>' +
@@ -419,6 +421,7 @@
                         '<span class="ss-mask-icon">&#x1F5A5;&#xFE0F;</span>' +
                         '<span class="ss-mask-msg">Pick a screen, window, or tab…</span>' +
                         '<span class="ss-mask-sub">Your browser will open the picker</span>' +
+                        '<button type="button" class="ss-mask-fallback" hidden>Share this page instead</button>' +
                     '</div>' +
                 '</div>' +
             '</div>' +
@@ -432,6 +435,14 @@
 
         document.body.appendChild(panel);
         videoEl = panel.querySelector('.ss-video');
+        videoEl.setAttribute('autopictureinpicture', '');
+        try { videoEl.autoPictureInPicture = true; } catch (e) {}
+        videoEl.addEventListener('enterpictureinpicture', function () {
+            _setStatus('Preview is floating. Switch apps — drag that small box.');
+        });
+        videoEl.addEventListener('leavepictureinpicture', function () {
+            if (stream) _setStatus('Sharing — the preview is back on this page.');
+        });
 
         var pos = _safePos();
         panel.style.top   = pos.top  + 'px';
@@ -443,53 +454,63 @@
 
         panel.querySelector('.ss-btn-stop').addEventListener('click', stop);
         panel.querySelector('.ss-btn-full').addEventListener('click', function () { _reqFullscreen(videoEl); });
-        panel.querySelector('.ss-btn-pip') .addEventListener('click', function () { _reqPiP(videoEl); });
-        panel.querySelector('.ss-btn-size').addEventListener('click', _cycleSize);
+        panel.querySelector('.ss-btn-pip') .addEventListener('click', function () { _reqPiP(videoEl, false); });
+        panel.querySelector('.ss-btn-size').addEventListener('click', function () {
+            if (!_isHandheld()) { _cycleSize(); return; }
+            if (panel.classList.contains('ss-bubble')) panel.classList.remove('ss-bubble');
+            else _enterBubble();
+        });
         panel.querySelector('.ss-btn-audio').addEventListener('click', function () { _toggleAudio(this); });
+        panel.querySelector('.ss-mask-fallback').addEventListener('click', function () {
+            this.hidden = true;
+            _startPage(_shareGen);
+        });
     }
 
     // ──────────────────────────────────────────────────────────────────────────────
     // DRAG  — pointer-capture, applied to both panels
     // ──────────────────────────────────────────────────────────────────────────────
     function _bindDrag(p) {
-        var head = p.querySelector('.ss-head');
+        var zones = [p.querySelector('.ss-head'), p.querySelector('.ss-stage')];
+        zones.forEach(function (zone) {
+            if (!zone) return;
 
-        head.addEventListener('pointerdown', function (e) {
-            if (e.target.closest && e.target.closest('button')) return;
-            if (e.target.tagName === 'BUTTON') return;
-            e.preventDefault();
+            zone.addEventListener('pointerdown', function (e) {
+                if (e.target.closest && e.target.closest('button')) return;
+                if (e.target.tagName === 'BUTTON') return;
+                e.preventDefault();
 
-            // Convert to left/top anchoring so we can move freely
-            var r = p.getBoundingClientRect();
-            p.style.left   = r.left + 'px';
-            p.style.top    = r.top  + 'px';
-            p.style.right  = 'auto';
-            p.style.bottom = 'auto';
+                var r = p.getBoundingClientRect();
+                p.style.left   = r.left + 'px';
+                p.style.top    = r.top  + 'px';
+                p.style.right  = 'auto';
+                p.style.bottom = 'auto';
 
-            _dragTarget = p;
-            _dragOX = e.clientX - r.left;
-            _dragOY = e.clientY - r.top;
+                _dragTarget = p;
+                _dragOX = e.clientX - r.left;
+                _dragOY = e.clientY - r.top;
 
-            try { head.setPointerCapture(e.pointerId); } catch (err) {}
-            p.classList.add('ss-dragging');
+                try { zone.setPointerCapture(e.pointerId); } catch (err) {}
+                p.classList.add('ss-dragging');
+            });
+
+            zone.addEventListener('pointermove', function (e) {
+                if (_dragTarget !== p) return;
+                var nx = Math.max(0, Math.min(window.innerWidth  - 80, e.clientX - _dragOX));
+                var ny = Math.max(0, Math.min(window.innerHeight - 40, e.clientY - _dragOY));
+                p.style.left = nx + 'px';
+                p.style.top  = ny + 'px';
+            });
+
+            function endDrag() {
+                if (_dragTarget !== p) return;
+                _dragTarget = null;
+                p.classList.remove('ss-dragging');
+            }
+            zone.addEventListener('pointerup',     endDrag);
+            zone.addEventListener('pointercancel', endDrag);
+            zone.addEventListener('lostpointercapture', endDrag);
         });
-
-        head.addEventListener('pointermove', function (e) {
-            if (_dragTarget !== p) return;
-            var nx = Math.max(0, Math.min(window.innerWidth  - 80, e.clientX - _dragOX));
-            var ny = Math.max(0, Math.min(window.innerHeight - 40, e.clientY - _dragOY));
-            p.style.left = nx + 'px';
-            p.style.top  = ny + 'px';
-        });
-
-        function endDrag(e) {
-            if (_dragTarget !== p) return;
-            _dragTarget = null;
-            p.classList.remove('ss-dragging');
-        }
-        head.addEventListener('pointerup',     endDrag);
-        head.addEventListener('pointercancel', endDrag);
-        head.addEventListener('lostpointercapture', endDrag);
     }
 
     // ──────────────────────────────────────────────────────────────────────────────
@@ -510,14 +531,27 @@
                  el.mozRequestFullScreen || el.msRequestFullscreen;
         if (fn) fn.call(el).catch(function () {});
     }
-    function _reqPiP(el) {
+    function _reqPiP(el, quiet) {
         if (!el) return;
-        if (!document.pictureInPictureEnabled) { _setStatus('PiP not supported.'); return; }
-        if (document.pictureInPictureElement) {
-            document.exitPictureInPicture().catch(function () {});
-        } else {
-            el.requestPictureInPicture().catch(function (e) { _setStatus('PiP: ' + (e.message || 'unavailable')); });
+        if (document.pictureInPictureElement === el) {
+            if (document.exitPictureInPicture) document.exitPictureInPicture().catch(function () {});
+            return;
         }
+        if (el.webkitSetPresentationMode && el.webkitPresentationMode === 'picture-in-picture') {
+            try { el.webkitSetPresentationMode('inline'); } catch (e) {}
+            return;
+        }
+        var standard = document.pictureInPictureEnabled && el.requestPictureInPicture;
+        if (standard) {
+            el.requestPictureInPicture().catch(function (e) {
+                if (!quiet) _setStatus('Pop-out: ' + (e.message || 'unavailable'));
+            });
+            return;
+        }
+        if (el.webkitSetPresentationMode) {
+            try { el.webkitSetPresentationMode('picture-in-picture'); return; } catch (e) {}
+        }
+        if (!quiet) _setStatus('This phone can\u2019t float the preview over other apps.');
     }
 
     function _setStatus(msg) {
@@ -625,6 +659,12 @@
         }
     });
 
+    // Real device capture: when they leave this app, float the preview over the next one.
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden || !_floatOnHide || !stream || !videoEl) return;
+        _reqPiP(videoEl, true);
+    });
+
     // ──────────────────────────────────────────────────────────────────────────────
     // CORE START / STOP
     // ──────────────────────────────────────────────────────────────────────────────
@@ -699,6 +739,9 @@
         _resetAudioBtn();
         _setViewerCount(0);
         _updateToolbarBtn(true);
+        _floatOnHide = false;
+        var fb = panel.querySelector('.ss-mask-fallback');
+        if (fb) fb.hidden = true;
         return gen;
     }
 
@@ -749,6 +792,156 @@
         _announce();
         clearInterval(_reannTimer);
         _reannTimer = setInterval(_announce, REANNOUNCE_MS);
+        _startKeepAlive();
+        _armMediaSession();
+        if (_isHandheld()) _enterBubble();
+        if (_floatOnHide) {
+            setTimeout(function () {
+                if (_floatOnHide && stream === s) _reqPiP(videoEl, true);
+            }, 350);
+        }
+    }
+
+    // Small movable preview, Meet-style, so the rest of the phone stays usable.
+    function _enterBubble() {
+        if (!panel) return;
+        panel.classList.add('ss-bubble');
+        var lift = 78;
+        var bar = document.getElementById('bottom');
+        if (bar) {
+            var gap = window.innerHeight - bar.getBoundingClientRect().top;
+            if (gap > 40 && gap < window.innerHeight * 0.6) lift = Math.round(gap) + 10;
+        }
+        panel.style.left = '10px';
+        panel.style.right = 'auto';
+        panel.style.top = 'auto';
+        panel.style.bottom = 'calc(' + lift + 'px + env(safe-area-inset-bottom, 0px))';
+    }
+
+    function _primeKeepAlive() {
+        try {
+            var AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) return;
+            if (!_keepCtx) _keepCtx = new AC();
+            if (_keepCtx.state === 'suspended') _keepCtx.resume();
+        } catch (e) {}
+    }
+    function _startKeepAlive() {
+        _primeKeepAlive();
+        if (!_keepCtx || _keepCtx._ssOsc) return;
+        try {
+            var osc = _keepCtx.createOscillator();
+            var gain = _keepCtx.createGain();
+            gain.gain.value = 0.00001;
+            osc.frequency.value = 1;
+            osc.connect(gain);
+            gain.connect(_keepCtx.destination);
+            osc.start();
+            _keepCtx._ssOsc = osc;
+        } catch (e) {}
+    }
+    function _stopKeepAlive() {
+        if (!_keepCtx || !_keepCtx._ssOsc) return;
+        try { _keepCtx._ssOsc.stop(); } catch (e) {}
+        _keepCtx._ssOsc = null;
+    }
+    function _armMediaSession() {
+        try {
+            if (!navigator.mediaSession || typeof MediaMetadata === 'undefined') return;
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: 'Sharing your screen',
+                artist: 'Harmony Piano'
+            });
+            navigator.mediaSession.playbackState = 'playing';
+            navigator.mediaSession.setActionHandler('stop', function () { stop(); });
+        } catch (e) {}
+    }
+    function _clearMediaSession() {
+        try {
+            if (!navigator.mediaSession) return;
+            navigator.mediaSession.playbackState = 'none';
+            navigator.mediaSession.setActionHandler('stop', null);
+        } catch (e) {}
+    }
+
+    function _displayMediaFn() {
+        var md = navigator.mediaDevices;
+        if (md && typeof md.getDisplayMedia === 'function') return md.getDisplayMedia.bind(md);
+        if (typeof navigator.getDisplayMedia === 'function') return navigator.getDisplayMedia.bind(navigator);
+        return null;
+    }
+
+    // Whole phone / monitor. Only the browser's own screen picker can see other apps.
+    function _startDeviceScreen() {
+        _primeKeepAlive();
+        var gen = _prepare('Choose your whole screen…');
+        var fn = _displayMediaFn();
+        if (!fn) { _deviceBlocked(gen); return; }
+        _askDevice(gen, fn, true);
+    }
+    function _deviceOpts(rich) {
+        if (!rich) return { video: true, audio: false };
+        return {
+            video: {
+                displaySurface: 'monitor',
+                frameRate: { ideal: 15, max: 30 },
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            },
+            audio: false,
+            monitorTypeSurfaces: 'include',
+            selfBrowserSurface: 'exclude',
+            surfaceSwitching: 'include',
+            preferCurrentTab: false
+        };
+    }
+    function _askDevice(gen, fn, rich) {
+        var t0 = Date.now();
+        var opts = _deviceOpts(rich);
+        var controller = null;
+        try {
+            if (rich && typeof CaptureController === 'function') {
+                controller = new CaptureController();
+                opts.controller = controller;
+            }
+        } catch (e) { controller = null; }
+        var pending;
+        try { pending = fn(opts); }
+        catch (err) {
+            if (rich) { _askDevice(gen, fn, false); return; }
+            _deviceBlocked(gen);
+            return;
+        }
+        try { if (controller && controller.setFocusBehavior) controller.setFocusBehavior('no-focus-change'); } catch (e) {}
+        Promise.resolve(pending).then(function (s) {
+            if (!_alive(gen)) { _stopTracks(s); return; }
+            var track = s.getVideoTracks()[0];
+            var surface = '';
+            try { surface = (track && track.getSettings && track.getSettings().displaySurface) || ''; } catch (e) {}
+            _floatOnHide = true;
+            var label = surface === 'monitor' ? 'Whole screen' : ((track && track.label) || 'Screen');
+            _goLive(gen, s, 'Sharing the phone screen. Switch apps and drag the small preview.', label);
+        }).catch(function (err) {
+            if (!_alive(gen)) return;
+            var name = (err && err.name) || '';
+            var cancel = name === 'NotAllowedError' || name === 'AbortError';
+            var fast = (Date.now() - t0) < 450;
+            if (rich && !cancel) { _askDevice(gen, fn, false); return; }
+            if (cancel && !fast) { _cancel(gen); return; }
+            _deviceBlocked(gen);
+        });
+    }
+    function _deviceBlocked(gen) {
+        if (!_alive(gen)) return;
+        _showMask(true);
+        var msg = panel.querySelector('.ss-mask-msg');
+        var sub = panel.querySelector('.ss-mask-sub');
+        var fb = panel.querySelector('.ss-mask-fallback');
+        if (msg) msg.textContent = 'This phone\u2019s browser can\u2019t capture other apps';
+        if (sub) sub.textContent = 'Chrome and Safari on phones block that. The Meet app can, because it is installed. You can still share this page.';
+        if (fb) fb.hidden = false;
+        _setStatus('Whole-screen capture is blocked by this browser.');
+        _setLive(false);
     }
 
     // ── real screen / window / tab, with a video-only retry ─────────────────────
@@ -780,14 +973,22 @@
     }
 
     function _startScreen() {
+        _primeKeepAlive();
         var gen = _prepare('Starting screen share…');
         var md = navigator.mediaDevices;
         if (!md || typeof md.getDisplayMedia !== 'function') { _startPage(gen); return; }
         _requestDisplay(gen, true, true);
     }
 
+    function _startPageDirect() {
+        _primeKeepAlive();
+        var gen = _prepare('Sharing this page…');
+        _startPage(gen);
+    }
+
     // ── camera (every phone and tablet) ─────────────────────────────────────────
     function _startCamera(facing) {
+        _primeKeepAlive();
         _closeSourceSheet();
         if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function' || !window.isSecureContext) {
             alert('The camera needs a secure page (HTTPS). Sharing the screen still works.');
@@ -1029,8 +1230,9 @@
         sheet.innerHTML =
             '<div class="ss-source-card">' +
                 '<div class="ss-source-title">Share</div>' +
-                '<p class="ss-source-sub">Share your screen, or a camera. Everyone in the room can watch.</p>' +
-                '<button type="button" class="ss-source-opt" data-src="screen">Share screen</button>' +
+                '<p class="ss-source-sub">Whole phone screen lets you leave this app. A small preview stays on top, and everyone sees that screen.</p>' +
+                '<button type="button" class="ss-source-opt" data-src="device">Whole phone screen</button>' +
+                '<button type="button" class="ss-source-opt" data-src="screen">This page</button>' +
                 '<button type="button" class="ss-source-opt" data-src="user">Front camera</button>' +
                 '<button type="button" class="ss-source-opt" data-src="environment">Back camera</button>' +
                 '<button type="button" class="ss-source-cancel">Cancel</button>' +
@@ -1042,7 +1244,8 @@
             var opt = e.target.closest && e.target.closest('[data-src]');
             if (opt) {
                 var src = opt.getAttribute('data-src');
-                if (src === 'screen') _startScreen();
+                if (src === 'device') _startDeviceScreen();
+                else if (src === 'screen') _startPageDirect();
                 else _startCamera(src === 'user' ? 'user' : 'environment');
                 return;
             }
@@ -1081,6 +1284,16 @@
         clearInterval(_reannTimer);
         _reannTimer = null;
         _stopPageLoop();
+        _floatOnHide = false;
+        _stopKeepAlive();
+        _clearMediaSession();
+        if (panel) panel.classList.remove('ss-bubble');
+        if (videoEl && document.pictureInPictureElement === videoEl && document.exitPictureInPicture) {
+            document.exitPictureInPicture().catch(function () {});
+        }
+        if (videoEl && videoEl.webkitPresentationMode === 'picture-in-picture' && videoEl.webkitSetPresentationMode) {
+            try { videoEl.webkitSetPresentationMode('inline'); } catch (e) {}
+        }
 
         if (stream) {
             var dying = stream;

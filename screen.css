@@ -4887,6 +4887,50 @@ body.media-library-viewer-open {
     color: rgba(255,255,255,0.35);
     text-shadow: none;
 }
+.ss-mask-fallback {
+    margin-top: 8px;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 10px;
+    background: #3b82f6;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-shadow: none;
+}
+.ss-mask-fallback[hidden] { display: none !important; }
+
+/* Meet-style floating preview: small, draggable, sits over the page. */
+.screen-share-panel.ss-bubble {
+    width: 168px !important;
+    height: 118px !important;
+    min-width: 148px;
+    min-height: 100px;
+    border-radius: 16px;
+    z-index: 100030;
+}
+.screen-share-panel.ss-bubble .ss-foot,
+.screen-share-panel.ss-bubble .ss-title,
+.screen-share-panel.ss-bubble .ss-source-chip,
+.screen-share-panel.ss-bubble .ss-btn-full { display: none !important; }
+.screen-share-panel.ss-bubble .ss-head {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 3;
+    height: 32px;
+    padding: 0 4px;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0));
+    border-bottom: 0;
+}
+.screen-share-panel.ss-bubble .ss-stage {
+    position: absolute;
+    inset: 0;
+}
+.screen-share-panel.ss-bubble .ss-live-badge { padding: 1px 6px; }
 
 /* ── Footer ── */
 .ss-foot {
