@@ -15,10 +15,11 @@
  * Walking here is the grounds' walkFn (worldHouse.js), not walk rects: anywhere inside the hedge that's clear of the
  * house and every place's railings, and through their gates.
  */
-import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, HOUSE_RECT, ROOF_Y, PARAPET_Y, LOUNGE_TOP, COURTS, PATIO, GATES, PATHS, PLAZA, WINDOWS, STAIR, ROAD_W, DRIVE, MOUTHS, subtractRects, pathDist, inRect, roadAt, ringPath } from "./worldEstate.js";
+import { ESTATE, HEDGE_IN, HOUSE_BLOCKS, HOUSE_RECT, ROOF_Y, PARAPET_Y, LOUNGE_TOP, COURTS, PATIO, GATES, PATHS, PLAZA, WINDOWS, STAIR, ROAD_W, DRIVE, MOUTHS, RACE, RACE_ROAD, subtractRects, pathDist, inRect, roadAt, ringPath, raceAt } from "./worldEstate.js";
 import { TERRACE_AT } from "./worldRoom.js";
 import { trackPoints } from "./worldPark.js";
 import { buildCars, PAD } from "./worldCars.js";
+import { buildRace } from "./worldRace.js";
 
 // the lounge's two storeys (with its own roof's overhang): the flat roof stops round it, its walls rise out of it
 const UPPER = [6.75, 23.65, -6.32, 8.25];
@@ -218,6 +219,7 @@ export function build(k) {
 		const drive = [];
 		for (let x = DRIVE.x0 + hw; x <= DRIVE.x1 + 0.01; x += 2) drive.push([x, DRIVE.z, 1, 0]);
 		strip(drive, false);
+		// (the road on west from the ring to the race track: worldRace.js draws that one)
 		const geo = new THREE.BufferGeometry();
 		geo.setAttribute("position", new THREE.Float32BufferAttribute(P.pos, 3));
 		geo.setAttribute("normal", new THREE.Float32BufferAttribute(P.nor, 3));
@@ -261,6 +263,13 @@ export function build(k) {
 		for (const p of PATHS) if (pathDist(p, x, z) < p[4] / 2 + pathGap) return false;
 		if (Math.hypot(x - PLAZA.x, z - PLAZA.z) < PLAZA.r + r + 0.4) return false;
 		if (roadAt(x, z, r + Math.max(0.6, pathGap))) return false;
+		if (inRect(RACE.area, x, z, r + 4)) {
+			const rc = raceAt(x, z);
+			if (rc && rc.d < RACE.hw + 9 + r) return false;
+			if (inRect(RACE.stand, x, z, r + 4) || inRect(RACE.paddock, x, z, r + 4)) return false;
+			// (the start line, the gantry, the leaderboard, the grid)
+			if (Math.abs(x + 112) < 22 && z > -60 && z < 20) return false;
+		}
 		if (segDist(ZIP[0], ZIP[1], x, z) < r + (h > 3 ? 3.0 : 0.8)) return false;
 		for (const p of track) if (p.y < h + 2.5 && Math.hypot(p.x - x, p.z - z) < r + 1.6) return false;
 		for (const t of taken) if (Math.hypot(t[0] - x, t[1] - z) < (t[2] + r) * 0.92) return false;
@@ -375,6 +384,11 @@ export function build(k) {
 				if (!clear(lx, lz, 0.25, 3.6, 0.3)) continue;
 				lamps.push([lx, lz]); taken.push([lx, lz, 0.9]);
 			}
+			for (let x = RACE_ROAD.x0 + 14; x < RACE_ROAD.x1 - 8; x += 12) for (const sd of [-1, 1]) {
+				const lz = RACE_ROAD.z + sd * (ROAD_W / 2 + 1.0);
+				if (!clear(x, lz, 0.25, 3.6, 0.3)) continue;
+				lamps.push([x, lz]); taken.push([x, lz, 0.9]);
+			}
 			for (let x = DRIVE.x0 + 14; x < DRIVE.x1 - 6; x += 16) for (const sd of [-1, 1]) {
 				const lz = DRIVE.z + sd * (ROAD_W / 2 + 1.0);
 				if (!clear(x, lz, 0.25, 3.6, 0.3)) continue;
@@ -424,7 +438,7 @@ export function build(k) {
 		avenue(PATHS[12], [-1], 11, 2.6);          // the west side of the house (the far side)
 		avenue(PATHS[2], [-1], 12, 2.8);           // the cross walk (its south side: the house side stays open)
 		// groves: clusters scattered through the open lawn
-		for (let c = 0; c < 40; c++) {
+		for (let c = 0; c < 95; c++) {
 			const cx = ESTATE[0] + 6 + R() * (ESTATE[1] - ESTATE[0] - 12), cz = ESTATE[2] + 6 + R() * (ESTATE[3] - ESTATE[2] - 12);
 			const n = 3 + Math.floor(R() * 5);
 			for (let i = 0; i < n * 3 && n > 0; i++) {
@@ -480,7 +494,7 @@ export function build(k) {
 		finish("hedge", mat("#ffffff", 0.95, 0, { map: hedgeTex }));
 		// the wood: tall dark firs in a band outside the hedge
 		const firs = [];
-		for (let i = 0; i < 520 && firs.length < 300; i++) {
+		for (let i = 0; i < 1100 && firs.length < 560; i++) {
 			const side = Math.floor(R() * 4), t = R(), o = 3 + R() * 22;
 			const x = side < 2 ? x0 - 30 + t * (x1 - x0 + 60) : side === 2 ? x0 - o : x1 + o;
 			const z = side < 2 ? (side ? z1 + o : z0 - o) : z0 - 30 + t * (z1 - z0 + 60);
@@ -640,17 +654,22 @@ export function build(k) {
 	}
 	if (ctx.debug) console.log(`[grounds] ${lawnRects.length} lawn pieces, ${treeCount} trees, ${lampCount} lamps`);
 
-	// ================================================================ every frame
-	// ================================================================ the cars (worldCars.js)
-	const cars = buildCars(k, { PATH_Y });
+	// ================================================================ the race track out west (worldRace.js), and the cars (worldCars.js:
+	// the race cars wait in its paddock)
+	const race = buildRace(k, { PATH_Y });
+	const cars = buildCars(k, { PATH_Y, race });
 
+	// ================================================================ every frame
 	function update(dt, t) {
 		sculpt.rotation.y = t * 0.25;
 		sculpt.position.y = 2.25 + Math.sin(t * 0.9) * 0.06;
 		cars.update(dt, t);
+		race.update(dt, t);
 	}
 	return {
 		update, houseWalls,
-		lateUpdate: cars.lateUpdate, vehicle: cars.vehicle, solidAt: cars.solidAt, onFx: cars.onFx, promptOpts: cars.promptOpts
+		lateUpdate: cars.lateUpdate, vehicle: cars.vehicle, solidAt: cars.solidAt,
+		onFx(d, p) { cars.onFx(d, p); race.onFx(d, p); },
+		promptOpts(opts) { cars.promptOpts(opts); race.promptOpts(opts); }
 	};
 }

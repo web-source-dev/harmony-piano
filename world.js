@@ -669,6 +669,7 @@ let modalKind = null, modalOnClose = null;
 function openModal(kind, title, html, width, onClose) {
 	if (modalKind && modalKind !== kind && modalOnClose) modalOnClose();
 	modalKind = kind; modalOnClose = onClose || null;
+	if (document.pointerLockElement) document.exitPointerLock();   // (a window needs the cursor back)
 	$("#mtitle").textContent = title;
 	$("#mbody").innerHTML = html;
 	$("#modal .win").style.setProperty("--w", (width || 560) + "px");
@@ -3235,6 +3236,41 @@ function pick(cx, cy) {
 function visibleChain(o) { while (o) { if (!o.visible) return false; o = o.parent; } return true; }
 function isMine(o) { while (o) { if (o === myAvatar.root) return true; o = o.parent; } return false; }
 function findPeer(o) { while (o) { if (o.userData && o.userData.peerId) return o.userData.peerId; o = o.parent; } return null; }
+// mouse look: Ctrl (on its own) hides the cursor and the mouse turns the camera - no dragging; Ctrl again brings the
+// cursor back. While it's hidden, a click uses whatever is in the middle of the screen (the little dot).
+let lookLock = false, lookHold = 0, ctrlSolo = false, lookHoverT = 0;
+function setLook(on) {
+	if (on) { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} }
+	else if (document.pointerLockElement) document.exitPointerLock();
+}
+document.addEventListener("pointerlockchange", () => {
+	lookLock = document.pointerLockElement === canvas;
+	document.body.classList.toggle("looklock", lookLock);
+	$("#tip").classList.add("hidden");
+	if (!lookLock) drag = null;
+});
+addEventListener("keydown", e => { ctrlSolo = e.key === "Control" ? !e.repeat : false; }, true);
+addEventListener("keyup", e => {
+	if (e.key !== "Control" || !ctrlSolo) return;
+	ctrlSolo = false;
+	if (!entered || modalKind || typing()) return;
+	setLook(!lookLock);
+});
+document.addEventListener("mousemove", e => {
+	if (!lookLock) return;
+	if (modalKind) { setLook(false); return; }
+	const dx = e.movementX || 0, dy = e.movementY || 0;
+	if (Math.abs(dx) > 300 || Math.abs(dy) > 300) return;   // (some browsers send one wild jump as the lock starts)
+	if (ridePOV()) {
+		rideLook.yaw = wrapAngle(rideLook.yaw - dx * 0.0025);
+		rideLook.pitch = Math.max(-1.35, Math.min(1.35, rideLook.pitch + dy * 0.002));
+	} else {
+		cam.yaw -= dx * 0.0025;
+		cam.pitch = Math.max(-0.6, Math.min(1.35, cam.pitch + dy * 0.002));
+	}
+	if (dx || dy) lookHold = performance.now();
+	if (performance.now() - lookHoverT > 120) { lookHoverT = performance.now(); hoverAt(innerWidth / 2, innerHeight / 2); }
+});
 canvas.addEventListener("pointerdown", e => {
 	if (!entered) return;
 	canvas.focus();
@@ -3254,14 +3290,16 @@ canvas.addEventListener("pointermove", e => {
 		}
 		return;
 	}
-	if (e.pointerType === "mouse") hoverAt(e.clientX, e.clientY);
+	if (e.pointerType === "mouse" && !lookLock) hoverAt(e.clientX, e.clientY);
 });
 canvas.addEventListener("pointerup", e => {
 	if (!drag || drag.id !== e.pointerId) return;
 	const clicked = drag.moved <= 5;
 	drag = null;
 	if (!clicked || modalKind) return;
-	const h = pick(e.clientX, e.clientY);
+	// (the cursor hidden for mouse look: the click is at the dot in the middle)
+	const cx = lookLock ? innerWidth / 2 : e.clientX, cy = lookLock ? innerHeight / 2 : e.clientY;
+	const h = pick(cx, cy);
 	if (!h) return;
 	// piano keys play directly while you sit at the piano
 	if (h.object.userData.note !== undefined) {
@@ -3672,8 +3710,9 @@ function updateMe(dt) {
 	const veh = !me.sit && house.vehicle();
 	if (veh) {
 		veh.drive(dt, { x: ix, z: iz, boost: keys.has(" ") || keys.has("e"), keys });
-		// (behind and a little above the kart, unless you're dragging to look round; the kart may ask for its own view)
-		if (!drag) {
+		// (behind and a little above the kart, unless you're dragging - or just turned the mouse - to look round; the kart
+		// may ask for its own view)
+		if (!drag && performance.now() - lookHold > 1500) {
 			const ch = veh.cam || {}, kk = Math.min(1, dt * 2.5);
 			cam.yaw = angleLerp(cam.yaw, me.h + Math.PI, kk);
 			cam.dist += ((ch.dist || 5.2) - cam.dist) * kk;
@@ -4823,6 +4862,7 @@ $("#enter").onclick = async () => {
 	startNetwork();
 	loadWorld();
 	addLog("Welcome to your little world, " + esc(profile.name) + ". Click anything to use it.", true);
+	addLog("Tip: press <b>Ctrl</b> to look around with the mouse (the cursor hides, just move the mouse to turn) - <b>Ctrl</b> again to get the cursor back.", true);
 	// once per browser: point out the door to the rest of the house
 	if (!lsGet("harmonyWorldHouseTip", false)) {
 		lsSet("harmonyWorldHouseTip", true);
@@ -4947,6 +4987,7 @@ redrawEasel();
 applyAll();
 renderSound();
 window.__worldBooted = true;
+if (params.has("debug")) window.__world = { me, cam, room, house, keys, get, setShared, peers, myAvatar, camera, MY_ID };   // TEMP-TEST
 requestAnimationFrame(frame);
 // Everything - every room, the grounds, the attractions - is built now, behind the loading screen, with its shaders
 // compiled and its textures on the graphics card: walking anywhere or looking far off never stalls after this.

@@ -7,26 +7,38 @@
  * the passenger seat and ride along. W / S (or the arrow keys, or the joystick) for the pedals, A / D to steer, Shift
  * for a burst of speed, Space for the handbrake, R (or E) for the horn, Esc to get out - the car stays where you left it.
  *
- * Each car's state is shared ("car:<id>": { d: driver id, p: passenger id, x, z, h }), x / z / h being where it's
- * parked (the middle of the car, facing h). While someone drives it, it's drawn round their avatar (their client moves
- * it; everyone else predicts it between pose updates so it glides instead of stepping), and whoever rides in it is
- * glued to their seat.
+ * Each car's state is shared, one key per seat, so the driver and the passenger never overwrite each other:
+ * "car:<id>": { d: driver id, x, z, h } (x / z / h being where it's parked: the middle of the car, facing h), written
+ * only by whoever drives it, and "carp:<id>": { p: passenger id }, written only by whoever rides in it. A seat only
+ * counts as taken while the person named in it is here AND sitting in a car (their pose says so, near that seat):
+ * someone who closed the tab, reloaded, or whose "I got out" was lost never leaves a ghost behind in the seat.
+ * While someone drives it, it's drawn round their avatar (their client moves it; everyone else predicts it between
+ * pose updates so it glides instead of stepping), and whoever rides in it is glued to their seat.
+ *
+ * Out at the race track (worldRace.js) four more cars wait in the paddock; on the asphalt there a car is quicker, out
+ * on the grass round it slower, and the boost pads throw it forward.
  *
  * Built by the grounds (worldGrounds.js) into their group: world coordinates. Local car coordinates: facing +z, x to
  * the side, the floor at y = 0.
  */
 import { floorAt } from "./worldRoom.js";
-import { DRIVE, ROAD_W } from "./worldEstate.js";
+import { DRIVE, ROAD_W, RACE } from "./worldEstate.js";
 
 // the parking pad (a car's length of paving in front of it joins the path down the west side of the house)
 export const PAD = [-37.8, -28.0, 4.6, 16.0];
 const CARS = [
 	{ id: "cherry", name: "Cherry", paint: "#b10f2e", seats: "#efe0c8", trim: "#f4efe8", plate: "LOVE 01", x: -32.6, z: 7.8, h: -Math.PI / 2 },
-	{ id: "midnight", name: "Midnight", paint: "#173a6b", seats: "#7a4b32", trim: "#c9a05a", plate: "LOVE 02", x: -32.6, z: 12.8, h: -Math.PI / 2 }
+	{ id: "midnight", name: "Midnight", paint: "#173a6b", seats: "#7a4b32", trim: "#c9a05a", plate: "LOVE 02", x: -32.6, z: 12.8, h: -Math.PI / 2 },
+	// the race cars, in the paddock at the race track (facing the main straight)
+	...[["lemon", "Lemon", "#f2c11d", "#1b1a1e", "#1b1a1e", -49.8], ["mint", "Mint", "#16a085", "#f4efe8", "#e9edf2", -43.4],
+		["violet", "Violet", "#6b3fa0", "#efe0c8", "#f4c542", -37.0], ["tangerine", "Tangerine", "#ef6a1f", "#1b1a1e", "#f4efe8", -30.6]]
+		.map(([id, name, paint, seats, trim, z], i) => ({ id, name, paint, seats, trim, plate: "RACE 0" + (i + 3), x: (RACE.paddock[0] + RACE.paddock[1]) / 2, z, h: Math.PI / 2 }))
 ];
 const SEAT = [0.37, -0.26], PSEAT = [-0.37, -0.26];   // where the driver / the passenger sits (their avatar's root)
 const WB = 2.56, FZ = 1.28, RZ = -1.28, TW = 0.79, WR = 0.34;
 const MAX_V = 15, TURBO_V = 22, REV_V = 5;
+// on the race track's asphalt (worldRace.js), and on the grass round it
+const TRACK_V = 27, TRACK_TURBO_V = 35, GRASS_V = 10;
 const HIT = [1.42, 0, -1.42], HIT_R = 0.92;            // the car as three circles along its middle (for bumping)
 const HALF = { w: 0.98, l: 2.3 };                       // half its width and length (people can't walk through it)
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
@@ -34,7 +46,7 @@ const wrap = a => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a
 // local (lx, lz) on a car at (x, z) facing h -> world
 const toWorld = (x, z, h, lx, lz) => [x + lx * Math.cos(h) + lz * Math.sin(h), z - lx * Math.sin(h) + lz * Math.cos(h)];
 
-export function buildCars(k, { PATH_Y }) {
+export function buildCars(k, { PATH_Y, race }) {
 	const { THREE, add, mat, group, rbox, g, ctx, canvasTex } = k;
 	const glow = c => new THREE.MeshBasicMaterial({ color: c, toneMapped: false });
 
@@ -247,25 +259,75 @@ export function buildCars(k, { PATH_Y }) {
 	const cars = CARS.map((def, i) => {
 		const m = makeCar(def);
 		m.lights(false, false, false);
-		return Object.assign(m, { i, def, key: "car:" + def.id, x: def.x, z: def.z, h: def.h, v: 0, steer: 0, spinA: 0, pitch: 0, roll: 0, lastV: 0, lastH: def.h, track: null, brake: false });
+		return Object.assign(m, { i, def, key: "car:" + def.id, pkey: "carp:" + def.id, x: def.x, z: def.z, h: def.h, v: 0, steer: 0, spinA: 0, pitch: 0, roll: 0, lastV: 0, lastH: def.h, track: null, brake: false });
 	});
-	const stateOf = c => { const s = ctx.get(c.key); return s && typeof s === "object" ? s : { d: "", p: "", x: c.def.x, z: c.def.z, h: c.def.h }; };
+	// the car's shared state: where it's parked and who drives it (its own key), who rides in it (another key)
+	function stateOf(c) {
+		const s = ctx.get(c.key), sp = ctx.get(c.pkey);
+		const o = s && typeof s === "object" ? s : { d: "", x: c.def.x, z: c.def.z, h: c.def.h };
+		return { d: typeof o.d === "string" ? o.d : "", p: sp && typeof sp === "object" && typeof sp.p === "string" ? sp.p : "", x: o.x, z: o.z, h: o.h };
+	}
 	const peerOf = id => (id ? ctx.peers().get(id) : null) || null;
-	const present = id => !!id && (id === ctx.MY_ID || ctx.peers().has(id));
-	function setState(c, patch) { ctx.setShared(c.key, Object.assign({}, stateOf(c), patch)); }
-	// (x, z, h) where the car is right now (as drawn)
-	const poseOf = c => [c.x, c.z, c.h];
+	// the driver's key (where it is, who drives) and the passenger's key: each only ever written by that seat's person
+	function setDrive(c, patch) { const s = stateOf(c); ctx.setShared(c.key, Object.assign({ d: s.d, x: s.x, z: s.z, h: s.h }, patch)); }
+	function setRide(c, p) { ctx.setShared(c.pkey, { p }); }
+	// who's really in a seat ("d" / "p") right now: the one the state names, if they're here and sitting in a car near it
+	// (their pose says "drive" / "carpass"); otherwise nobody - a stale name (closed the tab, reloaded, a lost "I got out")
+	// never keeps a seat
+	function occupant(c, seat) {
+		const s = stateOf(c), id = seat === "d" ? s.d : s.p;
+		if (!id) return "";
+		if (id === ctx.MY_ID) return (seat === "d" ? K && K.c === c : P && P.c === c) ? id : "";
+		const p = peerOf(id);
+		if (!p || p.upper !== (seat === "d" ? "drive" : "carpass")) return "";
+		// (the passenger: near the car; the driver moves the car, so they're always in it)
+		if (seat === "p" && Math.hypot(p.tx - c.x, p.tz - c.z) > 7) return "";
+		return id;
+	}
 
-	// can the car stand at (x, z) facing h? the grounds (ctx.canDrive) and the other car
+	// how much room there is between the car at (x, z) facing h and the nearest other car (negative: overlapping)
+	function carGap(c, x, z, h) {
+		let gap = Infinity;
+		for (const o of cars) {
+			if (o === c || Math.hypot(o.x - x, o.z - z) > 8) continue;
+			for (const lz of HIT) {
+				const [cx, cz] = toWorld(x, z, h, 0, lz);
+				for (const oz of HIT) { const [ox, ozz] = toWorld(o.x, o.z, o.h, 0, oz); gap = Math.min(gap, Math.hypot(cx - ox, cz - ozz) - HIT_R * 1.9); }
+			}
+		}
+		return gap;
+	}
+	// can the car stand at (x, z) facing h? the grounds (ctx.canDrive), and not into another car - though if it's already
+	// tangled up with one (they met between two updates, or one glided into the other), any move that doesn't make it
+	// worse is fine, so the two can always back out and drive apart instead of locking together
 	function fits(c, x, z, h) {
 		for (const lz of HIT) {
 			const [cx, cz] = toWorld(x, z, h, 0, lz);
 			if (!ctx.canDrive(cx, cz, HIT_R)) return false;
-			for (const o of cars) {
-				if (o === c) continue;
-				for (const oz of HIT) { const [ox, ozz] = toWorld(o.x, o.z, o.h, 0, oz); if (Math.hypot(cx - ox, cz - ozz) < HIT_R * 1.9) return false; }
+		}
+		const gap = carGap(c, x, z, h);
+		if (gap >= 0) return true;
+		return gap >= carGap(c, c.x, c.z, c.h) - 1e-3;
+	}
+	// pushed apart: if my car is overlapping another one, slide it out along the line between them (a bit each frame)
+	function unstick(c, dt) {
+		let px = 0, pz = 0;
+		for (const o of cars) {
+			if (o === c || Math.hypot(o.x - c.x, o.z - c.z) > 8) continue;
+			for (const lz of HIT) {
+				const [cx, cz] = toWorld(c.x, c.z, c.h, 0, lz);
+				for (const oz of HIT) {
+					const [ox, ozz] = toWorld(o.x, o.z, o.h, 0, oz), d = Math.hypot(cx - ox, cz - ozz), pen = HIT_R * 1.9 - d;
+					if (pen > 0) { const nx = d > 1e-3 ? (cx - ox) / d : Math.cos(c.h), nz = d > 1e-3 ? (cz - ozz) / d : -Math.sin(c.h); px += nx * pen; pz += nz * pen; }
+				}
 			}
 		}
+		const l = Math.hypot(px, pz);
+		if (l < 1e-3) return false;
+		const step = Math.min(l, 4 * dt + 0.02), nx = c.x + px / l * step, nz = c.z + pz / l * step;
+		let ok = true;
+		for (const lz of HIT) { const [cx, cz] = toWorld(nx, nz, c.h, 0, lz); if (!ctx.canDrive(cx, cz, HIT_R)) { ok = false; break; } }
+		if (ok) { c.x = nx; c.z = nz; }
 		return true;
 	}
 
@@ -320,21 +382,22 @@ export function buildCars(k, { PATH_Y }) {
 		if (m.carrying || m.carriedBy) { ctx.notice("You can't get in while carrying someone (or being carried)!"); return; }
 		if (K || P) leave(true);
 		if (m.sit) ctx.standUp(true);
-		const s = stateOf(c);
 		m.target = null; if (m.path) m.path = [];
 		m.anim = "sit"; m.sit = null; m.upperUntil = 0; m.speed = 0;
 		if (asPassenger) {
 			P = { c };
 			m.upper = "carpass";
-			setState(c, { p: ctx.MY_ID });
-			const d = peerOf(s.d);
+			setRide(c, ctx.MY_ID);
+			const d = peerOf(occupant(c, "d"));
 			ctx.notice(d ? `You hop in next to <b>${ctx.esc(d.look.name)}</b>. Enjoy the ride! <b>Esc</b> to get out.` : "You sit in the passenger seat. <b>Esc</b> to get out.");
 		} else {
 			K = { c, sendT: 0, saveT: 0 };
-			c.v = 0; c.steer = 0;
+			c.v = 0; c.steer = 0; c.track = null;
 			m.upper = "drive";
-			setState(c, { d: ctx.MY_ID, x: c.x, z: c.z, h: c.h });
-			ctx.notice(`You get behind the wheel of <b>${c.def.name}</b>. Drive anywhere - the ring road goes all the way round the grounds. <b>W/S</b> to drive, <b>A/D</b> to steer, <b>Shift</b> to go faster, <b>Space</b> handbrake, <b>R</b> horn, <b>Esc</b> to get out.`);
+			setDrive(c, { d: ctx.MY_ID, x: +c.x.toFixed(3), z: +c.z.toFixed(3), h: +c.h.toFixed(4) });
+			ctx.notice(c.def.id === "cherry" || c.def.id === "midnight"
+				? `You get behind the wheel of <b>${c.def.name}</b>. Drive anywhere - the ring road goes all the way round the grounds, and the <b>race track</b> is out west, past it. <b>W/S</b> to drive, <b>A/D</b> to steer, <b>Shift</b> to go faster, <b>Space</b> handbrake, <b>R</b> horn, <b>Esc</b> to get out.`
+				: `You strap into <b>${c.def.name}</b>. Out onto the track! Every lap is timed - <b>G</b> starts a race. <b>W/S</b> to drive, <b>A/D</b> to steer, <b>Shift</b> for more speed, <b>Space</b> handbrake, <b>Esc</b> to get out.`);
 		}
 		ctx.sfx("door", 0.45);
 		place(c);
@@ -347,10 +410,10 @@ export function buildCars(k, { PATH_Y }) {
 		const m = ctx.me(), wasDriver = !!K;
 		const s = stateOf(c);
 		K = null; P = null;
-		if (wasDriver) { c.v = 0; if (s.d === ctx.MY_ID) setState(c, { d: "", x: +c.x.toFixed(3), z: +c.z.toFixed(3), h: +c.h.toFixed(4) }); }
-		else if (s.p === ctx.MY_ID) setState(c, { p: "" });
+		if (wasDriver) { c.v = 0; if (s.d === ctx.MY_ID) setDrive(c, { d: "", x: +c.x.toFixed(3), z: +c.z.toFixed(3), h: +c.h.toFixed(4) }); }
+		else if (s.p === ctx.MY_ID) setRide(c, "");
 		const side = wasDriver ? 1 : -1;
-		const tries = [[side * 1.45, -0.2], [-side * 1.45, -0.2], [0, 3.0], [0, -3.0], [side * 2.2, 1.2]];
+		const tries = [[side * 1.45, -0.2], [-side * 1.45, -0.2], [0, 3.0], [0, -3.0], [side * 2.2, 1.2], [side * 3.2, 0], [-side * 3.2, 0]];
 		let spot = toWorld(c.x, c.z, c.h, side * 1.45, -0.2);
 		for (const [lx, lz] of tries) { const p = toWorld(c.x, c.z, c.h, lx, lz); if (ctx.canDrive(p[0], p[1], 0.35)) { spot = p; break; } }
 		m.x = spot[0]; m.z = spot[1]; m.h = c.h + side * Math.PI / 2;
@@ -373,15 +436,22 @@ export function buildCars(k, { PATH_Y }) {
 		if (m.upper !== "drive" || m.sit || stateOf(c).d !== ctx.MY_ID) { leave(true); return; }
 		dt = Math.min(0.05, dt);
 		const keys = inp.keys || new Set();
-		const thr = clamp(+inp.z || 0, -1, 1), st = clamp(+inp.x || 0, -1, 1);
-		const turbo = keys.has("shift"), hand = keys.has(" ");
+		let thr = clamp(+inp.z || 0, -1, 1);
+		const st = clamp(+inp.x || 0, -1, 1);
+		const turbo = keys.has("shift");
+		let hand = keys.has(" ");
 		if (keys.has("e") || keys.has("r")) honk(c);
-		const top = turbo ? TURBO_V : MAX_V;
+		// a race about to start: held on the brakes till the lights go out
+		if (race && race.locked(c.x, c.z)) { thr = 0; hand = true; }
+		// what's under the wheels: the race track's asphalt is quick, the grass round it slow
+		const surf = race ? race.surface(c.x, c.z) : null;
+		const top = surf === "track" ? (turbo ? TRACK_TURBO_V : TRACK_V) : surf === "grass" ? GRASS_V : turbo ? TURBO_V : MAX_V;
+		const grip = surf === "track" ? 1.35 : surf === "grass" ? 0.7 : 1;
 		let v = c.v;
 		c.brake = hand;
 		if (thr > 0.05) {
 			if (v < -0.3) { v = Math.min(0, v + 13 * thr * dt); c.brake = true; }
-			else v += (turbo ? 9 : 6.5) * thr * Math.max(0.15, 1 - v / top) * dt;
+			else v += (turbo ? 9 : 6.5) * grip * thr * Math.max(0.15, 1 - v / top) * dt;
 		} else if (thr < -0.05) {
 			if (v > 0.3) { v = Math.max(0, v + 14 * thr * dt); c.brake = true; }
 			else v = Math.max(-REV_V, v + 4.5 * thr * dt);
@@ -390,14 +460,20 @@ export function buildCars(k, { PATH_Y }) {
 			v -= Math.sign(v) * Math.min(Math.abs(v), (0.9 + 0.012 * v * v) * dt);
 		}
 		if (hand) v -= Math.sign(v) * Math.min(Math.abs(v), 15 * dt);
-		if (v > top) v += (top - v) * Math.min(1, dt * 1.5);
+		// a boost pad: a kick of speed (it eases back down to the top speed after)
+		if (race && v > 2 && race.boost(c.x, c.z)) { v = Math.max(v, top) + 11; ctx.sfx("whoosh", 0.7); }
+		if (v > top) v += (top - v) * Math.min(1, dt * (surf === "grass" ? 3 : 1.5));
 		// steering: full lock when slow, gentler at speed (and the wheel eases there, it never snaps)
 		const lock = 0.6 / (1 + Math.abs(v) * 0.075);
 		c.steer += (-st * lock - c.steer) * Math.min(1, dt * 5);
-		const nh = wrap(c.h + v / WB * Math.tan(c.steer) * dt);
-		const nx = c.x + Math.sin(nh) * v * dt, nz = c.z + Math.cos(nh) * v * dt;
-		if (fits(c, nx, nz, nh)) { c.x = nx; c.z = nz; c.h = nh; }
-		else {
+		// tangled up with another car? ease out of it first
+		unstick(c, dt);
+		// fast cars move a long way in a frame: in little steps, so nothing thin (a cone) is jumped over
+		const steps = Math.max(1, Math.ceil(Math.abs(v) * dt / 0.45)), sdt = dt / steps;
+		for (let n = 0; n < steps; n++) {
+			const nh = wrap(c.h + v / WB * Math.tan(c.steer) * sdt);
+			const nx = c.x + Math.sin(nh) * v * sdt, nz = c.z + Math.cos(nh) * v * sdt;
+			if (fits(c, nx, nz, nh)) { c.x = nx; c.z = nz; c.h = nh; continue; }
 			// scrape along whatever's in the way (one axis at a time), or stop against it
 			const hit = Math.abs(v);
 			if (fits(c, nx, c.z, nh)) { c.x = nx; c.h = nh; v *= 0.8; }
@@ -406,6 +482,7 @@ export function buildCars(k, { PATH_Y }) {
 				if (fits(c, c.x, c.z, nh)) c.h = nh;
 				if (hit > 2.5 && performance.now() / 1000 - (K.hitT || 0) > 0.4) { K.hitT = performance.now() / 1000; ctx.sfx("thunk", Math.min(0.8, 0.2 + hit * 0.05)); ctx.sfx("bump", Math.min(0.6, hit * 0.04)); }
 				v = hit > 2.5 ? -v * 0.2 : 0;
+				break;
 			}
 		}
 		c.v = v;
@@ -415,11 +492,11 @@ export function buildCars(k, { PATH_Y }) {
 		// arriving, and so the car stays where it was if this tab goes away)
 		K.sendT -= dt; K.saveT -= dt;
 		if (K.sendT <= 0) { K.sendT = 0.05; ctx.sendPose(true); }
-		if (K.saveT <= 0) { K.saveT = 3; setState(c, { d: ctx.MY_ID, x: +c.x.toFixed(3), z: +c.z.toFixed(3), h: +c.h.toFixed(4) }); }
+		if (K.saveT <= 0) { K.saveT = 3; setDrive(c, { d: ctx.MY_ID, x: +c.x.toFixed(3), z: +c.z.toFixed(3), h: +c.h.toFixed(4) }); }
 	}
 	const driver = {
 		label: "Esc to get out",
-		get cam() { return { dist: 6.6 + Math.min(3, Math.abs(K ? K.c.v : 0) * 0.13), pitch: 0.27 }; },
+		get cam() { return { dist: 6.6 + Math.min(3.6, Math.abs(K ? K.c.v : 0) * 0.12), pitch: 0.27 }; },
 		drive,
 		exit: () => leave(false)
 	};
@@ -444,12 +521,12 @@ export function buildCars(k, { PATH_Y }) {
 		} else if (Math.abs(cx - T.tx) > 1e-4 || Math.abs(cz - T.tz) > 1e-4 || Math.abs(th - T.th) > 1e-4) {
 			const el = Math.max(0.03, now - T.at);
 			const ivx = (cx - T.tx) / el, ivz = (cz - T.tz) / el, iw = wrap(th - T.th) / el;
-			T.vx += (clamp(ivx, -30, 30) - T.vx) * 0.6; T.vz += (clamp(ivz, -30, 30) - T.vz) * 0.6; T.w += (clamp(iw, -4, 4) - T.w) * 0.6;
+			T.vx += (clamp(ivx, -45, 45) - T.vx) * 0.6; T.vz += (clamp(ivz, -45, 45) - T.vz) * 0.6; T.w += (clamp(iw, -4, 4) - T.w) * 0.6;
 			T.tx = cx; T.tz = cz; T.th = th; T.at = now;
 		}
 		const ahead = Math.min(0.2, now - T.at);
 		const px = T.tx + T.vx * ahead, pz = T.tz + T.vz * ahead, ph = T.th + T.w * ahead;
-		if (Math.hypot(px - c.x, pz - c.z) > 8) { c.x = px; c.z = pz; c.h = ph; }
+		if (Math.hypot(px - c.x, pz - c.z) > 10) { c.x = px; c.z = pz; c.h = ph; }
 		else { const kk = Math.min(1, dt * 9); c.x += (px - c.x) * kk; c.z += (pz - c.z) * kk; c.h = wrap(c.h + wrap(ph - c.h) * kk); }
 		// speed along its nose (for the wheels and the lights)
 		const fv = T.vx * Math.sin(c.h) + T.vz * Math.cos(c.h);
@@ -474,7 +551,8 @@ export function buildCars(k, { PATH_Y }) {
 		for (const c of cars) {
 			const s = stateOf(c);
 			const mineNow = K && K.c === c;
-			const dPeer = !mineNow && s.d && s.d !== ctx.MY_ID ? peerOf(s.d) : null;
+			const dId = mineNow ? "" : occupant(c, "d");
+			const dPeer = dId ? peerOf(dId) : null;
 			if (mineNow) { /* drive() moved it */ }
 			else if (dPeer) follow(c, dPeer, dt);
 			else {
@@ -502,7 +580,8 @@ export function buildCars(k, { PATH_Y }) {
 			c.lights(running, running && (c.brake || acc < -3.5), running && c.v < -0.2);
 			// who's in it
 			if (dPeer) seatPeer(c, dPeer, SEAT);
-			const pPeer = s.p && s.p !== ctx.MY_ID ? peerOf(s.p) : null;
+			const pId = P && P.c === c ? "" : occupant(c, "p");
+			const pPeer = pId ? peerOf(pId) : null;
 			if (pPeer) seatPeer(c, pPeer, PSEAT);
 			if ((K && K.c === c) || (P && P.c === c)) {
 				place(c);
@@ -513,36 +592,44 @@ export function buildCars(k, { PATH_Y }) {
 			}
 		}
 		// my engine (the one I'm in, driving or riding)
-		const c = mine(), s = c && stateOf(c);
-		const on = !!c && (!!K || (s && present(s.d) && s.d !== ""));
+		const c = mine();
+		const on = !!c && (!!K || !!occupant(c, "d"));
 		engineSound(on, c ? c.v : 0, K ? 1 : 0);
 	}
-	// stale states: I'm "driving" with no car, or my seat was taken
+	// stale states: I'm "driving" with no car, my seat was taken, or a seat still has my name on it when I'm not in it
+	// (I reloaded the page: the same id comes back - or my "I got out" was lost)
+	let healT = 0;
 	function update(dt) {
 		const m = ctx.me();
 		if (!K && !P && (m.upper === "drive" || m.upper === "carpass")) { m.upper = null; if (m.anim === "sit" && !m.sit) m.anim = "idle"; ctx.sendPose(true); }
 		if (P) { const s = stateOf(P.c); if (s.p !== ctx.MY_ID) leave(true); }
+		if ((healT -= dt) > 0) return;
+		healT = 1.5;
+		for (const c of cars) {
+			const s = stateOf(c);
+			if (s.d === ctx.MY_ID && !(K && K.c === c)) setDrive(c, { d: "", x: +c.x.toFixed(3), z: +c.z.toFixed(3), h: +c.h.toFixed(4) });
+			if (s.p === ctx.MY_ID && !(P && P.c === c)) setRide(c, "");
+		}
 	}
 
 	// ================================================================ the doors (click the car, or E beside it)
 	cars.forEach(c => {
 		const nm = c.def.name;
-		const driverName = () => { const s = stateOf(c); const p = peerOf(s.d); return p ? p.look.name : "someone"; };
+		const isIn = () => (K && K.c === c) || (P && P.c === c);
+		const driverName = () => { const p = peerOf(occupant(c, "d")); return p ? p.look.name : "someone"; };
 		k.interact("car:" + c.def.id + ":drive", {
 			get stand() { return toWorld(c.x, c.z, c.h, 1.5, -0.1); },
 			reach: 3.0,
 			label: () => {
-				const s = stateOf(c);
-				if ((K && K.c === c) || (P && P.c === c)) return "Get out of " + nm;
-				if (!present(s.d)) return "Drive " + nm;
-				if (!present(s.p)) return "Ride with " + driverName();
+				if (isIn()) return "Get out of " + nm;
+				if (!occupant(c, "d")) return "Drive " + nm;
+				if (!occupant(c, "p")) return "Ride with " + driverName();
 				return nm + " is full";
 			},
 			use: () => {
-				const s = stateOf(c);
-				if ((K && K.c === c) || (P && P.c === c)) { leave(false); return; }
-				if (!present(s.d)) getIn(c, false);
-				else if (!present(s.p)) getIn(c, true);
+				if (isIn()) { leave(false); return; }
+				if (!occupant(c, "d")) getIn(c, false);
+				else if (!occupant(c, "p")) getIn(c, true);
 				else ctx.notice(nm + " is full - two at a time!");
 			}
 		}, c.body);
@@ -550,19 +637,18 @@ export function buildCars(k, { PATH_Y }) {
 			get stand() { return toWorld(c.x, c.z, c.h, -1.5, -0.1); },
 			reach: 3.0,
 			label: () => {
-				const s = stateOf(c);
 				if (P && P.c === c) return "Get out of " + nm;
-				if (present(s.p)) return nm + "'s passenger seat is taken";
-				return present(s.d) ? "Ride with " + driverName() : "Sit in " + nm + "'s passenger seat";
+				if (occupant(c, "p")) return nm + "'s passenger seat is taken";
+				return occupant(c, "d") ? "Ride with " + driverName() : "Sit in " + nm + "'s passenger seat";
 			},
 			use: () => {
-				const s = stateOf(c);
 				if (P && P.c === c) { leave(false); return; }
-				if (!present(s.p)) getIn(c, true);
+				if (!occupant(c, "p")) getIn(c, true);
 				else ctx.notice("Someone's already in that seat.");
 			}
 		});
 	});
+	if (race) race.attach(() => (K ? K.c : null));
 
 	return {
 		update, lateUpdate,

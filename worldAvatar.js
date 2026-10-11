@@ -463,12 +463,12 @@ function headShape(x, y, z, female, out) {
 	// the jaw: gently narrower toward a soft chin; the back of the jaw tucks in to the neck
 	if (y < 0.0) {
 		const s = smooth01(-y / 1.0);
-		x *= 1 - s * (female ? 0.31 : 0.2);
+		x *= 1 - s * (female ? 0.33 : 0.26);
 		z *= z < 0 ? 1 - s * 0.55 : 1 - s * 0.1;
 	}
 	// a chin, not a point: the bottom of the face is flattened off
 	if (y < -0.4) { const d = -0.4 - y; y = -0.4 - d * (1 - 0.45 * smooth01(d / 0.6)); }
-	if (!female && y < -0.2 && y > -0.75) x *= 1 + 0.06 * gauss((y + 0.5) ** 2, 0.12);   // a squarer jaw
+	if (!female && y < -0.2 && y > -0.75) x *= 1 + 0.025 * gauss((y + 0.5) ** 2, 0.12);   // a slightly squarer jaw (young: still soft)
 	// the face is flatter than the back of the head
 	if (z > 0.55) z = 0.55 + (z - 0.55) * 0.85;
 	// cheekbones, the brow ridge, eye sockets, the chin
@@ -476,10 +476,10 @@ function headShape(x, y, z, female, out) {
 	if (z > 0) {
 		const zf = smooth01(z / 0.6);
 		x *= 1 + 0.035 * gauss((y + 0.1) ** 2, 0.18) * zf;   // cheekbones
-		z += 0.022 * gauss((y - 0.24) ** 2, 0.07) * gauss((ax - 0.3) ** 2, 0.25) * zf;   // the brow
-		z -= 0.045 * gauss((y - 0.07) ** 2, 0.08) * gauss((ax - 0.36) ** 2, 0.12) * zf;  // the eye sockets
+		z += 0.01 * gauss((y - 0.24) ** 2, 0.07) * gauss((ax - 0.3) ** 2, 0.25) * zf;    // the brow (barely there: a young face)
+		z -= 0.028 * gauss((y - 0.07) ** 2, 0.08) * gauss((ax - 0.36) ** 2, 0.12) * zf;  // the eye sockets (shallow)
 		z += 0.02 * gauss((y + 0.7) ** 2, 0.1) * gauss(ax * ax, female ? 0.14 : 0.2) * zf;   // the chin
-		z += 0.015 * gauss((y + 0.25) ** 2, 0.15) * gauss((ax - 0.4) ** 2, 0.15) * zf;   // round cheeks
+		z += 0.03 * gauss((y + 0.22) ** 2, 0.15) * gauss((ax - 0.4) ** 2, 0.15) * zf;    // full, round cheeks
 	}
 	return out.set(x * HEAD_R, y * HEAD_R, z * HEAD_R);
 }
@@ -682,7 +682,7 @@ export class Avatar {
 		const C = look.colors;
 		const T = tex();
 		const skinC = new THREE.Color(look.skin);
-		const skin = new THREE.MeshPhysicalMaterial({ color: skinC, roughness: 0.5, sheen: 0.4, sheenRoughness: 0.5, sheenColor: skinC.clone().lerp(new THREE.Color("#ff8a7a"), 0.55).multiplyScalar(0.6) });
+		const skin = new THREE.MeshPhysicalMaterial({ color: skinC, roughness: 0.42, sheen: 0.45, sheenRoughness: 0.5, sheenColor: skinC.clone().lerp(new THREE.Color("#ff8a7a"), 0.55).multiplyScalar(0.6) });
 		const skinShade = skin.clone(); skinShade.color = skinC.clone().multiplyScalar(0.9);
 		// every garment's cloth (shared between the pieces of one colour and weave, so they draw as one)
 		const mats = new Map();
@@ -712,7 +712,7 @@ export class Avatar {
 		const tunic = fit.top === "kurta";   // (a long tunic over trousers)
 		const hairM = new THREE.MeshPhysicalMaterial({ color: look.hair, map: T.hair, roughness: 0.48, sheen: 0.6, sheenRoughness: 0.32, sheenColor: new THREE.Color(look.hair).lerp(new THREE.Color("#ffffff"), 0.35) });
 		const dark = new THREE.MeshStandardMaterial({ color: "#1a1214", roughness: 0.5 });
-		const blush = new THREE.MeshBasicMaterial({ color: "#ff8fa3", map: T.blush, transparent: true, opacity: female ? 0.32 : 0.16, depthWrite: false });
+		const blush = new THREE.MeshBasicMaterial({ color: "#ff8fa3", map: T.blush, transparent: true, opacity: female ? 0.34 : 0.2, depthWrite: false });
 		this.blushM = blush; this.blushBase = blush.opacity; this._rosy = false;
 		const B = new Batch();
 
@@ -774,7 +774,7 @@ export class Avatar {
 			sweet: a => 0.452 - 0.07 * cf(a) ** 1.5 - 0.012 * cb(a) ** 2,
 			gown: a => interp([[0, 0.37], [0.3, 0.402], [0.9, 0.405], [Math.PI, 0.39]], Math.abs(a))
 		};
-		const neck = mesh(revolve(female ? [[0.064, 0.43], [0.056, 0.48], [0.052, 0.53], [0.051, 0.6], [0, 0.62]] : [[0.078, 0.44], [0.07, 0.5], [0.066, 0.55], [0.064, 0.6], [0, 0.62]], 20, 16), skinShade);
+		const neck = mesh(revolve(female ? [[0.062, 0.43], [0.053, 0.48], [0.049, 0.53], [0.048, 0.6], [0, 0.62]] : [[0.074, 0.44], [0.064, 0.5], [0.06, 0.55], [0.058, 0.6], [0, 0.62]], 20, 16), skinShade);
 		neck.scale.z = 0.92;
 		torso.add(neck);
 
@@ -902,6 +902,7 @@ export class Avatar {
 		// ================================================================ head and face
 		const head = new THREE.Group();
 		head.position.y = 0.555;
+		head.scale.setScalar(female ? 1.06 : 1.07);   // (a touch bigger than an older adult's: young proportions)
 		torso.add(head);
 		this.head = head;
 		const face = new THREE.Group();
@@ -919,7 +920,7 @@ export class Avatar {
 		this.lids = [];
 		this.brows = [];
 		this.tears = [];
-		const eyeR = female ? 0.0202 : 0.019;
+		const eyeR = female ? 0.0232 : 0.0218;   // (big, bright eyes read young)
 		const sclera = new THREE.MeshPhysicalMaterial({ color: "#f3eeea", roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05 });
 		const irisM = new THREE.MeshPhysicalMaterial({ map: irisTex(look.eyes), transparent: true, roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.03 });
 		const browM = new THREE.MeshStandardMaterial({ color: new THREE.Color(look.hair).multiplyScalar(0.72), roughness: 0.9, side: THREE.DoubleSide });
@@ -933,9 +934,9 @@ export class Avatar {
 			return g;
 		})();
 		for (const sx of [-1, 1]) {
-			const s = faceAt(sx * 0.044, 0.012);
+			const s = faceAt(sx * 0.045, 0.008);
 			const eye = new THREE.Group();
-			eye.position.set(sx * 0.044, 0.012, s.z - eyeR * 0.42);
+			eye.position.set(sx * 0.045, 0.008, s.z - eyeR * 0.42);
 			eye.rotation.y = sx * 0.05;
 			face.add(eye);
 			eye.add(mesh(new THREE.SphereGeometry(eyeR, 22, 16), sclera, false));
@@ -953,7 +954,7 @@ export class Avatar {
 			low.rotation.x = 0.28;
 			eye.add(low);
 			// a tapered, gently arched eyebrow (it moves with the mood)
-			const bs = new THREE.Shape(), bw = 0.044, th0 = female ? 0.0068 : 0.0095, th1 = female ? 0.0022 : 0.003;
+			const bs = new THREE.Shape(), bw = 0.044, th0 = female ? 0.0064 : 0.0078, th1 = female ? 0.002 : 0.0028;
 			const N = 10;
 			for (let i = 0; i <= N; i++) { const u = i / N, x = u * bw, y = Math.sin(Math.PI * Math.min(1, u * 1.15)) * (female ? 0.0075 : 0.004) + (th0 + (th1 - th0) * u) / 2; i ? bs.lineTo(x, y) : bs.moveTo(x, y); }
 			for (let i = N; i >= 0; i--) { const u = i / N, x = u * bw, y = Math.sin(Math.PI * Math.min(1, u * 1.15)) * (female ? 0.0075 : 0.004) - (th0 + (th1 - th0) * u) / 2; bs.lineTo(x, y); }
@@ -988,8 +989,8 @@ export class Avatar {
 		}
 		// the nose: one sculpted shape - a narrow bridge, a rounded tip, the wings flaring either side of it, nostrils under
 		{
-			const k = female ? 0.86 : 1;
-			const H = 0.05 * k, yTop = 0.024, yBot = yTop - H;
+			const k = female ? 0.74 : 0.84;   // (small: a young face)
+			const H = 0.05 * k, yTop = 0.018, yBot = yTop - H;
 			const zs = [];
 			for (let i = 0; i <= 24; i++) zs.push(faceAt(0, yTop - i / 24 * H).z - 0.004);
 			const baseAt = t => { const f = t * 24, i = Math.min(23, Math.floor(f)); return zs[i] + (zs[i + 1] - zs[i]) * (f - i); };
@@ -1008,11 +1009,11 @@ export class Avatar {
 		}
 		// the lips (a little smile; turned over for a frown), and an open mouth for laughing
 		{
-			const my = -0.05, mz = faceAt(0, my).z + 0.002;
+			const my = -0.046, mz = faceAt(0, my).z + 0.002;
 			const mouth = new THREE.Group();
 			mouth.position.set(0, my, mz);
 			face.add(mouth);
-			const lipC = skinC.clone().lerp(new THREE.Color(female ? "#c2475f" : "#b0605a"), female ? 0.6 : 0.35).multiplyScalar(female ? 0.95 : 0.92);
+			const lipC = skinC.clone().lerp(new THREE.Color(female ? "#d4506a" : "#c06a66"), female ? 0.6 : 0.42).multiplyScalar(female ? 0.95 : 0.92);
 			const lipM = new THREE.MeshPhysicalMaterial({ color: lipC, roughness: female ? 0.32 : 0.5, clearcoat: female ? 0.5 : 0.1, clearcoatRoughness: 0.3 });
 			const bend = (w, sy) => v => { v.y += 4.2 * v.x * v.x; v.z -= 9 * v.x * v.x; };
 			const lip = (w, h, d, y, z) => reshape(bake(new THREE.SphereGeometry(1, 24, 12), [0, 0, 0], null, [w, h, d]), v => { v.y += y; v.z += z; bend()(v); });
@@ -1250,10 +1251,10 @@ export class Avatar {
 			}
 			return pts;
 		};
-		const ez = faceAt(0.044, 0.012).z, z = ez + 0.017;
+		const ez = faceAt(0.045, 0.008).z, z = ez + 0.02;   // (in front of the eyes, and their lids)
 		for (const sx of [-1, 1]) {
 			const lens = new THREE.Group();
-			lens.position.set(sx * 0.044, 0.012, z - 0.002);
+			lens.position.set(sx * 0.045, 0.008, z - 0.002);
 			lens.rotation.y = sx * 0.12;
 			g.add(lens);
 			const pts = outline(sx);

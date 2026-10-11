@@ -3,7 +3,7 @@
  * the grounds (worldGrounds.js) and the world (world.js: walking, the weather).
  *
  * The house stands in the north with the terrace and the pool deck in its courtyard. Everything else stands on
- * landscaped grounds round it, each with plenty of room to breathe (world x -94..56, z -166..40), joined by paved paths:
+ * landscaped grounds round it, each with plenty of room to breathe (world x -430..56, z -166..40), joined by paved paths:
  *
  *   north   the house: one rectangular block, a walkable roof deck on top with the gym and the playroom up there, the
  *           terrace cantilevered off its south edge, and the double-height lounge rising out of it
@@ -11,12 +11,14 @@
  *   south   the walled garden (the treehouse over it, the Box of Shame in it), and past it the Fun Park
  *   west    a line of attractions along the west avenue: the Aquarium, the Haunted Mansion, the Bumper Karts
  *   round   a walk all round the house and down the east side, with the roller coaster outside it
+ *   far west past the ring road: the Harmony Grand Prix circuit (RACE) - a big race track with a start gantry, a
+ *           grandstand, a paddock of race cars, and hurdles on the way (cone slaloms, barrier chicanes, tyre gates)
  *
  * Rects are [minX, maxX, minZ, maxZ] in world coordinates.
  */
 
 // the grounds: everything inside the hedge
-export const ESTATE = [-94, 56, -166, 40];
+export const ESTATE = [-430, 56, -166, 40];
 // (how far in from the edge you can walk: the hedge is in the way)
 export const HEDGE_IN = 1.4;
 
@@ -171,10 +173,88 @@ export const RING = { x0: -87.2, x1: 50.2, z0: -160.6, z1: 35.0, r: 12 };
 // the drive: from the ring (its west side) east along z to the parking pad's west edge
 export const DRIVE = { x0: -87.2, x1: -37.8, z: 10.3 };
 // where the drive meets the ring and the pad, widened so a car can swing in: x0..x1, half-width h0 at x0 to h1 at x1
+// (and on the ring's far side, the road on west to the race track)
 export const MOUTHS = [
 	{ x0: -84.0, x1: -77.5, z: 10.3, h0: 7.0, h1: ROAD_W / 2 },
-	{ x0: -44.5, x1: -37.8, z: 10.3, h0: ROAD_W / 2, h1: 5.7 }
+	{ x0: -44.5, x1: -37.8, z: 10.3, h0: ROAD_W / 2, h1: 5.7 },
+	{ x0: -96.9, x1: -90.4, z: 10.3, h0: ROAD_W / 2, h1: 7.0 }
 ];
+
+// ================================================================ the race track (worldRace.js)
+// The Harmony Grand Prix: a closed circuit out in the far west, past the ring road. Its centre line is a smooth loop
+// (Catmull-Rom) through these points, run in this order; the first one is the start / finish line, on the main straight
+// that runs south down its east side (x -112). The road from the ring's west side (RACE_ROAD, on along the drive's line)
+// comes in at the top of that straight.
+export const RACE = {
+	hw: 6.5,   // half the track's width
+	pts: [
+		[-112, -30], [-112, -80], [-117, -118], [-140, -142], [-190, -150], [-260, -148], [-322, -140], [-372, -118],
+		[-402, -78], [-408, -26], [-388, 16], [-336, 26], [-276, 20], [-236, -6], [-226, -52], [-196, -84],
+		[-160, -74], [-152, -40], [-176, -6], [-160, 20], [-130, 26], [-112, 8]
+	],
+	// everything the circuit takes up (the track, its run-off, the grandstand, the paddock): nothing else stands here
+	area: [-426, -98, -162, 36],
+	// the paddock in the infield (race cars parked in a row, facing the track), and the grandstand beside the main straight
+	paddock: [-137, -124, -54, -22],
+	stand: [-103.4, -97.6, -74, -36]
+};
+export const RACE_ROAD = { x0: -112, x1: -87.2, z: 10.3 };
+// the centre line, sampled every ~step metres from the start line: [x, z, tangent x, tangent z, metres from the line]
+let raceLine = null;
+export function racePath() {
+	if (raceLine) return raceLine;
+	const P = RACE.pts, n = P.length, dense = [];
+	for (let i = 0; i < n; i++) {
+		const p0 = P[(i - 1 + n) % n], p1 = P[i], p2 = P[(i + 1) % n], p3 = P[(i + 2) % n];
+		for (let j = 0; j < 40; j++) {
+			const t = j / 40, t2 = t * t, t3 = t2 * t;
+			const f = (a, b, c, d) => 0.5 * ((2 * b) + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+			dense.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]);
+		}
+	}
+	// even spacing (~1.5 m)
+	const out = [];
+	let along = 0;
+	out.push([dense[0][0], dense[0][1], 0, 0, 0]);
+	let last = dense[0];
+	for (let i = 1; i <= dense.length; i++) {
+		const q = dense[i % dense.length];
+		along += Math.hypot(q[0] - last[0], q[1] - last[1]);
+		last = q;
+		if (along - out[out.length - 1][4] >= 1.5 && i < dense.length) out.push([q[0], q[1], 0, 0, along]);
+	}
+	out.len = along;
+	for (let i = 0; i < out.length; i++) {
+		const a = out[(i - 1 + out.length) % out.length], b = out[(i + 1) % out.length];
+		const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
+		out[i][2] = dx / L; out[i][3] = dz / L;
+	}
+	// a coarse grid of which samples are near each 8 m cell (finding the nearest sample is then quick)
+	const C = 8, cells = new Map();
+	out.forEach((p, i) => {
+		const ci = Math.floor(p[0] / C), cj = Math.floor(p[1] / C);
+		for (let di = -2; di <= 2; di++) for (let dj = -2; dj <= 2; dj++) {
+			const key = (ci + di) * 4096 + (cj + dj), l = cells.get(key);
+			if (l) l.push(i); else cells.set(key, [i]);
+		}
+	});
+	out.near = (x, z) => cells.get(Math.floor(x / C) * 4096 + Math.floor(z / C)) || null;
+	raceLine = out;
+	return out;
+}
+// where (x, z) is on the track: { d: distance from the centre line, s: metres round from the start line, i: the sample,
+// u: how far across (+: to the left of the way round) } - or null if it's nowhere near it (over 16 m off)
+export function raceAt(x, z) {
+	const L = racePath(), near = L.near(x, z);
+	if (!near) return null;
+	let best = -1, bd = Infinity;
+	for (const i of near) { const p = L[i], d = (p[0] - x) ** 2 + (p[1] - z) ** 2; if (d < bd) { bd = d; best = i; } }
+	if (best < 0) return null;
+	const p = L[best], dx = x - p[0], dz = z - p[1];
+	const u = dx * p[3] - dz * p[2];   // (heading +z, left is +x)
+	const t = dx * p[2] + dz * p[3];
+	return { d: Math.abs(u), s: (p[4] + t + L.len) % L.len, i: best, u };
+}
 function ringSd(x, z) {
 	const cx = (RING.x0 + RING.x1) / 2, cz = (RING.z0 + RING.z1) / 2;
 	const qx = Math.abs(x - cx) - ((RING.x1 - RING.x0) / 2 - RING.r), qz = Math.abs(z - cz) - ((RING.z1 - RING.z0) / 2 - RING.r);
@@ -185,6 +265,8 @@ export function roadAt(x, z, pad = 0) {
 	const hw = ROAD_W / 2 + pad;
 	if (Math.abs(ringSd(x, z)) < hw) return true;
 	if (x > DRIVE.x0 && x < DRIVE.x1 && Math.abs(z - DRIVE.z) < hw) return true;
+	if (x > RACE_ROAD.x0 && x < RACE_ROAD.x1 && Math.abs(z - RACE_ROAD.z) < hw) return true;
+	if (x < RACE.area[1] + 6 + pad) { const r = raceAt(x, z); if (r && r.d < RACE.hw + 1.2 + pad) return true; }
 	for (const m of MOUTHS) if (x > m.x0 - Math.max(0, pad) && x < m.x1 + Math.max(0, pad)) {
 		const t = Math.max(0, Math.min(1, (x - m.x0) / (m.x1 - m.x0)));
 		if (Math.abs(z - m.z) < m.h0 + (m.h1 - m.h0) * t + pad) return true;
