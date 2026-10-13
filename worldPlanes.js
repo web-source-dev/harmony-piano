@@ -12,17 +12,22 @@
  * Up in the air anyone in a plane can jump out (J): freefall, then open the parachute (Space; it opens by itself low
  * down if you forget), steer it down and try to land on the target. A plane its pilot jumped out of flies on alone till
  * it comes down somewhere.
+ * Hand in hand: the two in a plane can hold hands (H), and holding hands, J asks the other to jump out together (their J
+ * and out you both go). In freefall, H grabs the hand of a skydiver falling near you (one on each side of them): you
+ * fall beside them, they steer for you both, and when their parachute opens, yours does too.
  *
  * Flying: W / S throttle, the arrow keys ↑ / ↓ the stick (↑ nose down, ↓ nose up; I swaps them), A / D (or ← / →) bank
  * to turn, Shift a burst of power, Space the wheel brakes, G the landing gear (Bluebird), R a smoke trail, C the camera,
- * J jump, Esc get out (on the ground) or jump (in the air). On a phone the joystick is the stick, and the prompt has
- * the throttle.
+ * J jump, H hold hands, Esc get out (on the ground) or jump (in the air). On a phone the joystick is the stick, and the
+ * prompt has the throttle.
  *
  * Shared state, like the cars (worldCars.js): "plane:<id>" { d: who flies it (or last flew it), st: park | fly | ghost
  * (flying with nobody in it) | wreck, x, y, z, h, p, r, b (landed on its belly) }, written only by that person (every
  * few seconds, and when something happens), and "planep:<id>" { p: the passenger }, written only by them. While it
- * flies, whoever flies it sends where it is about 15 times a second ("pl" zfx messages) and everyone else predicts it
- * between them; skydivers send theirs ("sd"). Crashes ("pcrash") and planes coming home ("pspawn") go to everyone too.
+ * flies, whoever flies it sends where it is about 15 times a second ("pl" zfx messages, with hh: holding hands) and
+ * everyone else predicts it between them; skydivers send theirs ("sd", with ln / ls: whose hand they hold, and which
+ * side of them they're on). Crashes ("pcrash") and planes coming home ("pspawn") go to everyone too; "phold" (the
+ * passenger asking the pilot to hold hands), "pjask" / "pjgo" (jumping together) and "sdlet" (let go) to one person.
  *
  * Built by the grounds (worldGrounds.js) into their group: world coordinates. A plane's own coordinates: the nose toward
  * +z, its left wing toward +x, its middle (what it turns about) at 0.
@@ -34,6 +39,7 @@ const G = 9.8;
 const CEIL = 240;          // how high a plane can climb
 const EDGE = 45;           // this near the hedge, a plane turns itself back toward the middle
 const SEND = 1 / 15;       // how often whoever flies a plane sends where it is
+const SKY_GAP = 1.45;      // two skydivers hand in hand: this far apart
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const wrap = a => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -50,7 +56,8 @@ const DEFS = [
 		gearH: 1.37, bellyH: 0.6, rest: 0.17,
 		stall: 11, fly: 16, top: 34, boost: 44, acc: 7.5, roll: 2.6, maxBank: 1.15, pitchRate: 1.1,
 		retract: false, camDist: 11.5,
-		seats: { pilot: [0, -0.48, -1.35], pass: [0, -0.46, -0.05] },
+		seats: { pilot: [0, -0.24, -1.35], pass: [0, -0.22, -0.2] },
+		stick: [0, -0.22, -0.96, 0.5],
 		stands: { pilot: [1.35, -1.9], pass: [-1.35, -1.6] },
 		solid: [[-0.62, 0.62, -4.4, 2.6], [-4.3, 4.3, -0.45, 0.95], [-1.6, 1.6, -4.3, -3.3]],
 		smokeAt: [0, -0.15, -4.5], span: 4.6, nose: 2.6, tail: -4.4
@@ -62,7 +69,8 @@ const DEFS = [
 		gearH: 1.05, bellyH: 0.58, rest: 0,
 		stall: 16, fly: 22, top: 52, boost: 68, acc: 9.5, roll: 3.2, maxBank: 1.2, pitchRate: 1.0,
 		retract: true, camDist: 13,
-		seats: { pilot: [0.33, -0.6, -0.25], pass: [-0.33, -0.6, -0.25] },
+		seats: { pilot: [0.25, -0.56, -0.25], pass: [-0.25, -0.56, -0.25] },
+		stick: [0.25, -0.5, 0.14, 0.46],
 		stands: { pilot: [1.55, -1.7], pass: [-1.55, -1.7] },
 		solid: [[-0.7, 0.7, -4.6, 3.3], [-4.95, 4.95, -0.9, 1.0], [-1.8, 1.8, -4.6, -3.5]],
 		smokeAt: [0, -0.1, -4.6], span: 4.95, nose: 3.3, tail: -4.6
@@ -292,7 +300,8 @@ export function buildPlanes(k, { PATH_Y, track }) {
 			"A / D  bank to turn      G  landing gear      R  smoke trail      C  camera",
 			"*Take off down the runway (its long end is west), land gently anywhere:",
 			"wings level, not diving, wheels down. Anything else is a crash!",
-			"*J  jump out with a parachute      Esc  get out (once you've stopped)"
+			"*J  jump out with a parachute      H  hold hands      Esc  get out",
+			"Holding hands, J jumps out together - and in freefall, H grabs a hand!"
 		], "#4c7bd9"), 1.6);
 		board(AIR.road.x + ROAD_W / 2 + 2.2, AIR.road.z1 - 8, 0, 3.6, 1.1, (c, w, h) => {
 			c.fillStyle = "#4c7bd9"; c.fillRect(0, 0, w, h);
@@ -354,6 +363,19 @@ export function buildPlanes(k, { PATH_Y, track }) {
 		const strobe = add(parent, new THREE.SphereGeometry(0.1, 10, 8), glow("#ffffff"), 0, tailY, tailZ, { cast: false });
 		return { red, grn, strobe };
 	}
+	// the control stick between the pilot's knees ([x, y, z] of its foot, how long): it tips as the pilot flies, and
+	// their left hand holds its grip (grip: a point in it, for the hand)
+	function makeStick(parent, [x, y, z, len]) {
+		const st = group(parent, x, y, z);
+		add(st, new THREE.CylinderGeometry(0.018, 0.024, len, 8), metal, 0, len / 2, 0, { cast: false });
+		add(st, new THREE.CylinderGeometry(0.032, 0.03, 0.12, 10), dark, 0, len + 0.04, 0, { cast: false });
+		add(st, new THREE.SphereGeometry(0.06, 10, 8), dark, 0, 0.02, 0, { cast: false }).scale.set(1, 0.4, 1);
+		st.rotation.order = "XZY";
+		const grip = new THREE.Object3D();
+		grip.position.set(0, len + 0.03, -0.02);
+		st.add(grip);
+		return { g: st, grip };
+	}
 	function propeller(parent, z, blades, len, bladeM, hubM, hubR) {
 		const prop = group(parent, 0, 0, z);
 		for (let i = 0; i < blades; i++) {
@@ -409,7 +431,7 @@ export function buildPlanes(k, { PATH_Y, track }) {
 		const rud = group(B, 0, 0.75, -4.32);
 		add(rud, rbox(0.06, 1.1, 0.42, 0.02), trimM, 0, 0, -0.2, { cast: false });
 		// the cockpits: leather rims and little windscreens
-		for (const zz of [-1.35, -0.05]) {
+		for (const zz of [-1.35, -0.2]) {
 			const rim = add(B, new THREE.TorusGeometry(0.34, 0.05, 8, 24), leather, 0, 0.5, zz, { rx: Math.PI / 2, cast: false });
 			rim.scale.set(1, 1.35, 1);
 			add(B, new THREE.PlaneGeometry(0.5, 0.24), glass, 0, 0.62, zz + 0.52, { rx: -0.45, cast: false, receive: false });
@@ -427,7 +449,7 @@ export function buildPlanes(k, { PATH_Y, track }) {
 		// its name down both sides
 		for (const sx of [-1, 1]) add(B, new THREE.PlaneGeometry(1.25, 0.31), new THREE.MeshBasicMaterial({ map: regTex(def.reg, "#3b2b40"), transparent: true, toneMapped: false }), sx * 0.42, 0.05, -2.45, { ry: sx * Math.PI / 2, cast: false, receive: false });
 		const nav = navLights(B, 4.62, -4.62, 1.12, 0.6, 1.33, -4.25);
-		return { root, B, prop, disc, ails, elev, rud, nav, legs: null, paints: [paintM, wingM, trimM, woodM] };
+		return { root, B, prop, disc, ails, elev, rud, nav, legs: null, stick: makeStick(B, def.stick), paints: [paintM, wingM, trimM, woodM] };
 	}
 
 	// Bluebird: a low-wing sport plane (two side by side under a bubble canopy), blue and white, the gear folds away
@@ -437,15 +459,26 @@ export function buildPlanes(k, { PATH_Y, track }) {
 		const wingM = new THREE.MeshPhysicalMaterial({ color: def.wing, roughness: 0.3, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.08 });
 		const redM = mat("#e2456f", 0.4, 0.1);
 		const B = group(root, 0, 0, 0);
-		add(B, lathe([[0.07, -4.55], [0.28, -3.7], [0.48, -2.3], [0.62, -1.0], [0.67, 0.2], [0.63, 1.3], [0.52, 2.2], [0.38, 2.78]], 0.95, 0.88), paintM, 0, 0, 0);
+		// (round, but cut down flat along the top where the cockpit is: a sill at shoulder height for the two in it)
+		const body = lathe([[0.07, -4.55], [0.28, -3.7], [0.48, -2.3], [0.62, -1.0], [0.67, 0.2], [0.63, 1.3], [0.52, 2.2], [0.38, 2.78]], 1.1, 0.88);
+		{
+			const pos = body.attributes.position, sill = 0.3;
+			const sm = (a, b, v) => { const u = clamp((v - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
+			for (let i = 0; i < pos.count; i++) {
+				const y = pos.getY(i), zz = pos.getZ(i);
+				if (y > sill) pos.setY(i, y - (y - sill) * 0.95 * sm(-1.9, -1.4, zz) * (1 - sm(0.8, 1.3, zz)));
+			}
+			body.computeVertexNormals();
+		}
+		add(B, body, paintM, 0, 0, 0);
 		// a white cheat line and red trim
-		for (const [zz, r] of [[-1.6, 0.6], [-1.9, 0.57]]) add(B, new THREE.CylinderGeometry(r * 0.95, r * 0.95, 0.12, 28), wingM, 0, 0, zz, { rx: Math.PI / 2, cast: false });
+		for (const [zz, r] of [[-1.6, 0.6], [-1.9, 0.57]]) add(B, new THREE.CylinderGeometry(r * 0.95, r * 0.95, 0.12, 28), wingM, 0, 0, zz, { rx: Math.PI / 2, cast: false }).scale.set(1.18, 1, 1);
 		const { prop, disc } = propeller(B, 2.85, 3, 0.95, dark, redM, 0.33);
 		// the canopy over the two seats, and the panel in front of them
 		const can = new THREE.SphereGeometry(1, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2);
-		add(B, can, glass, 0, 0.42, -0.3, { cast: false, receive: false }).scale.set(0.6, 0.58, 1.3);
-		add(B, new THREE.TorusGeometry(0.6, 0.025, 6, 24, Math.PI), metal, 0, 0.42, 0.25, { cast: false }).scale.set(1, 0.95, 1);
-		add(B, rbox(0.9, 0.2, 0.2, 0.05), dark, 0, 0.42, 0.55, { cast: false });
+		add(B, can, glass, 0, 0.3, -0.3, { cast: false, receive: false }).scale.set(0.68, 0.7, 1.3);
+		add(B, new THREE.TorusGeometry(0.68, 0.025, 6, 24, Math.PI), metal, 0, 0.3, 0.25, { cast: false }).scale.set(1, 1.02, 1);
+		add(B, rbox(0.9, 0.2, 0.2, 0.05), dark, 0, 0.36, 0.55, { cast: false });
 		// the wing (tapered, white with blue tips), its ailerons, the landing light in its leading edge
 		add(B, planGeo([[-4.9, 0.5], [0, 0.98], [4.9, 0.5], [4.9, -0.42], [0, -0.85], [-4.9, -0.42]], 0.14), wingM, 0, -0.38, 0);
 		for (const sx of [-1, 1]) add(B, rbox(0.1, 0.32, 0.95, 0.04), paintM, sx * 4.92, -0.33, 0.04, { cast: false });
@@ -478,9 +511,9 @@ export function buildPlanes(k, { PATH_Y, track }) {
 				legs.push({ g: m, axis: "z", up: -sx * 1.5 });
 			}
 		}
-		for (const sx of [-1, 1]) add(B, new THREE.PlaneGeometry(1.3, 0.32), new THREE.MeshBasicMaterial({ map: regTex(def.reg, "#ffffff"), transparent: true, toneMapped: false }), sx * 0.47, 0.06, -2.6, { ry: sx * Math.PI / 2, cast: false, receive: false });
+		for (const sx of [-1, 1]) add(B, new THREE.PlaneGeometry(1.3, 0.32), new THREE.MeshBasicMaterial({ map: regTex(def.reg, "#ffffff"), transparent: true, toneMapped: false }), sx * 0.53, 0.06, -2.6, { ry: sx * Math.PI / 2, cast: false, receive: false });
 		const nav = navLights(B, 4.98, -4.98, -0.3, 0.45, 1.56, -4.3);
-		return { root, B, prop, disc, ails, elev, rud, nav, legs, landM, paints: [paintM, wingM, redM] };
+		return { root, B, prop, disc, ails, elev, rud, nav, legs, landM, stick: makeStick(B, def.stick), paints: [paintM, wingM, redM] };
 	}
 
 	// ================================================================ the planes, and their shared state
@@ -495,7 +528,7 @@ export function buildPlanes(k, { PATH_Y, track }) {
 			x: def.x, y: def.gearH, z: def.z, h: def.h, p: def.rest, r: 0, v: 0, vy: 0, thr: 0,
 			ground: true, gear: 1, gearK: 1, belly: false, smoke: false, boosting: false, stall: false, edge: false,
 			ctrlP: 0, ctrlB: 0, rpm: 0, propA: 0, net: null, sendT: 0, saveT: 0, smokeT: 0, fireT: 0,
-			wrecked: false, wreckSeen: 0, staleT: 0, snd: null
+			wrecked: false, wreckSeen: 0, staleT: 0, snd: null, hold: false, heldWas: false
 		});
 	});
 	const home = pl => ({ d: "", st: "park", x: pl.def.x, y: 0, z: pl.def.z, h: pl.def.h, p: pl.def.rest, r: 0, b: 0 });
@@ -545,6 +578,32 @@ export function buildPlanes(k, { PATH_Y, track }) {
 		if (s.d === ctx.MY_ID) return (K && K.pl === pl) || ghosts.has(pl);
 		return !!peerOf(s.d);
 	}
+	// are the two in it holding hands? (the pilot says so - in their "pl" messages - and both are really sat in it)
+	function handsHeld(pl) {
+		if (!pilotOf(pl) || !passengerOf(pl)) return false;
+		return K && K.pl === pl ? pl.hold : fresh(pl) && !!pl.net.hh;
+	}
+	// the one I'm sat in a plane with (the passenger if I fly it, the pilot if I ride in it)
+	const otherInPlane = pl => (K && K.pl === pl ? passengerOf(pl) : P && P.pl === pl ? pilotOf(pl) : "");
+	// (as plain text: ctx.esc() it for a notice)
+	const nameOf = id => { const p = peerOf(id); return p ? p.look.name : "them"; };
+	const avOf = id => (id === ctx.MY_ID ? ctx.myAvatar() : peerOf(id) ? peerOf(id).avatar : null);
+
+	// one hand reaching for a point in the world (an avatar's own IK runs before it's put in its seat, so the planes
+	// and the skydivers place the hand themselves, after: w eases it in)
+	// (pole: which way the elbow points, in the world - in a narrow cockpit, down and back rather than out)
+	function reachHand(av, i, target, w, pole) {
+		av.ik[i] = target; av.ik[1 - i] = null;
+		av.ikW[i] = w; av.ikW[1 - i] = 0;
+		const op = av.ikPole;
+		av.ikPole = pole || null;
+		av.solveIK(0);
+		av.ik[i] = null; av.ikW[0] = av.ikW[1] = 0; av.ikPole = op;
+	}
+	// down and back in a plane (its own coordinates -> the world), for elbows
+	const _pole = new THREE.Vector3();
+	function elbowPole(pl, out) { pl.root.getWorldQuaternion(_q); return _pole.set(out, -1, -0.5).normalize().applyQuaternion(_q); }
+	const easeHold = (av, on, dt) => (av._holdW = on ? Math.min(1, (av._holdW || 0) + dt * 4) : 0);
 
 	// ================================================================ effects: smoke, fire, explosions, bits flying about
 	const fx = group(g, 0, 0, 0);
@@ -784,19 +843,32 @@ body.touch #flyhud .fh-keys { display: none; }
 			else if (agl < 25 && sink > 0.5) m = sink > 5.5 ? "Too fast a descent to land - ease back (↓)" : "Wings level, gentle... nice and easy";
 			else if (pl.y > CEIL - 25) m = "The air's too thin up here";
 		}
+		// (hand in hand with the one beside you)
+		const o = otherInPlane(pl), held = !!o && handsHeld(pl);
+		if (!m && held) m = pl.ground ? `Holding hands with ${nameOf(o)} 💕` : `Holding hands with ${nameOf(o)} 💕 - J to jump out together`;
 		setMsg(m, cls);
-		if (asPilot) setKeys("plane", `<kbd>W</kbd>/<kbd>S</kbd> throttle · <kbd>↓</kbd> nose up · <kbd>↑</kbd> nose down${inv ? " (swapped: I)" : ""} · <kbd>A</kbd>/<kbd>D</kbd> bank · <kbd>Shift</kbd> boost · <kbd>Space</kbd> brakes${pl.def.retract ? " · <kbd>G</kbd> gear" : ""} · <kbd>R</kbd> smoke · <kbd>C</kbd> camera · <kbd>J</kbd> jump · <kbd>Esc</kbd> get out`);
-		else setKeys("pass", `<kbd>J</kbd> jump out with a parachute · <kbd>Esc</kbd> get out (on the ground)`);
+		const hk = o ? ` · <kbd>H</kbd> ${held ? "let go" : "hold hands"}` : "";
+		if (asPilot) setKeys("plane" + hk, `<kbd>W</kbd>/<kbd>S</kbd> throttle · <kbd>↓</kbd> nose up · <kbd>↑</kbd> nose down${inv ? " (swapped: I)" : ""} · <kbd>A</kbd>/<kbd>D</kbd> bank · <kbd>Shift</kbd> boost · <kbd>Space</kbd> brakes${pl.def.retract ? " · <kbd>G</kbd> gear" : ""} · <kbd>R</kbd> smoke · <kbd>C</kbd> camera · <kbd>J</kbd> jump${hk} · <kbd>Esc</kbd> get out`);
+		else setKeys("pass" + hk, `<kbd>J</kbd> jump out with a parachute${hk} · <kbd>Esc</kbd> get out (on the ground)`);
 	}
 	function hudSky(S) {
 		hud.classList.remove("off");
 		if (nowS() - hudT < 0.08) return;
 		hudT = nowS();
 		const agl = Math.max(0, S.y - floorAt(S.x, S.z)), td = Math.hypot(S.x - AIR.target[0], S.z - AIR.target[1]);
-		hudEls.top.textContent = S.open ? "Parachute" : "Freefall!";
+		// (hand in hand: holding someone's, someone holding mine, or someone near enough to grab)
+		const lead = S.link && !S.link.pend ? S.link.id : "", fol = S.open ? [] : S.fol || [], gb = !S.open && !lead && !fol.length ? grabbable() : null;
+		hudEls.top.textContent = S.open ? "Parachute" : lead || fol.length ? "Freefall - hand in hand" : "Freefall!";
 		hudEls.stats.innerHTML = stat(Math.round(agl), "alt m") + stat(Math.round(-S.vy * 3.6), "fall km/h") + stat(td < 999 ? Math.round(td) + "m" : "-", "target");
-		setMsg(S.open ? (agl < 12 ? "Flare! Hold S to land softly" : "Steer to the pink target - A / D turn, W faster, S slower") : agl < 90 ? "Open your parachute! (Space)" : "Space opens your parachute", S.open ? "" : agl < 90 ? "warn" : "");
-		setKeys(S.open ? "chute" : "fall", S.open ? `<kbd>A</kbd>/<kbd>D</kbd> steer · <kbd>W</kbd> faster · <kbd>S</kbd> flare (slow down)` : `<kbd>Space</kbd> open parachute · <kbd>A</kbd>/<kbd>D</kbd> turn · <kbd>W</kbd> glide forward`);
+		let msg = S.open ? (agl < 12 ? "Flare! Hold S to land softly" : "Steer to the pink target - A / D turn, W faster, S slower") : agl < 90 ? "Open your parachute! (Space)" : "Space opens your parachute";
+		if (!S.open && agl >= 90) {
+			if (lead) msg = `Holding ${nameOf(lead)}'s hand - they steer. Their parachute opens yours`;
+			else if (fol.length) msg = `${fol.map(nameOf).join(" and ")} ${fol.length > 1 ? "are" : "is"} holding your hand - you steer for everyone`;
+			else if (gb && !gb.full) msg = `H to grab ${nameOf(gb.id)}'s hand!`;
+		}
+		setMsg(msg, S.open ? "" : agl < 90 ? "warn" : "");
+		const hk = lead || fol.length ? " · <kbd>H</kbd> let go" : gb ? " · <kbd>H</kbd> hold hands" : "";
+		setKeys((S.open ? "chute" : "fall") + hk, S.open ? `<kbd>A</kbd>/<kbd>D</kbd> steer · <kbd>W</kbd> faster · <kbd>S</kbd> flare (slow down)` : lead ? `<kbd>Space</kbd> open parachute${hk}` : `<kbd>Space</kbd> open parachute · <kbd>A</kbd>/<kbd>D</kbd> turn · <kbd>W</kbd> glide forward${hk}`);
 	}
 
 	// ================================================================ crash checks: trees, the coaster, buildings, other planes
@@ -1017,7 +1089,7 @@ body.touch #flyhud .fh-keys { display: none; }
 		} else {
 			K = { pl };
 			const s = stateOf(pl);
-			pl.belly = s.b; pl.gear = s.b ? 0 : 1; pl.ground = true; pl.v = 0; pl.thr = 0; pl.smoke = false; pl.net = null; pl.wrecked = false;
+			pl.belly = s.b; pl.gear = s.b ? 0 : 1; pl.ground = true; pl.v = 0; pl.thr = 0; pl.smoke = false; pl.net = null; pl.wrecked = false; pl.hold = false;
 			pl.y = floorAt(pl.x, pl.z) + (pl.belly ? pl.def.bellyH : pl.def.gearH); pl.p = pl.belly ? 0 : pl.def.rest; pl.r = 0;
 			m.upper = "fly";
 			setPlane(pl, "fly");
@@ -1047,13 +1119,52 @@ body.touch #flyhud .fh-keys { display: none; }
 		ctx.sendPose(true);
 		if (!quiet) ctx.sfx("door", 0.4);
 	}
-	function bail() {
+	// J: jump out. Holding hands, it asks the other one to jump too (their J and you both go, hand in hand); J again
+	// before they answer jumps alone
+	let jumpAsk = null;    // { to, at }: I asked the one beside me
+	let jumpAsked = null;  // { from, at }: they asked me
+	function jumpKey() {
+		const pl = mine();
+		if (!pl) return;
+		if (pl.ground) { exitPlane(); return; }
+		if (pl.y - floorAt(pl.x, pl.z) < 10) { ctx.notice("Too low to jump - land first, or climb higher!"); return; }
+		const o = otherInPlane(pl), tn = nowS();
+		if (o && jumpAsked && jumpAsked.from === o && tn - jumpAsked.at < 12) {
+			jumpAsked = null;
+			ctx.send({ t: "fx", kind: "zfx", zone: "grounds", what: "pjgo", i: pl.i, to: o });
+			bail(o);
+			return;
+		}
+		if (o && handsHeld(pl) && !(jumpAsk && tn - jumpAsk.at < 12)) {
+			jumpAsk = { to: o, at: tn };
+			ctx.send({ t: "fx", kind: "zfx", zone: "grounds", what: "pjask", i: pl.i, to: o });
+			flash(`Asked ${nameOf(o)} to jump with you... (J again to jump alone)`, "good", 6);
+			return;
+		}
+		jumpAsk = null;
+		bail();
+	}
+	// H: hold hands with the one beside me (the pilot keeps the say: the passenger asks them)
+	function toggleHold() {
+		const pl = mine();
+		if (!pl) return;
+		const o = otherInPlane(pl);
+		if (!o) { ctx.notice(K ? "There's nobody in the passenger seat to hold hands with!" : "There's no pilot to hold hands with!"); return; }
+		const on = !handsHeld(pl);
+		if (K) { pl.hold = on; pl.sendT = 0; }
+		else ctx.send({ t: "fx", kind: "zfx", zone: "grounds", what: "phold", i: pl.i, on: on ? 1 : 0 });
+	}
+	// lead: jumping out together with them (I'm the one who said yes: I'll fall beside them, hand in hand)
+	function bail(lead) {
 		const pl = mine();
 		if (!pl) return;
 		if (pl.ground) { exitPlane(); return; }
 		const agl = pl.y - floorAt(pl.x, pl.z);
 		if (agl < 10) { ctx.notice("Too low to jump - land first, or climb higher!"); return; }
-		const m = ctx.me(), w = seatWorld(pl, K ? "pilot" : "pass");
+		// (jumping together: out the same side as each other, the one who said yes on the far side of the other)
+		const mySeat = K ? "pilot" : "pass", pair = lead || (jumpAsk && nowS() - jumpAsk.at < 12 ? jumpAsk.to : "");
+		const lside = Math.sign(pl.def.seats[mySeat][0] - pl.def.seats[mySeat === "pilot" ? "pass" : "pilot"][0]) || (lead ? 1 : -1);
+		const m = ctx.me(), w = seatWorld(pl, mySeat);
 		const cp = Math.cos(pl.p);
 		if (K) {
 			K = null;
@@ -1067,15 +1178,19 @@ body.touch #flyhud .fh-keys { display: none; }
 			P = null;
 		}
 		// out over the side, with the plane's speed (it soon falls away behind)
-		const side = (R() < 0.5 ? -1 : 1) * 2.2;
+		const side = (pair ? lside : R() < 0.5 ? -1 : 1) * 2.2;
 		SK = {
 			x: w.x + Math.cos(pl.h) * side, y: w.y + 0.6, z: w.z - Math.sin(pl.h) * side, h: pl.h,
 			vx: Math.sin(pl.h) * cp * pl.v * 0.8, vy: Math.max(pl.vy, 0) + 2, vz: Math.cos(pl.h) * cp * pl.v * 0.8,
-			open: false, roll: 0, t: 0, sendT: 0, poseT: 0
+			open: false, roll: 0, t: 0, sendT: 0, poseT: 0,
+			// hand in hand with another skydiver: { id: theirs, side: which side of them I'm on (1: their left), at,
+			// pend: till they're out of the plane too }
+			link: lead ? { id: lead, side: lside, at: nowS(), pend: true } : null, lastLink: pair || ""
 		};
+		jumpAsk = jumpAsked = null;
 		m.upper = "freefall"; m.anim = "idle"; m.sit = null; m.speed = 0;
 		ctx.sfx("whoosh", 0.8);
-		flash("Geronimo! Space opens your parachute", "good", 3);
+		flash(pair ? `Jumping together with ${nameOf(pair)}! Space opens your parachute` : "Geronimo! Space opens your parachute", "good", 3.5);
 		ctx.sendPose(true);
 	}
 	function exitPlane() {
@@ -1102,13 +1217,31 @@ body.touch #flyhud .fh-keys { display: none; }
 
 	// where a seat is, in the world (the plane's root must be posed)
 	function seatWorld(pl, which) { pl.root.updateMatrixWorld(true); return pl.root.localToWorld(_v.set(...pl.def.seats[which])); }
-	function seatAvatar(av, pl, which) {
+	function seatAvatar(av, pl, which, held) {
 		const w = seatWorld(pl, which);
 		av.root.position.copy(w);
 		pl.root.getWorldQuaternion(_q);
 		av.root.quaternion.copy(_q);
 		av.root.visible = true;
+		// (how to sit: worldAvatar.js reads it for the "fly" / "flypass" poses)
+		const ck = av.cockpit || (av.cockpit = {});
+		ck.kind = pl.def.kind; ck.hold = !!held;
 		return w;
+	}
+	// hand in hand across the cockpit: where the two hands meet (plane coordinates), and which hand each reaches with
+	// (Buttercup: the pilot leans forward and the passenger reaches back, both right hands; Bluebird: side by side,
+	// the pilot's right hand in the passenger's left)
+	const _hA = new THREE.Vector3(), _hB = new THREE.Vector3(), _hM = new THREE.Vector3();
+	function holdInPlane(pl, pilotAv, passAv, dt) {
+		const bi = pl.def.kind === "bi";
+		const wp = easeHold(pilotAv, true, dt), wq = easeHold(passAv, true, dt);
+		const [mx, my, mz] = bi ? [-0.14, 0.66, -0.78] : [0, -0.02, 0.06];
+		// (palm to palm: each hand a touch toward its own side)
+		const off = bi ? [0, 0, 0.012] : [0.012, 0, 0];
+		pl.root.localToWorld(_hA.set(mx - off[0], my, mz - off[2]));
+		pl.root.localToWorld(_hB.set(mx + off[0], my, mz + off[2]));
+		reachHand(pilotAv, 0, bi ? _hA : _hB, wp, bi ? null : elbowPole(pl, 0.3));
+		reachHand(passAv, bi ? 0 : 1, bi ? _hB : _hA, wq, bi ? null : elbowPole(pl, -0.3));
 	}
 	function seatMe(pl) {
 		const m = ctx.me(), w = seatWorld(pl, K && K.pl === pl ? "pilot" : "pass");
@@ -1136,7 +1269,9 @@ body.touch #flyhud .fh-keys { display: none; }
 		dt = Math.min(0.05, dt);
 		const keys = inp.keys || new Set();
 		commonKeys(keys);
-		if (pressed(keys, "j")) { prevKeys = new Set(keys); bail(); return; }
+		if (pressed(keys, "j")) { prevKeys = new Set(keys); jumpKey(); return; }
+		if (pressed(keys, "h")) toggleHold();
+		if (pl.hold && !passengerOf(pl)) pl.hold = false;
 		const kb = (a, b) => keys.has(a) || keys.has(b);
 		const kbZ = (kb("w", "arrowup") ? 1 : 0) - (kb("s", "arrowdown") ? 1 : 0);
 		const joyZ = clamp((+inp.z || 0) - kbZ, -1, 1);
@@ -1159,7 +1294,8 @@ body.touch #flyhud .fh-keys { display: none; }
 		if (m.upper !== "flypass" || m.sit || s.p2 !== ctx.MY_ID) { leave(true); return; }
 		const keys = inp.keys || new Set();
 		commonKeys(keys);
-		if (pressed(keys, "j")) { prevKeys = new Set(keys); bail(); return; }
+		if (pressed(keys, "j")) { prevKeys = new Set(keys); jumpKey(); return; }
+		if (pressed(keys, "h")) toggleHold();
 		prevKeys = new Set(keys);
 		if (s.st === "ghost" && !P.warned) { P.warned = true; ctx.notice("Your pilot jumped out! Press <b>J</b> to jump too!"); }
 		seatMe(pl);
@@ -1171,25 +1307,113 @@ body.touch #flyhud .fh-keys { display: none; }
 	function openChute(auto) {
 		if (!SK || SK.open) return;
 		SK.open = true;
+		// (no holding hands under two parachutes: they'd tangle)
+		if (SK.link) dropLink();
 		const m = ctx.me();
 		m.upper = "chute";
 		ctx.sfx("whoosh", 0.7); ctx.sfx("pop", 0.5);
 		if (auto) ctx.notice("Your parachute opened by itself - that was low! Steer with <b>A/D</b>, aim for the pink target.");
 		ctx.sendPose(true);
 	}
+
+	// hand in hand in freefall: whoever grabs a hand falls beside the one they grabbed, who steers for both. Each
+	// skydiver's "sd" message says whose hand they hold (ln) and which side of them they're on (ls: 1 their left)
+	const freshSky = (n, tn) => !!n && tn - n.at < 1.5;
+	function dropLink(msg) {
+		if (!SK || !SK.link) return;
+		SK.link = null; SK.sendT = 0;
+		if (msg) flash(msg, "good", 3);
+	}
+	// who's holding my hands (falling beside me)
+	function myFollowers(tn) {
+		const out = [];
+		skyNet.forEach((n, id) => { if (n.ln === ctx.MY_ID && freshSky(n, tn) && !n.o && peerOf(id) && peerOf(id).upper === "freefall") out.push(id); });
+		return out;
+	}
+	// the nearest other skydiver in freefall I could grab, and the side of them I'd be on
+	function grabbable() {
+		if (!SK || SK.open) return null;
+		const tn = nowS();
+		let best = null, bd = 9;
+		ctx.peers().forEach((p, id) => {
+			const n = skyNet.get(id);
+			if (p.upper !== "freefall" || !freshSky(n, tn) || n.ln) return;
+			const d = p._sky || n, dist = Math.hypot(d.x - SK.x, d.y - SK.y, d.z - SK.z);
+			if (dist < bd) { bd = dist; best = { id, d, n }; }
+		});
+		if (!best) return null;
+		// (their left or their right: whichever I'm nearer, unless someone's already holding that hand)
+		const taken = new Set();
+		skyNet.forEach(n => { if (n.ln === best.id && freshSky(n, tn)) taken.add(n.ls); });
+		let side = Math.sign((SK.x - best.d.x) * Math.cos(best.n.h) - (SK.z - best.d.z) * Math.sin(best.n.h)) || 1;
+		if (taken.has(side)) side = -side;
+		return { id: best.id, side, full: taken.has(side) };
+	}
+	// H in freefall: grab the hand of whoever's near - or let go
+	function skyHold() {
+		if (!SK || SK.open) return;
+		if (SK.link) { const id = SK.link.id; dropLink(`You let go of ${nameOf(id)}'s hand`); return; }
+		const fol = myFollowers(nowS());
+		if (fol.length) {
+			for (const id of fol) ctx.send({ t: "fx", kind: "zfx", zone: "grounds", what: "sdlet", to: id });
+			flash("You let go", "good", 2.5);
+			return;
+		}
+		const gb = grabbable();
+		if (!gb) { ctx.notice("Fall closer to another skydiver (within a few metres - <b>W</b> glides you forward) to grab their hand!"); return; }
+		if (gb.full) { ctx.notice(`Both of <b>${ctx.esc(nameOf(gb.id))}</b>'s hands are taken!`); return; }
+		SK.link = { id: gb.id, side: gb.side, at: nowS(), pend: false };
+		SK.lastLink = gb.id; SK.sendT = 0;
+		ctx.sfx("pop", 0.4);
+		flash(`You grab ${nameOf(gb.id)}'s hand! They steer for you both`, "good", 3.5);
+	}
+	// where I should be, holding their hand: beside them, falling as they fall (null: not holding on)
+	function linkTarget(S, tn) {
+		const ln = S.link;
+		if (!ln) return null;
+		const p = peerOf(ln.id), n = skyNet.get(ln.id);
+		if (!p || !freshSky(n, tn) || n.at < ln.at - 1 || (p.upper !== "freefall" && p.upper !== "chute")) {
+			// (jumping out together: they're on their way out of the plane too)
+			if (ln.pend && tn - ln.at < 4) return null;
+			dropLink(`You lost hold of ${nameOf(ln.id)}'s hand!`);
+			return null;
+		}
+		ln.pend = false;
+		if (n.o || p.upper === "chute") {
+			dropLink();
+			openChute(false);
+			ctx.notice(`<b>${ctx.esc(nameOf(ln.id))}</b> opened their parachute - so you open yours too!`);
+			return null;
+		}
+		const d = p._sky || n;
+		return { x: d.x + Math.cos(n.h) * ln.side * SKY_GAP, y: d.y, z: d.z - Math.sin(n.h) * ln.side * SKY_GAP, h: n.h, vx: n.vx, vy: n.vy, vz: n.vz };
+	}
 	function skyDrive(dt, inp) {
 		if (!SK) return;
-		const S = SK, m = ctx.me();
+		const S = SK, m = ctx.me(), tn = nowS();
 		dt = Math.min(0.05, dt);
 		const keys = inp.keys || new Set();
 		commonKeys(keys);
 		if (pressed(keys, " ") || pressed(keys, "j")) openChute(false);
+		if (pressed(keys, "h")) skyHold();
 		prevKeys = new Set(keys);
 		const fwd = clamp(+inp.z || 0, -1, 1), turn = clamp(+inp.x || 0, -1, 1);
 		const gy = floorAt(S.x, S.z);
 		if (!S.open && S.y - gy < 45) openChute(true);
 		S.t += dt;
-		if (!S.open) {
+		// someone new holding my hand
+		const fol = S.open ? [] : myFollowers(tn);
+		for (const id of fol) if (!(S.fol || []).includes(id)) { S.lastLink = id; ctx.sfx("pop", 0.4); flash(`${nameOf(id)} took your hand! You steer for you both`, "good", 3.5); }
+		S.fol = fol;
+		const T = S.open ? null : linkTarget(S, tn);
+		if (T) {
+			// hand in hand: falling with them, gliding in beside them (they steer)
+			const kk = Math.min(1, dt * 5);
+			S.x += (T.x - S.x) * kk; S.y += (T.y - S.y) * kk; S.z += (T.z - S.z) * kk;
+			S.vx = T.vx; S.vy = T.vy; S.vz = T.vz;
+			S.h = wrap(S.h + wrap(T.h - S.h) * kk);
+			S.roll += (0 - S.roll) * kk;
+		} else if (!S.open) {
 			// freefall: falling ever faster (till the air holds you at about 140 km/h), the plane's speed fading
 			S.vy -= G * dt; S.vy -= S.vy * Math.abs(S.vy) * 0.0068 * dt;
 			S.h = wrap(S.h - turn * 1.8 * dt);
@@ -1213,7 +1437,7 @@ body.touch #flyhud .fh-keys { display: none; }
 		m.upper = S.open ? "chute" : "freefall";
 		// where I am: to everyone, ten times a second (and the pose now and then)
 		S.sendT -= dt; S.poseT -= dt;
-		if (S.sendT <= 0) { S.sendT = 0.1; ctx.send({ t: "fx", kind: "zfx", zone: "grounds", what: "sd", x: fix(S.x, 2), y: fix(S.y, 2), z: fix(S.z, 2), h: fix(S.h, 3), vx: fix(S.vx, 2), vy: fix(S.vy, 2), vz: fix(S.vz, 2), o: S.open ? 1 : 0, rl: fix(S.roll, 2) }); }
+		if (S.sendT <= 0) { S.sendT = 0.1; ctx.send({ t: "fx", kind: "zfx", zone: "grounds", what: "sd", x: fix(S.x, 2), y: fix(S.y, 2), z: fix(S.z, 2), h: fix(S.h, 3), vx: fix(S.vx, 2), vy: fix(S.vy, 2), vz: fix(S.vz, 2), o: S.open ? 1 : 0, rl: fix(S.roll, 2), ln: S.link ? S.link.id : "", ls: S.link ? S.link.side : 0 }); }
 		if (S.poseT <= 0) { S.poseT = 0.3; ctx.sendPose(true); }
 		hudSky(S);
 	}
@@ -1232,6 +1456,9 @@ body.touch #flyhud .fh-keys { display: none; }
 		if (td < 1.2) { msg = "<b>BULLSEYE!</b> Right in the middle of the target!"; ctx.sfx("yes", 0.7); ctx.sfx("applause", 0.6); }
 		else if (td < 10) { msg += ` You landed on the target, <b>${td.toFixed(1)} m</b> from the middle!`; ctx.sfx("applause", 0.4); }
 		else if (td < 60) msg += ` <b>${Math.round(td)} m</b> from the target.`;
+		// (the one I fell with: down already, close by)
+		const pal = S.lastLink && peerOf(S.lastLink);
+		if (pal && pal.upper !== "freefall" && pal.upper !== "chute" && Math.hypot(pal.tx - x, pal.tz - z) < 25) { msg += ` You landed together with <b>${ctx.esc(pal.look.name)}</b>! 💕`; ctx.sfx("applause", 0.4); }
 		ctx.notice(msg);
 		ctx.sendPose(true);
 	}
@@ -1290,13 +1517,13 @@ body.touch #flyhud .fh-keys { display: none; }
 			n.w += (clamp(wrap(d.h - n.h) / el, -4, 4) - n.w) * 0.6;
 			n.x = +d.x; n.y = +d.y; n.z = +d.z; n.h = +d.h; n.at = t;
 		}
-		Object.assign(n, { p: +d.p, r: +d.r, v: +d.v, th: +d.th || 0, g: d.g ? 1 : 0, gd: d.gd ? 1 : 0, sm: d.sm ? 1 : 0, b: d.b ? 1 : 0, cp: +d.cp || 0, cb: +d.cb || 0 });
+		Object.assign(n, { p: +d.p, r: +d.r, v: +d.v, th: +d.th || 0, g: d.g ? 1 : 0, gd: d.gd ? 1 : 0, sm: d.sm ? 1 : 0, b: d.b ? 1 : 0, cp: +d.cp || 0, cb: +d.cb || 0, hh: d.hh ? 1 : 0 });
 	}
 	const skyNet = new Map();   // skydiver id -> their last message
 	function onSkyMsg(d) {
 		if (d.id === ctx.MY_ID) return;
 		for (const f of ["x", "y", "z", "h"]) if (!isFinite(+d[f])) return;
-		skyNet.set(d.id, { x: +d.x, y: +d.y, z: +d.z, h: +d.h, vx: +d.vx || 0, vy: +d.vy || 0, vz: +d.vz || 0, o: !!d.o, rl: +d.rl || 0, at: nowS() });
+		skyNet.set(d.id, { x: +d.x, y: +d.y, z: +d.z, h: +d.h, vx: +d.vx || 0, vy: +d.vy || 0, vz: +d.vz || 0, o: !!d.o, rl: +d.rl || 0, at: nowS(), ln: typeof d.ln === "string" ? d.ln : "", ls: +d.ls < 0 ? -1 : 1 });
 	}
 
 	// ================================================================ every frame
@@ -1318,7 +1545,7 @@ body.touch #flyhud .fh-keys { display: none; }
 			pl.sendT -= dt; pl.saveT -= dt;
 			if (pl.sendT <= 0) {
 				pl.sendT = pl.ground && pl.v < 0.2 ? 0.5 : SEND;
-				ctx.send({ t: "fx", kind: "zfx", zone: "grounds", what: "pl", i: pl.i, x: fix(pl.x, 2), y: fix(pl.y, 2), z: fix(pl.z, 2), h: fix(pl.h, 3), p: fix(pl.p, 3), r: fix(pl.r, 3), v: fix(pl.v, 1), th: fix(pl.thr, 2), g: pl.gear ? 1 : 0, gd: pl.ground ? 1 : 0, sm: pl.smoke ? 1 : 0, b: pl.belly ? 1 : 0, cp: fix(pl.ctrlP, 2), cb: fix(pl.ctrlB, 2) });
+				ctx.send({ t: "fx", kind: "zfx", zone: "grounds", what: "pl", i: pl.i, x: fix(pl.x, 2), y: fix(pl.y, 2), z: fix(pl.z, 2), h: fix(pl.h, 3), p: fix(pl.p, 3), r: fix(pl.r, 3), v: fix(pl.v, 1), th: fix(pl.thr, 2), g: pl.gear ? 1 : 0, gd: pl.ground ? 1 : 0, sm: pl.smoke ? 1 : 0, b: pl.belly ? 1 : 0, cp: fix(pl.ctrlP, 2), cb: fix(pl.ctrlB, 2), hh: pl.hold && !ghosts.has(pl) ? 1 : 0 });
 			}
 			if (pl.saveT <= 0) { pl.saveT = 3; setPlane(pl, ghosts.has(pl) ? "ghost" : "fly"); }
 		}
@@ -1391,6 +1618,7 @@ body.touch #flyhud .fh-keys { display: none; }
 			pl.ails[0].rotation.x = pl.ctrlB * 0.35; pl.ails[1].rotation.x = -pl.ctrlB * 0.35;
 			pl.elev.rotation.x = -pl.ctrlP * 0.32;
 			pl.rud.rotation.y = pl.ctrlB * 0.3;
+			pl.stick.g.rotation.x = -pl.ctrlP * 0.3; pl.stick.g.rotation.z = pl.ctrlB * 0.3;
 			if (D.retract) pl.gearK += ((pl.gear && !pl.belly ? 1 : 0) - pl.gearK) * Math.min(1, dt * 1.6);
 			if (pl.legs) for (const l of pl.legs) l.g.rotation[l.axis] = l.up * (1 - pl.gearK);
 			// lights: navigation lights while it's running, a white strobe blinking, the landing light (Bluebird)
@@ -1426,14 +1654,27 @@ body.touch #flyhud .fh-keys { display: none; }
 			const dist = Math.hypot(lp.x - pl.x, lp.y - pl.y, lp.z - pl.z);
 			const vol = on ? (mineNow ? 0.05 + pl.thr * 0.06 : 0.09 * Math.pow(Math.max(0, 1 - dist / 220), 2) * (0.5 + pl.thr * 0.5)) : 0;
 			if (vol > 0.001 || pl.snd) engineSnd(pl, vol, pl.rpm);
-			// whoever's in it
-			const pId = pilotOf(pl), paId = passengerOf(pl);
-			if (pId && pId !== ctx.MY_ID) { const p = peerOf(pId); if (p) seatAvatar(p.avatar, pl, "pilot"); }
-			if (paId && paId !== ctx.MY_ID) { const p = peerOf(paId); if (p) seatAvatar(p.avatar, pl, "pass"); }
-			if (mineNow) seatAvatar(ctx.myAvatar(), pl, K ? "pilot" : "pass");
+			// whoever's in it (and, holding hands, their hands meeting between the seats)
+			const pId = pilotOf(pl), paId = passengerOf(pl), held = handsHeld(pl);
+			const pAv = pId && avOf(pId), qAv = paId && avOf(paId);
+			if (pAv) seatAvatar(pAv, pl, "pilot", held);
+			if (qAv) seatAvatar(qAv, pl, "pass", held);
+			if (mineNow && !(K ? pAv : qAv)) seatAvatar(ctx.myAvatar(), pl, K ? "pilot" : "pass", false);
+			if (held && pAv && qAv) holdInPlane(pl, pAv, qAv, dt);
+			else { if (pAv) easeHold(pAv, false); if (qAv) easeHold(qAv, false); }
+			// the pilot's left hand on the stick
+			if (pAv) { pl.root.updateMatrixWorld(true); reachHand(pAv, 1, pl.stick.grip.getWorldPosition(_hM), 1, elbowPole(pl, pl.def.kind === "bi" ? 0.25 : -0.1)); }
+			// (tell whoever's in it when it starts or stops)
+			if (mineNow && held !== pl.heldWas) {
+				const o = otherInPlane(pl);
+				if (held) { flash(`Holding hands with ${nameOf(o)} 💕`, "good", 3); ctx.sfx("pop", 0.35); }
+				else if (o) flash("You let go of each other's hands", "good", 2.5);
+			}
+			pl.heldWas = mineNow && held;
 		}
 		// skydivers: me, and everyone else (from their messages, predicted between them)
-		if (SK) poseSkydiver(ctx.myAvatar(), ctx.MY_ID, SK.x, SK.y, SK.z, SK.h, SK.open, SK.roll, dt);
+		const divers = new Map();   // id -> { av, d: where (x, y, z), h, open, roll, ln: whose hand they hold, ls: their side }
+		if (SK) divers.set(ctx.MY_ID, { av: ctx.myAvatar(), d: SK, h: SK.h, open: SK.open, roll: SK.roll, ln: SK.link && !SK.link.pend ? SK.link.id : "", ls: SK.link ? SK.link.side : 0 });
 		else hideChute(ctx.MY_ID);
 		ctx.peers().forEach((p, id) => {
 			const n = skyNet.get(id);
@@ -1443,9 +1684,47 @@ body.touch #flyhud .fh-keys { display: none; }
 				const d = p._sky || (p._sky = { x: tx, y: ty, z: tz });
 				const kk = Math.hypot(tx - d.x, ty - d.y, tz - d.z) > 20 ? 1 : Math.min(1, dt * 10);
 				d.x += (tx - d.x) * kk; d.y += (ty - d.y) * kk; d.z += (tz - d.z) * kk;
-				poseSkydiver(p.avatar, id, d.x, d.y, d.z, n.h, p.upper === "chute", n.rl, dt);
+				divers.set(id, { av: p.avatar, d, h: n.h, open: p.upper === "chute", roll: n.rl, ln: n.ln, ls: n.ls });
 			} else { p._sky = null; hideChute(id); }
 		});
+		// hand in hand: drawn right beside the one whose hand they hold (on everyone's screen, so the hands meet), at
+		// their height, facing their way
+		for (const f of divers.values()) {
+			const L = f.ln && !f.open ? divers.get(f.ln) : null;
+			if (!L || L.open || L.ln || L === f) { f.ln = ""; continue; }
+			const tx = L.d.x + Math.cos(L.h) * f.ls * SKY_GAP, ty = L.d.y, tz = L.d.z - Math.sin(L.h) * f.ls * SKY_GAP;
+			if (Math.hypot(tx - f.d.x, ty - f.d.y, tz - f.d.z) > 12) { f.ln = ""; continue; }
+			if (f.d === SK) {
+				// me: gliding in (skyDrive), then held right there
+				const kk = Math.hypot(tx - SK.x, ty - SK.y, tz - SK.z) < 0.6 ? 1 : Math.min(1, dt * 6);
+				SK.x += (tx - SK.x) * kk; SK.y += (ty - SK.y) * kk; SK.z += (tz - SK.z) * kk;
+				f.h = wrap(f.h + wrap(L.h - f.h) * kk);
+			} else {
+				// someone else: from where their messages put them, eased over to the spot beside the one they hold
+				const w = f.av._linkK = Math.min(1, (f.av._linkK || 0) + dt * 2.5);
+				f.d = { x: lerp(f.d.x, tx, w), y: lerp(f.d.y, ty, w), z: lerp(f.d.z, tz, w) };
+				f.h = wrap(f.h + wrap(L.h - f.h) * w);
+			}
+			f.roll = L.roll;
+			f.L = L;
+		}
+		divers.forEach((f, id) => { f.av.skyLink = 0; poseSkydiver(f.av, id, f.d.x, f.d.y, f.d.z, f.h, f.open, f.roll, dt); });
+		const linked = new Set();
+		for (const f of divers.values()) {
+			const L = f.L;
+			if (!L) continue;
+			// the near hands (1: their left / my right... arms[1] is the left arm) meet halfway between the shoulders
+			const li = f.ls > 0 ? 1 : 0, fi = 1 - li;
+			L.av.root.updateMatrixWorld(true); f.av.root.updateMatrixWorld(true);
+			L.av.arms[li].sh.getWorldPosition(_hA); f.av.arms[fi].sh.getWorldPosition(_hB);
+			_hM.addVectors(_hA, _hB).multiplyScalar(0.5);
+			_hA.sub(_hM).setLength(0.012).add(_hM); _hB.sub(_hM).setLength(0.012).add(_hM);
+			f.av.skyLink = -f.ls; L.av.skyLink = f.ls;
+			reachHand(L.av, li, _hA, easeHold(L.av, true, dt));
+			reachHand(f.av, fi, _hB, easeHold(f.av, true, dt));
+			linked.add(L.av); linked.add(f.av);
+		}
+		divers.forEach(f => { if (!f.L) f.av._linkK = 0; if (!linked.has(f.av)) easeHold(f.av, false); });
 		for (const id of [...chutes.keys()]) if (id !== ctx.MY_ID && !ctx.peers().has(id)) { const c = chutes.get(id); g.remove(c.grp); chutes.delete(id); }
 		// the wind rushing by: falling, or flying fast in the open
 		const myPl = mine();
@@ -1529,13 +1808,39 @@ body.touch #flyhud .fh-keys { display: none; }
 				pl.wreckSeen = nowS();
 			} else if (d.what === "pspawn") { const pl = planes[d.i | 0]; if (pl) { pl.net = null; poof(pl.def.x, pl.def.z); } }
 			else if (d.what === "pbail") { const pl = planes[d.i | 0]; if (pl && P && P.pl === pl && !P.warned) { P.warned = true; ctx.notice("Your pilot jumped out! Press <b>J</b> to jump too!"); } }
+			// (the rest are for one person: the one beside them in a plane, or the skydiver whose hand they held)
+			else if (d.what === "phold") { const pl = planes[d.i | 0]; if (pl && K && K.pl === pl && d.id && d.id === passengerOf(pl)) { pl.hold = !!d.on; pl.sendT = 0; } }
+			else if (d.what === "pjask" && d.to === ctx.MY_ID) {
+				const pl = planes[d.i | 0];
+				if (!pl || mine() !== pl || otherInPlane(pl) !== d.id) return;
+				jumpAsked = { from: d.id, at: nowS() };
+				flash(`${nameOf(d.id)} wants to jump out together, hand in hand! Press J`, "good", 8);
+				ctx.notice(`<b>${ctx.esc(nameOf(d.id))}</b> wants to jump out together, holding hands! Press <b>J</b> to go.`);
+				ctx.sfx("pop", 0.4);
+			} else if (d.what === "pjgo" && d.to === ctx.MY_ID) {
+				// (they said yes: out we go, together)
+				const pl = planes[d.i | 0];
+				if (pl && mine() === pl && jumpAsk && jumpAsk.to === d.id && nowS() - jumpAsk.at < 15) bail();
+			} else if (d.what === "sdlet" && d.to === ctx.MY_ID) { if (SK && SK.link && SK.link.id === d.id) dropLink(`${nameOf(d.id)} let go of your hand`); }
 		},
 		promptOpts(opts) {
 			const free = k2 => !opts.some(o => o.k === k2);
-			if (SK) { if (!SK.open && free("Space")) opts.push({ k: "Space", label: "Open your parachute", fn: () => openChute(false) }); return; }
+			if (SK) {
+				if (SK.open) return;
+				if (free("Space")) opts.push({ k: "Space", label: "Open your parachute", fn: () => openChute(false) });
+				if (free("H")) {
+					const gb = SK.link || (SK.fol && SK.fol.length) ? null : grabbable();
+					if (SK.link) opts.push({ k: "H", label: `Let go of ${nameOf(SK.link.id)}'s hand`, fn: skyHold });
+					else if (SK.fol && SK.fol.length) opts.push({ k: "H", label: "Let go", fn: skyHold });
+					else if (gb && !gb.full) opts.push({ k: "H", label: `Grab ${nameOf(gb.id)}'s hand`, fn: skyHold });
+				}
+				return;
+			}
 			const pl = mine();
 			if (pl) {
-				if (!pl.ground && free("J")) opts.push({ k: "J", label: "Jump out (parachute)", fn: bail });
+				const o = otherInPlane(pl), held = !!o && handsHeld(pl);
+				if (!pl.ground && free("J")) opts.push({ k: "J", label: held ? "Jump out together" : "Jump out (parachute)", fn: jumpKey });
+				if (o && free("H")) opts.push({ k: "H", label: held ? `Let go of ${nameOf(o)}'s hand` : `Hold hands with ${nameOf(o)}`, fn: toggleHold });
 				if (K) {
 					if (pl.def.retract && free("G")) opts.push({ k: "G", label: pl.gear && !pl.belly ? "Gear up" : "Gear down", fn: toggleGear });
 					if (free("R")) opts.push({ k: "R", label: pl.smoke ? "Smoke off" : "Smoke trail", fn: toggleSmoke });

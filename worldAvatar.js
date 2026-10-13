@@ -1868,15 +1868,32 @@ export class Avatar {
 			P.torsoX = -0.14;
 			for (let i = 0; i < 2; i++) { P.arm[i].x = -1.15; P.arm[i].e = -0.62; P.arm[i].z = (i ? 1 : -1) * 0.2; }
 		} else if (up === "fly") {
-			// flying a plane: the stick in the right hand, the throttle in the left, sitting up to see over the nose
-			P.torsoX = -0.06; P.headX = -0.08;
-			P.arm[1].x = -0.75; P.arm[1].e = -0.95; P.arm[1].z = 0.1;
-			P.arm[0].x = -0.6; P.arm[0].e = -1.05; P.arm[0].z = -0.28;
+			// flying a plane: the left hand on the stick (placed by IK: worldPlanes.js), the right resting on the thigh,
+			// elbows in (the cockpit's narrow), sitting up to see over the nose. this.cockpit (set by worldPlanes.js):
+			// { kind: "bi" | "sport", hold: hand in hand with the passenger (the right hand, placed by IK too) }
+			const ck = this.cockpit || {};
+			P.torsoX = -0.04; P.headX = -0.06;
+			P.arm[0].x = -0.4; P.arm[0].z = 0.12; P.arm[0].e = -0.8;
+			P.arm[1].x = -0.5; P.arm[1].z = -0.05; P.arm[1].e = -1.0;
+			if (ck.hold) {
+				const glance = Math.max(0, Math.sin(t * 0.8));
+				// (in the biplane: leaning forward to reach the front cockpit; side by side: a glance across)
+				if (ck.kind === "bi") { P.torsoX = 0.22; P.headX = -0.22; }
+				else { P.headY = -0.15 - glance * 0.4; P.headZ = 0.05 * glance; }
+			}
 		} else if (up === "flypass") {
-			// along for the flight: one hand on the cockpit's rim, looking out over the side
-			P.torsoX = -0.1; P.headY = 0.35; P.headX = 0.1;
-			P.arm[0].x = -0.45; P.arm[0].e = -0.9; P.arm[0].z = -0.1;
-			P.arm[1].x = -0.3; P.arm[1].e = -0.4; P.arm[1].z = 0.75;
+			// along for the flight: looking out over the side, the outside hand on the cockpit's edge, the other in the lap
+			// (side by side in the sport plane the passenger's in the right seat: the outside is to the right)
+			const ck = this.cockpit || {}, sport = ck.kind === "sport", o = sport ? 0 : 1;
+			P.torsoX = -0.08; P.headX = 0.08; P.headY = sport ? -0.4 : 0.4;
+			P.arm[o].x = -0.25; P.arm[o].z = sport ? -0.35 : 0.95; P.arm[o].e = -1.15;
+			P.arm[1 - o].x = -0.4; P.arm[1 - o].z = o ? 0.12 : -0.12; P.arm[1 - o].e = -0.8;
+			if (ck.hold) {
+				const glance = Math.max(0, Math.sin(t * 0.8 + 1));
+				// (in the biplane: twisted round to reach back to the pilot; side by side: a happy look across)
+				if (!sport) { P.torsoY = -0.55; P.headY = -0.9; P.headX = -0.05; P.arm[1].x = -0.35; P.arm[1].z = 0.3; }
+				else { P.headY = 0.15 + glance * 0.4; P.headZ = -0.05 * glance; }
+			}
 		} else if (up === "freefall") {
 			// skydiving, belly to the earth (the body is laid flat: see worldPlanes.js): arched, arms out and bent up,
 			// knees bent so the feet trail up behind, the head up to see where you're going; a little buffeting
@@ -1888,6 +1905,9 @@ export class Avatar {
 				P.leg[i].x = 0.35 + f2; P.leg[i].k = 1.15; P.leg[i].z = sd * 0.3;
 				P.foot[i] = 0.4;
 			}
+			// hand in hand with another skydiver (this.skyLink: which side they're on, 1 = our left; the arm's placed by
+			// IK): looking across at them
+			if (this.skyLink) P.headY = this.skyLink * (0.45 + Math.sin(t * 0.9) * 0.12);
 		} else if (up === "chute") {
 			// hanging under a parachute: both hands up on the steering toggles, legs dangling (and swinging a little)
 			const sw = Math.sin(t * 2.1) * 0.12;
