@@ -3,7 +3,7 @@
  * the grounds (worldGrounds.js) and the world (world.js: walking, the weather).
  *
  * The house stands in the north with the terrace and the pool deck in its courtyard. Everything else stands on
- * landscaped grounds round it, each with plenty of room to breathe (world x -430..56, z -166..40), joined by paved paths:
+ * landscaped grounds round it, each with plenty of room to breathe (world x -430..56, z -470..40), joined by paved paths:
  *
  *   north   the house: one rectangular block, a walkable roof deck on top with the gym and the playroom up there, the
  *           terrace cantilevered off its south edge, and the double-height lounge rising out of it
@@ -13,12 +13,14 @@
  *   round   a walk all round the house and down the east side, with the roller coaster outside it
  *   far west past the ring road: the Harmony Grand Prix circuit (RACE) - a big race track with a start gantry, a
  *           grandstand, a paddock of race cars, and hurdles on the way (cone slaloms, barrier chicanes, tyre gates)
+ *   far south past the ring road, down the airfield road: Harmony Airfield (AIR) - a long runway, an apron with a hangar
+ *           and a control tower, two planes to fly (worldPlanes.js), and a target on the lawn for parachutists
  *
  * Rects are [minX, maxX, minZ, maxZ] in world coordinates.
  */
 
 // the grounds: everything inside the hedge
-export const ESTATE = [-430, 56, -166, 40];
+export const ESTATE = [-430, 56, -470, 40];
 // (how far in from the edge you can walk: the hedge is in the way)
 export const HEDGE_IN = 1.4;
 
@@ -199,6 +201,23 @@ export const RACE = {
 	stand: [-103.4, -97.6, -74, -36]
 };
 export const RACE_ROAD = { x0: -112, x1: -87.2, z: 10.3 };
+// ================================================================ the airfield (worldPlanes.js)
+// Harmony Airfield, out in the far south past the ring road: one long runway running east-west (09 / 27), an apron on
+// its north side with a hangar and a control tower, and a road up from the ring road's south side. Two planes wait on
+// the apron; the lawn round it is kept clear of trees (the approaches too), and there's a target out on the lawn to
+// aim for under a parachute.
+export const AIR = {
+	runway: { x0: -380, x1: -20, z: -340, hw: 12 },
+	apron: [-120, 0, -328, -270],
+	hangar: [-112, -44, -268, -244],
+	tower: [14, -284],
+	road: { x: -20, z0: -270, z1: -160.6 },
+	target: [-205, -240],
+	windsock: [-200, -318],
+	// nothing tall in here: the runway, its approaches, the apron and its buildings
+	clear: [-450, 30, -372, -236]
+};
+AIR.runwayRect = [AIR.runway.x0, AIR.runway.x1, AIR.runway.z - AIR.runway.hw, AIR.runway.z + AIR.runway.hw];
 // the centre line, sampled every ~step metres from the start line: [x, z, tangent x, tangent z, metres from the line]
 let raceLine = null;
 export function racePath() {
@@ -267,6 +286,8 @@ export function roadAt(x, z, pad = 0) {
 	if (x > DRIVE.x0 && x < DRIVE.x1 && Math.abs(z - DRIVE.z) < hw) return true;
 	if (x > RACE_ROAD.x0 && x < RACE_ROAD.x1 && Math.abs(z - RACE_ROAD.z) < hw) return true;
 	if (x < RACE.area[1] + 6 + pad) { const r = raceAt(x, z); if (r && r.d < RACE.hw + 1.2 + pad) return true; }
+	if (Math.abs(x - AIR.road.x) < hw && z > AIR.road.z0 - pad && z < AIR.road.z1 + pad) return true;
+	if (inRect(AIR.apron, x, z, pad) || inRect(AIR.runwayRect, x, z, pad)) return true;
 	for (const m of MOUTHS) if (x > m.x0 - Math.max(0, pad) && x < m.x1 + Math.max(0, pad)) {
 		const t = Math.max(0, Math.min(1, (x - m.x0) / (m.x1 - m.x0)));
 		if (Math.abs(z - m.z) < m.h0 + (m.h1 - m.h0) * t + pad) return true;

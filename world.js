@@ -421,9 +421,11 @@ function upsertPeer(id, lk) {
 }
 const BASE_ANIMS = ["idle", "sit", "sleep", "floor"];
 const UPPER_ANIMS = ["wave", "dance", "clap", "heart", "drink", "paint", "write", "tug", "piano", "laugh", "cry", "kiss", "hug", "highfive", "jump", "bow", "cheer", "think", "shrug", "facepalm", "yawn", "warm", "telescope", "shake", "give", "stumble",
-	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash", "handhold", "kart", "drive", "carpass", "kick", "scoop", "throw",
+	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash", "handhold", "kart", "drive", "carpass", "fly", "flypass", "freefall", "chute", "kick", "scoop", "throw",
 	"foreheadkiss", "boop", "backhug", "neckkiss", "buttpat", "beckon", "flirty", "bitelip", "shy", "melt", "giggle", "eep",
 	"dz_hiphop", "dz_floss", "dz_robot", "dz_disco", "dz_salsa", "dz_shuffle", "dz_bootyshake", "dz_ballet", "dz_kpop", "dz_sway"];
+// up in the air (a plane, a parachute: worldPlanes.js) - over the house's roof isn't "in" one of its rooms
+const AIR_UPPERS = ["fly", "flypass", "freefall", "chute"];
 const PROPS = ["mug", "brush", "remote", "flower", "ring", "popcorn", "fork", "spoon", "sponge"].concat(FOOD_PROPS);
 function applyPose(p, d, snap) {
 	if (typeof d.x !== "number") return;
@@ -434,7 +436,7 @@ function applyPose(p, d, snap) {
 	// went through a door: jump straight there (no gliding through walls), and say where they went
 	if (Math.hypot(p.tx - p.x, p.tz - p.z) > 6) snap = true;
 	const nowIn = house.regionOf(areaOf(p.tx, p.tz));
-	if (wasIn && wasIn !== nowIn) peerMoved(p, nowIn);
+	if (wasIn && wasIn !== nowIn && !AIR_UPPERS.includes(d.u)) peerMoved(p, nowIn);
 	p.anim = BASE_ANIMS.includes(d.a) ? d.a : "idle";
 	const prevUpper = p.upper;
 	p.upper = UPPER_ANIMS.includes(d.u) ? d.u : (UPPER_ANIMS.includes(d.a) ? d.a : null);
@@ -3791,8 +3793,8 @@ function updateMe(dt) {
 		if (me.upper === "carry" || me.upper === "cuddle" || me.upper === "handhold") { /* still holding / snuggling */ }
 		else if (me.upper && !["paint", "piano", "tug", "telescope", "carry"].includes(me.upper)) { me.upper = null; me.partner = null; updateProps(); sendPose(true); }
 	}
-	// the stairs between floors: step into one end and you're on the other floor
-	if (!me.sit && !me.carriedBy) for (const P of house.portals) if (me.x > P.minX && me.x < P.maxX && me.z > P.minZ && me.z < P.maxZ) {
+	// the stairs between floors: step into one end and you're on the other floor (not flying over the roof, though)
+	if (!me.sit && !me.carriedBy && !(veh && veh.air)) for (const P of house.portals) if (me.x > P.minX && me.x < P.maxX && me.z > P.minZ && me.z < P.maxZ) {
 		if (P.climb) { if (freeSpot([P.climb])) { me.target = null; me.path = []; sitOn([P.climb]); } }
 		else crossFloor(P);
 		break;
@@ -4168,7 +4170,7 @@ function updatePeers(dt) {
 	peers.forEach((p, id) => {
 		if (t - p.last > 25000) { removePeer(id); return; }
 		// people are drawn in the room you're in and the rooms you can see into through open doors
-		p.avatar.root.visible = house.visible(house.regionOf(areaOf(p.x, p.z)));
+		p.avatar.root.visible = house.visible(AIR_UPPERS.includes(p.upper) ? "grounds" : house.regionOf(areaOf(p.x, p.z)));
 		const k = Math.min(1, dt * 10);
 		const ox = p.x, oz = p.z;
 		p.x += (p.tx - p.x) * k; p.z += (p.tz - p.z) * k;
@@ -4304,10 +4306,16 @@ function updateCamera(dt, t) {
 	if (spot && spot.lie) { fx = me.x - Math.sin(spot.h) * 0.9; fz = me.z - Math.cos(spot.h) * 0.9; ty = 0.75; }
 	if (me.upper === "piano") { ty = 1.05; fz = me.z + 0.35; }
 	if (drawOpen) { const d = room.interactables.easel; fx = (me.x + d.stand[0] + Math.sin(d.face) * 1.1) / 2; fz = (me.z + d.stand[1] + Math.cos(d.face) * 1.1) / 2; ty = 1.2; }
+	// up in the air (a plane, a parachute): the camera follows you up, out in the open sky
+	const air = !ride && !me.sit && house.vehicle();
+	const sky = !!(air && air.camY !== undefined);
 	if (ride) { const rp = myAvatar.root.position; fx = rp.x; fz = rp.z; ty = rp.y + 1.0; }
+	else if (sky) ty = air.camY;
 	else ty += floorAt(me.x, me.z);   // up the cinema tiers, down in the pool
-	cam.tx += (fx - cam.tx) * k; cam.tz += (fz - cam.tz) * k;
-	cam.ty += (ty - cam.ty) * k;
+	// (flying, it's locked on you: a lagging camera falls far behind a plane)
+	const kf = sky ? 1 : k;
+	cam.tx += (fx - cam.tx) * kf; cam.tz += (fz - cam.tz) * kf;
+	cam.ty += (ty - cam.ty) * kf;
 	// dragging below level means looking up: the camera stays at its lowest orbit and the view tilts up
 	// (dropping the camera to the floor would put it inside the furniture)
 	const lookUp = Math.max(0, -cam.pitch), pitch = Math.max(cam.pitch, 0.06);
@@ -4318,12 +4326,13 @@ function updateCamera(dt, t) {
 	// never through a wall, the floor or the ceiling: slide in along the line toward you instead
 	// (so the view keeps its angle - it just comes closer), and ease back out when there's room again
 	// (up on a ride you're out in the open air: nothing to bump into)
-	let f = ride ? 1 : camReach(camBox(cam.tx, cam.tz), cam.tx, cam.ty, cam.tz, px, py, pz);
+	let f = ride || sky ? 1 : camReach(camBox(cam.tx, cam.tz), cam.tx, cam.ty, cam.tz, px, py, pz);
 	// ...and never through a wall inside a room (the mansion's rooms, the aquarium's tunnel, the cardboard box)
 	f = Math.min(f, wallReach(ride, cam.tx, cam.ty, cam.tz, px, py, pz));
 	cam.pull = cam.pull === undefined || f < cam.pull ? f : cam.pull + (f - cam.pull) * Math.min(1, dt * 3);
 	px = cam.tx + (px - cam.tx) * cam.pull; py = cam.ty + (py - cam.ty) * cam.pull; pz = cam.tz + (pz - cam.tz) * cam.pull;
-	let fov = 55;
+	if (sky) py = Math.max(py, floorAt(px, pz) + 0.6);   // (never under the ground, flying low)
+	let fov = sky && air.fov ? air.fov : 55;
 	if (tvMode && fullVid) {
 		// square in front of the screen, filling the view
 		const scr = watchedScreen();
@@ -4376,7 +4385,8 @@ function updateCamera(dt, t) {
 	// the sky dome is centred on the living room; far out from it (the park, up on the coaster) it comes along with
 	// the camera, so you never fly out through the sky (close in it stays put: the telescope aims at its painted moon)
 	const cpos = camera.position, off = Math.hypot(cpos.x, cpos.z + 3), sf = Math.min(1, Math.max(0, (off - 20) / 20));
-	room.sky.position.set(cpos.x * sf, 0, -3 + (cpos.z + 3) * sf);
+	// (and up high - flying - it rises with you, so you never climb out through the top of it)
+	room.sky.position.set(cpos.x * sf, cpos.y > 12 ? cpos.y - 12 : 0, -3 + (cpos.z + 3) * sf);
 }
 
 // ============================================================ weather (worldWeather.js): rain, storms, snow, blossom, autumn
@@ -4896,6 +4906,14 @@ function watchPerf(raw) {
 		if (++perf.good >= 3) { perf.good = 0; gfx.scale = Math.min(1, gfx.scale + 0.1); applyGfx(); perf.cool = 1; }
 	} else perf.good = 0;
 }
+// where you are, for which part of the house you're in: up in the air, the last place you were over the open grounds
+// (flying over the roof isn't being in the dining room)
+const _airXZ = [me.x, me.z];
+function regionXZ() {
+	const veh = entered && house.vehicle();
+	if (!(veh && veh.air) || areaOf(me.x, me.z) === "grounds") { _airXZ[0] = me.x; _airXZ[1] = me.z; }
+	return _airXZ;
+}
 // one bad frame must never freeze the world: log it (once per message) and keep going
 const frameErrs = new Set();
 function frame() {
@@ -4919,7 +4937,7 @@ function frameBody() {
 	myAvatar.root.visible = !scopeOn && !tvMode && !ridePOV();
 	myAvatar.update(dt);
 	// the rest of the house: which room you're in, its lights, its moving parts
-	house.update(dt, t, me.x, me.z);
+	house.update(dt, t, ...regionXZ());
 	// only light the area you're in (fewer lights = much cheaper shading)
 	const inTerrace = areaOf(cam.tx, cam.tz) === "terrace" || (entered && areaOf(me.x, me.z) === "terrace");
 	const lightArea = house.indoorsAway() ? "house" : inTerrace || (house.current() && house.current().outdoor) ? "terrace" : "room";

@@ -1867,6 +1867,37 @@ export class Avatar {
 			// at the wheel of a car: leaning back in the seat, both hands up on the wheel
 			P.torsoX = -0.14;
 			for (let i = 0; i < 2; i++) { P.arm[i].x = -1.15; P.arm[i].e = -0.62; P.arm[i].z = (i ? 1 : -1) * 0.2; }
+		} else if (up === "fly") {
+			// flying a plane: the stick in the right hand, the throttle in the left, sitting up to see over the nose
+			P.torsoX = -0.06; P.headX = -0.08;
+			P.arm[1].x = -0.75; P.arm[1].e = -0.95; P.arm[1].z = 0.1;
+			P.arm[0].x = -0.6; P.arm[0].e = -1.05; P.arm[0].z = -0.28;
+		} else if (up === "flypass") {
+			// along for the flight: one hand on the cockpit's rim, looking out over the side
+			P.torsoX = -0.1; P.headY = 0.35; P.headX = 0.1;
+			P.arm[0].x = -0.45; P.arm[0].e = -0.9; P.arm[0].z = -0.1;
+			P.arm[1].x = -0.3; P.arm[1].e = -0.4; P.arm[1].z = 0.75;
+		} else if (up === "freefall") {
+			// skydiving, belly to the earth (the body is laid flat: see worldPlanes.js): arched, arms out and bent up,
+			// knees bent so the feet trail up behind, the head up to see where you're going; a little buffeting
+			const f = Math.sin(t * 13) * 0.05, f2 = Math.sin(t * 9.5 + 1) * 0.05;
+			P.bodyY = 0; P.torsoX = -0.25; P.headX = -0.7;
+			for (let i = 0; i < 2; i++) {
+				const sd = i ? 1 : -1;
+				P.arm[i].x = -0.35 + f; P.arm[i].z = sd * (1.45 + f2); P.arm[i].e = -1.1;
+				P.leg[i].x = 0.35 + f2; P.leg[i].k = 1.15; P.leg[i].z = sd * 0.3;
+				P.foot[i] = 0.4;
+			}
+		} else if (up === "chute") {
+			// hanging under a parachute: both hands up on the steering toggles, legs dangling (and swinging a little)
+			const sw = Math.sin(t * 2.1) * 0.12;
+			P.bodyY = 0; P.torsoX = 0.02; P.headX = 0.12;
+			for (let i = 0; i < 2; i++) {
+				const sd = i ? 1 : -1;
+				P.arm[i].x = -0.25; P.arm[i].z = sd * 2.55; P.arm[i].e = -0.55;
+				P.leg[i].x = -0.22 + (i ? sw : -sw); P.leg[i].k = 0.35 + (i ? -sw : sw) * 0.5; P.leg[i].z = sd * 0.06;
+				P.foot[i] = 0.5;
+			}
 		} else if (up === "carpass") {
 			// riding along: leaning back, hands in the lap
 			P.torsoX = -0.16; P.headX = -0.04;
