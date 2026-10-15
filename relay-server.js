@@ -636,11 +636,12 @@ function manageRoomsSnapshot() {
 	function room(id) {
 		return byRoom[id] || (byRoom[id] = { room: id, relayTabs: 0, users: Object.create(null), backup: null, chatHistory: 0 });
 	}
-	function addUser(r, p, where) {
+	function addUser(r, p, where, ip) {
 		if (!p || !p._id) return;
-		var u = r.users[p._id] || (r.users[p._id] = { _id: p._id, name: p.name || p._id, color: p.color || "", where: {} });
+		var u = r.users[p._id] || (r.users[p._id] = { _id: p._id, name: p.name || p._id, color: p.color || "", where: {}, ip: "" });
 		if (p.name) u.name = p.name;
 		if (p.color) u.color = p.color;
+		if (ip && ip !== "?") u.ip = ip;
 		u.where[where] = true;
 	}
 	var now = Date.now();
@@ -648,7 +649,7 @@ function manageRoomsSnapshot() {
 		var r = room(ch);
 		rooms[ch].forEach(function (s) {
 			r.relayTabs++;
-			addUser(r, s._p, "harmony");
+			addUser(r, s._p, "harmony", s._ip);
 			// Public-MPP rooms as seen by Harmony tabs (the backup server's own
 			// list below is authoritative for backup rooms).
 			var seen = s._people;
@@ -667,7 +668,7 @@ function manageRoomsSnapshot() {
 		var mr = mppRooms[id];
 		var br = room(id);
 		br.backup = { count: mppRoomParticipantCount(mr), settings: mr.settings };
-		mr.parts.forEach(function (p) { addUser(br, p, "backup"); });
+		mr.parts.forEach(function (p) { addUser(br, p, "backup", p.sock && p.sock._ip); });
 	}
 	mppChatHistory.forEach(function (list, chId) {
 		if (byRoom[chId]) byRoom[chId].chatHistory = list.length;
@@ -681,6 +682,19 @@ function manageRoomsSnapshot() {
 		}).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
 		return r;
 	});
+}
+
+// Where a person is right now (for their /manage profile): which rooms, on which
+// server, and the live IP of their current connection when we have it.
+function whereIsUser(uid) {
+	if (!uid) return [];
+	var out = [];
+	manageRoomsSnapshot().forEach(function (r) {
+		r.users.forEach(function (u) {
+			if (u._id === uid) out.push({ room: r.room, where: u.where || [], ip: u.ip || "" });
+		});
+	});
+	return out;
 }
 
 // ---- /manage live feed ----
@@ -844,6 +858,20 @@ function handleManageApi(req, res, route) {
 	}
 	if (sub === "/db/people" && req.method === "GET") {
 		done(null, { people: chatDb ? chatDb.people(q.room || "") : [] });
+		return;
+	}
+	// Everyone the chat log knows (the /manage People tab).
+	if (sub === "/db/roster" && req.method === "GET") {
+		done(null, { people: chatDb ? chatDb.roster({ q: q.q || "", limit: q.limit }) : [], dbOk: !!chatDb });
+		return;
+	}
+	// One person's full profile: names, IPs, rooms, recent messages, online now.
+	if (sub === "/db/profile" && req.method === "GET") {
+		if (!chatDb) return done(new Error("Chat database is not available"));
+		var prof = chatDb.profile(q.uid);
+		if (!prof) return done(new Error("Nobody with that id"));
+		prof.online = whereIsUser(String(q.uid));
+		done(null, prof);
 		return;
 	}
 	if (sub === "/db/export" && req.method === "GET") {
@@ -1159,7 +1187,15 @@ function sanitizeP(p) {
 // the tab has joined MPP, so keep the latest non-empty one.
 function rememberRelayIdentity(s, p) {
 	var clean = sanitizeP(p);
-	if (clean._id) s._p = clean;
+	if (clean._id) {
+		s._p = clean;
+		// A Harmony tab connects to our relay from the person's own browser, so its
+		// IP is theirs — even for people on the public MPP server. Log it once per id.
+		if (chatDb && s._ip && s._ipLoggedId !== clean._id) {
+			s._ipLoggedId = clean._id;
+			chatDb.rememberIdentity({ uid: clean._id, name: clean.name, ip: s._ip, server: "harmony" });
+		}
+	}
 }
 // Who a Harmony tab sees in its MPP room (sent every ~20s and on changes).
 // The only way /manage can list people on the PUBLIC MPP server.
@@ -1271,8 +1307,9 @@ function setMybotAnonymousHidden(hidden) {
 	broadcastAll({ m: "manage-anon", hidden: gMybotAnonymousHidden });
 }
 
-wss.on("connection", function (socket) {
+wss.on("connection", function (socket, req) {
 	socket._room = null;
+	socket._ip = req ? clientIp(req) : "?";
 	socket.missedPongs = 0;
 	socket.on("pong", function () { socket.missedPongs = 0; });
 	socket.on("message", function (raw) {
@@ -1300,6 +1337,19 @@ wss.on("connection", function (socket) {
 				break;
 			case "ppl":
 				rememberRelayPeople(socket, m);
+				break;
+			case "typing":
+				// Live "what they're typing" preview for /manage only — never sent on
+				// to other players, and nothing is stored. Clears when they send or stop.
+				rememberRelayIdentity(socket, m.p);
+				if (gLiveClients.size && socket._p) {
+					var tch = (typeof m.ch === "string" && m.ch) ? m.ch.slice(0, 256) : (socket._room || "lobby");
+					liveSend("typing", {
+						uid: socket._p._id, name: socket._p.name || "?", room: tch,
+						text: (typeof m.text === "string" ? m.text : "").slice(0, 512),
+						stop: !!m.stop, ts: Date.now()
+					});
+				}
 				break;
 			case "manage-noob-set":
 				setLobbyNoobHidden(m.hidden);
@@ -1585,7 +1635,16 @@ function mppHandle(sock, msg) {
 			// per-browser value; only a hash of it is ever shown to others).
 			if (typeof msg.token === "string" && /^[A-Za-z0-9_-]{16,64}$/.test(msg.token) && !st.room) {
 				st.user._id = "h" + crypto.createHash("sha256").update("harmony-id|" + msg.token).digest("hex").slice(0, 24);
+				st.tokenKnown = true;
+				// Give the browser back the name and colour it had last time, so a
+				// refresh does not turn everyone back into a random "Anonymous".
+				if (chatDb) {
+					var saved = chatDb.getIdentity(st.user._id);
+					if (saved && saved.name) st.user.name = saved.name;
+					if (saved && saved.color) st.user.color = saved.color;
+				}
 			}
+			if (chatDb && st.tokenKnown) chatDb.rememberIdentity({ uid: st.user._id, name: st.user.name, color: st.user.color, ip: sock._ip, server: "backup" });
 			mppSend(sock, { m: "hi", t: Date.now(), u: { _id: st.user._id, name: st.user.name, color: st.user.color }, motd: "Harmony backup server" });
 			break;
 		case "t":
@@ -1652,6 +1711,8 @@ function mppHandle(sock, msg) {
 				var pu = room && room.parts.get(st.pid);
 				if (pu) { pu.name = st.user.name; pu.color = st.user.color; }
 				if (room) mppBroadcast(room, { m: "p", id: st.pid, _id: st.user._id, name: st.user.name, color: st.user.color, x: st.x, y: st.y });
+				// Remember the chosen name/colour so it comes back next time.
+				if (chatDb && st.tokenKnown) chatDb.rememberIdentity({ uid: st.user._id, name: st.user.name, color: st.user.color, ip: sock._ip, server: "backup" });
 			}
 			break;
 		case "chset":
@@ -1705,8 +1766,9 @@ function mppHandle(sock, msg) {
 	}
 }
 
-mppWss.on("connection", function (sock) {
+mppWss.on("connection", function (sock, req) {
 	sock.missedPongs = 0;
+	sock._ip = req ? clientIp(req) : "?";
 	sock.on("pong", function () { sock.missedPongs = 0; });
 	sock.mpp = {
 		user: { _id: mppGenId("u"), name: "Anonymous", color: MPP_COLORS[Math.floor(Math.random() * MPP_COLORS.length)] },

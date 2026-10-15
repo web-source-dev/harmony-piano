@@ -479,6 +479,8 @@ Client.prototype._onSocketOpen = function(sock, promoted, log) {
 	this.lastProgressTime = 0;
 	this.serverFailCount = 0;
 	if(this.serverIndex > 0 && !promoted) this.emit("status", "Connected to backup server");
+	// Remember which server we ended up on, so a refresh returns the person here.
+	try { if(typeof localStorage !== "undefined") localStorage.harmonyServerIndex = String(this.serverIndex); } catch(e) {}
 	this.emit("server", this.getServerInfo());
 	if(!promoted) this.sendArray([{"m": "hi", "x": 1, "y": 1, "🐈": this['🐈']++ || undefined, token: this._helloToken() }]);
 	this.pingInterval = setInterval(function() {

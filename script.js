@@ -1486,6 +1486,29 @@ Rect.prototype.contains = function(x, y) {
 		}
 	})();
 
+	// Bring back the name and colour this browser used last time, so the person
+	// stays themselves across refreshes instead of becoming a new "Anonymous".
+	// The client re-sends lastUserSet on every (re)connect, so this restores it.
+	(function() {
+		if(!window.localStorage) return;
+		var set = {};
+		try {
+			var nm = localStorage.harmonyName, co = localStorage.harmonyColor;
+			if(nm) set.name = String(nm).slice(0, 40);
+			if(co && /^#[0-9a-fA-F]{6}$/.test(co)) set.color = co;
+		} catch(e) {}
+		if(set.name || set.color) gClient.lastUserSet = set;
+	})();
+	// Whenever the person changes their name/colour, remember it for next time.
+	function rememberIdentityLocal(set) {
+		if(!set || !window.localStorage) return;
+		try {
+			if(set.name) localStorage.harmonyName = String(set.name).slice(0, 40);
+			if(set.color) localStorage.harmonyColor = set.color;
+		} catch(e) {}
+	}
+	gClient.on("userset", function(set) { rememberIdentityLocal(set); });
+
 	// Remote-close a Harmony piano tab (sent from the /manage page). Browsers
 	// block window.close() on tabs the user opened themselves, so we disconnect
 	// first, try every close trick, then fall back to about:blank so the piano
@@ -3761,6 +3784,7 @@ Rect.prototype.contains = function(x, y) {
 			//$("#rename .text[name=name]").val("");
 			closeModal();
 			gClient.sendArray([{m: "userset", set: set}]);
+			rememberIdentityLocal(set);
 			// Self-hosted username color: syncs to everyone on this domain via the
 			// Harmony relay, independent of the MPP server (which ignores it).
 			if(typeof gNameColor !== "undefined" && gNameColor) {
@@ -4148,6 +4172,7 @@ Rect.prototype.contains = function(x, y) {
 				} else if(message.length <= 512) {
 					gClient.sendChat(message);
 					$(this).val("");
+					sendTyping("", true);
 					setTimeout(function() {
 						chat.blur();
 					}, 100);
@@ -4163,6 +4188,22 @@ Rect.prototype.contains = function(x, y) {
 				evt.stopPropagation();
 			}
 		});
+
+		// Live typing preview for /manage (admins only). Sent through the relay at
+		// most a few times a second; never shown to other players, never stored.
+		var typingTimer = null, lastTypingSent = 0;
+		function sendTyping(text, stop) {
+			if(!gRoomSync || !gRoomSync.isConnected || !gRoomSync.isConnected()) return;
+			try { gRoomSync.typing(text, stop); } catch(e) {}
+		}
+		$("#chat-input-bar input").on("input", function() {
+			var text = $(this).val();
+			var now = Date.now();
+			clearTimeout(typingTimer);
+			if(now - lastTypingSent > 350) { lastTypingSent = now; sendTyping(text, false); }
+			else { typingTimer = setTimeout(function() { lastTypingSent = Date.now(); sendTyping($("#chat-input-bar input").val(), false); }, 350); }
+		});
+		$("#chat-input-bar input").on("blur", function() { clearTimeout(typingTimer); sendTyping("", true); });
 
 		$("#chat").show();
 

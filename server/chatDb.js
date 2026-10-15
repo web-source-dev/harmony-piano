@@ -100,6 +100,31 @@ function open(rootDir, opts) {
 	db.exec("CREATE INDEX IF NOT EXISTS messages_msgid ON messages(room, msg_id); CREATE INDEX IF NOT EXISTS messages_ref ON messages(ref_id);");
 	db.exec("CREATE INDEX IF NOT EXISTS messages_uid ON messages(uid, id); CREATE INDEX IF NOT EXISTS messages_name ON messages(name, id);");
 
+	// A person, keyed by their stable id (the backup server derives it from the
+	// browser token, so the same browser keeps one id across refreshes). The
+	// server restores their last name/colour from here, and /manage tracks them.
+	db.exec([
+		"CREATE TABLE IF NOT EXISTS identities (",
+		"  uid TEXT PRIMARY KEY,",
+		"  name TEXT NOT NULL DEFAULT '',",
+		"  color TEXT NOT NULL DEFAULT '',",
+		"  first_ts INTEGER NOT NULL DEFAULT 0,",
+		"  last_ts INTEGER NOT NULL DEFAULT 0",
+		");",
+		// Every IP a person has connected from (what /manage shows). Public-MPP
+		// people get an IP too, via the relay connection their Harmony tab opens.
+		"CREATE TABLE IF NOT EXISTS ips (",
+		"  uid TEXT NOT NULL,",
+		"  ip TEXT NOT NULL,",
+		"  server TEXT NOT NULL DEFAULT '',",
+		"  first_ts INTEGER NOT NULL DEFAULT 0,",
+		"  last_ts INTEGER NOT NULL DEFAULT 0,",
+		"  hits INTEGER NOT NULL DEFAULT 0,",
+		"  PRIMARY KEY (uid, ip)",
+		");",
+		"CREATE INDEX IF NOT EXISTS ips_ip ON ips(ip);"
+	].join("\n"));
+
 	var stInsert = db.prepare(
 		"INSERT OR IGNORE INTO messages (room, kind, ts, uid, name, text, via, server, harmony, color, tz_known, dedup) " +
 		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -117,6 +142,16 @@ function open(rootDir, opts) {
 	var stRecentPerson = db.prepare(
 		"SELECT * FROM messages WHERE room = ? AND kind = ? AND ((? <> '' AND uid = ?) OR name = ?) AND ts >= ? ORDER BY id DESC LIMIT 1");
 	var stSetVia = db.prepare("UPDATE messages SET via = ?, harmony = MAX(harmony, ?), uid = CASE WHEN uid = '' THEN ? ELSE uid END WHERE id = ?");
+	// Upsert an identity: keep the first_ts, always move last_ts forward, and only
+	// overwrite name/colour when the new one isn't blank.
+	var stIdentity = db.prepare(
+		"INSERT INTO identities (uid, name, color, first_ts, last_ts) VALUES (?, ?, ?, ?, ?) " +
+		"ON CONFLICT(uid) DO UPDATE SET name = CASE WHEN ? <> '' THEN ? ELSE name END, " +
+		"color = CASE WHEN ? <> '' THEN ? ELSE color END, last_ts = ?");
+	var stIdentById = db.prepare("SELECT * FROM identities WHERE uid = ?");
+	var stIp = db.prepare(
+		"INSERT INTO ips (uid, ip, server, first_ts, last_ts, hits) VALUES (?, ?, ?, ?, ?, 1) " +
+		"ON CONFLICT(uid, ip) DO UPDATE SET last_ts = ?, hits = hits + 1, server = CASE WHEN ? <> '' THEN ? ELSE server END");
 	var stMetaGet = db.prepare("SELECT v FROM meta WHERE k = ?");
 	var stMetaSet = db.prepare("INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v");
 
@@ -327,6 +362,49 @@ function open(rootDir, opts) {
 			}
 			if (!o.room) throw new Error("Pick a room");
 			return db.prepare("DELETE FROM messages WHERE room = ?").run(String(o.room)).changes;
+		},
+
+		// ---- identities & IPs ----
+		// Remember who a person is and where they connected from. Called when a
+		// browser says hello and whenever it sets its name/colour.
+		rememberIdentity: function (m) {
+			var uid = str(m.uid, 64);
+			if (!uid) return;
+			var now = Date.now(), name = str(m.name, 120), col = color(m.color), srv = str(m.server, 20);
+			stIdentity.run(uid, name, col, now, now, name, name, col, col, now);
+			var ip = str(m.ip, 64);
+			if (ip && ip !== "?") stIp.run(uid, ip, srv, now, now, now, srv, srv);
+		},
+		// The saved name/colour for an id, so a reconnecting browser gets them back.
+		getIdentity: function (uid) { return stIdentById.get(str(uid, 64)) || null; },
+		// Full profile for /manage: identity, every IP, and totals from the chat log.
+		profile: function (uid) {
+			uid = str(uid, 64);
+			if (!uid) return null;
+			var ident = stIdentById.get(uid) || null;
+			var ips = db.prepare("SELECT ip, server, first_ts, last_ts, hits FROM ips WHERE uid = ? ORDER BY last_ts DESC").all(uid);
+			var agg = db.prepare(
+				"SELECT COUNT(*) AS total, SUM(kind = 'chat') AS messages, SUM(kind = 'join') AS joins, " +
+				"MIN(ts) AS first_ts, MAX(ts) AS last_ts FROM messages WHERE uid = ?").get(uid);
+			var names = db.prepare("SELECT name, MAX(color) AS color, COUNT(*) AS n, MAX(ts) AS last_ts FROM messages WHERE uid = ? GROUP BY name ORDER BY n DESC LIMIT 50").all(uid);
+			var rooms = db.prepare("SELECT room, COUNT(*) AS n, MAX(ts) AS last_ts FROM messages WHERE uid = ? GROUP BY room ORDER BY last_ts DESC LIMIT 100").all(uid);
+			var recent = db.prepare("SELECT * FROM messages WHERE uid = ? ORDER BY id DESC LIMIT 60").all(uid).reverse();
+			return { uid: uid, identity: ident, ips: ips, totals: agg, names: names, rooms: rooms, recent: recent };
+		},
+		// Everyone the chat log knows, newest activity first (the /manage people list).
+		roster: function (o) {
+			o = o || {};
+			var limit = Math.max(1, Math.min(+o.limit || 500, 5000));
+			var where = "uid <> ''", args = [];
+			if (o.q) { where += " AND (name LIKE ? ESCAPE '\\\\' OR uid LIKE ? ESCAPE '\\\\')"; var like = "%" + String(o.q).replace(/[\\%_]/g, "\\$&") + "%"; args.push(like, like); }
+			var sql = "SELECT uid, " +
+				"(SELECT name FROM messages m2 WHERE m2.uid = m.uid AND m2.name <> '' ORDER BY m2.id DESC LIMIT 1) AS name, " +
+				"(SELECT color FROM messages m3 WHERE m3.uid = m.uid AND m3.color <> '' ORDER BY m3.id DESC LIMIT 1) AS color, " +
+				"COUNT(*) AS total, SUM(kind = 'chat') AS messages, MIN(ts) AS first_ts, MAX(ts) AS last_ts, " +
+				"(SELECT COUNT(DISTINCT ip) FROM ips WHERE ips.uid = m.uid) AS ip_count " +
+				"FROM messages m WHERE " + where + " GROUP BY uid ORDER BY last_ts DESC LIMIT " + limit;
+			var stmt = db.prepare(sql);
+			return args.length ? stmt.all.apply(stmt, args) : stmt.all();
 		},
 
 		meta: function (k, v) { if (v === undefined) { var r = stMetaGet.get(k); return r ? r.v : null; } stMetaSet.run(k, String(v)); },

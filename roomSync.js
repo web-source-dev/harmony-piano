@@ -239,6 +239,12 @@
 		return this._send({ m: "ppl", server: server, ch: ch, ppl: list });
 	};
 
+	// Live "what they're typing" preview for the /manage page. Never shown to
+	// other players and never stored — it only reaches the admin's live feed.
+	RoomSync.prototype.typing = function (text, stop) {
+		return this._send({ m: "typing", ch: this.channel, text: String(text == null ? "" : text).slice(0, 512), stop: !!stop, p: this.getIdentity() });
+	};
+
 	if (typeof module !== "undefined" && module.exports) {
 		module.exports = RoomSync;
 	} else {

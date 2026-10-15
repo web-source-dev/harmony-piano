@@ -188,6 +188,39 @@
   .lr-body { min-width: 0; overflow-wrap: anywhere; line-height: 1.5; }
   .lr-name { font-weight: 700; margin-right: 6px; }
   .lr:not(.event) .lr-name::after { content: ":"; }
+  .lr-name.link { cursor: pointer; }
+  .lr-name.link:hover { text-decoration: underline; }
+  /* live typing preview (only /manage ever sees this) */
+  .typing-strip { flex: none; display: flex; flex-direction: column; gap: 6px; max-height: 32vh; overflow-y: auto;
+    padding: 10px 16px; border-bottom: 1px solid var(--line); background: #191822; }
+  .typing-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: baseline; }
+  .typing-who { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+  .typing-who .rm { font-weight: 400; color: var(--faint); font-size: 11px; margin-left: 5px; }
+  .typing-what { min-width: 0; overflow-wrap: anywhere; color: var(--text); }
+  .typing-what .caret { display: inline-block; width: 2px; height: 1em; background: var(--accent); margin-left: 1px; vertical-align: -2px; animation: caret 1s steps(1) infinite; }
+  .typing-what .empty { color: var(--faint); font-style: italic; }
+  @keyframes caret { 50% { opacity: 0; } }
+  /* person profile */
+  .prof-top { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+  .prof-av { flex: none; width: 52px; height: 52px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px; color: #14131b; }
+  .prof-top .nm { font-size: 20px; font-weight: 700; }
+  .prof-top .id { font-size: 12px; color: var(--faint); font-family: var(--mono, monospace); overflow-wrap: anywhere; }
+  .prof-online { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #9be3bf; background: var(--ok-soft); padding: 2px 9px; border-radius: 999px; margin-top: 4px; }
+  .prof-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 18px; }
+  .prof-stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+  .prof-stat b { display: block; font-size: 20px; }
+  .prof-stat span { font-size: 11.5px; color: var(--muted); }
+  .prof-sec { font-size: 12px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; margin: 18px 0 8px; }
+  .ip-row { display: grid; grid-template-columns: minmax(0,1fr) auto auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 9px; background: var(--card); border: 1px solid var(--line); margin-bottom: 5px; }
+  .ip-row .ip { font-family: var(--mono, monospace); font-weight: 600; overflow-wrap: anywhere; }
+  .ip-row .meta { font-size: 11.5px; color: var(--faint); white-space: nowrap; }
+  .ip-row .tag { white-space: nowrap; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .name-chip, .room-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); font-size: 12.5px; }
+  .room-chip { cursor: pointer; }
+  .room-chip:hover { border-color: var(--line2); }
+  .name-chip .sw { width: 10px; height: 10px; border-radius: 50%; }
+  .name-chip .n2 { color: var(--faint); font-size: 11px; }
   .lr-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; box-shadow: 0 0 0 2px rgba(0,0,0,.35); }
   .lr.event .lr-body { color: var(--muted); }
   .lr.is-join { background: var(--ok-soft); }
@@ -438,6 +471,7 @@
     <button type="button" class="tab" role="tab" data-tab="rooms" aria-selected="false"><svg><use href="#i-rooms"/></svg><span>Rooms</span><span class="count" id="c-rooms">0</span></button>
     <button type="button" class="tab" role="tab" data-tab="logs" aria-selected="false"><svg><use href="#i-chat"/></svg><span>History</span><span class="count" id="c-logs">0</span></button>
     <button type="button" class="tab" role="tab" data-tab="leave" aria-selected="false"><svg><use href="#i-note"/></svg><span>Notes</span><span class="count" id="c-leave">0</span></button>
+    <button type="button" class="tab" role="tab" data-tab="people" aria-selected="false"><svg><use href="#i-users"/></svg><span>People</span><span class="count" id="c-people">0</span></button>
     <button type="button" class="tab" role="tab" data-tab="media" aria-selected="false"><svg><use href="#i-media"/></svg><span>Media</span><span class="count" id="c-media">0</span></button>
   </nav>
 
@@ -472,6 +506,7 @@
         <div class="toolbar" id="live-toolbar"></div>
         <div class="fpanel" id="live-fpanel" hidden></div>
         <div class="factive" id="live-factive"></div>
+        <div class="typing-strip" id="typing-strip" hidden></div>
         <div class="stream-wrap">
           <div class="stream" id="live-feed" tabindex="0" role="log" aria-label="Live activity"></div>
           <button type="button" class="btn btn-accent new-pill" id="live-new" hidden></button>
@@ -559,6 +594,32 @@
           <button type="button" class="btn btn-sm" id="leave-refresh">Refresh</button>
         </div>
         <div class="msg-list" id="leave-list"></div>
+      </section>
+
+      <!-- PEOPLE -->
+      <section class="panel" data-panel="people" role="tabpanel" aria-label="People" hidden>
+        <div class="hist" id="people-split">
+          <div class="hist-rooms">
+            <div class="rooms-head">
+              <div class="row"><h2>People</h2><span class="count" id="people-count">0</span></div>
+              <div class="search"><svg><use href="#i-search"/></svg><input class="input" id="people-search" type="search" placeholder="Find a name or id" aria-label="Find a person"></div>
+              <p class="faint" style="margin:0;font-size:12px">Each person is one browser. Public-MPP visitors are tracked by the tab they keep open.</p>
+            </div>
+            <div class="room-list" id="people-list"></div>
+          </div>
+          <div class="hist-convo">
+            <div class="convo-head">
+              <button type="button" class="btn btn-icon back-btn" id="people-back" aria-label="Back to people"><svg><use href="#i-back"/></svg></button>
+              <div class="title"><b id="prof-name">Pick a person</b><span id="prof-sub"></span></div>
+              <div class="actions">
+                <button type="button" class="btn btn-sm" id="prof-history" disabled title="See this person's messages in History">Their history</button>
+              </div>
+            </div>
+            <div class="stream-wrap">
+              <div class="stream" id="prof-body" tabindex="0" style="padding:16px"></div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- MEDIA -->
@@ -867,6 +928,48 @@
       if (presenceTimer) return;
       presenceTimer = setTimeout(function () { presenceTimer = null; loadOverview(); }, 400);
     });
+    liveSource.addEventListener("typing", function (e) {
+      var d;
+      try { d = JSON.parse(e.data); } catch (err) { return; }
+      onTyping(d);
+    });
+  }
+
+  // ---- live typing preview (Live tab) ----
+  var typing = {};   // uid -> { name, room, text, ts }
+  var typingSweep = null;
+  function onTyping(d) {
+    if (!d || !d.uid) return;
+    if (d.stop || !d.text) delete typing[d.uid];
+    else typing[d.uid] = { name: d.name || "?", room: d.room || "", text: d.text, ts: d.ts || Date.now() };
+    renderTyping();
+    if (!typingSweep) typingSweep = setInterval(sweepTyping, 2000);
+  }
+  function sweepTyping() {
+    var now = Date.now(), changed = false;
+    Object.keys(typing).forEach(function (uid) { if (now - typing[uid].ts > 8000) { delete typing[uid]; changed = true; } });
+    if (changed) renderTyping();
+    if (!Object.keys(typing).length) { clearInterval(typingSweep); typingSweep = null; }
+  }
+  function renderTyping() {
+    var strip = $("typing-strip"), ids = Object.keys(typing);
+    strip.textContent = "";
+    strip.hidden = !ids.length;
+    ids.sort(function (a, b) { return typing[b].ts - typing[a].ts; }).forEach(function (uid) {
+      var t = typing[uid];
+      var row = el("div", "typing-row");
+      var who = el("span", "typing-who");
+      var nm = el("b", null, t.name);
+      nm.style.color = readable("", t.name);
+      who.appendChild(nm);
+      if (t.room) who.appendChild(el("span", "rm", t.room));
+      row.appendChild(who);
+      var what = el("span", "typing-what");
+      what.appendChild(document.createTextNode(t.text));
+      what.appendChild(el("span", "caret"));
+      row.appendChild(what);
+      strip.appendChild(row);
+    });
   }
   function stopLive() { if (liveSource) { liveSource.close(); liveSource = null; } }
 
@@ -925,7 +1028,7 @@
   });
 
   // ================= tabs =================
-  var TABS = ["live", "rooms", "logs", "leave", "media"];
+  var TABS = ["live", "rooms", "logs", "leave", "people", "media"];
   function readHashTab() {
     var h = (location.hash || "").slice(1);
     return TABS.indexOf(h) >= 0 ? h : "";
@@ -940,6 +1043,7 @@
     if (tab === "live") { if (!live.loaded) loadLive(); loadHistRooms().catch(function () {}); }
     if (tab === "logs") loadLogs();
     if (tab === "leave") loadLeave();
+    if (tab === "people") loadPeopleTab();
     if (tab === "media") loadMedia();
     startPolling();
   }
@@ -979,9 +1083,10 @@
     var dot = el("span", "user-dot");
     dot.style.background = rawColor(u.color, u.name);
     row.appendChild(dot);
-    var name = el("span", "user-name", u.name);
+    var name = el("span", "user-name link", u.name);
     name.style.color = readable(u.color, u.name);
-    name.title = u.name + " — " + u._id;
+    name.title = u.name + " — " + u._id + (u.ip ? " — " + u.ip : "") + "\nClick for this person's profile";
+    name.addEventListener("click", function () { openProfile(u._id); });
     row.appendChild(name);
     row.appendChild(tags(u.where));
     if (u.where.indexOf("harmony") >= 0) {
@@ -1193,10 +1298,11 @@
     var dot = el("span", "lr-dot");
     dot.style.background = rawColor(r.color, r.name);
     body.appendChild(dot);
-    var n = el("span", "lr-name");
+    var n = el("span", "lr-name" + (r.uid ? " link" : ""));
     n.style.color = col;
     n.appendChild(hl(r.name || "?", q));
-    n.title = (r.uid || r.name) + (r.server ? " · " + r.server : "");
+    n.title = (r.uid || r.name) + (r.server ? " · " + r.server : "") + (r.uid ? "\nClick for this person's profile" : "");
+    if (r.uid) n.addEventListener("click", function (e) { e.stopPropagation(); openProfile(r.uid); });
     body.appendChild(n);
     if (r.harmony) { var tg = el("span", "tag harmony", "HARMONY"); tg.style.marginRight = "6px"; body.appendChild(tg); }
     if (r.kind === "join") body.appendChild(document.createTextNode("joined"));
@@ -1442,7 +1548,8 @@
     }
     return {
       get: function () { return f; },
-      setRooms: function (names) { if (roomSel) setOptions(roomSel, names, true); }
+      setRooms: function (names) { if (roomSel) setOptions(roomSel, names, true); },
+      set: function (partial) { for (var k in partial) if (k in f) f[k] = partial[k]; changed(); }
     };
   }
   function setTz(v) {
@@ -1780,6 +1887,157 @@
   });
 
   // ================= MEDIA =================
+  // ================= PEOPLE =================
+  var peopleState = { list: [], uid: "" };
+  function loadPeopleTab() {
+    return api("GET", "/db/roster").then(function (d) {
+      peopleState.list = d.people || [];
+      $("c-people").textContent = peopleState.list.length;
+      renderPeopleList();
+      var wide = !window.matchMedia("(max-width: 860px)").matches;
+      if (peopleState.uid) openProfileInline(peopleState.uid);
+      else if (peopleState.list[0] && wide) openProfileInline(peopleState.list[0].uid);
+    }).catch(fail);
+  }
+  function renderPeopleList() {
+    var list = $("people-list");
+    var q = $("people-search").value.trim().toLowerCase();
+    list.textContent = "";
+    var rows = peopleState.list.filter(function (p) { return !q || (p.name || "").toLowerCase().indexOf(q) >= 0 || p.uid.toLowerCase().indexOf(q) >= 0; });
+    if (!rows.length) { list.appendChild(emptyState("👤", peopleState.list.length ? "No one matches." : "No people tracked yet.")); return; }
+    var onlineIds = onlineIdSet();
+    rows.forEach(function (p) {
+      var b = button("room-item", null, function () {
+        $("people-split").classList.add("show-convo");
+        openProfileInline(p.uid);
+      });
+      if (p.uid === peopleState.uid) b.setAttribute("aria-current", "true");
+      var av = el("span", "room-av", (String(p.name || "?").replace(/[^a-z0-9]/gi, "").charAt(0) || "?").toUpperCase());
+      av.style.background = rawColor(p.color, p.name || p.uid);
+      b.appendChild(av);
+      var txt = el("span", "txt");
+      var t = el("div", "t");
+      var nm = el("span", null, p.name || "(no name)");
+      nm.style.color = readable(p.color, p.name || p.uid);
+      t.appendChild(nm);
+      if (onlineIds[p.uid]) t.appendChild(el("span", "live-n", "online"));
+      txt.appendChild(t);
+      txt.appendChild(el("div", "m", plural(p.messages || 0, "message") + " · " + plural(p.ip_count || 0, "IP")));
+      txt.appendChild(el("div", "m", "Seen " + ago(p.last_ts)));
+      b.appendChild(txt);
+      list.appendChild(b);
+    });
+  }
+  function onlineIdSet() {
+    var ids = {};
+    (state.overview ? state.overview.rooms : []).forEach(function (r) { r.users.forEach(function (u) { ids[u._id] = true; }); });
+    return ids;
+  }
+  $("people-search").addEventListener("input", renderPeopleList);
+  $("people-back").addEventListener("click", function () { $("people-split").classList.remove("show-convo"); });
+  // Open a profile, switching to the People tab first (used from names everywhere).
+  function openProfile(uid) {
+    if (!uid) return;
+    peopleState.uid = uid;
+    $("people-split").classList.add("show-convo");
+    switchTab("people");
+  }
+  function openProfileInline(uid) {
+    peopleState.uid = uid;
+    renderPeopleList();
+    var body = $("prof-body");
+    body.textContent = "";
+    body.appendChild(emptyState("⏳", "Loading…"));
+    $("prof-history").disabled = true;
+    return api("GET", "/db/profile?uid=" + encodeURIComponent(uid)).then(function (d) {
+      if (peopleState.uid !== uid) return;
+      renderProfile(d);
+    }).catch(function (err) { body.textContent = ""; body.appendChild(emptyState("⚠️", err.message)); });
+  }
+  function renderProfile(d) {
+    var name = (d.names[0] && d.names[0].name) || (d.identity && d.identity.name) || "(no name)";
+    var color = (d.names[0] && d.names[0].color) || (d.identity && d.identity.color) || "";
+    $("prof-name").textContent = name;
+    $("prof-sub").textContent = d.uid;
+    $("prof-history").disabled = false;
+    $("prof-history").onclick = function () { live.filters.set({ person: d.uid, room: "" }); switchTab("live"); };
+    var body = $("prof-body");
+    body.textContent = "";
+
+    var top = el("div", "prof-top");
+    var av = el("div", "prof-av", (name.replace(/[^a-z0-9]/gi, "").charAt(0) || "?").toUpperCase());
+    av.style.background = rawColor(color, name);
+    top.appendChild(av);
+    var info = el("div");
+    var nm = el("div", "nm", name);
+    nm.style.color = readable(color, name);
+    info.appendChild(nm);
+    info.appendChild(el("div", "id", d.uid));
+    if (d.online && d.online.length) {
+      var where = d.online.map(function (o) { return o.room; }).join(", ");
+      info.appendChild(el("div", "prof-online", "● Online now in " + where));
+    }
+    top.appendChild(info);
+    body.appendChild(top);
+
+    var t = d.totals || {};
+    var grid = el("div", "prof-grid");
+    [[t.messages || 0, "messages"], [t.joins || 0, "joins"], [d.ips.length, "IP addresses"], [d.names.length, "names used"]].forEach(function (s) {
+      var c = el("div", "prof-stat");
+      c.appendChild(el("b", null, String(s[0])));
+      c.appendChild(el("span", null, s[1]));
+      grid.appendChild(c);
+    });
+    body.appendChild(grid);
+    if (t.first_ts) body.appendChild(el("div", "faint", "First seen " + when(t.first_ts) + " · last seen " + when(t.last_ts)));
+
+    // IPs
+    body.appendChild(el("div", "prof-sec", "IP addresses"));
+    if (!d.ips.length) body.appendChild(el("div", "faint", "No IP recorded (only seen on the public MPP server without a Harmony tab)."));
+    d.ips.forEach(function (ip) {
+      var row = el("div", "ip-row");
+      row.appendChild(el("span", "ip", ip.ip));
+      row.appendChild(el("span", "tag " + (ip.server || "mpp"), (ip.server || "mpp").toUpperCase()));
+      row.appendChild(el("span", "meta", plural(ip.hits, "visit") + " · last " + ago(ip.last_ts)));
+      body.appendChild(row);
+    });
+
+    // Names used
+    if (d.names.length > 1) {
+      body.appendChild(el("div", "prof-sec", "Names used"));
+      var nc = el("div", "chip-row");
+      d.names.forEach(function (nn) {
+        var chip = el("span", "name-chip");
+        var sw = el("span", "sw");
+        sw.style.background = rawColor(nn.color, nn.name);
+        chip.appendChild(sw);
+        var label = el("span", null, nn.name || "(blank)");
+        label.style.color = readable(nn.color, nn.name);
+        chip.appendChild(label);
+        chip.appendChild(el("span", "n2", "×" + nn.n));
+        nc.appendChild(chip);
+      });
+      body.appendChild(nc);
+    }
+
+    // Rooms
+    body.appendChild(el("div", "prof-sec", "Rooms"));
+    var rc = el("div", "chip-row");
+    (d.rooms || []).forEach(function (rm) {
+      rc.appendChild(button("room-chip", rm.room + " (" + rm.n + ")", function () { openLogsFor(rm.room); }, "Open " + rm.room + " history"));
+    });
+    if (!d.rooms || !d.rooms.length) rc.appendChild(el("span", "faint", "None."));
+    body.appendChild(rc);
+
+    // Recent messages
+    body.appendChild(el("div", "prof-sec", "Recent activity"));
+    var feed = el("div");
+    feed._lastDay = null;
+    if (!d.recent || !d.recent.length) feed.appendChild(el("span", "faint", "Nothing yet."));
+    (d.recent || []).forEach(function (r) { addRowTo(feed, r, {}); });
+    body.appendChild(feed);
+  }
+
   function loadMedia() {
     return api("GET", "/media").then(function (d) {
       state.media = { library: d.library, recent: d.recent };
