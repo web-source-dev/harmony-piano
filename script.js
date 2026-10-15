@@ -3878,6 +3878,10 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gLoveBits !== "undefined" && gLoveBits) gLoveBits.tryHandleChat(msg);
 			return true;
 		}
+		if(typeof RoomChat !== "undefined" && RoomChat.isSyncText(chatLine)) {
+			RoomChat.handleSync(msg);
+			return true;
+		}
 		return false;
 	}
 
@@ -3900,6 +3904,8 @@ Rect.prototype.contains = function(x, y) {
 				}
 			}
 			chat.reattachPending();
+			// Then the room's whole stored history (older pages load on scroll).
+			if(typeof RoomChat !== "undefined") RoomChat.loadLatest();
 		});
 
 		// Your own messages show up instantly (dimmed, "sending…") even on a slow
@@ -3917,6 +3923,7 @@ Rect.prototype.contains = function(x, y) {
 			var color = (typeof gNameColor !== "undefined" && gNameColor && me && me._id)
 				? gNameColor.colorFor(me) : ((me && me.color) || "white");
 			li.css("color", color || "white");
+			if(typeof RoomChat !== "undefined") RoomChat.decoratePending(li, info.message);
 			pendingLines[info.id] = li;
 			$("#chat ul").append(li);
 			chat.scrollToBottom();
@@ -3957,7 +3964,7 @@ Rect.prototype.contains = function(x, y) {
 		// The server broadcasts edits/deletes to everyone in the room, sender included.
 		gClient.on("a-edit", function(msg) {
 			if(!msg || msg.id == null || typeof msg.a !== "string") return;
-			chatLineById(msg.id).find(".message").text(msg.a);
+			chatLineById(msg.id).each(function() { this._text = msg.a; }).find(".message").text(msg.a);
 		});
 		gClient.on("a-del", function(msg) {
 			if(!msg || msg.id == null) return;
@@ -4064,6 +4071,7 @@ Rect.prototype.contains = function(x, y) {
 			if($(evt.target).closest("#harmony-tools").length) return;
 			if($(evt.target).closest("#corner-banner").length) return;
 			if($(evt.target).closest("#chat-input-bar").length) return;
+			if($(evt.target).closest("#chat-lightbox").length) return;
 			if(!$("#chat").has(evt.target).length && !$("#chat-input-bar").has(evt.target).length) {
 				chat.blur();
 			}
@@ -4079,6 +4087,7 @@ Rect.prototype.contains = function(x, y) {
 				if($(touch.target).closest("#harmony-tools").length) continue;
 				if($(touch.target).closest("#corner-banner").length) continue;
 				if($(touch.target).closest("#hacks-dock").length) continue;
+				if($(touch.target).closest("#chat-lightbox").length) continue;
 				if(!$("#chat").has(touch.target).length && !$("#chat-input-bar").has(touch.target).length) {
 					chat.blur();
 				}
@@ -4107,6 +4116,7 @@ Rect.prototype.contains = function(x, y) {
 						chat.blur();
 					}, 100);
 				} else if(message.length <= 512) {
+					if(typeof RoomChat !== "undefined") RoomChat.beforeSend(message);
 					gClient.sendChat(message);
 					$(this).val("");
 					sendTyping("", true);
@@ -4155,6 +4165,7 @@ Rect.prototype.contains = function(x, y) {
 
 			clear: function() {
 				$("#chat li").remove();
+				if(typeof RoomChat !== "undefined") RoomChat.reset();
 			},
 
 			// After the history reload on (re)join, put still-pending lines back.
@@ -4203,26 +4214,21 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof LoveBits !== "undefined" && LoveBits.isSyncText(chatLine)) return;
 				if(typeof RoomMetronomeSync !== "undefined" && RoomMetronomeSync.SYNC_PREFIX &&
 					chatLine.indexOf(RoomMetronomeSync.SYNC_PREFIX) === 0) return;
+				if(typeof RoomChat !== "undefined" && RoomChat.isSyncText(chatLine)) return;
 
-				var li = $('<li><span class="name"/><span class="message"/>');
-
-				li.find(".name").text(msg.p.name + ":");
-				li.find(".message").text(chatLine);
 				var chatColor = (typeof gNameColor !== "undefined" && gNameColor)
 					? gNameColor.colorFor(msg.p) : (msg.p.color || "white");
-				li.css("color", chatColor || "white");
+				// RoomChat builds the line (time, photo, reply, reactions) and puts it in place.
+				var li = RoomChat.addMessage(msg, { fromHistory: !!fromHistory });
 
 				// Only the Harmony backup server gives chat lines ids it can edit/delete;
 				// the buttons are hidden by CSS unless #manage is in the URL.
-				if(msg.id != null) li.attr("data-chat-id", String(msg.id));
 				if(msg.id != null && gClient.isOnBackupServer && gClient.isOnBackupServer()) {
-					li.append('<span class="chat-manage-actions">' +
+					li.find(".chat-actions").before('<span class="chat-manage-actions">' +
 						'<button type="button" class="chat-manage-edit" title="Edit this message for everyone">Edit</button>' +
 						'<button type="button" class="chat-manage-delete" title="Delete this message for everyone">Delete</button>' +
 					'</span>');
 				}
-
-				$("#chat ul").append(li);
 
 				if(typeof ChatLogger !== "undefined") {
 					ChatLogger.logMessage(msg.p.name, chatLine, {
@@ -4233,30 +4239,18 @@ Rect.prototype.contains = function(x, y) {
 						msgId: msg.id
 					});
 				}
-
-				var eles = $("#chat ul li").get();
-				for(var i = 1; i <= 50 && i <= eles.length; i++) {
-					eles[eles.length - i].style.opacity = 1.0 - (i * 0.03);
-				}
-				if(eles.length > 50) {
-					eles[0].style.display = "none";
-				}
-				if(eles.length > 256) {
-					$(eles[0]).remove();
-				}
-
-				// scroll to bottom if not "chatting" or if not scrolled up
-				// (phones: the log is always scrollable, so never yank the reader down)
-				if(!$("#chat").hasClass("chatting") && !isMobileLayout()) {
-					chat.scrollToBottom();
-				} else {
-					var ele = $("#chat .chat-log").get(0);
-					if(ele && ele.scrollTop > ele.scrollHeight - ele.offsetHeight - 50)
-						chat.scrollToBottom();
-				}
 			}
 		};
 	})();
+
+	RoomChat.init({
+		client: gClient,
+		colorFor: function(p) {
+			return (typeof gNameColor !== "undefined" && gNameColor) ? gNameColor.colorFor(p) : (p.color || "white");
+		},
+		isMuted: function(uid) { return gChatMutes.indexOf(uid) != -1; },
+		isMobileLayout: isMobileLayout
+	});
 
 	if(typeof ChatLogger !== "undefined") {
 		var gLoggedParticipants = {};

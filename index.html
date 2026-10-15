@@ -7,7 +7,7 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20261016a"/>
+    <link rel="stylesheet" href="./screen.css?v=20261016b"/>
     <!-- Phone with "Desktop site" on: still use the phone layout (after the CSS it adjusts). -->
     <script src="./forceMobile.js?v=20260929a"></script>
     <!-- User accounts: same name + settings on every device (piano and World). -->
@@ -416,8 +416,15 @@
 
 <div id="bottom">
     <div id="chat-input-bar">
+        <div id="chat-reply-bar" hidden>
+            <span class="chat-reply-bar-label">Replying to <b class="chat-reply-bar-name"></b></span>
+            <span class="chat-reply-bar-text"></span>
+            <button type="button" class="chat-reply-bar-close" title="Cancel reply (Esc)" aria-label="Cancel reply">✕</button>
+        </div>
+        <button type="button" id="chat-photo-btn" title="Send a photo (you can also paste or drop one)" aria-label="Send a photo">📷</button>
         <input placeholder="You can chat with this thing." class="translate" maxlength="512"/>
     </div>
+    <input type="file" id="chat-photo-file" accept="image/jpeg,image/png,image/gif,image/webp" hidden/>
     <div class="relative toolbar-band">
         <div id="room">
             <div class="info"></div>
@@ -1150,6 +1157,7 @@
         "./cursorLooks.js?v=20260924b",
         "./partyGame.js?v=20261016a",
         "./chatLogger.js?v=20261015d",
+        "./roomChat.js?v=20261016a",
         "./cornerBanner.js",
         "./funVideoPopup.js",
         "./screenShare.js?v=20261010b",
@@ -1159,7 +1167,7 @@
         "./wakeBell.js?v=20261002a",
         "./loveBits.js?v=20260925b",
         "./roomThemes.js?v=20261002v",
-        "./script.js?v=20261016c",
+        "./script.js?v=20261016d",
         "./worldEntry.js?v=20261003a"
     ];
 </script>

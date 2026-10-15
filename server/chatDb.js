@@ -42,6 +42,8 @@ try {
 var KINDS = ["chat", "join", "leave", "rename", "prompt", "world", "edit", "delete"];
 var MAX_TEXT = 4000;
 
+// The name a chat line goes by for reactions/replies (same formula in roomChat.js).
+function chatRef(ts, who) { return Math.round(+ts || 0).toString(36) + "." + String(who || "").slice(0, 64); }
 function hash(s) { return crypto.createHash("sha1").update(String(s)).digest("hex").slice(0, 16); }
 function color(v) { v = String(v || "").trim(); return /^#[0-9a-f]{3,8}$/i.test(v) ? v.toLowerCase() : ""; }
 function str(v, max) { v = v == null ? "" : String(v); return max && v.length > max ? v.slice(0, max) : v; }
@@ -124,6 +126,36 @@ function open(rootDir, opts) {
 		");",
 		"CREATE INDEX IF NOT EXISTS ips_ip ON ips(ip);"
 	].join("\n"));
+
+	// Emoji reactions and reply links for the piano chat. A chat line is named by
+	// its "ref": the chat server's timestamp + the sender's id, which every
+	// visitor (and the stored row) agrees on. `by` is who reacted: their account.
+	db.exec([
+		"CREATE TABLE IF NOT EXISTS chat_reactions (",
+		"  room TEXT NOT NULL,",
+		"  ref TEXT NOT NULL,",
+		"  emoji TEXT NOT NULL,",
+		"  by TEXT NOT NULL,",
+		"  name TEXT NOT NULL DEFAULT '',",
+		"  ts INTEGER NOT NULL DEFAULT 0,",
+		"  PRIMARY KEY (room, ref, emoji, by)",
+		");",
+		"CREATE TABLE IF NOT EXISTS chat_replies (",
+		"  room TEXT NOT NULL,",
+		"  ref TEXT NOT NULL,",            // the reply
+		"  target TEXT NOT NULL,",         // the line it answers
+		"  target_name TEXT NOT NULL DEFAULT '',",
+		"  target_text TEXT NOT NULL DEFAULT '',",
+		"  ts INTEGER NOT NULL DEFAULT 0,",
+		"  PRIMARY KEY (room, ref)",
+		");"
+	].join("\n"));
+	var stReactOn = db.prepare("INSERT OR IGNORE INTO chat_reactions (room, ref, emoji, by, name, ts) VALUES (?, ?, ?, ?, ?, ?)");
+	var stReactOff = db.prepare("DELETE FROM chat_reactions WHERE room = ? AND ref = ? AND emoji = ? AND by = ?");
+	var stReactCount = db.prepare("SELECT COUNT(DISTINCT emoji) AS n FROM chat_reactions WHERE room = ? AND ref = ? AND by = ?");
+	var stReply = db.prepare(
+		"INSERT INTO chat_replies (room, ref, target, target_name, target_text, ts) VALUES (?, ?, ?, ?, ?, ?) " +
+		"ON CONFLICT(room, ref) DO NOTHING");
 
 	var stInsert = db.prepare(
 		"INSERT OR IGNORE INTO messages (room, kind, ts, uid, name, text, via, server, harmony, color, tz_known, dedup) " +
@@ -298,6 +330,65 @@ function open(rootDir, opts) {
 				room: str(m.room, 120) || "lobby", kind: "world", ts: m.ts || Date.now(), uid: str(m.uid, 64),
 				name: str(m.name, 120) || "?", text: text, server: "world", color: m.color, dedup: m.id ? "w|" + m.room + "|" + m.id : null
 			});
+		},
+
+		// ---- the piano's own chat history (what everyone in a room sees) ----
+		// Chat lines, joins and name changes, newest first, `before` a row id.
+		// Deleted lines are left out and edited ones show their current text,
+		// with no marks — only /manage sees edit/delete history.
+		history: function (room, before, limit) {
+			room = str(room, 120);
+			limit = Math.max(1, Math.min(+limit || 150, 500));
+			var args = [room];
+			var sql = "SELECT id, kind, ts, uid, name, text, cur_text, edited, color, msg_id FROM messages " +
+				"WHERE room = ? AND kind IN ('chat', 'join', 'rename') AND deleted = 0";
+			if (+before > 0) { sql += " AND id < ?"; args.push(+before); }
+			sql += " ORDER BY id DESC LIMIT " + (limit + 1);
+			var stmt = db.prepare(sql);
+			var rows = stmt.all.apply(stmt, args);
+			var more = rows.length > limit;
+			if (more) rows.pop();
+			var out = rows.map(function (r) {
+				var o = { id: r.id, kind: r.kind, ts: r.ts, uid: r.uid, name: r.name, color: r.color };
+				if (r.kind === "chat") {
+					o.text = r.edited ? r.cur_text : r.text;
+					o.ref = chatRef(r.ts, r.uid || r.name);
+					if (r.msg_id) o.msgId = r.msg_id;
+				} else if (r.kind === "rename") {
+					o.text = r.text;
+				}
+				return o;
+			});
+			var refs = out.filter(function (o) { return o.ref; }).map(function (o) { return o.ref; });
+			return { rows: out, more: more, meta: api.chatMeta(room, refs) };
+		},
+		// Reactions and reply links for a set of chat lines.
+		chatMeta: function (room, refs) {
+			var reactions = [], replies = [];
+			for (var i = 0; i < refs.length; i += 400) {
+				var part = refs.slice(i, i + 400);
+				var marks = part.map(function () { return "?"; }).join(",");
+				var s1 = db.prepare("SELECT ref, emoji, by, name, ts FROM chat_reactions WHERE room = ? AND ref IN (" + marks + ") ORDER BY ts");
+				reactions = reactions.concat(s1.all.apply(s1, [room].concat(part)));
+				var s2 = db.prepare("SELECT ref, target, target_name, target_text FROM chat_replies WHERE room = ? AND ref IN (" + marks + ")");
+				replies = replies.concat(s2.all.apply(s2, [room].concat(part)));
+			}
+			return { reactions: reactions, replies: replies };
+		},
+		// One person toggles one emoji on one line. Returns true when it changed.
+		setReaction: function (m) {
+			var room = str(m.room, 120), ref = str(m.ref, 120), emoji = str(m.emoji, 32), by = str(m.by, 64);
+			if (!room || !ref || !emoji || !by) return false;
+			if (m.on) {
+				if (stReactCount.get(room, ref, by).n >= 12) return false;   // a dozen different emoji per line each
+				return stReactOn.run(room, ref, emoji, by, str(m.name, 120), Date.now()).changes > 0;
+			}
+			return stReactOff.run(room, ref, emoji, by).changes > 0;
+		},
+		setReply: function (m) {
+			var room = str(m.room, 120), ref = str(m.ref, 120), target = str(m.target, 120);
+			if (!room || !ref || !target || ref === target) return false;
+			return stReply.run(room, ref, target, str(m.targetName, 120), str(m.targetText, 300), Date.now()).changes > 0;
 		},
 
 		// ---- reading (for /manage) ----

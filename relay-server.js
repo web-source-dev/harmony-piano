@@ -50,7 +50,7 @@ var MAX_ID = 64;
 var MIME = {
 	".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
 	".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8",
-	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
+	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
 	".svg": "image/svg+xml", ".ico": "image/x-icon", ".txt": "text/plain; charset=utf-8",
 	".mp3": "audio/mpeg", ".m4a": "audio/mp4", ".wav": "audio/wav", ".ogg": "audio/ogg",
 	".aac": "audio/aac", ".flac": "audio/flac", ".opus": "audio/opus", ".weba": "audio/webm",
@@ -1231,9 +1231,103 @@ var server = http.createServer(function (req, res) {
 		return;
 	}
 
+	if (route.indexOf("/api/chat/") === 0) { handleRoomChatApi(req, res, route); return; }
+
 	if (req.method === "GET") { serveStatic(req, res); return; }
 	res.writeHead(404); res.end("Not found");
 });
+
+// ---- Piano chat: full room history, emoji reactions, replies, photos ----
+// Everyone signed in can read a room's whole history (newest page first, older
+// pages on scroll). Reactions and reply links are stored here and pushed to
+// everyone in the room over the relay ("CX|" lines, handled by roomChat.js).
+var CHAT_PHOTO_DIR = path.join(ROOT, "chat-photos");
+var CHAT_PHOTO_MAX = 10 * 1024 * 1024;
+var CHAT_PHOTO_TYPES = { "image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp" };
+var CHAT_SYNC_SENDER = { _id: "harmony-chat", name: "" };
+var EMOJI_RE = /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|[‍️⃣#*0-9]|\p{Emoji_Modifier})+$/u;
+
+function chatSyncToRoom(ch, payload) {
+	var set = rooms[String(ch || "")];
+	if (!set) return;
+	var data = JSON.stringify({ m: "b", text: "CX|" + JSON.stringify(payload), p: CHAT_SYNC_SENDER });
+	set.forEach(function (peer) {
+		if (peer.readyState === 1) { try { peer.send(data); } catch (e) {} }
+	});
+}
+// The file really is the picture type it claims to be.
+function chatPhotoMagicOk(buf, type) {
+	if (type === "image/jpeg") return buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+	if (type === "image/png") return buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+	if (type === "image/gif") return buf.slice(0, 4).toString("latin1") === "GIF8";
+	if (type === "image/webp") return buf.slice(0, 4).toString("latin1") === "RIFF" && buf.slice(8, 12).toString("latin1") === "WEBP";
+	return false;
+}
+function handleChatPhotoUpload(req, res) {
+	var type = String(req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+	var ext = CHAT_PHOTO_TYPES[type];
+	if (!ext) { sendJson(res, 400, { ok: false, error: "Only JPG, PNG, GIF or WebP pictures" }); return; }
+	if (parseInt(req.headers["content-length"], 10) > CHAT_PHOTO_MAX) { sendJson(res, 413, { ok: false, error: "Picture too large (max 10 MB)" }); return; }
+	var chunks = [], size = 0, failed = false;
+	req.on("data", function (c) {
+		if (failed) return;
+		size += c.length;
+		if (size > CHAT_PHOTO_MAX) { failed = true; sendJson(res, 413, { ok: false, error: "Picture too large (max 10 MB)" }); req.destroy(); return; }
+		chunks.push(c);
+	});
+	req.on("error", function () { if (!failed) { failed = true; sendJson(res, 400, { ok: false, error: "Upload interrupted" }); } });
+	req.on("end", function () {
+		if (failed) return;
+		var buf = Buffer.concat(chunks);
+		if (!buf.length || !chatPhotoMagicOk(buf, type)) { sendJson(res, 400, { ok: false, error: "That file is not a picture" }); return; }
+		var file = crypto.randomBytes(8).toString("hex") + ext;
+		try {
+			fs.mkdirSync(CHAT_PHOTO_DIR, { recursive: true });
+			fs.writeFileSync(path.join(CHAT_PHOTO_DIR, file), buf);
+		} catch (e) { sendJson(res, 500, { ok: false, error: "Could not save the picture" }); return; }
+		sendJson(res, 200, { ok: true, url: "/chat-photos/" + file });
+	});
+}
+function handleRoomChatApi(req, res, route) {
+	if (route === "/api/chat/photo" && req.method === "POST") { handleChatPhotoUpload(req, res); return; }
+	if (!chatDb) { sendJson(res, 503, { ok: false, error: "Chat history is not available on this server" }); return; }
+	var acct = accountFromReq(req);
+	var me = acct ? "a" + acct.id : "";
+	if (route === "/api/chat/history" && req.method === "GET") {
+		var q = url.parse(req.url, true).query || {};
+		var room = String(q.room || "").slice(0, 120);
+		if (!room) { sendJson(res, 400, { ok: false, error: "No room" }); return; }
+		var h = chatDb.history(room, q.before, q.limit);
+		sendJson(res, 200, { ok: true, room: room, me: me, rows: h.rows, more: h.more, meta: h.meta });
+		return;
+	}
+	if ((route === "/api/chat/react" || route === "/api/chat/reply") && req.method === "POST") {
+		readJsonBody(req, 8192, function (err, d) {
+			if (err) { sendJson(res, 400, { ok: false, error: err.message }); return; }
+			var room = String(d.room || "").slice(0, 120), ref = String(d.ref || "").slice(0, 120);
+			if (!room || !ref) { sendJson(res, 400, { ok: false, error: "Missing room or message" }); return; }
+			var ch = String(d.ch || room).slice(0, 256);
+			if (route === "/api/chat/react") {
+				var emoji = String(d.emoji || "");
+				if (!emoji || emoji.length > 16 || !EMOJI_RE.test(emoji)) { sendJson(res, 400, { ok: false, error: "Not an emoji" }); return; }
+				var name = String(d.name || (acct && acct.name) || "?").slice(0, 60);
+				var on = !!d.on;
+				var changed = chatDb.setReaction({ room: room, ref: ref, emoji: emoji, by: me, name: name, on: on });
+				if (changed) chatSyncToRoom(ch, { t: "r", room: room, ref: ref, emoji: emoji, by: me, name: name, on: on });
+				sendJson(res, 200, { ok: true, changed: changed, me: me });
+			} else {
+				var target = String(d.target || "").slice(0, 120);
+				var reply = { t: "p", room: room, ref: ref, target: target,
+					targetName: String(d.targetName || "").slice(0, 120), targetText: String(d.targetText || "").slice(0, 300) };
+				var saved = chatDb.setReply(reply);
+				if (saved) chatSyncToRoom(ch, reply);
+				sendJson(res, 200, { ok: true, saved: saved });
+			}
+		});
+		return;
+	}
+	sendJson(res, 404, { ok: false, error: "Unknown chat endpoint" });
+}
 
 // ---- WebSocket relay (same port, only on the /relay path) ----
 // Both WebSocket servers use noServer + a single shared upgrade router below, so

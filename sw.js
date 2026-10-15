@@ -7,6 +7,7 @@
  *   /api/*        chat logs, media API
  *   /room-media/     Room DJ uploads (ephemeral)
  *   /media-library/  Persistent media library
+ *   /chat-photos/    pictures sent in chat (the browser's HTTP cache keeps them)
  *   /health          health checks
  *   /manage          admin page (never cached, never stored as index.html)
  *
@@ -15,7 +16,7 @@
  */
 "use strict";
 
-var CACHE_NAME = "harmony-piano-ui-v20";
+var CACHE_NAME = "harmony-piano-ui-v21";
 
 var SHELL = [
 	"./",
@@ -39,6 +40,7 @@ var SHELL = [
 	"./cursorLooks.js",
 	"./partyGame.js",
 	"./chatLogger.js?v=20261015d",
+	"./roomChat.js",
 	"./cornerBanner.js",
 	"./funVideoPopup.js",
 	"./screenShare.js",
@@ -67,6 +69,7 @@ function isLivePath(pathname) {
 	if (pathname === "/manage" || pathname === "/manage/" || pathname === "/manage.html") return true;
 	if (pathname.indexOf("/room-media/") === 0) return true;
 	if (pathname.indexOf("/media-library/") === 0) return true;
+	if (pathname.indexOf("/chat-photos/") === 0) return true;
 	return false;
 }
 
