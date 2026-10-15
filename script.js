@@ -4260,7 +4260,8 @@ Rect.prototype.contains = function(x, y) {
 						fromHistory: !!fromHistory,
 						participantId: msg.p && (msg.p._id != null ? msg.p._id : msg.p.id),
 						t: msg.t,
-						color: chatColor
+						color: chatColor,
+						msgId: msg.id
 					});
 				}
 

@@ -247,7 +247,7 @@
 			var key = state.room + "\x1e" + (uid || userName) + "\x1e" + (t || "") + "\x1e" + messageText;
 			if (!t) key += "\x1e" + Math.floor(Date.now() / 60000);
 			if (!markSeen(key)) return;
-			send({ kind: "chat", name: userName || "?", uid: uid, text: String(messageText), t: t || undefined, color: opts.color || "" });
+			send({ kind: "chat", name: userName || "?", uid: uid, text: String(messageText), t: t || undefined, color: opts.color || "", msgId: opts.msgId != null ? String(opts.msgId) : "" });
 		},
 
 		logJoin: function (userName, uid, color) {

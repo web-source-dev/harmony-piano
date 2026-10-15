@@ -39,7 +39,7 @@ try {
 	}
 }
 
-var KINDS = ["chat", "join", "leave", "rename", "prompt", "world"];
+var KINDS = ["chat", "join", "leave", "rename", "prompt", "world", "edit", "delete"];
 var MAX_TEXT = 4000;
 
 function hash(s) { return crypto.createHash("sha1").update(String(s)).digest("hex").slice(0, 16); }
@@ -82,6 +82,22 @@ function open(rootDir, opts) {
 	// Databases made before colours were stored.
 	var cols = db.prepare("PRAGMA table_info(messages)").all().map(function (c) { return c.name; });
 	if (cols.indexOf("color") < 0) db.exec("ALTER TABLE messages ADD COLUMN color TEXT NOT NULL DEFAULT ''");
+	// Edits and deletes (backup server). A chat row keeps the text as first sent
+	// in `text`; cur_text is what it says now, edited counts the edits and
+	// deleted/deleted_by mark a removed line. Each edit/delete is also its own
+	// row (kind edit/delete) pointing at the chat row through ref_id.
+	[
+		["msg_id", "TEXT NOT NULL DEFAULT ''"],      // the chat server's id for the line
+		["cur_text", "TEXT NOT NULL DEFAULT ''"],
+		["edited", "INTEGER NOT NULL DEFAULT 0"],
+		["deleted", "INTEGER NOT NULL DEFAULT 0"],   // UTC ms when deleted
+		["deleted_by", "TEXT NOT NULL DEFAULT ''"],
+		["ref_id", "INTEGER NOT NULL DEFAULT 0"],
+		["ref_name", "TEXT NOT NULL DEFAULT ''"],
+		["ref_color", "TEXT NOT NULL DEFAULT ''"],
+		["old_text", "TEXT NOT NULL DEFAULT ''"]
+	].forEach(function (c) { if (cols.indexOf(c[0]) < 0) db.exec("ALTER TABLE messages ADD COLUMN " + c[0] + " " + c[1]); });
+	db.exec("CREATE INDEX IF NOT EXISTS messages_msgid ON messages(room, msg_id); CREATE INDEX IF NOT EXISTS messages_ref ON messages(ref_id);");
 	db.exec("CREATE INDEX IF NOT EXISTS messages_uid ON messages(uid, id); CREATE INDEX IF NOT EXISTS messages_name ON messages(name, id);");
 
 	var stInsert = db.prepare(
@@ -89,6 +105,12 @@ function open(rootDir, opts) {
 		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 	var stSetColor = db.prepare("UPDATE messages SET color = ? WHERE dedup = ? AND color <> ?");
 	var stByDedup = db.prepare("SELECT * FROM messages WHERE dedup = ?");
+	var stByMsgId = db.prepare("SELECT * FROM messages WHERE room = ? AND msg_id = ? AND kind = 'chat' ORDER BY id LIMIT 1");
+	var stSetColorId = db.prepare("UPDATE messages SET color = ? WHERE id = ?");
+	var stSetMsgId =db.prepare("UPDATE messages SET msg_id = ? WHERE id = ? AND msg_id = ''");
+	var stSetEdited = db.prepare("UPDATE messages SET cur_text = ?, edited = edited + 1 WHERE id = ?");
+	var stSetDeleted = db.prepare("UPDATE messages SET deleted = ?, deleted_by = ? WHERE id = ?");
+	var stSetRef = db.prepare("UPDATE messages SET ref_id = ?, ref_name = ?, ref_color = ?, old_text = ? WHERE id = ?");
 	var stById = db.prepare("SELECT * FROM messages WHERE id = ?");
 	var stRecent = db.prepare(
 		"SELECT id FROM messages WHERE room = ? AND kind = ? AND (uid = ? OR (? = '' AND name = ?)) AND text = ? AND ts >= ? LIMIT 1");
@@ -113,6 +135,16 @@ function open(rootDir, opts) {
 		if (!silent) emit(row);
 		return row;
 	}
+	// Inserts an edit/delete row linked to the chat row it changed (orig may be
+	// missing when the line was sent before the database existed).
+	function insertRef(ev, orig, before) {
+		var row = insert(ev, true);
+		if (!row) return null;
+		stSetRef.run(orig ? orig.id : 0, orig ? orig.name : "", orig ? orig.color : "", before || "", row.id);
+		row = stById.get(row.id);
+		emit(row);
+		return row;
+	}
 	function seenRecently(room, kind, uid, name, text, windowMs) {
 		return !!stRecent.get(room, kind, uid, uid, name, text, Date.now() - windowMs);
 	}
@@ -127,10 +159,26 @@ function open(rootDir, opts) {
 			var room = str(m.room, 120);
 			if (!text || !room) return null;
 			var uid = str(m.uid, 64), name = str(m.name, 120) || "?";
+			var msgId = str(m.msgId, 64);
+			// A line the chat server gave an id to is already stored: an edited copy
+			// of it (sent again to newcomers in the room history) is not a new message.
+			var known = msgId && stByMsgId.get(room, msgId);
+			if (known) {
+				var kc = color(m.color);
+				if (m.fromTab && kc && known.color !== kc) {
+					stSetColorId.run(kc, known.id);
+					emit(Object.assign(stById.get(known.id), { updated: true }));
+				}
+				return null;
+			}
 			var t = +m.t;
 			if (t > 1e12 && t < Date.now() + 864e5) {
 				var key = "c|" + room + "|" + (uid || name) + "|" + Math.round(t) + "|" + hash(text);
 				var row = insert({ room: room, kind: "chat", ts: t, uid: uid, name: name, text: text, server: m.server, color: m.color, dedup: key });
+				if (msgId) {
+					var target = row || stByDedup.get(key);
+					if (target && stSetMsgId.run(msgId, target.id).changes && row) row.msg_id = msgId;
+				}
 				// Already stored (by the server or another tab): a piano tab knows the
 				// colour people actually see (custom name colours), so it wins.
 				var c = color(m.color);
@@ -139,6 +187,41 @@ function open(rootDir, opts) {
 			}
 			if (seenRecently(room, "chat", uid, name, text, m.legacy ? 6 * 3600e3 : 180e3)) return null;
 			return insert({ room: room, kind: "chat", ts: Date.now(), uid: uid, name: name, text: text, server: m.server, color: m.color });
+		},
+
+		// A chat line was edited (backup server). The chat row keeps the original
+		// and gets the new text in cur_text; an "edit" row records who changed
+		// what, with the text before and after.
+		addEdit: function (m) {
+			var room = str(m.room, 120), msgId = str(m.msgId, 64), text = str(m.text).trim();
+			if (!room || !msgId || !text) return null;
+			var orig = stByMsgId.get(room, msgId);
+			var before = orig ? (orig.edited ? orig.cur_text : orig.text) : "";
+			if (orig && before === text) return null;
+			if (orig) {
+				stSetEdited.run(text, orig.id);
+				emit(Object.assign(stById.get(orig.id), { updated: true }));
+			}
+			return insertRef({ room: room, kind: "edit", ts: Date.now(), uid: m.uid, name: m.name, color: m.color, text: text, server: m.server }, orig, before);
+		},
+		addDelete: function (m) {
+			var room = str(m.room, 120), msgId = str(m.msgId, 64);
+			if (!room || !msgId) return null;
+			var orig = stByMsgId.get(room, msgId);
+			if (orig && orig.deleted) return null;
+			var now = Date.now();
+			if (orig) {
+				stSetDeleted.run(now, str(m.name, 120) || "?", orig.id);
+				emit(Object.assign(stById.get(orig.id), { updated: true }));
+			}
+			var last = orig ? (orig.edited ? orig.cur_text : orig.text) : "";
+			return insertRef({ room: room, kind: "delete", ts: now, uid: m.uid, name: m.name, color: m.color, text: last, server: m.server }, orig, last);
+		},
+		// Every version of a chat line: the original, then each edit, then a delete.
+		versions: function (id) {
+			var orig = stById.get(+id);
+			if (!orig) return null;
+			return { message: orig, changes: db.prepare("SELECT * FROM messages WHERE ref_id = ? ORDER BY id").all(orig.id) };
 		},
 
 		// Someone arrived. Joins come from two places (the server watching who is in
@@ -203,8 +286,8 @@ function open(rootDir, opts) {
 			function likeOf(v) { return "%" + String(v).replace(/[\\%_]/g, "\\$&") + "%"; }
 			if (o.q) {
 				var like = likeOf(o.q);
-				where.push("(name LIKE ? ESCAPE '\\' OR text LIKE ? ESCAPE '\\' OR via LIKE ? ESCAPE '\\')");
-				args.push(like, like, like);
+				where.push("(name LIKE ? ESCAPE '\\' OR text LIKE ? ESCAPE '\\' OR via LIKE ? ESCAPE '\\' OR cur_text LIKE ? ESCAPE '\\' OR old_text LIKE ? ESCAPE '\\' OR ref_name LIKE ? ESCAPE '\\')");
+				args.push(like, like, like, like, like, like);
 			}
 			if (o.person) {
 				where.push("(uid = ? OR name LIKE ? ESCAPE '\\')");

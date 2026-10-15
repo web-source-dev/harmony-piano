@@ -287,7 +287,7 @@ function saveChatEvent(body, cb) {
 	var base = {
 		room: room, uid: ev.uid, name: ev.name, text: ev.text, t: ev.t, via: ev.via,
 		harmony: !!ev.harmony, server: ev.server, legacy: data.v !== 2,
-		color: ev.color, fromTab: data.v === 2
+		color: ev.color, fromTab: data.v === 2, msgId: ev.msgId
 	};
 	var row = null;
 	if (ev.kind === "chat") row = chatDb.addChat(base);
@@ -836,6 +836,12 @@ function handleManageApi(req, res, route) {
 		}));
 		return;
 	}
+	if (sub === "/db/versions" && req.method === "GET") {
+		var ver = chatDb && chatDb.versions(q.id);
+		if (!ver) return done(new Error("Message not found"));
+		done(null, ver);
+		return;
+	}
 	if (sub === "/db/people" && req.method === "GET") {
 		done(null, { people: chatDb ? chatDb.people(q.room || "") : [] });
 		return;
@@ -854,7 +860,10 @@ function handleManageApi(req, res, route) {
 		exp.forEach(function (r) {
 			var when = r.tz_known ? fmt.format(new Date(r.ts)).replace(",", "") : new Date(r.ts).toISOString().replace("T", " ").slice(0, 19) + " (old line, zone unknown)";
 			var who = r.name + (r.harmony ? " [HARMONY]" : "");
-			var what = r.kind === "join" ? who + " joined" + (r.via ? " via " + r.via : "")
+			var what = r.kind === "edit" ? who + " edited " + (r.ref_name || "a") + "'s message: \"" + r.old_text + "\" -> \"" + r.text + "\""
+				: r.kind === "delete" ? who + " deleted " + (r.ref_name || "a") + "'s message: \"" + r.text + "\""
+				: r.kind === "chat" && (r.edited || r.deleted) ? who + ": " + (r.edited ? r.cur_text + "   [edited; first sent as: " + r.text + "]" : r.text) + (r.deleted ? "   [deleted by " + r.deleted_by + "]" : "")
+				: r.kind === "join" ? who + " joined" + (r.via ? " via " + r.via : "")
 				: r.kind === "leave" ? who + " left"
 				: r.kind === "rename" ? who + " changed name to " + r.text
 				: r.kind === "prompt" ? who + " (corner reply): " + r.text
@@ -1607,7 +1616,7 @@ function mppHandle(sock, msg) {
 				mppBroadcast(room, chatFrame);
 				mppRememberChat(room._id, chatFrame);
 				if (chatDb && !mppIsSyncText(chatFrame.a)) {
-					chatDb.addChat({ room: room._id, uid: p._id, name: p.name, text: chatFrame.a, t: chatFrame.t, server: "backup", color: p.color });
+					chatDb.addChat({ room: room._id, uid: p._id, name: p.name, text: chatFrame.a, t: chatFrame.t, server: "backup", color: p.color, msgId: chatFrame.id });
 				}
 			}
 			break;
@@ -1622,6 +1631,8 @@ function mppHandle(sock, msg) {
 					if (editHist[ei].id === msg.id) { editHist[ei].a = editText; editHist[ei].edited = Date.now(); break; }
 				}
 				mppBroadcast(room, { m: "a-edit", id: msg.id, a: editText });
+				// /manage keeps the text before and after; the piano chat just shows the new text.
+				if (chatDb) chatDb.addEdit({ room: room._id, msgId: msg.id, text: editText, uid: st.user._id, name: st.user.name, color: st.user.color, server: "backup" });
 			}
 			break;
 		case "a-del":
@@ -1631,6 +1642,7 @@ function mppHandle(sock, msg) {
 					if (delHist[di].id === msg.id) { delHist.splice(di, 1); break; }
 				}
 				mppBroadcast(room, { m: "a-del", id: msg.id });
+				if (chatDb) chatDb.addDelete({ room: room._id, msgId: msg.id, uid: st.user._id, name: st.user.name, color: st.user.color, server: "backup" });
 			}
 			break;
 		case "userset":

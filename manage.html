@@ -208,6 +208,26 @@
   .stream-foot .grow { margin-right: auto; }
   .stream-foot b { color: var(--warn); font-weight: 600; }
   .stream-foot .status-pill { height: 24px; }
+  /* edits & deletes (only here — the piano chat never shows them) */
+  .ver-btn { border: 1px solid var(--line2); background: var(--card2); color: var(--muted); font: inherit; font-size: 10.5px; font-weight: 700;
+    border-radius: 6px; padding: 0 7px; line-height: 18px; margin-left: 8px; cursor: pointer; vertical-align: 1px; text-transform: uppercase; letter-spacing: .03em; }
+  .ver-btn:hover, .ver-btn[aria-expanded="true"] { color: #fff; border-color: var(--warn); }
+  .ver-btn.del { border-color: rgba(229,72,77,.5); color: #ff9b9e; }
+  .lr.is-deleted .lr-text { text-decoration: line-through; text-decoration-color: rgba(255,155,158,.8); opacity: .65; }
+  .lr.is-edit { background: rgba(245,165,36,.07); }
+  .lr.is-delete { background: rgba(229,72,77,.07); }
+  .change { display: block; margin-top: 4px; padding: 6px 10px; border-radius: 8px; background: rgba(0,0,0,.25); border-left: 3px solid var(--line2); }
+  .lr.is-edit .change { border-left-color: var(--warn); }
+  .lr.is-delete .change { border-left-color: var(--danger); }
+  .change del { color: #ff9b9e; text-decoration-color: rgba(255,155,158,.8); }
+  .change ins { color: #9be3bf; text-decoration: none; }
+  .change .arrow { color: var(--faint); margin: 0 6px; }
+  .versions { display: block; margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: rgba(0,0,0,.28); border: 1px solid var(--line); font-size: 12.5px; }
+  .versions .v { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; padding: 3px 0; }
+  .versions .v + .v { border-top: 1px dashed var(--line); }
+  .versions .vl { color: var(--faint); white-space: nowrap; font-size: 11.5px; }
+  .versions .vt { color: var(--text); overflow-wrap: anywhere; }
+  .versions .vt.gone { color: #ff9b9e; }
   @keyframes rowIn { from { background: rgba(232,87,143,.25); } }
   .lr.fresh { animation: rowIn 1.4s ease-out; }
 
@@ -1155,12 +1175,13 @@
     frag.appendChild(document.createTextNode(text.slice(pos)));
     return frag;
   }
-  var KIND_ICON = { join: "➡️", leave: "⬅️", rename: "✏️", prompt: "📝", world: "🌍" };
-  var KIND_TITLE = { join: "Joined", leave: "Left", rename: "Name change", prompt: "Corner prompt reply", world: "World chat" };
+  var KIND_ICON = { join: "➡️", leave: "⬅️", rename: "✏️", prompt: "📝", world: "🌍", edit: "🖊️", "delete": "🗑️" };
+  var KIND_TITLE = { join: "Joined", leave: "Left", rename: "Name change", prompt: "Corner prompt reply", world: "World chat", edit: "Message edited", "delete": "Message deleted" };
   function rowEl(r, opts) {
     var q = (opts.q || "").toLowerCase();
     var isMsg = r.kind === "chat" || r.kind === "world" || r.kind === "prompt";
-    var row = el("div", "lr" + (isMsg ? "" : " event") + (r.kind === "join" ? " is-join" : r.kind === "leave" ? " is-leave" : "") + (opts.fresh ? " fresh" : ""));
+    var row = el("div", "lr" + (isMsg ? "" : " event") + (r.kind === "join" ? " is-join" : r.kind === "leave" ? " is-leave" : "") +
+      (r.kind === "edit" ? " is-edit" : r.kind === "delete" ? " is-delete" : "") + (r.deleted ? " is-deleted" : "") + (opts.fresh ? " fresh" : ""));
     row.dataset.id = r.id;
     var t = el("span", "lr-time" + (r.tz_known ? "" : " legacy"), clock(new Date(r.ts), useUtc(r)));
     t.title = rowTitle(r);
@@ -1181,16 +1202,74 @@
     if (r.kind === "join") body.appendChild(document.createTextNode("joined"));
     else if (r.kind === "leave") body.appendChild(document.createTextNode("left"));
     else if (r.kind === "rename") { body.appendChild(document.createTextNode("changed name to ")); var nn = el("b"); nn.appendChild(hl(r.text, q)); body.appendChild(nn); }
+    else if (r.kind === "edit" || r.kind === "delete") changeBody(body, r, q);
     else {
-      // Like the piano chat: the whole line in the person's colour.
-      var tx = el("span");
+      // Like the piano chat: the whole line in the person's colour, as it reads now.
+      var tx = el("span", "lr-text");
       tx.style.color = col;
-      tx.appendChild(hl(r.text, q));
+      tx.appendChild(hl(r.edited ? r.cur_text : r.text, q));
       body.appendChild(tx);
+      if (r.edited || r.deleted) body.appendChild(versionsButton(r, row));
     }
     if (r.via) { var v = el("span", "lr-via"); v.appendChild(hl(r.via, q)); body.appendChild(v); }
     row.appendChild(body);
     return row;
+  }
+  // "Ali edited Sara's message" + before -> after (or the deleted text).
+  function changeBody(body, r, q) {
+    var isEdit = r.kind === "edit";
+    body.appendChild(document.createTextNode(isEdit ? "edited " : "deleted "));
+    if (r.ref_name) {
+      var who = el("b", null, r.ref_name + "\u2019s");
+      who.style.color = readable(r.ref_color, r.ref_name);
+      body.appendChild(who);
+      body.appendChild(document.createTextNode(" message"));
+    } else body.appendChild(document.createTextNode("a message"));
+    var box = el("span", "change");
+    if (isEdit) {
+      var before = el("del");
+      before.appendChild(hl(r.old_text || "(earlier text not saved)", q));
+      box.appendChild(before);
+      box.appendChild(el("span", "arrow", "\u2192"));
+      var after = el("ins");
+      after.appendChild(hl(r.text, q));
+      box.appendChild(after);
+    } else {
+      var gone = el("del");
+      gone.appendChild(hl(r.text || r.old_text || "(text not saved)", q));
+      box.appendChild(gone);
+    }
+    body.appendChild(box);
+  }
+  // Badge on an edited/deleted chat line; opens every version of it.
+  function versionsButton(r, row) {
+    var label = r.deleted ? (r.edited ? "edited \u00b7 deleted" : "deleted") : (r.edited > 1 ? "edited \u00d7" + r.edited : "edited");
+    var b = button("ver-btn" + (r.deleted ? " del" : ""), label, function () {
+      var open = row.querySelector(".versions");
+      if (open) { open.remove(); b.setAttribute("aria-expanded", "false"); return; }
+      b.setAttribute("aria-expanded", "true");
+      var box = el("span", "versions", "Loading\u2026");
+      row.lastChild.appendChild(box);
+      api("GET", "/db/versions?id=" + r.id).then(function (d) {
+        box.textContent = "";
+        function line(label, text, title, cls) {
+          var v = el("span", "v");
+          var l = el("span", "vl", label);
+          if (title) l.title = title;
+          v.appendChild(l);
+          v.appendChild(el("span", "vt" + (cls ? " " + cls : ""), text));
+          box.appendChild(v);
+        }
+        var m = d.message;
+        line("Original \u00b7 " + clock(new Date(m.ts), useUtc(m)), m.text, rowTitle(m));
+        d.changes.forEach(function (c) {
+          if (c.kind === "edit") line("Edit by " + c.name + " \u00b7 " + clock(new Date(c.ts), useUtc(c)), c.text, rowTitle(c));
+          else line("Deleted by " + c.name + " \u00b7 " + clock(new Date(c.ts), useUtc(c)), "removed from the piano chat", rowTitle(c), "gone");
+        });
+      }).catch(function (err) { box.textContent = err.message; });
+    }, r.deleted ? "Deleted by " + r.deleted_by + " \u2014 show every version" : "Show every version of this message");
+    b.setAttribute("aria-expanded", "false");
+    return b;
   }
   // Each day is its own group, so its sticky date label only sticks while that day is on screen.
   function addRowTo(view, r, opts) {
@@ -1211,7 +1290,7 @@
   // ================= filters (shared by Live and History) =================
   var KIND_OPTS = [
     ["", "Everything"], ["chat", "Chat"], ["join,leave", "Joins & leaves"], ["rename", "Name changes"],
-    ["prompt", "Corner replies"], ["world", "World chat"]
+    ["prompt", "Corner replies"], ["world", "World chat"], ["edit,delete", "Edits & deletes"]
   ];
   var SERVER_LABEL = { harmony: "Harmony tabs", mpp: "Public MPP", backup: "Backup server", world: "World" };
   function emptyFilters() { return { q: "", room: "", person: "", kinds: "", server: "", from: "", to: "" }; }
@@ -1242,7 +1321,7 @@
     if (f.to && r.ts >= dateMs(f.to, true)) return false;
     if (f.q) {
       var q = f.q.toLowerCase();
-      if (![r.name, r.text, r.via].some(function (s) { return s && s.toLowerCase().indexOf(q) >= 0; })) return false;
+      if (![r.name, r.text, r.via, r.cur_text, r.old_text, r.ref_name].some(function (s) { return s && s.toLowerCase().indexOf(q) >= 0; })) return false;
     }
     return true;
   }
