@@ -90,17 +90,19 @@
 		return !!(room && state.liveRooms[room]);
 	}
 
+	// Always UTC: visitors are in every timezone, so their local clocks would mix
+	// different times in one log. /manage turns "UTC" stamps into the viewer's own time.
 	function todayKey() {
 		var d = new Date();
-		var m = d.getMonth() + 1;
-		var day = d.getDate();
-		return d.getFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
+		var m = d.getUTCMonth() + 1;
+		var day = d.getUTCDate();
+		return d.getUTCFullYear() + "-" + (m < 10 ? "0" : "") + m + "-" + (day < 10 ? "0" : "") + day;
 	}
 
 	function timeStamp() {
 		var d = new Date();
 		function pad(n) { return n < 10 ? "0" + n : "" + n; }
-		return todayKey() + " " + pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
+		return todayKey() + " " + pad(d.getUTCHours()) + ":" + pad(d.getUTCMinutes()) + ":" + pad(d.getUTCSeconds()) + " UTC";
 	}
 
 	function sanitizeRoom(name) {

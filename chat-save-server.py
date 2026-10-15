@@ -15,7 +15,7 @@ import os
 import re
 import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -301,7 +301,7 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
             raw = self.rfile.read(length).decode("utf-8")
             data = json.loads(raw)
             room = sanitize_room(data.get("room", "room"))
-            date = data.get("date") or datetime.now().strftime("%Y-%m-%d")
+            date = data.get("date") or datetime.now(timezone.utc).strftime("%Y-%m-%d")
             line = data.get("line", "")
             if not line.endswith("\n"):
                 line += "\n"
@@ -318,17 +318,17 @@ class ChatSaveHandler(SimpleHTTPRequestHandler):
                     if "_joins" in log_name:
                         header = (
                             f"=== Join log: {data.get('room', room)} | Date: {date} | "
-                            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n"
+                            f"Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')} ===\n"
                         )
                     elif "_prompts" in log_name:
                         header = (
                             f"=== Corner prompts: {data.get('room', room)} | Date: {date} | "
-                            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n"
+                            f"Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')} ===\n"
                         )
                     else:
                         header = (
                             f"=== Chat: {data.get('room', room)} | Date: {date} | "
-                            f"Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} ===\n"
+                            f"Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')} ===\n"
                         )
                     f.write(header)
                 f.write(line)

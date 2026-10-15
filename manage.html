@@ -164,14 +164,46 @@
     padding: 8px 10px; cursor: pointer; display: block; width: 100%; }
   .log-item:hover { background: rgba(255,255,255,.05); }
   .log-item[aria-current="true"] { border-color: var(--accent); background: rgba(232,87,143,.1); }
-  .log-item .t { font-weight: 600; word-break: break-all; }
+  .log-item { display: flex; gap: 10px; align-items: center; }
+  .log-item .ico { flex: none; width: 32px; height: 32px; border-radius: 9px; background: var(--card2); display: flex;
+    align-items: center; justify-content: center; font-size: 16px; }
+  .log-item .txt { min-width: 0; flex: 1; }
+  .log-item .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .log-item .t .ty { font-weight: 400; color: var(--muted); }
   .log-item .m { font-size: 12px; color: var(--faint); }
+  .log-group { font-size: 11px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; padding: 10px 4px 2px; }
+  .log-group:first-child { padding-top: 0; }
   .viewer-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
-  .viewer-head .title { font-weight: 700; margin-right: auto; word-break: break-all; min-width: 0; }
-  .log-text { margin: 0; padding: 12px; border-radius: 12px; background: #15131d; border: 1px solid var(--line);
-    font: 12.5px/1.55 ui-monospace, "Cascadia Mono", Consolas, monospace; white-space: pre-wrap; word-break: break-word;
-    max-height: calc(100vh - 290px); min-height: 200px; overflow: auto; -webkit-overflow-scrolling: touch; }
-  .log-text mark { background: rgba(232,87,143,.45); color: #fff; border-radius: 2px; }
+  .viewer-head .title { margin-right: auto; min-width: 0; flex: 1 1 200px; }
+  .viewer-head .title b { display: block; font-size: 16px; word-break: break-word; }
+  .viewer-head .title span { display: block; font-size: 12px; color: var(--faint); word-break: break-all; }
+  .split > .card { scroll-margin-top: calc(var(--header-h) + 10px); }
+  .log-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .log-summary:empty { display: none; }
+  .log-view { padding: 6px; border-radius: 12px; background: #15131d; border: 1px solid var(--line);
+    max-height: calc(100vh - 320px); min-height: 220px; overflow: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  .log-view mark { background: rgba(232,87,143,.45); color: #fff; border-radius: 2px; }
+  .log-view > .faint { display: block; padding: 18px 10px; text-align: center; }
+  .lr { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; padding: 5px 8px; border-radius: 8px; align-items: baseline; }
+  .lr:hover { background: rgba(255,255,255,.04); }
+  .lr-time { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; cursor: help; }
+  .lr-time.legacy { font-style: italic; }
+  .lr-time.legacy::after { content: "*"; margin-left: 1px; color: var(--backup); font-style: normal; }
+  .lr-body { min-width: 0; word-break: break-word; overflow-wrap: anywhere; }
+  .lr-name { font-weight: 700; margin-right: 6px; }
+  .lr.event .lr-body { color: var(--muted); }
+  .lr.event .lr-name { margin-right: 4px; }
+  .lr-ico { margin-right: 6px; }
+  .lr-via { display: inline-block; font-size: 11px; color: var(--faint); background: var(--card2); border-radius: 6px; padding: 0 6px; margin-left: 6px; line-height: 18px; }
+  .lr-plain { color: var(--muted); }
+  .day-sep { position: sticky; top: -6px; z-index: 1; display: flex; justify-content: center; padding: 8px 0 6px; }
+  .day-sep span { background: #2b2839; border: 1px solid var(--line); color: #fff; font-size: 12px; font-weight: 600; padding: 3px 12px;
+    border-radius: 999px; box-shadow: 0 4px 12px rgba(0,0,0,.35); }
+  .sess-sep { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--faint); padding: 8px 8px 4px; }
+  .sess-sep::before, .sess-sep::after { content: ""; flex: 1; border-top: 1px dashed var(--line); }
+  .more-btn { display: block; margin: 4px auto 8px; }
+  .tz-note { font-size: 12px; color: var(--faint); margin-top: 8px; }
+  .tz-note b { color: var(--backup); font-weight: 600; }
   .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; min-height: 36px; }
   .check input { width: 18px; height: 18px; }
 
@@ -208,6 +240,8 @@
     max-width: calc(100% - 32px); background: #3a3650; border: 1px solid #4a4660; padding: 10px 16px; border-radius: 12px;
     box-shadow: 0 10px 30px rgba(0,0,0,.4); }
   .toast.err { background: #4a2430; border-color: #7a3444; }
+  .toast.join { background: #2c3a4a; border-color: #4dabf7; }
+  #sound-toggle.locked { border-color: var(--backup); color: #ffd28a; }
 
   /* ---- tablets & phones: sidebar becomes a drawer ---- */
   @media (max-width: 960px) {
@@ -246,7 +280,8 @@
     .media-thumb { height: 110px; }
     .media-body { padding: 8px 10px 10px; }
     .media-actions .btn { flex: 1 1 auto; }
-    .log-text { max-height: 60vh; }
+    .log-view { max-height: 65vh; }
+    .lr { grid-template-columns: 58px minmax(0, 1fr); gap: 8px; padding: 5px 4px; }
     .upload .btn { width: 100%; }
   }
   @media (pointer: coarse) {
@@ -287,6 +322,7 @@
         <button type="button" class="btn" id="online-toggle" aria-controls="side" aria-expanded="false">👥 <span id="online-count-btn">0</span><span class="btn-label">&nbsp;online</span></button>
         <div class="brand"><span class="brand-mark" aria-hidden="true">🛠️</span><span class="brand-name">Harmony Manage</span></div>
         <span class="live" id="live" title="Server status"><span class="live-dot"></span><span class="live-text" id="live-text">Live</span></span>
+        <button type="button" class="btn" id="sound-toggle" aria-pressed="true" title="Sound when someone joins">🔔<span class="btn-label" id="sound-label">&nbsp;Join sound</span></button>
         <a class="btn" href="/" target="_blank" rel="noopener" title="Open piano">🎹<span class="btn-label">&nbsp;Open piano</span></a>
         <button type="button" class="btn" id="logout" title="Sign out">🚪<span class="btn-label">&nbsp;Sign out</span></button>
       </div>
@@ -370,6 +406,9 @@
         <div class="split">
           <div class="card">
             <div class="filters">
+              <input class="input" id="log-search" type="search" placeholder="Find a room" aria-label="Find a room">
+            </div>
+            <div class="filters">
               <select class="input" id="log-room" aria-label="Room"><option value="">All rooms</option></select>
               <select class="input" id="log-type" aria-label="Log type">
                 <option value="">All types</option>
@@ -383,17 +422,20 @@
           </div>
           <div class="card">
             <div class="viewer-head">
-              <span class="title" id="log-title">Pick a log</span>
+              <div class="title"><b id="log-title">Pick a log</b><span id="log-file"></span></div>
               <button type="button" class="btn btn-sm" id="log-refresh" disabled>Refresh</button>
               <a class="btn btn-sm" id="log-download" aria-disabled="true">Download</a>
               <button type="button" class="btn btn-sm btn-danger" id="log-delete" disabled>Delete</button>
             </div>
             <div class="filters">
               <input class="input" id="log-filter" type="search" placeholder="Filter lines (name, word…)" aria-label="Filter lines">
+              <select class="input" id="log-tz" aria-label="Show times in" style="flex:0 1 auto"></select>
               <label class="check"><input type="checkbox" id="log-follow"> Follow live</label>
             </div>
-            <pre class="log-text" id="log-text"><span class="faint">Select a chat log to read it.</span></pre>
+            <div class="log-summary" id="log-summary"></div>
+            <div class="log-view" id="log-text" tabindex="0" role="log" aria-label="Log lines"><span class="faint">Select a chat log to read it.</span></div>
             <div class="status" id="log-status"></div>
+            <p class="tz-note" id="tz-note" hidden><b>*</b> Older line: saved with the visitor's own clock, so its timezone is unknown and the time may be off by hours. New lines are saved in UTC and shown in your time.</p>
           </div>
         </div>
       </section>
@@ -493,9 +535,11 @@
     if (!t) { t = el("div", "toast"); t.setAttribute("role", "status"); document.body.appendChild(t); }
     t.textContent = text;
     t.classList.toggle("err", !!isErr);
+    t.classList.remove("join");
     t.hidden = false;
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.hidden = true; }, 3200);
+    toastTimer = setTimeout(function () { t.hidden = true; }, 4000);
+    return t;
   }
   function fail(err) { toast(err && err.message || String(err), true); }
   function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
@@ -505,11 +549,38 @@
     while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
     return (i ? n.toFixed(1) : n) + " " + u[i];
   }
+  // Every time on this page is shown in the viewer's own timezone.
+  var MY_TZ = (function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; } })();
+  function clock(d, utc) {
+    return d.toLocaleTimeString(undefined, utc ? { hour: "numeric", minute: "2-digit", timeZone: "UTC" } : { hour: "numeric", minute: "2-digit" });
+  }
+  function ymd(d, utc) {
+    return utc ? d.toISOString().slice(0, 10)
+      : d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
+  }
+  // "2026-10-06" -> "Today" / "Yesterday" / "Tue, Oct 6" / "Tue, Oct 6, 2025"
+  function dayLabel(key) {
+    var now = new Date(), y = new Date(now.getTime() - 864e5);
+    if (key === ymd(now)) return "Today";
+    if (key === ymd(y)) return "Yesterday";
+    var p = key.split("-"), d = new Date(+p[0], +p[1] - 1, +p[2]);
+    if (isNaN(d)) return key;
+    var o = { weekday: "short", month: "short", day: "numeric" };
+    if (d.getFullYear() !== now.getFullYear()) o.year = "numeric";
+    return d.toLocaleDateString(undefined, o);
+  }
   function when(ms) {
     if (!ms) return "";
     var d = new Date(ms);
-    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }) + " " +
-      d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    return dayLabel(ymd(d)) + ", " + clock(d);
+  }
+  function ago(ms) {
+    if (!ms) return "";
+    var s = Math.round((Date.now() - ms) / 1000);
+    if (s < 45) return "just now";
+    if (s < 3600) return Math.round(s / 60) + " min ago";
+    if (s < 86400) return Math.round(s / 3600) + " h ago";
+    return when(ms);
   }
   function setOptions(select, values, keepFirst, labelFn) {
     var cur = select.value;
@@ -550,10 +621,120 @@
     if (h) document.documentElement.style.setProperty("--header-h", h + "px");
   }
 
+  // ---------- tab title, join sound ----------
+  var BASE_TITLE = "Harmony Manage", onlineTotal = 0, titleFlashTimer = null;
+  function updateTitle() {
+    if (titleFlashTimer) return;
+    document.title = $("app").hidden ? BASE_TITLE : BASE_TITLE + " (" + onlineTotal + ")";
+  }
+  function flashTitle(text) {
+    clearInterval(titleFlashTimer);
+    var n = 0;
+    document.title = text;
+    titleFlashTimer = setInterval(function () {
+      n++;
+      document.title = n % 2 ? BASE_TITLE + " (" + onlineTotal + ")" : text;
+      if (n >= 10) { clearInterval(titleFlashTimer); titleFlashTimer = null; updateTitle(); }
+    }, 1000);
+  }
+
+  var soundOn = true, audioCtx = null, lastRing = 0;
+  try { soundOn = localStorage.getItem("harmony_manage_sound") !== "off"; } catch (e) {}
+  function getAudio() {
+    if (!audioCtx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      audioCtx = new AC();
+      audioCtx.onstatechange = updateSoundBtn;
+    }
+    return audioCtx;
+  }
+  function unlockAudio() {
+    var c = getAudio();
+    if (c && c.state === "suspended") c.resume().then(updateSoundBtn, function () {});
+  }
+  function updateSoundBtn() {
+    var b = $("sound-toggle"), locked = soundOn && audioCtx && audioCtx.state !== "running";
+    b.setAttribute("aria-pressed", soundOn ? "true" : "false");
+    b.classList.toggle("locked", !!locked);
+    b.firstChild.textContent = soundOn ? "🔔" : "🔕";
+    $("sound-label").textContent = "\u00a0" + (!soundOn ? "Sound off" : locked ? "Tap to enable sound" : "Join sound");
+    b.title = !soundOn ? "Join sound is off — click to turn on"
+      : locked ? "The browser blocks sound until you click the page — click here" : "A sound plays when someone joins — click to turn off";
+  }
+  // A big ~5 second chime: two bright arpeggios, then a full ringing chord.
+  function playJoinSound(force) {
+    if (!soundOn && !force) return;
+    var c = getAudio();
+    if (!c) return;
+    if (c.state === "suspended") c.resume().catch(function () {});
+    if (!force && Date.now() - lastRing < 5500) return;   // never stack two chimes
+    lastRing = Date.now();
+    var t0 = c.currentTime + 0.05;
+    var comp = c.createDynamicsCompressor();
+    comp.threshold.value = -14; comp.ratio.value = 4;
+    comp.connect(c.destination);
+    var master = c.createGain();
+    master.gain.value = 1;
+    master.connect(comp);
+    function bell(freq, at, dur, vol) {
+      [[1, 1], [2, 0.45], [3, 0.2], [4.2, 0.1]].forEach(function (p) {
+        var o = c.createOscillator(), g = c.createGain();
+        o.type = "sine";
+        o.frequency.value = freq * p[0];
+        g.gain.setValueAtTime(0.0001, t0 + at);
+        g.gain.exponentialRampToValueAtTime(vol * p[1], t0 + at + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + dur / p[0]);
+        o.connect(g); g.connect(master);
+        o.start(t0 + at); o.stop(t0 + at + dur + 0.05);
+      });
+    }
+    var arp = [523.25, 659.25, 783.99, 1046.5];   // C5 E5 G5 C6
+    [0, 1.5].forEach(function (start) {
+      arp.forEach(function (f, i) { bell(f, start + i * 0.17, 1.4, 0.32); });
+    });
+    [261.63, 523.25, 659.25, 783.99, 1046.5].forEach(function (f) { bell(f, 3.0, 2.1, 0.26); });
+  }
+  $("sound-toggle").addEventListener("click", function () {
+    var c = getAudio();
+    if (soundOn && c && c.state !== "running") { unlockAudio(); playJoinSound(true); return; }
+    soundOn = !soundOn;
+    try { localStorage.setItem("harmony_manage_sound", soundOn ? "on" : "off"); } catch (e) {}
+    if (soundOn) { unlockAudio(); playJoinSound(true); }
+    updateSoundBtn();
+  });
+  ["pointerdown", "keydown", "touchstart"].forEach(function (t) { document.addEventListener(t, unlockAudio, true); });
+
+  // Who was online at the last poll, and when each person was last seen (so a quick
+  // reconnect doesn't ring again).
+  var presence = { ready: false, prev: {}, lastSeen: {} };
+  function detectJoins(o) {
+    var now = Date.now(), cur = {}, joined = [];
+    o.rooms.forEach(function (r) {
+      r.users.forEach(function (u) { if (!cur[u._id]) cur[u._id] = { u: u, room: r.room }; });
+    });
+    Object.keys(cur).forEach(function (id) {
+      var seen = presence.lastSeen[id];
+      if (presence.ready && !presence.prev[id] && !(seen && now - seen < 60000)) joined.push(cur[id]);
+      presence.lastSeen[id] = now;
+    });
+    Object.keys(presence.lastSeen).forEach(function (id) { if (now - presence.lastSeen[id] > 600000) delete presence.lastSeen[id]; });
+    presence.prev = cur;
+    presence.ready = true;
+    if (!joined.length) return;
+    var first = joined[0];
+    var who = first.u.name + (joined.length > 1 ? " +" + (joined.length - 1) + " more" : "");
+    playJoinSound();
+    toast("🎹 " + who + " joined " + first.room).classList.add("join");
+    if (document.hidden) flashTitle("🔔 " + who + " joined!");
+  }
+
   // ---------- login ----------
   function showLogin(msg) {
     stopPolling();
+    presence.ready = false; presence.prev = {};
     $("app").hidden = true;
+    updateTitle();
     $("login").hidden = false;
     $("login-msg").textContent = msg || "";
     setTimeout(function () { $("login-pw").focus(); }, 30);
@@ -562,6 +743,7 @@
     $("login").hidden = true;
     $("app").hidden = false;
     $("login-pw").value = "";
+    updateSoundBtn();
     fitHeader();
     switchTab(readHashTab() || "rooms");
   }
@@ -624,7 +806,7 @@
 
   function startPolling() {
     stopPolling();
-    pollTimer = setInterval(function () { if (!document.hidden) loadOverview(); }, 4000);
+    pollTimer = setInterval(loadOverview, 4000);
     if ($("log-follow").checked) startFollow();
   }
   function stopPolling() { clearInterval(pollTimer); pollTimer = null; clearInterval(followTimer); followTimer = null; }
@@ -658,6 +840,8 @@
     });
     $("side-total").textContent = plural(total, "person").replace("persons", "people");
     $("online-count-btn").textContent = total;
+    onlineTotal = total;
+    updateTitle();
     var q = state.sideQuery, where = state.sideWhere;
     o.rooms.forEach(function (r) {
       var users = r.users.filter(function (u) {
@@ -687,6 +871,7 @@
     return api("GET", "/overview").then(function (data) {
       setLive(true);
       state.overview = data;
+      detectJoins(data);
       renderOverview();
       renderSide();
     }).catch(function (err) {
@@ -814,6 +999,28 @@
   bindToggle("anon", $("anon-toggle"), "/anon", "Anonymous");
 
   // ---------- chat logs ----------
+  var TYPE_LABEL = { chat: "Chat", joins: "Joins", prompts: "Corner prompts", world: "World chat" };
+  var TYPE_ICON = { chat: "💬", joins: "🚪", prompts: "📝", world: "🌍" };
+  var MAX_ROWS = 1500;
+  state.logShowAll = false;
+  state.logTz = "local";
+  try { if (localStorage.getItem("harmony_manage_tz") === "utc") state.logTz = "utc"; } catch (e) {}
+
+  (function initTz() {
+    var sel = $("log-tz");
+    var mine = el("option", null, "Times: my time" + (MY_TZ ? " (" + MY_TZ.replace(/_/g, " ") + ")" : ""));
+    mine.value = "local";
+    var utc = el("option", null, "Times: UTC");
+    utc.value = "utc";
+    sel.appendChild(mine); sel.appendChild(utc);
+    sel.value = state.logTz;
+    sel.addEventListener("change", function () {
+      state.logTz = sel.value;
+      try { localStorage.setItem("harmony_manage_tz", sel.value); } catch (e) {}
+      renderLogText();
+    });
+  })();
+
   function openLogsFor(room) {
     setOptions($("log-room"), (state.overview ? state.overview.knownRooms : []).concat([room]), true);
     $("log-room").value = room;
@@ -831,31 +1038,53 @@
     }).catch(fail);
   }
   function filteredLogs() {
-    var room = $("log-room").value, type = $("log-type").value;
-    return state.logs.filter(function (l) { return (!room || l.room === room) && (!type || l.type === type); });
+    var room = $("log-room").value, type = $("log-type").value, q = $("log-search").value.trim().toLowerCase();
+    return state.logs.filter(function (l) {
+      return (!room || l.room === room) && (!type || l.type === type) && (!q || l.room.toLowerCase().indexOf(q) >= 0);
+    }).sort(function (a, b) { return (b.date || "").localeCompare(a.date || "") || b.mtime - a.mtime; });
   }
-  var TYPE_LABEL = { chat: "Chat", joins: "Joins", prompts: "Corner prompts", world: "World chat" };
+  function logInfo(file) {
+    for (var i = 0; i < state.logs.length; i++) if (state.logs[i].file === file) return state.logs[i];
+    return null;
+  }
   function renderLogList() {
     var list = $("log-list");
     list.textContent = "";
     var logs = filteredLogs();
     if (!logs.length) { list.appendChild(el("div", "empty", "No chat logs match.")); return; }
+    var lastDay = null;
     logs.forEach(function (l) {
-      var b = button("log-item", null, function () { openLog(l.file); });
+      var day = l.date || "";
+      if (day !== lastDay) { list.appendChild(el("div", "log-group", day ? dayLabel(day) : "No date")); lastDay = day; }
+      var b = button("log-item", null, function () { openLog(l.file);
+        // Phones: the viewer sits under the list, so bring it into view.
+        if (window.matchMedia("(max-width: 960px)").matches) $("log-text").parentNode.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      b.title = l.file;
       if (l.file === state.logFile) b.setAttribute("aria-current", "true");
-      b.appendChild(el("div", "t", l.room + " · " + (TYPE_LABEL[l.type] || l.type)));
-      b.appendChild(el("div", "m", (l.date || "no date") + " · " + bytes(l.size) + " · updated " + when(l.mtime)));
+      b.appendChild(el("span", "ico", TYPE_ICON[l.type] || "📄"));
+      var txt = el("span", "txt");
+      var t = el("div", "t", l.room + " ");
+      t.appendChild(el("span", "ty", "· " + (TYPE_LABEL[l.type] || l.type)));
+      txt.appendChild(t);
+      txt.appendChild(el("div", "m", bytes(l.size) + " · updated " + ago(l.mtime)));
+      b.appendChild(txt);
       list.appendChild(b);
     });
   }
   function onLogFilter() { state.logFile = ""; renderLogList(); var f = filteredLogs()[0]; if (f) openLog(f.file); else clearViewer(); }
   $("log-room").addEventListener("change", onLogFilter);
   $("log-type").addEventListener("change", onLogFilter);
+  $("log-search").addEventListener("input", onLogFilter);
 
   function clearViewer() {
     state.logFile = ""; state.logRaw = "";
     $("log-title").textContent = "Pick a log";
-    $("log-text").textContent = "Select a chat log to read it.";
+    $("log-file").textContent = "";
+    $("log-text").textContent = "";
+    $("log-text").appendChild(el("span", "faint", "Select a chat log to read it."));
+    $("log-summary").textContent = "";
+    $("tz-note").hidden = true;
     $("log-refresh").disabled = true; $("log-delete").disabled = true;
     $("log-download").removeAttribute("href"); $("log-download").setAttribute("aria-disabled", "true");
     $("log-status").textContent = "";
@@ -863,50 +1092,185 @@
   function openLog(file, keepScroll) {
     var switched = file !== state.logFile;
     state.logFile = file;
-    if (switched) state.logRaw = "";
+    if (switched) { state.logRaw = ""; state.logShowAll = false; }
     renderLogList();
-    $("log-title").textContent = file;
+    var info = logInfo(file);
+    $("log-title").textContent = info ? info.room + " · " + (TYPE_LABEL[info.type] || info.type) + (info.date ? " · " + dayLabel(info.date) : "") : file;
+    $("log-file").textContent = file;
     $("log-refresh").disabled = false; $("log-delete").disabled = false;
     $("log-download").href = "/api/manage/chat-log?download=1&file=" + encodeURIComponent(file);
     $("log-download").removeAttribute("aria-disabled");
-    var pre = $("log-text");
-    var atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 30;
+    var view = $("log-text");
+    var atBottom = view.scrollTop + view.clientHeight >= view.scrollHeight - 30;
     return api("GET", "/chat-log?file=" + encodeURIComponent(file), null, true).then(function (text) {
       if (state.logFile !== file) return;
       var changed = text !== state.logRaw;
       state.logRaw = text;
       $("log-status").classList.remove("err");
       if (changed || !keepScroll) renderLogText();
-      $("log-status").textContent = text.split("\n").filter(Boolean).length + " lines · " + bytes(text.length);
-      if (!keepScroll || (changed && (atBottom || $("log-follow").checked))) pre.scrollTop = pre.scrollHeight;
+      if (!keepScroll || (changed && (atBottom || $("log-follow").checked))) view.scrollTop = view.scrollHeight;
     }).catch(function (err) {
       $("log-status").textContent = err.message;
       $("log-status").classList.add("err");
     });
   }
-  function renderLogText() {
-    var pre = $("log-text");
-    var q = $("log-filter").value.trim().toLowerCase();
-    pre.textContent = "";
-    var lines = state.logRaw.split("\n");
-    if (q) lines = lines.filter(function (l) { return l.toLowerCase().indexOf(q) >= 0; });
-    if (!lines.join("").trim()) { pre.appendChild(el("span", "faint", q ? "No lines match \"" + q + "\"." : "This log is empty.")); return; }
+
+  // ---- turning raw log lines into readable rows ----
+  // New lines: "[2026-10-15 14:03:22 UTC] ...". Older lines have no "UTC": they were
+  // stamped with whatever clock the visitor's computer had, so their zone is unknown.
+  var STAMP_RE = /^\[(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2}):(\d{2})( UTC)?\] ?([\s\S]*)$/;
+  var HEAD_RE = /^=== (.*?)(?: \| Date: ([^|]*?))?(?: \| Started: (.*?))? ===$/;
+  var SESS_RE = /^--- room "(.*)" log started at (\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2}):(\d{2})( UTC)?(.*?) ---$/;
+
+  function makeStamp(date, h, m, sec, isUtc) {
+    if (isUtc) return { utc: true, d: new Date(date + "T" + h + ":" + m + ":" + sec + "Z") };
+    // Old line: keep the wall-clock numbers exactly as written.
+    var p = date.split("-");
+    return { utc: false, raw: date + " " + h + ":" + m + ":" + sec, day: date, d: new Date(+p[0], +p[1] - 1, +p[2], +h, +m, +sec) };
+  }
+  function stampDay(st) { return st.utc ? ymd(st.d, state.logTz === "utc") : st.day; }
+  function stampClock(st) { return st.utc ? clock(st.d, state.logTz === "utc") : clock(st.d); }
+  function stampTitle(st) {
+    if (!st.utc) return st.raw + " — older line, saved in the visitor's own clock (timezone unknown)";
+    var local = st.d.toLocaleString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" });
+    return local + (MY_TZ ? " (" + MY_TZ + ")" : " (your time)") + "\n" + st.d.toISOString().replace("T", " ").slice(0, 19) + " UTC";
+  }
+  function splitVia(text) {
+    var m = /^(.*?) via (.+)$/.exec(text);
+    return m ? { text: m[1], via: m[2] } : { text: text, via: "" };
+  }
+  function parseLine(line, type) {
+    var mh = HEAD_RE.exec(line);
+    if (mh) return { kind: "head", label: mh[1], date: (mh[2] || "").trim() };
+    var ms = SESS_RE.exec(line);
+    if (ms) return { kind: "session", room: ms[1], st: makeStamp(ms[2], ms[3], ms[4], ms[5], !!ms[6]), via: ms[7].replace(/^\s*via\s*/, "").trim() };
+    var m = STAMP_RE.exec(line);
+    if (!m) return { kind: "plain", text: line };
+    var row = { st: makeStamp(m[1], m[2], m[3], m[4], !!m[5]), raw: line };
+    var body = m[6];
+    if (type === "joins") {
+      row.harmony = body.indexOf("*** HARMONY *** ") === 0;
+      if (row.harmony) body = body.slice(16);
+      var jr = /^(.*) changed name to (.*)$/.exec(body);
+      if (jr) { var v = splitVia(jr[2]); row.kind = "rename"; row.name = jr[1]; row.text = v.text; row.via = v.via; return row; }
+      var jj = /^(.*) joined(?: via (.*))?$/.exec(body);
+      if (jj) { row.kind = "join"; row.name = jj[1]; row.via = jj[2] || ""; return row; }
+      row.kind = "event"; row.text = body; return row;
+    }
+    if (type === "prompts") {
+      var pr = /^(.*?) sent reply: ([\s\S]*)$/.exec(body);
+      if (pr) { row.kind = "msg"; row.name = pr[1]; row.text = pr[2]; row.prompt = true; return row; }
+    }
+    var i = body.indexOf(": ");
+    if (i > 0 && i < 80) { row.kind = "msg"; row.name = body.slice(0, i); row.text = body.slice(i + 2); return row; }
+    row.kind = "event"; row.text = body;
+    return row;
+  }
+  function nameColor(name) {
+    var h = 0;
+    for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+    return "hsl(" + h + ", 75%, 72%)";
+  }
+  function hl(text, q) {
     var frag = document.createDocumentFragment();
-    lines.forEach(function (line, i) {
-      if (q) {
-        var low = line.toLowerCase(), pos = 0, at;
-        while ((at = low.indexOf(q, pos)) >= 0) {
-          frag.appendChild(document.createTextNode(line.slice(pos, at)));
-          frag.appendChild(el("mark", null, line.slice(at, at + q.length)));
-          pos = at + q.length;
-        }
-        frag.appendChild(document.createTextNode(line.slice(pos)));
-      } else {
-        frag.appendChild(document.createTextNode(line));
+    if (!q) { frag.appendChild(document.createTextNode(text)); return frag; }
+    var low = text.toLowerCase(), pos = 0, at;
+    while ((at = low.indexOf(q, pos)) >= 0) {
+      frag.appendChild(document.createTextNode(text.slice(pos, at)));
+      frag.appendChild(el("mark", null, text.slice(at, at + q.length)));
+      pos = at + q.length;
+    }
+    frag.appendChild(document.createTextNode(text.slice(pos)));
+    return frag;
+  }
+  function rowEl(r, q) {
+    var row = el("div", "lr" + (r.kind === "msg" ? "" : " event"));
+    var t = el("span", "lr-time" + (r.st.utc ? "" : " legacy"), stampClock(r.st));
+    t.title = stampTitle(r.st);
+    row.appendChild(t);
+    var body = el("div", "lr-body");
+    if (r.kind === "msg" || r.kind === "join" || r.kind === "rename") {
+      if (r.kind === "join") body.appendChild(el("span", "lr-ico", "➡️"));
+      if (r.kind === "rename") body.appendChild(el("span", "lr-ico", "✏️"));
+      if (r.prompt) body.appendChild(el("span", "lr-ico", "📝"));
+      var n = el("span", "lr-name");
+      n.style.color = nameColor(r.name);
+      n.appendChild(hl(r.name, q));
+      body.appendChild(n);
+      if (r.harmony) { var tg = el("span", "tag harmony", "HARMONY"); tg.style.marginRight = "6px"; body.appendChild(tg); }
+      if (r.kind === "join") body.appendChild(document.createTextNode("joined"));
+      if (r.kind === "rename") { body.appendChild(document.createTextNode("changed name to ")); var nn = el("b"); nn.appendChild(hl(r.text, q)); body.appendChild(nn); }
+      if (r.kind === "msg") body.appendChild(hl(r.text, q));
+      if (r.via) { var v = el("span", "lr-via"); v.appendChild(hl(r.via, q)); body.appendChild(v); }
+    } else {
+      body.appendChild(hl(r.text, q));
+    }
+    row.appendChild(body);
+    return row;
+  }
+  function renderLogText() {
+    var view = $("log-text");
+    var q = $("log-filter").value.trim().toLowerCase();
+    var info = logInfo(state.logFile) || {};
+    var type = info.type || (/_joins/.test(state.logFile) ? "joins" : /_prompts/.test(state.logFile) ? "prompts" : /_world/.test(state.logFile) ? "world" : "chat");
+    view.textContent = "";
+    var rows = [], people = {}, msgs = 0, joins = 0, legacy = 0;
+    state.logRaw.split(/\r?\n/).forEach(function (line) {
+      if (!line.trim()) return;
+      var r = parseLine(line, type);
+      if (r.kind === "head") return;
+      if (r.st) {
+        if (!r.st.utc) legacy++;
+        if (r.name) people[r.name] = true;
+        if (r.kind === "msg") msgs++;
+        if (r.kind === "join") joins++;
       }
-      if (i < lines.length - 1) frag.appendChild(document.createTextNode("\n"));
+      if (q && (line.toLowerCase().indexOf(q) < 0 || r.kind === "session")) return;
+      rows.push(r);
     });
-    pre.appendChild(frag);
+
+    var sum = $("log-summary");
+    sum.textContent = "";
+    var bits = [];
+    if (msgs) bits.push(plural(msgs, type === "prompts" ? "reply" : "message").replace("replys", "replies"));
+    if (joins) bits.push(plural(joins, "join"));
+    var np = Object.keys(people).length;
+    if (np) bits.push(plural(np, "person").replace("persons", "people"));
+    bits.forEach(function (b) { sum.appendChild(el("span", "badge", b)); });
+    $("tz-note").hidden = !legacy;
+    $("log-status").textContent = (q ? plural(rows.length, "line") + " match · " : "") + bytes(state.logRaw.length) +
+      " · times in " + (state.logTz === "utc" ? "UTC" : "your time" + (MY_TZ ? " (" + MY_TZ.replace(/_/g, " ") + ")" : ""));
+
+    if (!rows.length) { view.appendChild(el("span", "faint", q ? "No lines match “" + q + "”." : "This log is empty.")); return; }
+    var hidden = state.logShowAll ? 0 : Math.max(0, rows.length - MAX_ROWS);
+    var frag = document.createDocumentFragment();
+    if (hidden) {
+      frag.appendChild(button("btn btn-sm more-btn", "Show " + plural(hidden, "earlier line"), function () {
+        state.logShowAll = true;
+        var before = view.scrollHeight - view.scrollTop;
+        renderLogText();
+        view.scrollTop = view.scrollHeight - before;
+      }));
+    }
+    var lastDay = null;
+    rows.slice(hidden).forEach(function (r) {
+      if (r.kind === "plain") { var p = el("div", "lr event"); p.appendChild(el("span")); var pb = el("div", "lr-body lr-plain"); pb.appendChild(hl(r.text, q)); p.appendChild(pb); frag.appendChild(p); return; }
+      var day = stampDay(r.st);
+      if (day !== lastDay) {
+        var sep = el("div", "day-sep");
+        sep.appendChild(el("span", null, dayLabel(day)));
+        frag.appendChild(sep);
+        lastDay = day;
+      }
+      if (r.kind === "session") {
+        var s = el("div", "sess-sep", "Logging started " + stampClock(r.st) + (r.via ? " · " + r.via : ""));
+        s.title = stampTitle(r.st);
+        frag.appendChild(s);
+        return;
+      }
+      frag.appendChild(rowEl(r, q));
+    });
+    view.appendChild(frag);
   }
   function startFollow() {
     clearInterval(followTimer);
