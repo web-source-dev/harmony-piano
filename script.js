@@ -4259,7 +4259,8 @@ Rect.prototype.contains = function(x, y) {
 					ChatLogger.logMessage(msg.p.name, chatLine, {
 						fromHistory: !!fromHistory,
 						participantId: msg.p && (msg.p._id != null ? msg.p._id : msg.p.id),
-						t: msg.t
+						t: msg.t,
+						color: chatColor
 					});
 				}
 
@@ -4306,7 +4307,8 @@ Rect.prototype.contains = function(x, y) {
 			var me = gClient.findParticipantById(gClient.participantId);
 			if(!me || !gClient.participantId) return;
 			gLoggedSelfJoinRoom = roomId;
-			ChatLogger.logJoin(me.name || "?", me._id);
+			ChatLogger.logJoin(me.name || "?", me._id,
+				(typeof gNameColor !== "undefined" && gNameColor) ? gNameColor.colorFor(me) : me.color);
 		}
 
 		gClient.on("room participants sync", function(ppl) {
@@ -4336,7 +4338,8 @@ Rect.prototype.contains = function(x, y) {
 				gLoggedParticipants[info.part.id] = info.newName || "";
 			}
 			if(info.part && info.part.id === gClient.participantId) {
-				ChatLogger.logRename(info.oldName, info.newName, info.part._id);
+				ChatLogger.logRename(info.oldName, info.newName, info.part._id,
+					(typeof gNameColor !== "undefined" && gNameColor) ? gNameColor.colorFor(info.part) : info.part.color);
 			}
 		});
 		ChatLogger.init();

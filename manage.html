@@ -4,320 +4,386 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#1c1a26">
+<meta name="theme-color" content="#14131b">
 <title>Harmony Manage</title>
 <style>
   :root {
-    --bg: #1c1a26; --card: #262433; --card2: #2e2b3d; --line: #36334a;
-    --text: #fff; --muted: rgba(255,255,255,0.68); --faint: rgba(255,255,255,0.46);
-    --accent: #e8578f; --accent-hover: #d44a80; --focus: #ff8cb8;
-    --danger: #e5484d; --danger-bg: rgba(229,72,77,0.14); --ok: #3fb97d;
-    --harmony: #e8578f; --mpp: #4dabf7; --backup: #f5a524;
-    --header-h: 104px; --side-w: 300px;
+    --bg: #14131b; --panel: #1b1a24; --card: #22202d; --card2: #2a2837; --hover: #312e40; --line: #33304a; --line2: #403c58;
+    --text: #f4f2f8; --muted: #b5b1c4; --faint: #7f7b91;
+    --accent: #e8578f; --accent-hover: #d44a80; --accent-soft: rgba(232,87,143,.14); --focus: #ff8cb8;
+    --danger: #e5484d; --danger-bg: rgba(229,72,77,.14); --ok: #3fb97d; --ok-soft: rgba(63,185,125,.12); --warn: #f5a524;
+    --radius: 14px; --side-w: 272px; --rooms-w: 300px;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--text); -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
-  body { font: 14px/1.45 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; min-height: 100vh; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  body { font: 14px/1.45 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif; -webkit-tap-highlight-color: transparent; }
   button, input, select { font: inherit; color: inherit; }
   button, a, label, select { touch-action: manipulation; }
   [hidden] { display: none !important; }
   a { color: var(--focus); }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #3a3750; border-radius: 10px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  * { scrollbar-color: #3a3750 transparent; scrollbar-width: thin; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 
-  /* ---- login ---- */
-  #login { min-height: 100vh; min-height: 100dvh; display: flex; align-items: center; justify-content: center; padding: 16px; }
-  .login-card { width: 100%; max-width: 380px; padding: 30px 24px 24px; border-radius: 20px; text-align: center;
-    background: var(--card); border: 1px solid var(--line); box-shadow: 0 16px 40px rgba(0,0,0,.35); }
+  /* ================= login ================= */
+  #login { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .login-card { width: 100%; max-width: 380px; padding: 32px 24px 24px; border-radius: 22px; text-align: center;
+    background: var(--panel); border: 1px solid var(--line); box-shadow: 0 20px 50px rgba(0,0,0,.45); }
   .login-card.shake { animation: shake .42s ease; }
   @keyframes shake { 0%,100%{transform:none} 20%{transform:translateX(-9px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-5px)} 80%{transform:translateX(3px)} }
-  .login-icon { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 18px; display: flex; align-items: center;
-    justify-content: center; font-size: 32px; background: var(--accent); }
+  .login-icon { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 18px; display: flex; align-items: center; justify-content: center;
+    font-size: 30px; background: linear-gradient(135deg, #f06a9d, #c2457a); box-shadow: 0 8px 24px rgba(232,87,143,.35); }
   .login-card h1 { margin: 0 0 6px; font-size: 22px; }
-  .login-card p.sub { margin: 0 0 20px; color: var(--muted); }
+  .login-card p.sub { margin: 0 0 22px; color: var(--muted); }
   .field { position: relative; }
-  .field input { width: 100%; height: 48px; padding: 0 48px 0 16px; border-radius: 12px; border: 1px solid rgba(255,255,255,.2);
+  .field input { width: 100%; height: 48px; padding: 0 48px 0 16px; border-radius: 12px; border: 1px solid var(--line2);
     background: rgba(0,0,0,.28); font-size: 16px; outline: none; }
-  .field input:focus { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(255,140,184,.25); }
-  .eye { position: absolute; right: 6px; top: 6px; width: 36px; height: 36px; border: 0; border-radius: 9px;
-    background: transparent; color: var(--muted); cursor: pointer; padding: 0; font-size: 17px; }
-  .eye:hover { background: rgba(255,255,255,.1); color: #fff; }
+  .field input:focus { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(255,140,184,.22); }
+  .eye { position: absolute; right: 6px; top: 6px; width: 36px; height: 36px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; font-size: 17px; }
+  .eye:hover { background: rgba(255,255,255,.08); color: #fff; }
   .login-btn { width: 100%; height: 48px; margin-top: 12px; font-size: 16px; }
   .login-msg { min-height: 20px; margin: 12px 0 0; font-size: 13.5px; color: #ffb3c9; }
 
-  /* ---- buttons / inputs ---- */
-  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 14px;
-    border-radius: 10px; border: 1px solid var(--line); background: var(--card2); cursor: pointer; font-weight: 600;
-    white-space: nowrap; text-decoration: none; color: var(--text); font-size: 13px; }
-  .btn:hover { background: #38344b; }
-  .btn:focus-visible, .tab:focus-visible, select:focus-visible, input:focus-visible, .chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
-  .btn[disabled] { opacity: .5; cursor: default; }
-  .btn-accent { background: var(--accent); border-color: var(--accent); font-weight: 700; }
+  /* ================= controls ================= */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 14px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--card2); cursor: pointer; font-weight: 600; white-space: nowrap; text-decoration: none;
+    color: var(--text); font-size: 13px; transition: background .12s, border-color .12s; }
+  .btn:hover { background: var(--hover); }
+  .btn[disabled], .btn[aria-disabled="true"] { opacity: .45; cursor: default; pointer-events: none; }
+  .btn-accent { background: var(--accent); border-color: var(--accent); }
   .btn-accent:hover { background: var(--accent-hover); }
   .btn-danger { background: var(--danger-bg); border-color: rgba(229,72,77,.45); color: #ff9b9e; }
   .btn-danger:hover { background: rgba(229,72,77,.25); }
+  .btn-ghost { background: transparent; border-color: transparent; }
+  .btn-ghost:hover { background: rgba(255,255,255,.06); }
   .btn-sm { min-height: 30px; padding: 0 10px; font-size: 12px; border-radius: 8px; }
-  .input, select.input { height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line);
-    background: rgba(0,0,0,.25); outline: none; min-width: 0; font-size: 14px; }
+  .btn-icon { width: 36px; padding: 0; }
+  .btn svg, .tab svg, .ico-svg { width: 16px; height: 16px; flex: none; }
+  .input, select.input { height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0,0,0,.25);
+    outline: none; min-width: 0; font-size: 14px; }
+  .input:focus { border-color: var(--line2); }
+  select.input { padding-right: 6px; }
   select.input option { background: var(--card); }
-  .chip { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 999px; padding: 4px 10px;
-    font-size: 12px; font-weight: 600; cursor: pointer; min-height: 28px; }
-  .chip[aria-pressed="true"] { background: var(--card2); color: #fff; border-color: #4a4660; }
+  input[type="date"].input { color-scheme: dark; }
+  .search { position: relative; flex: 1 1 200px; min-width: 0; }
+  .search svg { position: absolute; left: 10px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--faint); pointer-events: none; }
+  .search .input { width: 100%; padding-left: 34px; }
+  .chip { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 999px; padding: 4px 11px; font-size: 12.5px;
+    font-weight: 600; cursor: pointer; min-height: 30px; white-space: nowrap; }
+  .chip:hover { background: rgba(255,255,255,.05); color: #fff; }
+  .chip[aria-pressed="true"] { background: var(--accent-soft); color: #fff; border-color: rgba(232,87,143,.6); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .count { display: inline-block; min-width: 20px; padding: 0 6px; border-radius: 10px; background: var(--card2); font-size: 11px; line-height: 18px;
+    color: var(--muted); text-align: center; font-weight: 600; }
+  .toggle { position: relative; width: 46px; height: 26px; flex: none; }
+  .toggle input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
+  .toggle .track { position: absolute; inset: 0; border-radius: 13px; background: #4a4660; transition: background .15s; }
+  .toggle .thumb { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .toggle input:checked + .track { background: var(--accent); }
+  .toggle input:checked + .track .thumb { transform: translateX(20px); }
+  .toggle input:focus-visible + .track { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .toggle input:disabled + .track { opacity: .5; }
+  .check { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; min-height: 32px; }
+  .check input { width: 17px; height: 17px; accent-color: var(--accent); }
 
-  /* ---- header ---- */
-  header.top { position: sticky; top: 0; z-index: 30; background: rgba(28,26,38,.94); backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top, 0px); }
-  .top-inner { padding: 10px 16px 0; }
-  .top-row { display: flex; align-items: center; gap: 10px; }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; margin-right: auto; min-width: 0; }
-  .brand-mark { width: 30px; height: 30px; border-radius: 9px; background: var(--accent); display: flex; flex: none;
+  /* ================= app shell =================
+     The page itself never scrolls; each area scrolls on its own. */
+  #app { height: 100%; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+  header.top { order: 0; flex: none; background: var(--panel); border-bottom: 1px solid var(--line); padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px; }
+  .top-row { display: flex; align-items: center; gap: 8px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 16px; margin-right: auto; min-width: 0; }
+  .brand-mark { width: 32px; height: 32px; border-radius: 10px; background: linear-gradient(135deg, #f06a9d, #c2457a); display: flex; flex: none;
     align-items: center; justify-content: center; font-size: 16px; }
   .brand-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgba(63,185,125,.2); }
-  .live.off .live-dot { background: var(--danger); box-shadow: 0 0 0 3px rgba(229,72,77,.2); }
-  #online-toggle { display: none; }
-  nav.tabs { display: flex; gap: 2px; margin-top: 8px; overflow-x: auto; scrollbar-width: none; }
+  .status-pill { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border-radius: 999px; background: var(--card);
+    border: 1px solid var(--line); font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgba(63,185,125,.2); flex: none; }
+  .off .dot { background: var(--danger); box-shadow: 0 0 0 3px rgba(229,72,77,.2); }
+  .dot.pulse { animation: pulse 2s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(63,185,125,0); } }
+  #online-toggle .n { font-variant-numeric: tabular-nums; }
+  .sound-banner { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px; padding: 10px 14px; border-radius: 12px; cursor: pointer;
+    text-align: left; background: rgba(245,165,36,.14); border: 1px solid rgba(245,165,36,.5); color: #ffd28a; font-size: 13px; animation: glow 1.8s ease-in-out infinite; }
+  .sound-banner b { color: #fff; }
+  @keyframes glow { 50% { background: rgba(245,165,36,.26); } }
+
+  nav.tabs { order: 1; flex: none; display: flex; gap: 2px; padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--line);
+    overflow-x: auto; scrollbar-width: none; }
   nav.tabs::-webkit-scrollbar { display: none; }
-  .tab { border: 0; background: transparent; padding: 10px 12px; border-bottom: 2px solid transparent; cursor: pointer;
-    color: var(--muted); font-weight: 600; white-space: nowrap; min-height: 42px; }
+  .tab { display: inline-flex; align-items: center; gap: 7px; border: 0; background: transparent; padding: 0 12px; height: 44px; cursor: pointer;
+    color: var(--muted); font-weight: 600; white-space: nowrap; border-bottom: 2px solid transparent; }
   .tab:hover { color: #fff; }
   .tab[aria-selected="true"] { color: #fff; border-bottom-color: var(--accent); }
-  .tab .count { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 10px;
-    background: var(--card2); font-size: 11px; line-height: 18px; color: var(--muted); }
+  .tab .live-blip { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
 
-  /* ---- layout: sidebar + main ---- */
-  .layout { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); align-items: start; }
-  aside.side { position: sticky; top: var(--header-h); height: calc(100vh - var(--header-h)); height: calc(100dvh - var(--header-h));
-    overflow-y: auto; border-right: 1px solid var(--line); background: #201e2b; padding: 14px 12px 24px;
-    -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-  main { min-width: 0; padding: 18px 16px 60px; padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px)); }
+  .shell { order: 2; flex: 1; min-height: 0; display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); }
+  aside.side { min-height: 0; overflow-y: auto; overscroll-behavior: contain; border-right: 1px solid var(--line); background: var(--panel); padding: 14px 12px 20px; }
+  main { min-width: 0; min-height: 0; position: relative; }
+  .panel { position: absolute; inset: 0; display: flex; flex-direction: column; min-height: 0; }
+  .panel.scroll { overflow-y: auto; overscroll-behavior: contain; padding: 18px 20px 40px; display: block; }
   .scrim { display: none; }
 
-  .side-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .side-head h2 { margin: 0; font-size: 15px; margin-right: auto; }
-  .side-total { font-size: 12px; color: var(--muted); }
-  .side-close { display: none; }
-  .side-search { width: 100%; margin-bottom: 8px; }
-  .side-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
-  .side-room { margin-bottom: 14px; }
-  .side-room-head { display: flex; align-items: center; gap: 6px; padding: 4px 4px 6px; font-size: 12px; font-weight: 700;
-    color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
-  .side-room-head .rn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: auto; text-transform: none; font-size: 13px; color: #fff; }
-  .person { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; min-height: 40px; }
-  .person:hover { background: rgba(255,255,255,.04); }
-  .person .user-name { font-size: 13.5px; }
-  .side-note { font-size: 11.5px; color: var(--faint); line-height: 1.5; margin-top: 16px; }
-
-  /* ---- shared bits ---- */
-  .panel-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-  .panel-head h2 { margin: 0 auto 0 0; font-size: 18px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; }
-  .muted { color: var(--muted); }
+  /* ================= shared bits ================= */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
   .faint { color: var(--faint); }
-  .empty { padding: 28px 16px; text-align: center; color: var(--faint); }
-  .status { font-size: 13px; color: var(--muted); min-height: 18px; }
+  .empty { padding: 36px 16px; text-align: center; color: var(--faint); }
+  .empty .big { display: block; font-size: 30px; margin-bottom: 8px; opacity: .8; }
+  .status { font-size: 12.5px; color: var(--faint); }
   .status.err { color: #ff9b9e; }
-  .user-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: #888; box-shadow: 0 0 0 2px rgba(0,0,0,.25); }
-  .user-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .section-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 12px; }
+  .section-head h2 { margin: 0 auto 0 0; font-size: 18px; }
+  .section-title { margin: 26px 0 10px; font-size: 12px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; }
+  .user-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: #888; box-shadow: 0 0 0 2px rgba(0,0,0,.3); }
+  .user-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .tags { display: inline-flex; gap: 3px; flex: none; }
-  .tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 6px; letter-spacing: .02em; line-height: 16px; }
+  .tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 6px; letter-spacing: .02em; line-height: 16px; vertical-align: 1px; }
   .tag.harmony { background: rgba(232,87,143,.18); color: #ffb3c9; }
   .tag.mpp { background: rgba(77,171,247,.16); color: #9fd0ff; }
   .tag.backup { background: rgba(245,165,36,.16); color: #ffd28a; }
 
-  /* ---- rooms ---- */
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 16px; }
-  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
-  .stat b { display: block; font-size: 22px; font-variant-numeric: tabular-nums; }
+  /* ================= online sidebar ================= */
+  .side-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .side-head h2 { margin: 0; font-size: 15px; margin-right: auto; }
+  .side-total { font-size: 12px; color: var(--muted); }
+  .side-close { display: none; }
+  .side .search { margin-bottom: 8px; }
+  .side .chips { margin-bottom: 12px; }
+  .side-room { margin-bottom: 12px; }
+  .side-room-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px 6px; font-size: 12px; color: var(--faint); }
+  .side-room-head .rn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-right: auto; font-weight: 700; font-size: 12.5px; color: var(--muted); }
+  .person { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; min-height: 38px; }
+  .person:hover { background: rgba(255,255,255,.04); }
+  .side-note { font-size: 11.5px; color: var(--faint); line-height: 1.6; margin-top: 18px; }
+
+  /* ================= filters ================= */
+  .toolbar { flex: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .toolbar h2 { margin: 0 6px 0 0; font-size: 16px; white-space: nowrap; }
+  .fbtn[aria-expanded="true"] { background: var(--hover); border-color: var(--line2); }
+  .fbtn .count { background: var(--accent); color: #fff; }
+  .fpanel { flex: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px 14px; padding: 14px 16px 16px;
+    border-bottom: 1px solid var(--line); background: #191822; max-height: 55vh; overflow-y: auto; }
+  .fpanel label.f { display: flex; flex-direction: column; gap: 5px; font-size: 11.5px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; min-width: 0; }
+  .fpanel label.f .input { width: 100%; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--text); }
+  .fpanel .f-actions { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; }
+  .factive { flex: none; display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 16px; border-bottom: 1px solid var(--line); }
+  .factive:empty { display: none; }
+  .fchip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--accent-soft);
+    border: 1px solid rgba(232,87,143,.45); font-size: 12px; color: #fff; }
+  .fchip button { border: 0; background: transparent; color: #ffb3c9; cursor: pointer; width: 22px; height: 22px; border-radius: 50%; font-size: 14px; line-height: 1; }
+  .fchip button:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+  /* ================= message stream (Live + History) ================= */
+  .stream-wrap { flex: 1; min-height: 0; position: relative; }
+  .stream { position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px 10px 14px; -webkit-overflow-scrolling: touch; }
+  .stream > .empty { margin-top: 40px; }
+  .stream mark { background: rgba(232,87,143,.45); color: #fff; border-radius: 3px; padding: 0 1px; }
+  .lr { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 12px; padding: 5px 10px; border-radius: 8px; align-items: baseline; }
+  .lr:hover { background: rgba(255,255,255,.035); }
+  .lr-time { font-size: 11.5px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; cursor: help; }
+  .lr-time.legacy { font-style: italic; }
+  .lr-time.legacy::after { content: "*"; margin-left: 1px; color: var(--warn); font-style: normal; }
+  .lr-body { min-width: 0; overflow-wrap: anywhere; line-height: 1.5; }
+  .lr-name { font-weight: 700; margin-right: 6px; }
+  .lr:not(.event) .lr-name::after { content: ":"; }
+  .lr-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; box-shadow: 0 0 0 2px rgba(0,0,0,.35); }
+  .lr.event .lr-body { color: var(--muted); }
+  .lr.is-join { background: var(--ok-soft); }
+  .lr.is-join:hover { background: rgba(63,185,125,.17); }
+  .lr.is-leave .lr-body { opacity: .7; }
+  .lr-ico { margin-right: 6px; }
+  .lr-via { display: inline-block; font-size: 11px; color: var(--faint); background: var(--card2); border-radius: 6px; padding: 0 7px; margin-left: 6px; line-height: 18px; }
+  .lr-room { border: 0; font: inherit; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 7px; background: var(--card2); color: var(--muted);
+    margin-right: 8px; cursor: pointer; vertical-align: 1px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
+  .lr-room:hover { background: var(--hover); color: #fff; }
+  .day-sep { position: sticky; top: -8px; z-index: 2; display: flex; justify-content: center; padding: 10px 0 6px; pointer-events: none; }
+  .day-sep span { background: #2b2839; border: 1px solid var(--line2); color: #fff; font-size: 12px; font-weight: 600; padding: 3px 12px; border-radius: 999px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+  .more-btn { display: flex; margin: 6px auto 10px; }
+  .new-pill { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); border-radius: 999px; box-shadow: 0 8px 22px rgba(0,0,0,.5); z-index: 3; }
+  .stream-foot { flex: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 7px 16px; border-top: 1px solid var(--line);
+    background: var(--panel); font-size: 12px; color: var(--faint); min-height: 38px; }
+  .stream-foot .grow { margin-right: auto; }
+  .stream-foot b { color: var(--warn); font-weight: 600; }
+  .stream-foot .status-pill { height: 24px; }
+  @keyframes rowIn { from { background: rgba(232,87,143,.25); } }
+  .lr.fresh { animation: rowIn 1.4s ease-out; }
+
+  /* ================= history ================= */
+  .hist { position: absolute; inset: 0; display: grid; grid-template-columns: var(--rooms-w) minmax(0, 1fr); }
+  .hist-rooms { min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--panel); }
+  .rooms-head { flex: none; padding: 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+  .rooms-head .row { display: flex; align-items: center; gap: 8px; }
+  .rooms-head .search { flex: none; }
+  .rooms-head h2 { margin: 0 auto 0 0; font-size: 15px; }
+  .room-list { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px; }
+  .room-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 1px solid transparent; border-radius: 12px;
+    background: transparent; text-align: left; cursor: pointer; margin-bottom: 2px; }
+  .room-item:hover { background: rgba(255,255,255,.04); }
+  .room-item[aria-current="true"] { background: var(--accent-soft); border-color: rgba(232,87,143,.45); }
+  .room-av { flex: none; width: 36px; height: 36px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; color: #1b1a24; }
+  .room-item .txt { min-width: 0; flex: 1; }
+  .room-item .t { font-weight: 700; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .room-item .t > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .room-item .live-n { flex: none; font-size: 10.5px; font-weight: 700; color: #9be3bf; background: var(--ok-soft); padding: 0 6px; border-radius: 6px; line-height: 17px; }
+  .room-item .m { font-size: 12px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hist-convo { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .convo-head { flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .convo-head .title { flex: 1 1 auto; min-width: 0; }
+  .convo-head .title b { display: block; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .convo-head .title span { display: block; font-size: 12px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .convo-head .actions { display: flex; gap: 6px; flex: none; }
+  .back-btn { display: none; }
+
+  /* ================= rooms panel ================= */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+  .stat b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; line-height: 1.2; }
   .stat span { font-size: 12px; color: var(--muted); }
-  .globals { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin-bottom: 20px; }
-  .row { display: flex; align-items: center; gap: 12px; }
+  .globals { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin-bottom: 8px; }
+  .grow-row { display: flex; align-items: center; gap: 12px; }
   .row-text { flex: 1; min-width: 0; }
-  .row-title { font-weight: 600; }
+  .row-title { font-weight: 700; }
   .row-sub { font-size: 12px; color: var(--muted); }
-  .toggle { position: relative; width: 48px; height: 28px; flex: none; }
-  .toggle input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
-  .toggle .track { position: absolute; inset: 0; border-radius: 14px; background: #4a4660; transition: background .15s; }
-  .toggle .thumb { position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform .15s; }
-  .toggle input:checked + .track { background: var(--accent); }
-  .toggle input:checked + .track .thumb { transform: translateX(20px); }
-  .toggle input:focus-visible + .track { outline: 2px solid var(--focus); outline-offset: 2px; }
-  .toggle input:disabled { cursor: default; }
-  .toggle input:disabled + .track { opacity: .5; }
-  .room-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+  .room-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 12px; }
   .room-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-  .room-name { font-weight: 700; font-size: 15px; word-break: break-all; }
-  .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+  .room-name { font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
   .badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: var(--card2); color: var(--muted); }
   .users { display: flex; flex-direction: column; gap: 4px; max-height: 280px; overflow: auto; }
   .user { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; background: rgba(0,0,0,.18); min-height: 40px; }
   .room-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
   .other-rooms { display: flex; flex-wrap: wrap; gap: 6px; }
-  .section-title { margin: 24px 0 10px; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 
-  /* ---- chat logs ---- */
-  .split { display: grid; grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); gap: 12px; align-items: start; }
-  .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
-  .filters .input { flex: 1 1 120px; }
-  .log-list { display: flex; flex-direction: column; gap: 4px; max-height: calc(100vh - 260px); overflow: auto; }
-  .log-item { text-align: left; border: 1px solid transparent; background: rgba(0,0,0,.18); border-radius: 10px;
-    padding: 8px 10px; cursor: pointer; display: block; width: 100%; }
-  .log-item:hover { background: rgba(255,255,255,.05); }
-  .log-item[aria-current="true"] { border-color: var(--accent); background: rgba(232,87,143,.1); }
-  .log-item { display: flex; gap: 10px; align-items: center; }
-  .log-item .ico { flex: none; width: 32px; height: 32px; border-radius: 9px; background: var(--card2); display: flex;
-    align-items: center; justify-content: center; font-size: 16px; }
-  .log-item .txt { min-width: 0; flex: 1; }
-  .log-item .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .log-item .t .ty { font-weight: 400; color: var(--muted); }
-  .log-item .m { font-size: 12px; color: var(--faint); }
-  .log-group { font-size: 11px; font-weight: 700; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; padding: 10px 4px 2px; }
-  .log-group:first-child { padding-top: 0; }
-  .viewer-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
-  .viewer-head .title { margin-right: auto; min-width: 0; flex: 1 1 200px; }
-  .viewer-head .title b { display: block; font-size: 16px; word-break: break-word; }
-  .viewer-head .title span { display: block; font-size: 12px; color: var(--faint); word-break: break-all; }
-  .split > .card { scroll-margin-top: calc(var(--header-h) + 10px); }
-  .log-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-  .log-summary:empty { display: none; }
-  .log-view { padding: 6px; border-radius: 12px; background: #15131d; border: 1px solid var(--line);
-    max-height: calc(100vh - 320px); min-height: 220px; overflow: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-  .log-view mark { background: rgba(232,87,143,.45); color: #fff; border-radius: 2px; }
-  .log-view > .faint { display: block; padding: 18px 10px; text-align: center; }
-  .lr { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 10px; padding: 5px 8px; border-radius: 8px; align-items: baseline; }
-  .lr:hover { background: rgba(255,255,255,.04); }
-  .lr-time { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; cursor: help; }
-  .lr-time.legacy { font-style: italic; }
-  .lr-time.legacy::after { content: "*"; margin-left: 1px; color: var(--backup); font-style: normal; }
-  .lr-body { min-width: 0; word-break: break-word; overflow-wrap: anywhere; }
-  .lr-name { font-weight: 700; margin-right: 6px; }
-  .lr.event .lr-body { color: var(--muted); }
-  .lr.event .lr-name { margin-right: 4px; }
-  .lr-ico { margin-right: 6px; }
-  .lr-via { display: inline-block; font-size: 11px; color: var(--faint); background: var(--card2); border-radius: 6px; padding: 0 6px; margin-left: 6px; line-height: 18px; }
-  .lr-plain { color: var(--muted); }
-  .day-sep { position: sticky; top: -6px; z-index: 1; display: flex; justify-content: center; padding: 8px 0 6px; }
-  .day-sep span { background: #2b2839; border: 1px solid var(--line); color: #fff; font-size: 12px; font-weight: 600; padding: 3px 12px;
-    border-radius: 999px; box-shadow: 0 4px 12px rgba(0,0,0,.35); }
-  .sess-sep { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--faint); padding: 8px 8px 4px; }
-  .sess-sep::before, .sess-sep::after { content: ""; flex: 1; border-top: 1px dashed var(--line); }
-  .more-btn { display: block; margin: 4px auto 8px; }
-  .live-card { position: relative; padding: 10px; }
-  .live-view { max-height: calc(100vh - 250px); min-height: 320px; }
-  .new-pill { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); border-radius: 999px; box-shadow: 0 6px 18px rgba(0,0,0,.45); }
-  .live-conn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
-  .live-conn.off .live-dot { background: var(--danger); box-shadow: 0 0 0 3px rgba(229,72,77,.2); }
-  .live-dot-sm { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 6px; vertical-align: 1px; }
-  .lr-room { border: 0; font: inherit; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 8px; background: var(--card2); color: #fff;
-    margin-right: 8px; cursor: pointer; vertical-align: 1px; }
-  .lr-room:hover { background: #3a3650; }
-  .lr.is-join { background: rgba(63,185,125,.07); }
-  .lr.is-leave .lr-body { opacity: .75; }
-  .db-warning { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: var(--danger-bg); color: #ff9b9e; font-size: 13px; }
-  #log-kinds { margin-bottom: 10px; }
-  @keyframes rowIn { from { background: rgba(232,87,143,.22); } }
-  .live-view .lr:last-child { animation: rowIn 1.2s ease-out; }
-  .tz-note { font-size: 12px; color: var(--faint); margin-top: 8px; }
-  .tz-note b { color: var(--backup); font-weight: 600; }
-  .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; min-height: 36px; }
-  .check input { width: 18px; height: 18px; }
-
-  /* ---- leave msgs ---- */
+  /* ================= notes ================= */
   .msg-list { display: flex; flex-direction: column; gap: 6px; }
-  .msg { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: rgba(0,0,0,.18); cursor: pointer; }
-  .msg input { margin-top: 2px; width: 18px; height: 18px; flex: none; }
+  .msg { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); cursor: pointer; }
+  .msg:hover { border-color: var(--line2); }
+  .msg input { margin-top: 3px; width: 17px; height: 17px; flex: none; accent-color: var(--accent); }
   .msg-body { flex: 1; min-width: 0; }
   .msg-meta { font-size: 12px; color: var(--faint); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .msg-room { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 8px; background: var(--card2); color: #fff; }
-  .msg-text { word-break: break-word; margin-top: 2px; }
+  .msg-text { overflow-wrap: anywhere; margin-top: 4px; }
   .select-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 
-  /* ---- media ---- */
-  .upload { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; border: 1px dashed #4a4660; border-radius: 14px;
-    padding: 14px; margin-bottom: 16px; }
+  /* ================= media ================= */
+  .upload { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; border: 1.5px dashed var(--line2); border-radius: var(--radius); padding: 16px; margin-bottom: 18px; background: rgba(255,255,255,.015); }
+  .upload.drag { border-color: var(--accent); background: var(--accent-soft); }
   .upload .status:empty { display: none; }
-  .panel-head .status:empty { display: none; }
-  .upload.drag { border-color: var(--accent); background: rgba(232,87,143,.07); }
   .media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
   .media-card { padding: 0; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
-  .media-card.selected { border-color: var(--accent); }
-  .media-thumb { position: relative; height: 140px; background: #15131d; display: flex; align-items: center; justify-content: center; }
+  .media-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .media-thumb { position: relative; height: 140px; background: #121118; display: flex; align-items: center; justify-content: center; }
   .media-thumb img, .media-thumb video { width: 100%; height: 100%; object-fit: contain; display: block; }
   .media-thumb .icon { font-size: 40px; opacity: .6; }
-  .media-thumb .sel { position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; }
+  .media-thumb .sel { position: absolute; top: 8px; left: 8px; width: 20px; height: 20px; accent-color: var(--accent); }
   .media-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .media-title { font-weight: 600; word-break: break-all; }
+  .media-title { font-weight: 600; overflow-wrap: anywhere; }
   .media-meta { font-size: 12px; color: var(--faint); overflow-wrap: anywhere; }
   .media-body audio { width: 100%; height: 36px; }
   .media-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
-  .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 60;
+  .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 80;
     max-width: calc(100% - 32px); background: #3a3650; border: 1px solid #4a4660; padding: 10px 16px; border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+    box-shadow: 0 10px 30px rgba(0,0,0,.45); font-weight: 600; }
   .toast.err { background: #4a2430; border-color: #7a3444; }
-  .toast.join { background: #2c3a4a; border-color: #4dabf7; }
-  .sound-banner { display: block; width: 100%; margin-top: 8px; padding: 9px 12px; border-radius: 10px; cursor: pointer; text-align: left;
-    background: rgba(245,165,36,.16); border: 1px solid rgba(245,165,36,.55); color: #ffd28a; font-size: 13px; animation: pulse 1.6s ease-in-out infinite; }
-  .sound-banner b { color: #fff; }
-  @keyframes pulse { 50% { background: rgba(245,165,36,.28); } }
+  .toast.join { background: #1f3a2d; border-color: var(--ok); }
 
-  /* ---- tablets & phones: sidebar becomes a drawer ---- */
-  @media (max-width: 960px) {
-    .layout { display: block; }
-    #online-toggle { display: inline-flex; }
-    aside.side { position: fixed; z-index: 50; top: 0; left: 0; bottom: 0; height: auto; width: min(86vw, 340px);
-      transform: translateX(-102%); transition: transform .22s ease; box-shadow: 8px 0 30px rgba(0,0,0,.45);
-      padding-top: calc(14px + env(safe-area-inset-top, 0px)); padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+  /* ================= laptops: the online list becomes a drawer ================= */
+  @media (max-width: 1279px) {
+    .shell { grid-template-columns: minmax(0, 1fr); }
+    aside.side { position: fixed; z-index: 70; top: 0; left: 0; bottom: 0; width: min(86vw, 330px); transform: translateX(-102%);
+      transition: transform .22s ease; box-shadow: 10px 0 34px rgba(0,0,0,.5);
+      padding-top: calc(14px + env(safe-area-inset-top, 0px)); padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
     body.side-open aside.side { transform: none; }
-    .scrim { display: block; position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.5); opacity: 0; pointer-events: none; transition: opacity .2s; }
+    .scrim { display: block; position: fixed; inset: 0; z-index: 65; background: rgba(0,0,0,.55); opacity: 0; pointer-events: none; transition: opacity .2s; }
     body.side-open .scrim { opacity: 1; pointer-events: auto; }
-    body.side-open { overflow: hidden; }
     .side-close { display: inline-flex; }
-    .split { grid-template-columns: 1fr; }
-    .log-list { max-height: 240px; }
   }
-  @media (max-width: 600px) {
-    .top-inner { padding: 8px 12px 0; }
-    .top-row { gap: 6px; }
+  @media (min-width: 1280px) { #online-toggle { display: none; } }
+
+  /* ================= tablets: history is rooms list -> conversation ================= */
+  @media (max-width: 860px) {
+    .hist { grid-template-columns: minmax(0, 1fr); }
+    .hist .hist-convo { display: none; }
+    .hist.show-convo .hist-rooms { display: none; }
+    .hist.show-convo .hist-convo { display: flex; }
+    .hist-rooms { border-right: 0; }
+    .back-btn { display: inline-flex; }
+  }
+
+  /* ================= phones ================= */
+  @media (max-width: 640px) {
+    header.top { padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px; }
     .brand { font-size: 15px; gap: 8px; }
-    .brand-mark { width: 28px; height: 28px; }
-    .btn-label { display: none; }
-    .live-text { display: none; }
-    .tab { padding: 10px 10px; }
-    main { padding: 14px 12px 60px; }
-    .card { padding: 14px; border-radius: 14px; }
+    .brand-mark { width: 30px; height: 30px; }
+    .hide-sm { display: none !important; }
+    .status-pill { padding: 0 9px; }
+    /* the tabs become a bottom bar */
+    nav.tabs { order: 3; border-bottom: 0; border-top: 1px solid var(--line); padding: 0 4px env(safe-area-inset-bottom, 0px); gap: 0; }
+    .tab { flex: 1; flex-direction: column; justify-content: center; gap: 3px; height: 58px; padding: 0 2px; font-size: 10.5px; border-bottom: 0; border-top: 2px solid transparent; position: relative; }
+    .tab svg { width: 21px; height: 21px; }
+    .tab[aria-selected="true"] { border-top-color: var(--accent); color: #fff; }
+    .tab .count { position: absolute; top: 5px; left: 50%; margin-left: 6px; min-width: 16px; line-height: 15px; font-size: 9.5px; padding: 0 4px; }
+    .tab .live-blip { position: absolute; top: 9px; left: 50%; margin-left: 8px; }
+    .panel.scroll { padding: 14px 12px 30px; }
+    .toolbar, .convo-head, .factive, .fpanel, .stream-foot { padding-left: 12px; padding-right: 12px; }
+    .toolbar h2 { display: none; }
+    .fpanel { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .fpanel .f-room, .fpanel .f-person, .fpanel .f-tz { grid-column: 1 / -1; }
+    .lr { grid-template-columns: 50px minmax(0, 1fr); gap: 8px; padding: 5px 6px; }
+    .lr-time { font-size: 10.5px; }
+    .lr-room { max-width: 110px; }
+    .stream { padding: 6px 4px 12px; }
     .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
     .stat { padding: 10px; }
-    .stat b { font-size: 18px; }
+    .stat b { font-size: 19px; }
     .stat span { font-size: 11px; }
     .globals { grid-template-columns: 1fr; }
     .room-grid { grid-template-columns: minmax(0, 1fr); }
-    .panel-head h2 { flex: 1 0 100%; }
-    .panel-head .input, .filters .input { flex: 1 1 140px; }
     .media-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .media-thumb { height: 110px; }
     .media-body { padding: 8px 10px 10px; }
     .media-actions .btn { flex: 1 1 auto; }
-    .log-view { max-height: 65vh; }
-    .live-view { max-height: calc(100vh - 230px); }
-    .lr { grid-template-columns: 58px minmax(0, 1fr); gap: 8px; padding: 5px 4px; }
     .upload .btn { width: 100%; }
+    .toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+    .convo-head .btn-label { display: none; }
+    .convo-head .actions .btn { width: 40px; padding: 0; }
   }
   @media (pointer: coarse) {
     .btn { min-height: 40px; }
-    .btn-sm { min-height: 36px; padding: 0 12px; }
+    .btn-sm { min-height: 34px; padding: 0 12px; }
+    .btn-icon { width: 40px; }
     .input, select.input { height: 40px; font-size: 16px; } /* 16px: no iOS zoom on focus */
     .chip { min-height: 34px; padding: 6px 12px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .login-card.shake { animation: none; }
-    .toggle .thumb, .toggle .track, aside.side, .scrim { transition: none; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
   }
 </style>
 <!-- Phone with "Desktop site" on: still use the phone layout (after the CSS it adjusts). -->
 <script src="/forceMobile.js?v=20260929a"></script>
 </head>
 <body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-live" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+  <symbol id="i-rooms" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></symbol>
+  <symbol id="i-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></symbol>
+  <symbol id="i-media" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18 14.5a6.5 6.5 0 0 1 3.5 5.5"/></symbol>
+  <symbol id="i-piano" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v9M12 5v14M16 5v9M8 14v5M16 14v5"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H4"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></symbol>
+</svg>
 
 <section id="login">
   <form class="login-card" id="login-form" autocomplete="off">
@@ -336,35 +402,35 @@
 
 <div id="app" hidden>
   <header class="top" id="top">
-    <div class="top-inner">
-      <div class="top-row">
-        <button type="button" class="btn" id="online-toggle" aria-controls="side" aria-expanded="false">👥 <span id="online-count-btn">0</span><span class="btn-label">&nbsp;online</span></button>
-        <div class="brand"><span class="brand-mark" aria-hidden="true">🛠️</span><span class="brand-name">Harmony Manage</span></div>
-        <span class="live" id="live" title="Server status"><span class="live-dot"></span><span class="live-text" id="live-text">Live</span></span>
-        <a class="btn" href="/" target="_blank" rel="noopener" title="Open piano">🎹<span class="btn-label">&nbsp;Open piano</span></a>
-        <button type="button" class="btn" id="logout" title="Sign out">🚪<span class="btn-label">&nbsp;Sign out</span></button>
-      </div>
-      <button type="button" class="sound-banner" id="sound-banner" hidden>🔇 Your browser blocks sound until you click this page once — <b>click anywhere to turn on the join sound</b></button>
-      <nav class="tabs" role="tablist" aria-label="Sections">
-        <button type="button" class="tab" role="tab" data-tab="live" aria-selected="true"><span class="live-dot-sm" aria-hidden="true"></span>Live</button>
-        <button type="button" class="tab" role="tab" data-tab="rooms" aria-selected="false">Rooms <span class="count" id="c-rooms">0</span></button>
-        <button type="button" class="tab" role="tab" data-tab="logs" aria-selected="false">Chat history <span class="count" id="c-logs">0</span></button>
-        <button type="button" class="tab" role="tab" data-tab="leave" aria-selected="false">Leave a msg <span class="count" id="c-leave">0</span></button>
-        <button type="button" class="tab" role="tab" data-tab="media" aria-selected="false">Media <span class="count" id="c-media">0</span></button>
-      </nav>
+    <div class="top-row">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">🛠️</span><span class="brand-name">Harmony Manage</span></div>
+      <span class="status-pill" id="live" title="Server status"><span class="dot pulse"></span><span id="live-text">Live</span></span>
+      <button type="button" class="btn" id="online-toggle" aria-controls="side" aria-expanded="false" title="Who's online">
+        <svg><use href="#i-users"/></svg><span class="n" id="online-count-btn">0</span><span class="hide-sm">&nbsp;online</span></button>
+      <a class="btn" href="/" target="_blank" rel="noopener" title="Open piano"><svg><use href="#i-piano"/></svg><span class="hide-sm">Open piano</span></a>
+      <button type="button" class="btn btn-icon" id="logout" title="Sign out" aria-label="Sign out"><svg><use href="#i-out"/></svg></button>
     </div>
+    <button type="button" class="sound-banner" id="sound-banner" hidden>🔇 <span>Your browser blocks sound until you click this page once — <b>click anywhere to turn on the join sound</b></span></button>
   </header>
 
-  <div class="layout">
-    <!-- ONLINE NOW (always visible on wide screens, a drawer on phones) -->
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button type="button" class="tab" role="tab" data-tab="live" aria-selected="true"><svg><use href="#i-live"/></svg><span>Live</span><span class="live-blip" aria-hidden="true"></span></button>
+    <button type="button" class="tab" role="tab" data-tab="rooms" aria-selected="false"><svg><use href="#i-rooms"/></svg><span>Rooms</span><span class="count" id="c-rooms">0</span></button>
+    <button type="button" class="tab" role="tab" data-tab="logs" aria-selected="false"><svg><use href="#i-chat"/></svg><span>History</span><span class="count" id="c-logs">0</span></button>
+    <button type="button" class="tab" role="tab" data-tab="leave" aria-selected="false"><svg><use href="#i-note"/></svg><span>Notes</span><span class="count" id="c-leave">0</span></button>
+    <button type="button" class="tab" role="tab" data-tab="media" aria-selected="false"><svg><use href="#i-media"/></svg><span>Media</span><span class="count" id="c-media">0</span></button>
+  </nav>
+
+  <div class="shell">
+    <!-- ONLINE NOW (always visible on wide screens, a drawer otherwise) -->
     <aside class="side" id="side" aria-label="Online now">
       <div class="side-head">
         <h2>Online now</h2>
         <span class="side-total" id="side-total">0 people</span>
         <button type="button" class="btn btn-sm side-close" id="side-close" aria-label="Close online list">✕</button>
       </div>
-      <input class="input side-search" id="side-search" type="search" placeholder="Search name or room" aria-label="Search online people">
-      <div class="side-chips" role="group" aria-label="Filter by server">
+      <div class="search"><svg><use href="#i-search"/></svg><input class="input" id="side-search" type="search" placeholder="Search name or room" aria-label="Search online people"></div>
+      <div class="chips" id="side-chips" role="group" aria-label="Filter by server">
         <button type="button" class="chip" data-where="" aria-pressed="true">All</button>
         <button type="button" class="chip" data-where="harmony" aria-pressed="false">Harmony</button>
         <button type="button" class="chip" data-where="mpp" aria-pressed="false">MPP</button>
@@ -382,59 +448,39 @@
 
     <main>
       <!-- LIVE -->
-      <section data-panel="live" role="tabpanel">
-        <div class="panel-head">
-          <h2>Live activity</h2>
-          <span class="live-conn" id="live-conn"><span class="live-dot"></span> Connecting…</span>
-        </div>
-        <p class="db-warning" id="db-warning-live" hidden>The chat database isn't running on the server (run <code>npm install</code> there and restart), so nothing is being saved.</p>
-        <div class="filters">
-          <select class="input" id="live-room" aria-label="Room" style="flex:0 1 220px"><option value="">All rooms</option></select>
-          <div class="side-chips" id="live-kinds" role="group" aria-label="Show" style="margin:0">
-            <button type="button" class="chip" data-kinds="" aria-pressed="true">Everything</button>
-            <button type="button" class="chip" data-kinds="chat,world,prompt" aria-pressed="false">Messages</button>
-            <button type="button" class="chip" data-kinds="join,leave,rename" aria-pressed="false">Joins &amp; leaves</button>
-          </div>
-        </div>
-        <div class="card live-card">
-          <div class="log-view live-view" id="live-feed" tabindex="0" role="log" aria-live="polite" aria-label="Live activity"></div>
+      <section class="panel" data-panel="live" role="tabpanel" aria-label="Live activity">
+        <div class="toolbar" id="live-toolbar"></div>
+        <div class="fpanel" id="live-fpanel" hidden></div>
+        <div class="factive" id="live-factive"></div>
+        <div class="stream-wrap">
+          <div class="stream" id="live-feed" tabindex="0" role="log" aria-label="Live activity"></div>
           <button type="button" class="btn btn-accent new-pill" id="live-new" hidden></button>
         </div>
+        <div class="stream-foot"><span class="grow" id="live-status">Connecting…</span><span id="live-conn" class="status-pill off"><span class="dot"></span><span>Connecting…</span></span></div>
       </section>
 
       <!-- ROOMS -->
-      <section data-panel="rooms" role="tabpanel" hidden>
+      <section class="panel scroll" data-panel="rooms" role="tabpanel" aria-label="Rooms" hidden>
         <div class="stats" id="stats"></div>
         <div class="globals">
-          <div class="card row">
-            <div class="row-text">
-              <div class="row-title">Noob x_x</div>
-              <div class="row-sub" id="noob-sub">Lobby ghost, for everyone</div>
-            </div>
+          <div class="card grow-row">
+            <div class="row-text"><div class="row-title">Noob x_x</div><div class="row-sub" id="noob-sub">Lobby ghost, for everyone</div></div>
             <label class="toggle" title="Show Noob x_x in the lobby for everyone">
-              <input type="checkbox" id="noob-toggle" aria-label="Show Noob x_x in lobby">
-              <span class="track"><span class="thumb"></span></span>
+              <input type="checkbox" id="noob-toggle" aria-label="Show Noob x_x in lobby"><span class="track"><span class="thumb"></span></span>
             </label>
           </div>
-          <div class="card row">
-            <div class="row-text">
-              <div class="row-title">Anonymous</div>
-              <div class="row-sub" id="anon-sub">mybot room on the backup server</div>
-            </div>
+          <div class="card grow-row">
+            <div class="row-text"><div class="row-title">Anonymous</div><div class="row-sub" id="anon-sub">mybot room on the backup server</div></div>
             <label class="toggle" title="Show Anonymous in the backup mybot room">
-              <input type="checkbox" id="anon-toggle" aria-label="Show Anonymous in mybot">
-              <span class="track"><span class="thumb"></span></span>
+              <input type="checkbox" id="anon-toggle" aria-label="Show Anonymous in mybot"><span class="track"><span class="thumb"></span></span>
             </label>
           </div>
-          <div class="card row">
-            <div class="row-text">
-              <div class="row-title">Clear chat everywhere</div>
-              <div class="row-sub">Wipe the chat in every live room</div>
-            </div>
+          <div class="card grow-row">
+            <div class="row-text"><div class="row-title">Clear chat everywhere</div><div class="row-sub">Wipe the chat in every live room</div></div>
             <button type="button" class="btn btn-danger" id="clear-all">Clear all</button>
           </div>
         </div>
-        <div class="panel-head"><h2>Live rooms</h2><span class="status" id="rooms-status"></span></div>
+        <div class="section-title">Live rooms</div>
         <div class="room-grid" id="room-grid"></div>
         <div id="other-wrap" hidden>
           <div class="section-title">Rooms with saved data (no one online)</div>
@@ -442,58 +488,61 @@
         </div>
       </section>
 
-      <!-- CHAT LOGS -->
-      <section data-panel="logs" role="tabpanel" hidden>
-        <div class="split">
-          <div class="card">
-            <div class="filters">
-              <input class="input" id="log-search" type="search" placeholder="Find a room" aria-label="Find a room">
+      <!-- CHAT HISTORY -->
+      <section class="panel" data-panel="logs" role="tabpanel" aria-label="Chat history" hidden>
+        <div class="hist" id="hist">
+          <div class="hist-rooms">
+            <div class="rooms-head">
+              <div class="row"><h2>Rooms</h2><span class="count" id="rooms-count">0</span></div>
+              <div class="search"><svg><use href="#i-search"/></svg><input class="input" id="log-search" type="search" placeholder="Find a room" aria-label="Find a room"></div>
+              <select class="input" id="room-sort" aria-label="Sort rooms">
+                <option value="recent">Most recent activity</option>
+                <option value="busy">Most messages</option>
+                <option value="name">Name A–Z</option>
+              </select>
             </div>
-            <div class="log-list" id="log-list"></div>
+            <div class="room-list" id="log-list"></div>
           </div>
-          <div class="card">
-            <div class="viewer-head">
-              <div class="title"><b id="log-title">Pick a log</b><span id="log-file"></span></div>
-              <a class="btn btn-sm" id="log-download" aria-disabled="true">Download</a>
-              <button type="button" class="btn btn-sm btn-danger" id="log-delete" disabled>Delete history</button>
+          <div class="hist-convo">
+            <div class="convo-head">
+              <button type="button" class="btn btn-icon back-btn" id="hist-back" aria-label="Back to rooms"><svg><use href="#i-back"/></svg></button>
+              <div class="title"><b id="log-title">Pick a room</b><span id="log-file"></span></div>
+              <div class="actions">
+                <a class="btn btn-sm" id="log-download" aria-disabled="true" title="Download what's shown as a text file"><svg><use href="#i-down"/></svg><span class="btn-label">Download</span></a>
+                <button type="button" class="btn btn-sm btn-danger" id="log-delete" disabled title="Delete this room's saved history"><svg><use href="#i-trash"/></svg><span class="btn-label">Delete</span></button>
+              </div>
             </div>
-            <div class="filters">
-              <input class="input" id="log-filter" type="search" placeholder="Search this room (name, word…)" aria-label="Search this room">
-              <select class="input" id="log-tz" aria-label="Show times in" style="flex:0 1 auto"></select>
+            <div class="toolbar" id="hist-toolbar"></div>
+            <div class="fpanel" id="hist-fpanel" hidden></div>
+            <div class="factive" id="hist-factive"></div>
+            <div class="stream-wrap">
+              <div class="stream" id="log-text" tabindex="0" role="log" aria-label="Room history"></div>
             </div>
-            <div class="side-chips" id="log-kinds" role="group" aria-label="Show">
-              <button type="button" class="chip" data-kinds="" aria-pressed="true">Everything</button>
-              <button type="button" class="chip" data-kinds="chat" aria-pressed="false">Chat</button>
-              <button type="button" class="chip" data-kinds="join,leave" aria-pressed="false">Joins &amp; leaves</button>
-              <button type="button" class="chip" data-kinds="rename" aria-pressed="false">Name changes</button>
-              <button type="button" class="chip" data-kinds="prompt" aria-pressed="false">Corner replies</button>
-              <button type="button" class="chip" data-kinds="world" aria-pressed="false">World chat</button>
-            </div>
-            <p class="db-warning" id="db-warning" hidden>The chat database isn't running on the server (run <code>npm install</code> there and restart), so nothing is being saved.</p>
-            <div class="log-view" id="log-text" tabindex="0" role="log" aria-label="Log lines"><span class="faint">Select a chat log to read it.</span></div>
-            <div class="status" id="log-status"></div>
-            <p class="tz-note" id="tz-note" hidden><b>*</b> Older line imported from the old text logs: it was saved with the visitor's own clock, so its timezone is unknown and the time may be off by hours. Everything saved now uses one real clock and is shown in your time.</p>
+            <div class="stream-foot"><span class="grow" id="log-status"></span><span id="tz-note" hidden title="Older line imported from the old text logs: saved with the visitor's own clock, so its timezone is unknown"><b>*</b> old line<span class="hide-sm">, visitor's clock (zone unknown)</span></span></div>
           </div>
         </div>
       </section>
 
-      <!-- LEAVE A MSG (every room at once) -->
-      <section data-panel="leave" role="tabpanel" hidden>
-        <div class="panel-head">
-          <h2>Leave a msg <span class="faint" id="leave-summary" style="font-size:13px;font-weight:400"></span></h2>
-          <input class="input" id="leave-search" type="search" placeholder="Search notes or names" aria-label="Search notes">
+      <!-- NOTES (leave a msg, every room at once) -->
+      <section class="panel scroll" data-panel="leave" role="tabpanel" aria-label="Notes" hidden>
+        <div class="section-head">
+          <h2>Leave-a-msg notes <span class="faint" id="leave-summary" style="font-size:13px;font-weight:400"></span></h2>
+        </div>
+        <div class="filters">
+          <div class="search"><svg><use href="#i-search"/></svg><input class="input" id="leave-search" type="search" placeholder="Search notes or names" aria-label="Search notes"></div>
           <select class="input" id="leave-room" aria-label="Room"><option value="">All rooms</option></select>
+          <select class="input" id="leave-sort" aria-label="Sort notes"><option value="new">Newest first</option><option value="old">Oldest first</option></select>
         </div>
         <div class="select-bar">
           <label class="check"><input type="checkbox" id="leave-all-cb"> Select all shown</label>
           <button type="button" class="btn btn-sm btn-danger" id="leave-del-sel" disabled>Delete selected</button>
           <button type="button" class="btn btn-sm" id="leave-refresh">Refresh</button>
         </div>
-        <div class="card"><div class="msg-list" id="leave-list"></div></div>
+        <div class="msg-list" id="leave-list"></div>
       </section>
 
       <!-- MEDIA -->
-      <section data-panel="media" role="tabpanel" hidden>
+      <section class="panel scroll" data-panel="media" role="tabpanel" aria-label="Media" hidden>
         <div class="upload" id="upload">
           <div class="row-text">
             <div class="row-title">Add to Media Library</div>
@@ -504,18 +553,17 @@
           <button type="button" class="btn btn-accent" id="upload-btn">Choose files</button>
           <span class="status" id="upload-status"></span>
         </div>
-        <div class="panel-head">
-          <h2 id="media-heading">Media Library</h2>
+        <div class="section-head"><h2 id="media-heading">Media Library</h2></div>
+        <div class="filters">
+          <div class="search"><svg><use href="#i-search"/></svg><input class="input" id="media-search" type="search" placeholder="Search files" aria-label="Search files"></div>
           <select class="input" id="media-source" aria-label="Source">
             <option value="library">Media Library</option>
             <option value="recent">Room media (Room DJ / Share Image)</option>
           </select>
           <select class="input" id="media-kind" aria-label="Kind">
-            <option value="">All kinds</option>
-            <option value="audio">Audio</option>
-            <option value="video">Video</option>
-            <option value="image">Images</option>
+            <option value="">All kinds</option><option value="audio">Audio</option><option value="video">Video</option><option value="image">Images</option>
           </select>
+          <select class="input" id="media-sort" aria-label="Sort"><option value="new">Newest first</option><option value="old">Oldest first</option><option value="big">Largest first</option><option value="name">Name A–Z</option></select>
         </div>
         <div class="select-bar">
           <button type="button" class="btn btn-sm" id="media-select-all">Select all</button>
@@ -533,14 +581,14 @@
 
   var $ = function (id) { return document.getElementById(id); };
   var state = {
-    tab: "rooms", overview: null, logs: [], logFile: "", logRaw: "",
+    tab: "live", overview: null,
     leaveMsgs: [], leaveSel: {}, media: { library: [], recent: [] }, mediaSel: {},
-    sideWhere: "", sideQuery: ""
+    sideWhere: "", sideQuery: "", leaveRoomWanted: "", logTz: "local"
   };
-  var pollTimer = null, followTimer = null, toastTimer = null;
+  var pollTimer = null, toastTimer = null;
   var WHERE_LABEL = { harmony: "HARMONY", mpp: "MPP", backup: "BACKUP" };
 
-  // ---------- helpers ----------
+  // ================= helpers =================
   function el(tag, cls, text) {
     var n = document.createElement(tag);
     if (cls) n.className = cls;
@@ -554,12 +602,20 @@
     if (onClick) b.addEventListener("click", onClick);
     return b;
   }
-  function api(method, path, body, raw) {
+  function svgIcon(id) {
+    var NS = "http://www.w3.org/2000/svg";
+    var s = document.createElementNS(NS, "svg");
+    s.setAttribute("class", "ico-svg");
+    var u = document.createElementNS(NS, "use");
+    u.setAttribute("href", "#" + id);
+    s.appendChild(u);
+    return s;
+  }
+  function api(method, path, body) {
     var opts = { method: method, credentials: "same-origin", cache: "no-store", headers: {} };
     if (body instanceof Blob) { opts.body = body; opts.headers["X-Filename"] = encodeURIComponent(body.name || "upload"); }
     else if (body) { opts.body = JSON.stringify(body); opts.headers["Content-Type"] = "application/json"; }
     return fetch("/api/manage" + path, opts).then(function (res) {
-      if (raw && res.ok) return res.text();
       return res.json().catch(function () { return { ok: false, error: "Server error (" + res.status + ")" }; }).then(function (data) {
         if (res.status === 401 && path !== "/auth") { showLogin("Signed out — enter the manage password again."); }
         if (!data.ok) { var e = new Error(data.error || ("Request failed (" + res.status + ")")); e.data = data; throw e; }
@@ -580,14 +636,30 @@
   }
   function fail(err) { toast(err && err.message || String(err), true); }
   function plural(n, word) { return n + " " + word + (n === 1 ? "" : "s"); }
+  function people(n) { return plural(n, "person").replace("persons", "people"); }
   function bytes(n) {
     if (!n) return "0 B";
     var u = ["B", "KB", "MB", "GB"], i = 0;
     while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
     return (i ? n.toFixed(1) : n) + " " + u[i];
   }
-  // Every time on this page is shown in the viewer's own timezone.
+  function setOptions(select, values, keepFirst, labelFn) {
+    var cur = select.value;
+    if (keepFirst && cur && values.indexOf(cur) < 0) values = values.concat([cur]);
+    while (select.options.length > (keepFirst ? 1 : 0)) select.remove(select.options.length - 1);
+    values.forEach(function (v) {
+      var o = el("option", null, labelFn ? labelFn(v) : v);
+      o.value = v;
+      select.appendChild(o);
+    });
+    if (values.indexOf(cur) >= 0 || (keepFirst && cur === "")) select.value = cur;
+  }
+  function debounce(fn, ms) { var t; return function () { var a = arguments; clearTimeout(t); t = setTimeout(function () { fn.apply(null, a); }, ms); }; }
+  function emptyState(icon, text) { var e = el("div", "empty"); e.appendChild(el("span", "big", icon)); e.appendChild(document.createTextNode(text)); return e; }
+
+  // ---- times: everything is shown in the viewer's own timezone ----
   var MY_TZ = (function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; } })();
+  try { if (localStorage.getItem("harmony_manage_tz") === "utc") state.logTz = "utc"; } catch (e) {}
   function clock(d, utc) {
     return d.toLocaleTimeString(undefined, utc ? { hour: "numeric", minute: "2-digit", timeZone: "UTC" } : { hour: "numeric", minute: "2-digit" });
   }
@@ -595,7 +667,6 @@
     return utc ? d.toISOString().slice(0, 10)
       : d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
   }
-  // "2026-10-06" -> "Today" / "Yesterday" / "Tue, Oct 6" / "Tue, Oct 6, 2025"
   function dayLabel(key) {
     var now = new Date(), y = new Date(now.getTime() - 864e5);
     if (key === ymd(now)) return "Today";
@@ -619,46 +690,40 @@
     if (s < 86400) return Math.round(s / 3600) + " h ago";
     return when(ms);
   }
-  function setOptions(select, values, keepFirst, labelFn) {
-    var cur = select.value;
-    if (keepFirst && cur && values.indexOf(cur) < 0) values = values.concat([cur]);
-    while (select.options.length > (keepFirst ? 1 : 0)) select.remove(select.options.length - 1);
-    values.forEach(function (v) {
-      var o = el("option", null, labelFn ? labelFn(v) : v);
-      o.value = v;
-      select.appendChild(o);
-    });
-    if (values.indexOf(cur) >= 0 || (keepFirst && cur === "")) select.value = cur;
+  // Footer text: the main part always, the details only on wider screens.
+  function setFoot(id, main, extra) {
+    var f = $(id);
+    f.textContent = main;
+    if (extra) f.appendChild(el("span", "hide-sm", " · " + extra));
   }
-  function tags(where) {
-    var t = el("span", "tags");
-    ["harmony", "mpp", "backup"].forEach(function (w) {
-      if (where.indexOf(w) >= 0) t.appendChild(el("span", "tag " + w, WHERE_LABEL[w]));
-    });
-    return t;
-  }
-  function userRow(u, cls) {
-    var row = el("div", cls);
-    var dot = el("span", "user-dot");
-    if (u.color) dot.style.background = u.color;
-    row.appendChild(dot);
-    var name = el("span", "user-name", u.name);
-    name.title = u.name + " — " + u._id;
-    row.appendChild(name);
-    row.appendChild(tags(u.where));
-    if (u.where.indexOf("harmony") >= 0) {
-      var close = button("btn btn-sm btn-danger", "Close", null, "Close " + u.name + "'s Harmony tab");
-      close.addEventListener("click", function () { closeUser(u, close); });
-      row.appendChild(close);
-    }
-    return row;
-  }
-  function fitHeader() {
-    var h = $("top").offsetHeight;
-    if (h) document.documentElement.style.setProperty("--header-h", h + "px");
-  }
+  function tzText() { return state.logTz === "utc" ? "UTC" : "your time" + (MY_TZ ? " (" + MY_TZ.replace(/_/g, " ") + ")" : ""); }
 
-  // ---------- tab title, join sound ----------
+  // ---- colours: the colour each person has in the piano chat ----
+  function hashHue(name) {
+    var h = 0;
+    for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+    return h;
+  }
+  function parseHex(c) {
+    var m = /^#([0-9a-f]{3}|[0-9a-f]{6})(?:[0-9a-f]{2})?$/i.exec(String(c || "").trim());
+    if (!m) return null;
+    var h = m[1].length === 3 ? m[1].replace(/./g, "$&$&") : m[1];
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  // The real colour, lifted just enough to stay readable on the dark background.
+  function readable(c, name) {
+    var rgb = parseHex(c);
+    if (!rgb) return "hsl(" + hashHue(name || "?") + ", 70%, 72%)";
+    var L = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+    if (L < 0.5) {
+      var t = (0.5 - L) / (1 - L);
+      rgb = rgb.map(function (v) { return Math.round(v + (255 - v) * t); });
+    }
+    return "rgb(" + rgb.join(",") + ")";
+  }
+  function rawColor(c, name) { return parseHex(c) ? c : "hsl(" + hashHue(name || "?") + ", 60%, 60%)"; }
+
+  // ================= tab title, join sound =================
   var BASE_TITLE = "Harmony Manage", onlineTotal = 0, titleFlashTimer = null;
   function updateTitle() {
     if (titleFlashTimer) return;
@@ -675,10 +740,9 @@
     }, 1000);
   }
 
-  // The join sound is always on. Browsers only allow a page to make sound after
-  // it has been clicked once since it loaded; until then a banner asks for that
-  // click. Once allowed, it keeps playing while the tab is in the background or
-  // another window is focused.
+  // The join sound is always on. Browsers only let a page make sound after it
+  // has been clicked once since it loaded; until then a banner asks for that
+  // click. Once allowed it keeps playing in a background tab or behind other windows.
   var audioCtx = null, lastRing = 0, audioWasLocked = true;
   function getAudio() {
     if (!audioCtx) {
@@ -689,7 +753,6 @@
     }
     return audioCtx;
   }
-  function audioReady() { return !!(audioCtx && audioCtx.state === "running"); }
   function unlockAudio() {
     var c = getAudio();
     if (!c || c.state === "running") return;
@@ -699,13 +762,12 @@
     }, function () {});
   }
   function updateSoundBanner() {
-    var ready = audioReady();
+    var ready = !!(audioCtx && audioCtx.state === "running");
     $("sound-banner").hidden = ready || $("app").hidden;
     if (ready) audioWasLocked = false;
-    fitHeader();
   }
   function bellVoice(c, out, t0) {
-    return function bell(freq, at, dur, vol) {
+    return function (freq, at, dur, vol) {
       [[1, 1], [2, 0.45], [3, 0.2], [4.2, 0.1]].forEach(function (p) {
         var o = c.createOscillator(), g = c.createGain();
         o.type = "sine";
@@ -727,7 +789,6 @@
     master.connect(comp);
     return master;
   }
-  // Short "sound is on" confirmation after the unlocking click.
   function playDing() {
     var c = getAudio();
     if (!c) return;
@@ -749,6 +810,7 @@
     [261.63, 523.25, 659.25, 783.99, 1046.5].forEach(function (f) { bell(f, 3.0, 2.1, 0.26); });
   }
   ["pointerdown", "keydown", "touchstart", "click"].forEach(function (t) { document.addEventListener(t, unlockAudio, true); });
+  $("sound-banner").addEventListener("click", unlockAudio);
 
   function onJoinRow(row) {
     playJoinSound();
@@ -756,12 +818,12 @@
     if (document.hidden) flashTitle("🔔 " + row.name + " joined!");
   }
 
-  // ---------- live stream from the server (Server-Sent Events) ----------
+  // ================= live stream from the server (Server-Sent Events) =================
   var liveSource = null, presenceTimer = null;
   function setLiveConn(ok) {
     var c = $("live-conn");
     c.classList.toggle("off", !ok);
-    c.lastChild.textContent = ok ? " Live" : " Reconnecting…";
+    c.lastChild.textContent = ok ? "Live" : "Reconnecting…";
   }
   function startLive() {
     if (liveSource || typeof EventSource === "undefined") return;
@@ -769,25 +831,26 @@
     liveSource.onopen = function () { setLiveConn(true); };
     liveSource.onerror = function () {
       setLiveConn(false);
-      // Signed out on the server? The next overview call shows the login screen.
-      if (liveSource && liveSource.readyState === 2) { stopLive(); setTimeout(function () { if (!$("app").hidden) { loadOverview(); startLive(); } }, 3000); }
+      if (liveSource && liveSource.readyState === 2) {
+        stopLive();
+        setTimeout(function () { if (!$("app").hidden) { loadOverview(); startLive(); } }, 3000);
+      }
     };
     liveSource.addEventListener("row", function (e) {
       var row;
       try { row = JSON.parse(e.data); } catch (err) { return; }
       if (row.kind === "join" && !row.updated) onJoinRow(row);
       onLiveRow(row);
+      onHistRow(row);
     });
     liveSource.addEventListener("presence", function () {
       if (presenceTimer) return;
       presenceTimer = setTimeout(function () { presenceTimer = null; loadOverview(); }, 400);
     });
   }
-  function stopLive() {
-    if (liveSource) { liveSource.close(); liveSource = null; }
-  }
+  function stopLive() { if (liveSource) { liveSource.close(); liveSource = null; } }
 
-  // ---------- login ----------
+  // ================= login =================
   function showLogin(msg) {
     stopPolling();
     stopLive();
@@ -802,7 +865,6 @@
     $("app").hidden = false;
     $("login-pw").value = "";
     updateSoundBanner();
-    fitHeader();
     startLive();
     switchTab(readHashTab() || "live");
   }
@@ -842,10 +904,11 @@
     api("POST", "/logout").catch(function () {}).then(function () { showLogin("Signed out."); });
   });
 
-  // ---------- tabs ----------
+  // ================= tabs =================
+  var TABS = ["live", "rooms", "logs", "leave", "media"];
   function readHashTab() {
     var h = (location.hash || "").slice(1);
-    return ["live", "rooms", "logs", "leave", "media"].indexOf(h) >= 0 ? h : "";
+    return TABS.indexOf(h) >= 0 ? h : "";
   }
   function switchTab(tab) {
     state.tab = tab;
@@ -854,7 +917,7 @@
     if (location.hash.slice(1) !== tab) history.replaceState(null, "", "#" + tab);
     setSideOpen(false);
     loadOverview();
-    if (tab === "live") { if (!state.live.loaded) loadLive(); loadHistRooms().catch(function () {}); }
+    if (tab === "live") { if (!live.loaded) loadLive(); loadHistRooms().catch(function () {}); }
     if (tab === "logs") loadLogs();
     if (tab === "leave") loadLeave();
     if (tab === "media") loadMedia();
@@ -863,14 +926,11 @@
   document.querySelectorAll(".tab").forEach(function (b) {
     b.addEventListener("click", function () { switchTab(b.dataset.tab); });
   });
+  // Who's online is pushed live; this poll is only a safety net.
+  function startPolling() { stopPolling(); pollTimer = setInterval(loadOverview, 15000); }
+  function stopPolling() { clearInterval(pollTimer); pollTimer = null; }
 
-  function startPolling() {
-    stopPolling();
-    pollTimer = setInterval(loadOverview, 15000);
-  }
-  function stopPolling() { clearInterval(pollTimer); pollTimer = null; clearInterval(followTimer); followTimer = null; }
-
-  // ---------- online sidebar ----------
+  // ================= online sidebar =================
   function setSideOpen(open) {
     document.body.classList.toggle("side-open", open);
     $("online-toggle").setAttribute("aria-expanded", open ? "true" : "false");
@@ -880,24 +940,45 @@
   $("scrim").addEventListener("click", function () { setSideOpen(false); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") setSideOpen(false); });
   $("side-search").addEventListener("input", function () { state.sideQuery = this.value.trim().toLowerCase(); renderSide(); });
-  document.querySelectorAll(".side-chips .chip").forEach(function (c) {
+  document.querySelectorAll("#side-chips .chip").forEach(function (c) {
     c.addEventListener("click", function () {
       state.sideWhere = c.dataset.where;
-      document.querySelectorAll(".side-chips .chip").forEach(function (o) { o.setAttribute("aria-pressed", o === c ? "true" : "false"); });
+      document.querySelectorAll("#side-chips .chip").forEach(function (o) { o.setAttribute("aria-pressed", o === c ? "true" : "false"); });
       renderSide();
     });
   });
-
+  function tags(where) {
+    var t = el("span", "tags");
+    ["harmony", "mpp", "backup"].forEach(function (w) {
+      if (where.indexOf(w) >= 0) t.appendChild(el("span", "tag " + w, WHERE_LABEL[w]));
+    });
+    return t;
+  }
+  function userRow(u, cls) {
+    var row = el("div", cls);
+    var dot = el("span", "user-dot");
+    dot.style.background = rawColor(u.color, u.name);
+    row.appendChild(dot);
+    var name = el("span", "user-name", u.name);
+    name.style.color = readable(u.color, u.name);
+    name.title = u.name + " — " + u._id;
+    row.appendChild(name);
+    row.appendChild(tags(u.where));
+    if (u.where.indexOf("harmony") >= 0) {
+      var close = button("btn btn-sm btn-danger", "Close", null, "Close " + u.name + "'s Harmony tab");
+      close.addEventListener("click", function () { closeUser(u, close); });
+      row.appendChild(close);
+    }
+    return row;
+  }
   function renderSide() {
     var o = state.overview;
     var list = $("side-list");
     list.textContent = "";
     if (!o) return;
-    var people = {}, total = 0, shown = 0;
-    o.rooms.forEach(function (r) {
-      r.users.forEach(function (u) { if (!people[u._id]) { people[u._id] = true; total++; } });
-    });
-    $("side-total").textContent = plural(total, "person").replace("persons", "people");
+    var seen = {}, total = 0, shown = 0;
+    o.rooms.forEach(function (r) { r.users.forEach(function (u) { if (!seen[u._id]) { seen[u._id] = true; total++; } }); });
+    $("side-total").textContent = people(total);
     $("online-count-btn").textContent = total;
     onlineTotal = total;
     updateTitle();
@@ -912,7 +993,7 @@
       var box = el("div", "side-room");
       var head = el("div", "side-room-head");
       head.appendChild(el("span", "rn", r.room));
-      head.appendChild(el("span", null, String(users.length)));
+      head.appendChild(el("span", "count", String(users.length)));
       box.appendChild(head);
       users.forEach(function (u) { box.appendChild(userRow(u, "person")); });
       list.appendChild(box);
@@ -920,7 +1001,7 @@
     if (!shown) list.appendChild(el("div", "empty", total ? "No one matches." : "No one is online right now."));
   }
 
-  // ---------- rooms / overview ----------
+  // ================= rooms / overview =================
   function setLive(ok) {
     $("live").classList.toggle("off", !ok);
     $("live-text").textContent = ok ? "Live" : "Offline";
@@ -932,9 +1013,13 @@
       state.overview = data;
       renderOverview();
       renderSide();
-    }).catch(function (err) {
-      if (!err.data) setLive(false);
-    });
+      if (state.tab === "logs") renderRoomList();
+    }).catch(function (err) { if (!err.data) setLive(false); });
+  }
+  function onlineByRoom() {
+    var m = {};
+    (state.overview ? state.overview.rooms : []).forEach(function (r) { m[r.room] = r.users.length; });
+    return m;
   }
   var toggleBusy = { noob: false, anon: false };
   function renderOverview() {
@@ -944,6 +1029,7 @@
     $("c-rooms").textContent = o.rooms.length;
     $("c-leave").textContent = c.leaveMsgs;
     $("c-media").textContent = c.library + c.recent;
+    if (c.chatRooms != null) $("c-logs").textContent = c.chatRooms;
 
     var online = {};
     o.rooms.forEach(function (r) { r.users.forEach(function (u) { online[u._id] = true; }); });
@@ -968,44 +1054,36 @@
 
     var grid = $("room-grid");
     grid.textContent = "";
-    if (!o.rooms.length) grid.appendChild(el("div", "card empty", "No one is in any room right now."));
-    var live = {};
-    o.rooms.forEach(function (r) {
-      live[r.room] = true;
-      grid.appendChild(roomCard(r));
-    });
+    if (!o.rooms.length) { var e = emptyState("🌙", "No one is in any room right now."); e.classList.add("card"); grid.appendChild(e); }
+    var liveRooms = {};
+    o.rooms.forEach(function (r) { liveRooms[r.room] = true; grid.appendChild(roomCard(r)); });
 
-    var others = o.knownRooms.filter(function (r) { return !live[r]; });
+    var others = o.knownRooms.filter(function (r) { return !liveRooms[r]; });
     $("other-wrap").hidden = !others.length;
     var wrap = $("other-rooms");
     wrap.textContent = "";
-    others.forEach(function (r) {
-      wrap.appendChild(button("btn btn-sm", r, function () { openLogsFor(r); }, "Open chat logs for " + r));
-    });
-
+    others.forEach(function (r) { wrap.appendChild(button("btn btn-sm", r, function () { openLogsFor(r); }, "Open the history of " + r)); });
   }
   function roomCard(r) {
     var card = el("div", "card room-card");
     var head = el("div");
     head.appendChild(el("div", "room-name", r.room));
     var badges = el("div", "badges");
-    badges.appendChild(el("span", "badge", plural(r.users.length, "person").replace("persons", "people")));
+    badges.appendChild(el("span", "badge", people(r.users.length)));
     if (r.relayTabs) badges.appendChild(el("span", "badge", plural(r.relayTabs, "Harmony tab")));
     if (r.backup) badges.appendChild(el("span", "badge", r.backup.count + " on backup"));
     if (r.chatHistory) badges.appendChild(el("span", "badge", r.chatHistory + " backup chat lines"));
     head.appendChild(badges);
     card.appendChild(head);
-
     var users = el("div", "users");
     if (!r.users.length) users.appendChild(el("div", "faint", "Nobody identified yet (tabs still connecting)."));
     r.users.forEach(function (u) { users.appendChild(userRow(u, "user")); });
     card.appendChild(users);
-
     var actions = el("div", "room-actions");
     var clear = button("btn btn-sm btn-danger", "Clear chat");
     clear.addEventListener("click", function () { clearChat(r.room, clear); });
     actions.appendChild(clear);
-    actions.appendChild(button("btn btn-sm", "Chat logs", function () { openLogsFor(r.room); }));
+    actions.appendChild(button("btn btn-sm", "History", function () { openLogsFor(r.room); }));
     actions.appendChild(button("btn btn-sm", "Notes", function () { state.leaveRoomWanted = r.room; switchTab("leave"); }));
     var open = el("a", "btn btn-sm", "Open room");
     open.href = "/?c=" + encodeURIComponent(r.room);
@@ -1033,7 +1111,6 @@
     }).catch(fail).then(function () { btn.disabled = false; });
   }
   $("clear-all").addEventListener("click", function () { clearChat("*", this); });
-
   function bindToggle(key, input, path, label) {
     input.addEventListener("change", function () {
       var hidden = !input.checked;
@@ -1054,28 +1131,20 @@
   bindToggle("noob", $("noob-toggle"), "/noob", "Noob x_x");
   bindToggle("anon", $("anon-toggle"), "/anon", "Anonymous");
 
-  // ---------- shared: rendering stored rows (Live + Chat logs) ----------
-  // Rows come from the server's database: ts is UTC ms. tz_known = 0 marks an old
-  // line imported from the text files, saved with the visitor's own clock — its
-  // numbers are shown as written, with a "*".
-  state.logTz = "local";
-  try { if (localStorage.getItem("harmony_manage_tz") === "utc") state.logTz = "utc"; } catch (e) {}
+  // ================= stored rows (Live + History) =================
+  // ts is UTC ms. tz_known = 0 marks an old line imported from the text logs,
+  // saved with the visitor's own clock: its numbers are shown as written, with "*".
   function useUtc(r) { return !r.tz_known || state.logTz === "utc"; }
   function rowDay(r) { return ymd(new Date(r.ts), useUtc(r)); }
-  function rowClock(r) { return clock(new Date(r.ts), useUtc(r)); }
   function rowTitle(r) {
     var d = new Date(r.ts);
     if (!r.tz_known) return d.toISOString().replace("T", " ").slice(0, 19) + " — older line, saved with the visitor's own clock (timezone unknown)";
     var local = d.toLocaleString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" });
     return local + (MY_TZ ? " (" + MY_TZ + ")" : " (your time)") + "\n" + d.toISOString().replace("T", " ").slice(0, 19) + " UTC";
   }
-  function nameColor(name) {
-    var h = 0;
-    for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
-    return "hsl(" + h + ", 75%, 72%)";
-  }
   function hl(text, q) {
     var frag = document.createDocumentFragment();
+    text = String(text || "");
     if (!q) { frag.appendChild(document.createTextNode(text)); return frag; }
     var low = text.toLowerCase(), pos = 0, at;
     while ((at = low.indexOf(q, pos)) >= 0) {
@@ -1087,300 +1156,452 @@
     return frag;
   }
   var KIND_ICON = { join: "➡️", leave: "⬅️", rename: "✏️", prompt: "📝", world: "🌍" };
+  var KIND_TITLE = { join: "Joined", leave: "Left", rename: "Name change", prompt: "Corner prompt reply", world: "World chat" };
   function rowEl(r, opts) {
-    var q = opts.q || "";
+    var q = (opts.q || "").toLowerCase();
     var isMsg = r.kind === "chat" || r.kind === "world" || r.kind === "prompt";
-    var row = el("div", "lr" + (isMsg ? "" : " event") + (r.kind === "join" ? " is-join" : r.kind === "leave" ? " is-leave" : ""));
+    var row = el("div", "lr" + (isMsg ? "" : " event") + (r.kind === "join" ? " is-join" : r.kind === "leave" ? " is-leave" : "") + (opts.fresh ? " fresh" : ""));
     row.dataset.id = r.id;
-    var t = el("span", "lr-time" + (r.tz_known ? "" : " legacy"), rowClock(r));
+    var t = el("span", "lr-time" + (r.tz_known ? "" : " legacy"), clock(new Date(r.ts), useUtc(r)));
     t.title = rowTitle(r);
     row.appendChild(t);
     var body = el("div", "lr-body");
-    if (opts.showRoom) {
-      var rb = button("lr-room", r.room, function () { openLogsFor(r.room); }, "Open the history of " + r.room);
-      body.appendChild(rb);
-    }
-    if (KIND_ICON[r.kind]) {
-      var ic = el("span", "lr-ico", KIND_ICON[r.kind]);
-      ic.title = { join: "Joined", leave: "Left", rename: "Name change", prompt: "Corner prompt reply", world: "World chat" }[r.kind];
-      body.appendChild(ic);
-    }
+    if (opts.showRoom) body.appendChild(button("lr-room", r.room, function () { openLogsFor(r.room); }, "Open the history of " + r.room));
+    if (KIND_ICON[r.kind]) { var ic = el("span", "lr-ico", KIND_ICON[r.kind]); ic.title = KIND_TITLE[r.kind]; body.appendChild(ic); }
+    var col = readable(r.color, r.name);
+    var dot = el("span", "lr-dot");
+    dot.style.background = rawColor(r.color, r.name);
+    body.appendChild(dot);
     var n = el("span", "lr-name");
-    n.style.color = nameColor(r.name || "?");
+    n.style.color = col;
     n.appendChild(hl(r.name || "?", q));
-    if (r.uid) n.title = r.uid;
+    n.title = (r.uid || r.name) + (r.server ? " · " + r.server : "");
     body.appendChild(n);
     if (r.harmony) { var tg = el("span", "tag harmony", "HARMONY"); tg.style.marginRight = "6px"; body.appendChild(tg); }
     if (r.kind === "join") body.appendChild(document.createTextNode("joined"));
     else if (r.kind === "leave") body.appendChild(document.createTextNode("left"));
     else if (r.kind === "rename") { body.appendChild(document.createTextNode("changed name to ")); var nn = el("b"); nn.appendChild(hl(r.text, q)); body.appendChild(nn); }
-    else body.appendChild(hl(r.text, q));
+    else {
+      // Like the piano chat: the whole line in the person's colour.
+      var tx = el("span");
+      tx.style.color = col;
+      tx.appendChild(hl(r.text, q));
+      body.appendChild(tx);
+    }
     if (r.via) { var v = el("span", "lr-via"); v.appendChild(hl(r.via, q)); body.appendChild(v); }
     row.appendChild(body);
     return row;
   }
+  // Each day is its own group, so its sticky date label only sticks while that day is on screen.
   function addRowTo(view, r, opts) {
     var day = rowDay(r);
-    if (view._lastDay !== day) {
+    if (view._lastDay !== day || !view._group || view._group.parentNode !== view) {
+      var group = el("div", "day-group");
       var sep = el("div", "day-sep");
       sep.appendChild(el("span", null, dayLabel(day)));
-      view.appendChild(sep);
+      group.appendChild(sep);
+      view.appendChild(group);
+      view._group = group;
       view._lastDay = day;
     }
-    view.appendChild(rowEl(r, opts));
+    view._group.appendChild(rowEl(r, opts));
   }
   function nearBottom(view) { return view.scrollTop + view.clientHeight >= view.scrollHeight - 40; }
-  function kindsMatch(kinds, r) { return !kinds || kinds.split(",").indexOf(r.kind) >= 0; }
-  function textMatch(q, r) {
-    return !q || [r.name, r.text, r.via].some(function (s) { return s && s.toLowerCase().indexOf(q) >= 0; });
-  }
-  function bindChips(groupId, onChange) {
-    var chips = document.querySelectorAll("#" + groupId + " .chip");
-    chips.forEach(function (c) {
-      c.addEventListener("click", function () {
-        chips.forEach(function (o) { o.setAttribute("aria-pressed", o === c ? "true" : "false"); });
-        onChange(c.dataset.kinds);
-      });
-    });
-  }
-  (function initTz() {
-    var sel = $("log-tz");
-    var mine = el("option", null, "Times: my time" + (MY_TZ ? " (" + MY_TZ.replace(/_/g, " ") + ")" : ""));
-    mine.value = "local";
-    var utc = el("option", null, "Times: UTC");
-    utc.value = "utc";
-    sel.appendChild(mine); sel.appendChild(utc);
-    sel.value = state.logTz;
-    sel.addEventListener("change", function () {
-      state.logTz = sel.value;
-      try { localStorage.setItem("harmony_manage_tz", sel.value); } catch (e) {}
-      renderLogRows(true);
-      renderLive(true);
-    });
-  })();
 
-  // ---------- LIVE: everything happening in every room, as it happens ----------
+  // ================= filters (shared by Live and History) =================
+  var KIND_OPTS = [
+    ["", "Everything"], ["chat", "Chat"], ["join,leave", "Joins & leaves"], ["rename", "Name changes"],
+    ["prompt", "Corner replies"], ["world", "World chat"]
+  ];
+  var SERVER_LABEL = { harmony: "Harmony tabs", mpp: "Public MPP", backup: "Backup server", world: "World" };
+  function emptyFilters() { return { q: "", room: "", person: "", kinds: "", server: "", from: "", to: "" }; }
+  function filtersOn(f) { return !!(f.q || f.room || f.person || f.kinds || f.server || f.from || f.to); }
+  function dateMs(v, end) {
+    if (!v) return 0;
+    var p = v.split("-"), d = new Date(+p[0], +p[1] - 1, +p[2]);
+    if (end) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+  function filterQuery(f) {
+    var a = [];
+    if (f.room) a.push("room=" + encodeURIComponent(f.room));
+    if (f.kinds) a.push("kinds=" + f.kinds);
+    if (f.q) a.push("q=" + encodeURIComponent(f.q));
+    if (f.person) a.push("person=" + encodeURIComponent(f.person));
+    if (f.server) a.push("server=" + encodeURIComponent(f.server));
+    if (f.from) a.push("from=" + dateMs(f.from));
+    if (f.to) a.push("to=" + dateMs(f.to, true));
+    return a.join("&");
+  }
+  function filterMatch(f, r) {
+    if (f.room && r.room !== f.room) return false;
+    if (f.kinds && f.kinds.split(",").indexOf(r.kind) < 0) return false;
+    if (f.server && (f.server === "harmony" ? !(r.harmony || r.server === "harmony") : r.server !== f.server)) return false;
+    if (f.person && r.uid !== f.person && (r.name || "").toLowerCase().indexOf(f.person.toLowerCase()) < 0) return false;
+    if (f.from && r.ts < dateMs(f.from)) return false;
+    if (f.to && r.ts >= dateMs(f.to, true)) return false;
+    if (f.q) {
+      var q = f.q.toLowerCase();
+      if (![r.name, r.text, r.via].some(function (s) { return s && s.toLowerCase().indexOf(q) >= 0; })) return false;
+    }
+    return true;
+  }
+
+  // Builds a toolbar (search + Filters button), the filter panel and the
+  // removable chips for active filters. cfg: { prefix, title, roomSelect, roomFor, onChange }
+  var tzSelects = [];
+  function makeFilters(cfg) {
+    var f = emptyFilters();
+    var P = cfg.prefix;
+    var bar = $(P + "-toolbar"), panel = $(P + "-fpanel"), active = $(P + "-factive");
+    if (cfg.title) bar.appendChild(el("h2", null, cfg.title));
+    var search = el("div", "search");
+    search.appendChild(svgIcon("i-search"));
+    var qIn = el("input", "input");
+    qIn.type = "search"; qIn.placeholder = "Search messages and names"; qIn.setAttribute("aria-label", "Search");
+    search.appendChild(qIn);
+    bar.appendChild(search);
+    var fbtn = button("btn fbtn", null, function () { showPanel(panel.hidden); }, "More filters");
+    fbtn.setAttribute("aria-expanded", "false");
+    fbtn.setAttribute("aria-controls", P + "-fpanel");
+    fbtn.appendChild(svgIcon("i-filter"));
+    fbtn.appendChild(el("span", null, "Filters"));
+    var fcount = el("span", "count");
+    fcount.hidden = true;
+    fbtn.appendChild(fcount);
+    bar.appendChild(fbtn);
+    function showPanel(open) {
+      panel.hidden = !open;
+      fbtn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) loadPeople();
+    }
+
+    function field(label, ctl, cls) {
+      var l = el("label", "f" + (cls ? " " + cls : ""));
+      l.appendChild(document.createTextNode(label));
+      l.appendChild(ctl);
+      panel.appendChild(l);
+      return ctl;
+    }
+    var roomSel = null;
+    if (cfg.roomSelect) {
+      roomSel = el("select", "input");
+      roomSel.appendChild(new Option("All rooms", ""));
+      field("Room", roomSel, "f-room");
+    }
+    var personIn = el("input", "input");
+    personIn.type = "search"; personIn.placeholder = "Name or user id"; personIn.autocomplete = "off";
+    var dl = el("datalist"); dl.id = P + "-people";
+    personIn.setAttribute("list", dl.id);
+    panel.appendChild(dl);
+    field("Person", personIn, "f-person");
+    var kindSel = el("select", "input");
+    KIND_OPTS.forEach(function (k) { kindSel.appendChild(new Option(k[1], k[0])); });
+    field("Show", kindSel);
+    var serverSel = el("select", "input");
+    serverSel.appendChild(new Option("Any server", ""));
+    Object.keys(SERVER_LABEL).forEach(function (k) { serverSel.appendChild(new Option(SERVER_LABEL[k], k)); });
+    field("Server", serverSel);
+    var fromIn = el("input", "input"); fromIn.type = "date";
+    field("From day", fromIn);
+    var toIn = el("input", "input"); toIn.type = "date";
+    field("To day", toIn);
+    var tzSel = el("select", "input");
+    tzSel.appendChild(new Option("My time" + (MY_TZ ? " (" + MY_TZ.replace(/_/g, " ") + ")" : ""), "local"));
+    tzSel.appendChild(new Option("UTC", "utc"));
+    tzSel.value = state.logTz;
+    tzSelects.push(tzSel);
+    field("Show times in", tzSel, "f-tz");
+    var acts = el("div", "f-actions");
+    acts.appendChild(button("btn btn-sm btn-ghost", "Clear all filters", function () { f = emptyFilters(); changed(); }));
+    acts.appendChild(button("btn btn-sm btn-accent", "Done", function () { showPanel(false); }));
+    panel.appendChild(acts);
+
+    function syncInputs() {
+      qIn.value = f.q;
+      if (roomSel) roomSel.value = f.room;
+      personIn.value = f.person; kindSel.value = f.kinds; serverSel.value = f.server;
+      fromIn.value = f.from; toIn.value = f.to;
+    }
+    function renderActive() {
+      active.textContent = "";
+      var n = 0;
+      function chip(text, key) {
+        n++;
+        var c = el("span", "fchip", text);
+        var x = button(null, "×", function () { f[key] = ""; changed(); });
+        x.setAttribute("aria-label", "Remove filter: " + text);
+        c.appendChild(x);
+        active.appendChild(c);
+      }
+      if (f.room) chip("Room: " + f.room, "room");
+      if (f.person) chip("Person: " + f.person, "person");
+      if (f.kinds) chip(KIND_OPTS.filter(function (k) { return k[0] === f.kinds; })[0][1], "kinds");
+      if (f.server) chip(SERVER_LABEL[f.server], "server");
+      if (f.from) chip("From " + dayLabel(f.from), "from");
+      if (f.to) chip("To " + dayLabel(f.to), "to");
+      if (f.q) chip("“" + f.q + "”", "q");
+      fcount.hidden = !n;
+      fcount.textContent = n;
+    }
+    function changed() { syncInputs(); renderActive(); cfg.onChange(f); }
+    qIn.addEventListener("input", debounce(function () { f.q = qIn.value.trim(); renderActive(); cfg.onChange(f); }, 300));
+    personIn.addEventListener("input", debounce(function () { f.person = personIn.value.trim(); renderActive(); cfg.onChange(f); }, 350));
+    if (roomSel) roomSel.addEventListener("change", function () { f.room = roomSel.value; changed(); loadPeople(); });
+    kindSel.addEventListener("change", function () { f.kinds = kindSel.value; changed(); });
+    serverSel.addEventListener("change", function () { f.server = serverSel.value; changed(); });
+    fromIn.addEventListener("change", function () { f.from = fromIn.value; changed(); });
+    toIn.addEventListener("change", function () { f.to = toIn.value; changed(); });
+    tzSel.addEventListener("change", function () { setTz(tzSel.value); });
+
+    function loadPeople() {
+      var room = cfg.roomFor ? cfg.roomFor() : f.room;
+      api("GET", "/db/people" + (room ? "?room=" + encodeURIComponent(room) : "")).then(function (d) {
+        dl.textContent = "";
+        d.people.forEach(function (p) { var o = el("option"); o.value = p.name; o.label = plural(p.n, "line"); dl.appendChild(o); });
+      }).catch(function () {});
+    }
+    return {
+      get: function () { return f; },
+      setRooms: function (names) { if (roomSel) setOptions(roomSel, names, true); }
+    };
+  }
+  function setTz(v) {
+    state.logTz = v;
+    try { localStorage.setItem("harmony_manage_tz", v); } catch (e) {}
+    tzSelects.forEach(function (s) { s.value = v; });
+    renderLive(true);
+    renderHist(true);
+    updateDownloadLink();
+  }
+
+  // ================= LIVE =================
   var LIVE_MAX = 600;
-  state.live = { rows: [], room: "", kinds: "", loaded: false, unseen: 0 };
+  var live = { rows: [], loaded: false, unseen: 0 };
+  live.filters = makeFilters({ prefix: "live", title: "Live activity", roomSelect: true, onChange: function () { loadLive(); } });
   function loadLive() {
-    var L = state.live;
-    var qs = "?limit=200" + (L.room ? "&room=" + encodeURIComponent(L.room) : "") + (L.kinds ? "&kinds=" + L.kinds : "");
-    return api("GET", "/db/messages" + qs).then(function (d) {
-      L.rows = d.rows.reverse();
-      L.loaded = true;
+    var qs = filterQuery(live.filters.get());
+    return api("GET", "/db/messages?limit=250" + (qs ? "&" + qs : "")).then(function (d) {
+      live.rows = d.rows.reverse();
+      live.loaded = true;
       renderLive(false);
     }).catch(fail);
   }
+  function liveStatus() { setFoot("live-status", plural(live.rows.length, "event") + " shown", "times in " + tzText()); }
   function renderLive(keepScroll) {
-    var view = $("live-feed"), L = state.live;
+    var view = $("live-feed");
     var stick = !keepScroll || nearBottom(view);
     view.textContent = "";
     view._lastDay = null;
-    if (!L.rows.length) {
-      view.appendChild(el("span", "faint", L.loaded ? "Nothing yet. New chat lines, joins and leaves from every room show up here the moment they happen." : "Loading…"));
+    var f = live.filters.get();
+    if (!live.rows.length) {
+      view.appendChild(live.loaded
+        ? emptyState("📡", filtersOn(f) ? "Nothing matches these filters yet." : "Nothing yet. Chat lines, joins and leaves from every room appear here the moment they happen.")
+        : emptyState("⏳", "Loading…"));
     }
-    L.rows.forEach(function (r) { addRowTo(view, r, { showRoom: !L.room }); });
+    live.rows.forEach(function (r) { addRowTo(view, r, { showRoom: !f.room, q: f.q }); });
     if (stick) view.scrollTop = view.scrollHeight;
-    L.unseen = 0;
+    live.unseen = 0;
     updateLivePill();
+    liveStatus();
   }
   function updateLivePill() {
-    var pill = $("live-new"), n = state.live.unseen;
+    var pill = $("live-new"), n = live.unseen;
     pill.hidden = !n;
     pill.textContent = "↓ " + plural(n, "new event");
   }
   $("live-new").addEventListener("click", function () {
     var view = $("live-feed");
     view.scrollTop = view.scrollHeight;
-    state.live.unseen = 0;
+    live.unseen = 0;
     updateLivePill();
   });
   $("live-feed").addEventListener("scroll", function () {
-    if (state.live.unseen && nearBottom(this)) { state.live.unseen = 0; updateLivePill(); }
+    if (live.unseen && nearBottom(this)) { live.unseen = 0; updateLivePill(); }
   });
-  $("live-room").addEventListener("change", function () { state.live.room = this.value; loadLive(); });
-  bindChips("live-kinds", function (k) { state.live.kinds = k; loadLive(); });
-
-  // A new or updated row arrived from the server.
   function onLiveRow(row) {
-    var L = state.live;
-    if (L.loaded && (!L.room || L.room === row.room) && kindsMatch(L.kinds, row)) {
-      var view = $("live-feed");
-      if (row.updated) {
-        L.rows = L.rows.map(function (r) { return r.id === row.id ? row : r; });
-        var old = view.querySelector('.lr[data-id="' + row.id + '"]');
-        if (old) old.parentNode.replaceChild(rowEl(row, { showRoom: !L.room }), old);
-      } else {
-        var stick = nearBottom(view);
-        if (!L.rows.length) view.textContent = "";
-        L.rows.push(row);
-        addRowTo(view, row, { showRoom: !L.room });
-        if (L.rows.length > LIVE_MAX) { L.rows.splice(0, L.rows.length - LIVE_MAX); if (stick) renderLive(false); }
-        if (stick) view.scrollTop = view.scrollHeight;
-        else if (state.tab === "live") { L.unseen++; updateLivePill(); }
-      }
+    var f = live.filters.get();
+    if (!live.loaded || !filterMatch(f, row)) return;
+    var view = $("live-feed");
+    if (row.updated) {
+      live.rows = live.rows.map(function (r) { return r.id === row.id ? row : r; });
+      var old = view.querySelector('.lr[data-id="' + row.id + '"]');
+      if (old) old.parentNode.replaceChild(rowEl(row, { showRoom: !f.room, q: f.q }), old);
+      return;
     }
-    onLogsRow(row);
+    var stick = nearBottom(view);
+    if (!live.rows.length) { view.textContent = ""; view._lastDay = null; }
+    live.rows.push(row);
+    addRowTo(view, row, { showRoom: !f.room, q: f.q, fresh: true });
+    if (live.rows.length > LIVE_MAX) { live.rows.splice(0, live.rows.length - LIVE_MAX); if (stick) renderLive(false); }
+    if (stick) view.scrollTop = view.scrollHeight;
+    else { live.unseen++; updateLivePill(); }
+    liveStatus();
   }
 
-  // ---------- CHAT LOGS: full history per room, from the database ----------
-  state.hist = { rooms: [], room: "", rows: [], more: false, kinds: "", q: "", busy: false };
+  // ================= CHAT HISTORY =================
+  var hist = { rooms: [], room: "", rows: [], more: false, busy: false };
+  hist.filters = makeFilters({
+    prefix: "hist", roomFor: function () { return hist.room; },
+    onChange: function () { if (hist.room) openHistRoom(hist.room); }
+  });
   function openLogsFor(room) {
-    state.hist.room = room;
+    hist.room = room;
+    hist.rows = [];
+    $("hist").classList.add("show-convo");
     switchTab("logs");
   }
+  var dbWarned = false;
   function loadHistRooms() {
     return api("GET", "/db/rooms").then(function (d) {
-      state.hist.rooms = d.rooms;
-      $("db-warning").hidden = d.dbOk !== false;
-      $("db-warning-live").hidden = d.dbOk !== false;
-      var names = d.rooms.map(function (r) { return r.room; }).sort();
-      setOptions($("live-room"), names, true);
+      hist.rooms = d.rooms;
+      if (d.dbOk === false && !dbWarned) { dbWarned = true; toast("The chat database isn't running on the server — run npm install there and restart.", true); }
+      live.filters.setRooms(d.rooms.map(function (r) { return r.room; }).sort());
       $("c-logs").textContent = d.rooms.length;
+      $("rooms-count").textContent = d.rooms.length;
       renderRoomList();
       return d;
     });
   }
   function loadLogs() {
     return loadHistRooms().then(function (d) {
-      var H = state.hist;
-      if (!H.room && d.rooms[0]) openHistRoom(d.rooms[0].room);
-      else if (H.room && !H.rows.length) openHistRoom(H.room);
-      else if (!H.room) clearViewer();
+      var wide = !window.matchMedia("(max-width: 860px)").matches;
+      if (hist.room && !hist.rows.length) openHistRoom(hist.room);
+      else if (!hist.room && d.rooms[0] && wide) openHistRoom(d.rooms[0].room);
+      else if (!hist.room) clearViewer();
     }).catch(fail);
   }
   function renderRoomList() {
-    var list = $("log-list"), H = state.hist;
-    var q = $("log-search").value.trim().toLowerCase();
+    var list = $("log-list");
+    var q = $("log-search").value.trim().toLowerCase(), sort = $("room-sort").value;
+    var onl = onlineByRoom();
     list.textContent = "";
-    var rooms = H.rooms.filter(function (r) { return !q || r.room.toLowerCase().indexOf(q) >= 0; });
-    if (!rooms.length) { list.appendChild(el("div", "empty", H.rooms.length ? "No rooms match." : "No chat history yet.")); return; }
+    var rooms = hist.rooms.filter(function (r) { return !q || r.room.toLowerCase().indexOf(q) >= 0; });
+    rooms.sort(sort === "name" ? function (a, b) { return a.room.localeCompare(b.room); }
+      : sort === "busy" ? function (a, b) { return (b.messages || 0) - (a.messages || 0); }
+      : function (a, b) { return (b.last_ts || 0) - (a.last_ts || 0); });
+    if (!rooms.length) { list.appendChild(emptyState("🗂️", hist.rooms.length ? "No rooms match." : "No chat history yet.")); return; }
     rooms.forEach(function (r) {
-      var b = button("log-item", null, function () {
+      var b = button("room-item", null, function () {
+        $("hist").classList.add("show-convo");
         openHistRoom(r.room);
-        if (window.matchMedia("(max-width: 960px)").matches) $("log-text").parentNode.scrollIntoView({ behavior: "smooth", block: "start" });
       });
-      if (r.room === H.room) b.setAttribute("aria-current", "true");
-      b.appendChild(el("span", "ico", r.room.charAt(0).toUpperCase() || "#"));
+      if (r.room === hist.room) b.setAttribute("aria-current", "true");
+      var av = el("span", "room-av", (r.room.replace(/[^a-z0-9]/gi, "").charAt(0) || "#").toUpperCase());
+      av.style.background = "hsl(" + hashHue(r.room) + ", 65%, 70%)";
+      b.appendChild(av);
       var txt = el("span", "txt");
-      txt.appendChild(el("div", "t", r.room));
+      var t = el("div", "t");
+      t.appendChild(el("span", null, r.room));
+      if (onl[r.room]) t.appendChild(el("span", "live-n", onl[r.room] + " online"));
+      txt.appendChild(t);
       txt.appendChild(el("div", "m", plural(r.messages || 0, "message") + " · " + plural(r.joins || 0, "join")));
-      txt.appendChild(el("div", "m", "Last activity " + ago(r.last_ts)));
+      txt.appendChild(el("div", "m", "Active " + ago(r.last_ts)));
       b.appendChild(txt);
       list.appendChild(b);
     });
   }
   $("log-search").addEventListener("input", renderRoomList);
+  $("room-sort").addEventListener("change", renderRoomList);
+  $("hist-back").addEventListener("click", function () { $("hist").classList.remove("show-convo"); });
 
   function clearViewer() {
-    var H = state.hist;
-    H.room = ""; H.rows = []; H.more = false;
+    hist.room = ""; hist.rows = []; hist.more = false;
     $("log-title").textContent = "Pick a room";
     $("log-file").textContent = "";
-    $("log-text").textContent = "";
-    $("log-text").appendChild(el("span", "faint", "Pick a room on the left to read its history."));
+    var v = $("log-text");
+    v.textContent = "";
+    v.appendChild(emptyState("💬", "Pick a room to read its history."));
     $("log-delete").disabled = true;
     $("log-download").removeAttribute("href"); $("log-download").setAttribute("aria-disabled", "true");
     $("log-status").textContent = "";
   }
   function histQuery(extra) {
-    var H = state.hist;
-    return "?room=" + encodeURIComponent(H.room) + (H.kinds ? "&kinds=" + H.kinds : "") +
-      (H.q ? "&q=" + encodeURIComponent(H.q) : "") + (extra || "");
+    var f = Object.assign({}, hist.filters.get(), { room: hist.room });
+    return "?" + filterQuery(f) + (extra || "");
   }
   function openHistRoom(room) {
-    var H = state.hist;
-    H.room = room; H.rows = []; H.more = false;
+    hist.room = room; hist.rows = []; hist.more = false;
     renderRoomList();
-    var info = H.rooms.filter(function (r) { return r.room === room; })[0];
+    var info = hist.rooms.filter(function (r) { return r.room === room; })[0];
     $("log-title").textContent = room;
-    $("log-file").textContent = info ? "Since " + when(info.first_ts) + " · " + plural(info.total, "event") : "";
+    $("log-file").textContent = info ? plural(info.total, "event") + " since " + when(info.first_ts) : "";
     $("log-delete").disabled = false;
     $("log-download").removeAttribute("aria-disabled");
     updateDownloadLink();
-    $("log-text").textContent = "";
-    $("log-text").appendChild(el("span", "faint", "Loading…"));
+    var v = $("log-text");
+    v.textContent = "";
+    v.appendChild(emptyState("⏳", "Loading…"));
     return api("GET", "/db/messages" + histQuery("&limit=400")).then(function (d) {
-      if (H.room !== room) return;
-      H.rows = d.rows.reverse();
-      H.more = d.more;
-      renderLogRows(false);
+      if (hist.room !== room) return;
+      hist.rows = d.rows.reverse();
+      hist.more = d.more;
+      renderHist(false);
     }).catch(fail);
   }
   function updateDownloadLink() {
+    if (!hist.room) return;
     var tz = state.logTz === "utc" ? "UTC" : (MY_TZ || "UTC");
     $("log-download").href = "/api/manage/db/export" + histQuery("&tz=" + encodeURIComponent(tz));
   }
   function loadEarlier() {
-    var H = state.hist;
-    if (H.busy || !H.rows.length) return;
-    H.busy = true;
-    var room = H.room;
-    api("GET", "/db/messages" + histQuery("&limit=400&before=" + H.rows[0].id)).then(function (d) {
-      if (H.room !== room) return;
-      H.rows = d.rows.reverse().concat(H.rows);
-      H.more = d.more;
+    if (hist.busy || !hist.rows.length) return;
+    hist.busy = true;
+    var room = hist.room;
+    api("GET", "/db/messages" + histQuery("&limit=400&before=" + hist.rows[0].id)).then(function (d) {
+      if (hist.room !== room) return;
+      hist.rows = d.rows.reverse().concat(hist.rows);
+      hist.more = d.more;
       var view = $("log-text"), fromBottom = view.scrollHeight - view.scrollTop;
-      renderLogRows(true);
+      renderHist(true);
       view.scrollTop = view.scrollHeight - fromBottom;
-    }).catch(fail).then(function () { H.busy = false; });
+    }).catch(fail).then(function () { hist.busy = false; });
   }
-  function renderLogRows(keepScroll) {
-    var H = state.hist, view = $("log-text");
-    if (!H.room) return;
+  function renderHist(keepScroll) {
+    var view = $("log-text");
+    if (!hist.room) return;
     var stick = !keepScroll || nearBottom(view);
     view.textContent = "";
     view._lastDay = null;
-    var legacy = H.rows.some(function (r) { return !r.tz_known; });
-    $("tz-note").hidden = !legacy;
-    $("log-status").textContent = plural(H.rows.length, "line") + " shown" + (H.more ? " (more above)" : "") +
-      " · times in " + (state.logTz === "utc" ? "UTC" : "your time" + (MY_TZ ? " (" + MY_TZ.replace(/_/g, " ") + ")" : "")) +
-      " · updates live";
-    if (H.more) view.appendChild(button("btn btn-sm more-btn", "Load earlier", loadEarlier));
-    if (!H.rows.length) {
-      view.appendChild(el("span", "faint", H.q || H.kinds ? "Nothing matches." : "No history in this room yet."));
-      return;
-    }
-    H.rows.forEach(function (r) { addRowTo(view, r, { q: H.q.toLowerCase() }); });
+    var f = hist.filters.get();
+    $("tz-note").hidden = !hist.rows.some(function (r) { return !r.tz_known; });
+    setFoot("log-status", plural(hist.rows.length, "line") + (hist.more ? " (scroll up for more)" : ""), "times in " + tzText() + " · updates live");
+    if (hist.more) view.appendChild(button("btn btn-sm more-btn", "Load earlier", loadEarlier));
+    if (!hist.rows.length) { view.appendChild(emptyState("🔍", filtersOn(f) ? "Nothing matches these filters." : "No history in this room yet.")); return; }
+    hist.rows.forEach(function (r) { addRowTo(view, r, { q: f.q }); });
     if (stick) view.scrollTop = view.scrollHeight;
   }
-  // Scrolling to the top loads earlier lines automatically.
-  $("log-text").addEventListener("scroll", function () { if (this.scrollTop < 60 && state.hist.more) loadEarlier(); });
-  function onLogsRow(row) {
-    var H = state.hist;
-    if (H.room !== row.room || !kindsMatch(H.kinds, row) || !textMatch(H.q.toLowerCase(), row)) return;
+  $("log-text").addEventListener("scroll", function () { if (this.scrollTop < 60 && hist.more) loadEarlier(); });
+  function onHistRow(row) {
+    if (!hist.room || hist.room !== row.room) return;
+    var f = Object.assign({}, hist.filters.get(), { room: hist.room });
+    if (!filterMatch(f, row)) return;
     var view = $("log-text");
     if (row.updated) {
-      H.rows = H.rows.map(function (r) { return r.id === row.id ? row : r; });
+      hist.rows = hist.rows.map(function (r) { return r.id === row.id ? row : r; });
       var old = view.querySelector('.lr[data-id="' + row.id + '"]');
-      if (old) old.parentNode.replaceChild(rowEl(row, { q: H.q.toLowerCase() }), old);
+      if (old) old.parentNode.replaceChild(rowEl(row, { q: f.q }), old);
       return;
     }
-    if (H.rows.some(function (r) { return r.id === row.id; })) return;
+    if (hist.rows.some(function (r) { return r.id === row.id; })) return;
     var stick = nearBottom(view);
-    if (!H.rows.length) view.textContent = "";
-    H.rows.push(row);
-    addRowTo(view, row, { q: H.q.toLowerCase() });
+    if (!hist.rows.length) { view.textContent = ""; view._lastDay = null; }
+    hist.rows.push(row);
+    addRowTo(view, row, { q: f.q, fresh: true });
     if (stick) view.scrollTop = view.scrollHeight;
   }
-  var histSearchTimer = null;
-  $("log-filter").addEventListener("input", function () {
-    var v = this.value.trim();
-    clearTimeout(histSearchTimer);
-    histSearchTimer = setTimeout(function () { state.hist.q = v; if (state.hist.room) openHistRoom(state.hist.room); }, 300);
-  });
-  bindChips("log-kinds", function (k) { state.hist.kinds = k; if (state.hist.room) openHistRoom(state.hist.room); });
   $("log-delete").addEventListener("click", function () {
-    var room = state.hist.room;
+    var room = hist.room;
     if (!room || !confirm("Delete ALL saved history for \"" + room + "\"?\nChat lines, joins and leaves. This cannot be undone.")) return;
     api("POST", "/db/delete", { room: room }).then(function (d) {
       toast("Deleted " + plural(d.removed, "line") + " from " + room);
       clearViewer();
+      $("hist").classList.remove("show-convo");
       loadLogs();
     }).catch(fail);
   });
 
-  // ---------- leave a msg: every room at once ----------
+  // ================= NOTES (leave a msg, every room at once) =================
   function msgKey(m) { return m.room + "\n" + m.id; }
   function loadLeave() {
     return api("GET", "/leave-msgs?all=1").then(function (d) {
@@ -1388,11 +1609,9 @@
       var keep = {};
       d.messages.forEach(function (m) { if (state.leaveSel[msgKey(m)]) keep[msgKey(m)] = m; });
       state.leaveSel = keep;
-      var rooms = [];
-      d.messages.forEach(function (m) { if (rooms.indexOf(m.room) < 0) rooms.push(m.room); });
+      var rooms = [], counts = {};
+      d.messages.forEach(function (m) { if (rooms.indexOf(m.room) < 0) rooms.push(m.room); counts[m.room] = (counts[m.room] || 0) + 1; });
       rooms.sort();
-      var counts = {};
-      d.messages.forEach(function (m) { counts[m.room] = (counts[m.room] || 0) + 1; });
       if (state.leaveRoomWanted && rooms.indexOf(state.leaveRoomWanted) < 0) rooms.push(state.leaveRoomWanted);
       setOptions($("leave-room"), rooms, true, function (r) { return r + " (" + (counts[r] || 0) + ")"; });
       if (state.leaveRoomWanted) { $("leave-room").value = state.leaveRoomWanted; state.leaveRoomWanted = ""; }
@@ -1400,20 +1619,19 @@
     }).catch(fail);
   }
   function shownLeave() {
-    var room = $("leave-room").value, q = $("leave-search").value.trim().toLowerCase();
+    var room = $("leave-room").value, q = $("leave-search").value.trim().toLowerCase(), old = $("leave-sort").value === "old";
     return state.leaveMsgs.filter(function (m) {
       if (room && m.room !== room) return false;
       return !q || m.text.toLowerCase().indexOf(q) >= 0 || m.name.toLowerCase().indexOf(q) >= 0;
-    });
+    }).sort(function (a, b) { return old ? a.ts - b.ts : b.ts - a.ts; });
   }
   function renderLeave() {
     var list = $("leave-list");
     list.textContent = "";
-    var msgs = shownLeave();
-    var rooms = {};
+    var msgs = shownLeave(), rooms = {};
     state.leaveMsgs.forEach(function (m) { rooms[m.room] = true; });
     $("leave-summary").textContent = "· " + plural(state.leaveMsgs.length, "note") + " in " + plural(Object.keys(rooms).length, "room");
-    if (!msgs.length) list.appendChild(el("div", "empty", state.leaveMsgs.length ? "No notes match." : "No one has left a note in any room yet."));
+    if (!msgs.length) list.appendChild(emptyState("📝", state.leaveMsgs.length ? "No notes match." : "No one has left a note in any room yet."));
     msgs.forEach(function (m) {
       var key = msgKey(m);
       var row = el("label", "msg");
@@ -1429,7 +1647,12 @@
       var body = el("div", "msg-body");
       var meta = el("div", "msg-meta");
       meta.appendChild(el("span", "msg-room", m.room));
-      meta.appendChild(el("span", null, m.name + " · " + when(m.ts)));
+      var nm = el("b", null, m.name);
+      nm.style.color = readable("", m.name);
+      meta.appendChild(nm);
+      var tm = el("span", null, "· " + when(m.ts));
+      tm.title = new Date(m.ts).toLocaleString();
+      meta.appendChild(tm);
       body.appendChild(meta);
       body.appendChild(el("div", "msg-text", m.text));
       row.appendChild(body);
@@ -1442,8 +1665,7 @@
     var n = Object.keys(state.leaveSel).length;
     $("leave-del-sel").disabled = !n;
     $("leave-del-sel").textContent = n ? "Delete selected (" + n + ")" : "Delete selected";
-    var shown = shownLeave();
-    var cb = $("leave-all-cb");
+    var shown = shownLeave(), cb = $("leave-all-cb");
     cb.checked = shown.length > 0 && shown.every(function (m) { return state.leaveSel[msgKey(m)]; });
     cb.disabled = !shown.length;
   }
@@ -1466,6 +1688,7 @@
     });
   }
   $("leave-room").addEventListener("change", renderLeave);
+  $("leave-sort").addEventListener("change", renderLeave);
   $("leave-search").addEventListener("input", renderLeave);
   $("leave-refresh").addEventListener("click", loadLeave);
   $("leave-all-cb").addEventListener("change", function () {
@@ -1477,7 +1700,7 @@
     deleteLeave(Object.keys(state.leaveSel).map(function (k) { return state.leaveSel[k]; }));
   });
 
-  // ---------- media ----------
+  // ================= MEDIA =================
   function loadMedia() {
     return api("GET", "/media").then(function (d) {
       state.media = { library: d.library, recent: d.recent };
@@ -1486,8 +1709,13 @@
   }
   function mediaKey(m) { return m.source + "/" + m.file; }
   function currentMedia() {
-    var src = $("media-source").value, kind = $("media-kind").value;
-    return (state.media[src] || []).filter(function (m) { return !kind || m.kind === kind; });
+    var src = $("media-source").value, kind = $("media-kind").value, q = $("media-search").value.trim().toLowerCase(), sort = $("media-sort").value;
+    return (state.media[src] || []).filter(function (m) {
+      return (!kind || m.kind === kind) && (!q || (m.title + " " + m.file).toLowerCase().indexOf(q) >= 0);
+    }).sort(sort === "old" ? function (a, b) { return a.added - b.added; }
+      : sort === "big" ? function (a, b) { return b.size - a.size; }
+      : sort === "name" ? function (a, b) { return String(a.title).localeCompare(String(b.title)); }
+      : function (a, b) { return b.added - a.added; });
   }
   function renderMedia() {
     var src = $("media-source").value;
@@ -1495,24 +1723,15 @@
     var grid = $("media-grid");
     grid.textContent = "";
     var items = currentMedia();
-    if (!items.length) grid.appendChild(el("div", "card empty", "No files here."));
+    if (!items.length) { var e = emptyState("🖼️", "No files here."); e.classList.add("card"); grid.appendChild(e); }
     items.forEach(function (m) {
       var key = mediaKey(m);
       var card = el("div", "card media-card" + (state.mediaSel[key] ? " selected" : ""));
       var thumb = el("div", "media-thumb");
       if (m.kind === "image") {
-        var img = el("img");
-        img.loading = "lazy";
-        img.alt = m.title;
-        img.src = m.url;
-        thumb.appendChild(img);
+        var img = el("img"); img.loading = "lazy"; img.alt = m.title; img.src = m.url; thumb.appendChild(img);
       } else if (m.kind === "video") {
-        var v = el("video");
-        v.controls = true;
-        v.preload = "metadata";
-        v.playsInline = true;
-        v.src = m.url;
-        thumb.appendChild(v);
+        var v = el("video"); v.controls = true; v.preload = "metadata"; v.playsInline = true; v.src = m.url; thumb.appendChild(v);
       } else {
         thumb.appendChild(el("span", "icon", "🎵"));
       }
@@ -1527,16 +1746,11 @@
       });
       thumb.appendChild(sel);
       card.appendChild(thumb);
-
       var body = el("div", "media-body");
       body.appendChild(el("div", "media-title", m.title));
       body.appendChild(el("div", "media-meta", (m.title !== m.file ? m.file + " · " : "") + bytes(m.size) + " · " + when(m.added)));
       if (m.kind === "audio") {
-        var a = el("audio");
-        a.controls = true;
-        a.preload = "none";
-        a.src = m.url;
-        body.appendChild(a);
+        var a = el("audio"); a.controls = true; a.preload = "none"; a.src = m.url; body.appendChild(a);
       }
       var actions = el("div", "media-actions");
       var open = el("a", "btn btn-sm", "Open");
@@ -1573,6 +1787,8 @@
   }
   $("media-source").addEventListener("change", function () { state.mediaSel = {}; renderMedia(); });
   $("media-kind").addEventListener("change", renderMedia);
+  $("media-sort").addEventListener("change", renderMedia);
+  $("media-search").addEventListener("input", renderMedia);
   $("media-del-sel").addEventListener("click", function () {
     deleteMedia(Object.keys(state.mediaSel).map(function (k) { return state.mediaSel[k]; }));
   });
@@ -1582,7 +1798,6 @@
     items.forEach(function (m) { if (allOn) delete state.mediaSel[mediaKey(m)]; else state.mediaSel[mediaKey(m)] = m; });
     renderMedia();
   });
-
   function uploadFiles(files) {
     files = Array.prototype.slice.call(files || []);
     if (!files.length) return;
@@ -1610,10 +1825,10 @@
   ["dragleave", "drop"].forEach(function (t) { up.addEventListener(t, function (e) { e.preventDefault(); up.classList.remove("drag"); }); });
   up.addEventListener("drop", function (e) { uploadFiles(e.dataTransfer && e.dataTransfer.files); });
 
-  // ---------- boot ----------
-  window.addEventListener("resize", fitHeader);
-  $("sound-banner").addEventListener("click", unlockAudio);
+  // ================= boot =================
   document.addEventListener("visibilitychange", function () { if (!document.hidden && !$("app").hidden) loadOverview(); });
+  // "Active 5 min ago" labels go stale; refresh the room list now and then.
+  setInterval(function () { if (!$("app").hidden && state.tab === "logs") renderRoomList(); }, 60000);
   api("GET", "/auth").then(function (d) { if (d.authed) showApp(); else showLogin(""); })
     .catch(function () { showLogin("Can't reach the piano server."); });
 })();

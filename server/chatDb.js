@@ -43,6 +43,7 @@ var KINDS = ["chat", "join", "leave", "rename", "prompt", "world"];
 var MAX_TEXT = 4000;
 
 function hash(s) { return crypto.createHash("sha1").update(String(s)).digest("hex").slice(0, 16); }
+function color(v) { v = String(v || "").trim(); return /^#[0-9a-f]{3,8}$/i.test(v) ? v.toLowerCase() : ""; }
 function str(v, max) { v = v == null ? "" : String(v); return max && v.length > max ? v.slice(0, max) : v; }
 
 function open(rootDir, opts) {
@@ -69,6 +70,7 @@ function open(rootDir, opts) {
 		"  via TEXT NOT NULL DEFAULT '',", // site they used (joins)
 		"  server TEXT NOT NULL DEFAULT '',", // mpp | backup | harmony | world
 		"  harmony INTEGER NOT NULL DEFAULT 0,",
+		"  color TEXT NOT NULL DEFAULT '',",  // the person's chat colour, as the piano shows it
 		"  tz_known INTEGER NOT NULL DEFAULT 1,", // 0 = imported old line, visitor's clock (zone unknown)
 		"  dedup TEXT UNIQUE",
 		");",
@@ -77,10 +79,16 @@ function open(rootDir, opts) {
 		"CREATE INDEX IF NOT EXISTS messages_recent ON messages(room, kind, ts);",
 		"CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);"
 	].join("\n"));
+	// Databases made before colours were stored.
+	var cols = db.prepare("PRAGMA table_info(messages)").all().map(function (c) { return c.name; });
+	if (cols.indexOf("color") < 0) db.exec("ALTER TABLE messages ADD COLUMN color TEXT NOT NULL DEFAULT ''");
+	db.exec("CREATE INDEX IF NOT EXISTS messages_uid ON messages(uid, id); CREATE INDEX IF NOT EXISTS messages_name ON messages(name, id);");
 
 	var stInsert = db.prepare(
-		"INSERT OR IGNORE INTO messages (room, kind, ts, uid, name, text, via, server, harmony, tz_known, dedup) " +
-		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+		"INSERT OR IGNORE INTO messages (room, kind, ts, uid, name, text, via, server, harmony, color, tz_known, dedup) " +
+		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+	var stSetColor = db.prepare("UPDATE messages SET color = ? WHERE dedup = ? AND color <> ?");
+	var stByDedup = db.prepare("SELECT * FROM messages WHERE dedup = ?");
 	var stById = db.prepare("SELECT * FROM messages WHERE id = ?");
 	var stRecent = db.prepare(
 		"SELECT id FROM messages WHERE room = ? AND kind = ? AND (uid = ? OR (? = '' AND name = ?)) AND text = ? AND ts >= ? LIMIT 1");
@@ -99,7 +107,7 @@ function open(rootDir, opts) {
 		var r = stInsert.run(
 			str(ev.room, 120) || "lobby", ev.kind, Math.round(+ev.ts) || Date.now(),
 			str(ev.uid, 64), str(ev.name, 120), str(ev.text, MAX_TEXT), str(ev.via, 200),
-			str(ev.server, 20), ev.harmony ? 1 : 0, ev.tzKnown === false ? 0 : 1, ev.dedup || null);
+			str(ev.server, 20), ev.harmony ? 1 : 0, color(ev.color), ev.tzKnown === false ? 0 : 1, ev.dedup || null);
 		if (!r.changes) return null;
 		var row = stById.get(r.lastInsertRowid);
 		if (!silent) emit(row);
@@ -121,13 +129,16 @@ function open(rootDir, opts) {
 			var uid = str(m.uid, 64), name = str(m.name, 120) || "?";
 			var t = +m.t;
 			if (t > 1e12 && t < Date.now() + 864e5) {
-				return insert({
-					room: room, kind: "chat", ts: t, uid: uid, name: name, text: text, server: m.server,
-					dedup: "c|" + room + "|" + (uid || name) + "|" + Math.round(t) + "|" + hash(text)
-				});
+				var key = "c|" + room + "|" + (uid || name) + "|" + Math.round(t) + "|" + hash(text);
+				var row = insert({ room: room, kind: "chat", ts: t, uid: uid, name: name, text: text, server: m.server, color: m.color, dedup: key });
+				// Already stored (by the server or another tab): a piano tab knows the
+				// colour people actually see (custom name colours), so it wins.
+				var c = color(m.color);
+				if (!row && m.fromTab && c && stSetColor.run(c, key, c).changes) emit(Object.assign(stByDedup.get(key), { updated: true }));
+				return row;
 			}
 			if (seenRecently(room, "chat", uid, name, text, m.legacy ? 6 * 3600e3 : 180e3)) return null;
-			return insert({ room: room, kind: "chat", ts: Date.now(), uid: uid, name: name, text: text, server: m.server });
+			return insert({ room: room, kind: "chat", ts: Date.now(), uid: uid, name: name, text: text, server: m.server, color: m.color });
 		},
 
 		// Someone arrived. Joins come from two places (the server watching who is in
@@ -144,29 +155,29 @@ function open(rootDir, opts) {
 				}
 				return null;
 			}
-			return insert({ room: room, kind: "join", ts: m.ts || Date.now(), uid: uid, name: name, via: m.via, harmony: m.harmony, server: m.server });
+			return insert({ room: room, kind: "join", ts: m.ts || Date.now(), uid: uid, name: name, via: m.via, harmony: m.harmony, server: m.server, color: m.color });
 		},
 		addLeave: function (m) {
 			var room = str(m.room, 120), uid = str(m.uid, 64), name = str(m.name, 120) || "?";
 			if (!room || stRecentPerson.get(room, "leave", uid, uid, name, Date.now() - 30e3)) return null;
-			return insert({ room: room, kind: "leave", ts: m.ts || Date.now(), uid: uid, name: name, server: m.server });
+			return insert({ room: room, kind: "leave", ts: m.ts || Date.now(), uid: uid, name: name, server: m.server, color: m.color });
 		},
 		addRename: function (m) {
 			var room = str(m.room, 120), uid = str(m.uid, 64), name = str(m.name, 120) || "?", to = str(m.text, 120);
 			if (!room || !to || to === name || seenRecently(room, "rename", uid, name, to, 120e3)) return null;
-			return insert({ room: room, kind: "rename", ts: Date.now(), uid: uid, name: name, text: to, via: m.via, harmony: m.harmony, server: m.server });
+			return insert({ room: room, kind: "rename", ts: Date.now(), uid: uid, name: name, text: to, via: m.via, harmony: m.harmony, server: m.server, color: m.color });
 		},
 		addPrompt: function (m) {
 			var room = str(m.room, 120), uid = str(m.uid, 64), name = str(m.name, 120) || "?", text = str(m.text).trim();
 			if (!room || !text || seenRecently(room, "prompt", uid, name, text, 120e3)) return null;
-			return insert({ room: room, kind: "prompt", ts: Date.now(), uid: uid, name: name, text: text, server: m.server });
+			return insert({ room: room, kind: "prompt", ts: Date.now(), uid: uid, name: name, text: text, server: m.server, color: m.color });
 		},
 		addWorld: function (m) {
 			var text = str(m.text).trim();
 			if (!text) return null;
 			return insert({
 				room: str(m.room, 120) || "lobby", kind: "world", ts: m.ts || Date.now(), uid: str(m.uid, 64),
-				name: str(m.name, 120) || "?", text: text, server: "world", dedup: m.id ? "w|" + m.room + "|" + m.id : null
+				name: str(m.name, 120) || "?", text: text, server: "world", color: m.color, dedup: m.id ? "w|" + m.room + "|" + m.id : null
 			});
 		},
 
@@ -189,19 +200,39 @@ function open(rootDir, opts) {
 			if (o.after) { where.push("id > ?"); args.push(+o.after); }
 			if (o.from) { where.push("ts >= ?"); args.push(+o.from); }
 			if (o.to) { where.push("ts < ?"); args.push(+o.to); }
+			function likeOf(v) { return "%" + String(v).replace(/[\\%_]/g, "\\$&") + "%"; }
 			if (o.q) {
-				var like = "%" + String(o.q).replace(/[\\%_]/g, "\\$&") + "%";
+				var like = likeOf(o.q);
 				where.push("(name LIKE ? ESCAPE '\\' OR text LIKE ? ESCAPE '\\' OR via LIKE ? ESCAPE '\\')");
 				args.push(like, like, like);
 			}
+			if (o.person) {
+				where.push("(uid = ? OR name LIKE ? ESCAPE '\\')");
+				args.push(String(o.person), likeOf(o.person));
+			}
+			if (o.server) {
+				// "harmony" = came through a Harmony tab; otherwise the chat server.
+				if (o.server === "harmony") where.push("(harmony = 1 OR server = 'harmony')");
+				else { where.push("server = ?"); args.push(String(o.server)); }
+			}
 			var limit = Math.max(1, Math.min(+o.limit || 300, 5000));
-			var sql = "SELECT * FROM messages" + (where.length ? " WHERE " + where.join(" AND ") : "") +
+			var sql = "SELECT m.*, CASE WHEN m.color <> '' THEN m.color ELSE COALESCE(" +
+				"(SELECT c.color FROM messages c WHERE m.uid <> '' AND c.uid = m.uid AND c.color <> '' ORDER BY c.id DESC LIMIT 1), " +
+				"(SELECT c.color FROM messages c WHERE c.name = m.name AND c.color <> '' ORDER BY c.id DESC LIMIT 1), '') END AS color " +
+				"FROM messages m" + (where.length ? " WHERE " + where.join(" AND ") : "") +
 				(o.after ? " ORDER BY id ASC" : " ORDER BY id DESC") + " LIMIT " + (limit + 1);
 			var stmt = db.prepare(sql);
 			var rows = stmt.all.apply(stmt, args);
 			var more = rows.length > limit;
 			if (more) rows.pop();
 			return { rows: rows, more: more };
+		},
+		// Names seen (most active first) — suggestions for the person filter.
+		people: function (room) {
+			var sql = "SELECT name, uid, MAX(color) AS color, COUNT(*) AS n, MAX(ts) AS last_ts FROM messages" +
+				(room ? " WHERE room = ?" : "") + " GROUP BY name ORDER BY n DESC LIMIT 300";
+			var stmt = db.prepare(sql);
+			return room ? stmt.all(String(room)) : stmt.all();
 		},
 		count: function () { return db.prepare("SELECT COUNT(*) AS n FROM messages").get().n; },
 		deleteWhere: function (o) {

@@ -286,7 +286,8 @@ function saveChatEvent(body, cb) {
 	if (!ev) return cb(null, false);
 	var base = {
 		room: room, uid: ev.uid, name: ev.name, text: ev.text, t: ev.t, via: ev.via,
-		harmony: !!ev.harmony, server: ev.server, legacy: data.v !== 2
+		harmony: !!ev.harmony, server: ev.server, legacy: data.v !== 2,
+		color: ev.color, fromTab: data.v === 2
 	};
 	var row = null;
 	if (ev.kind === "chat") row = chatDb.addChat(base);
@@ -390,7 +391,7 @@ function addWorldChat(room, data) {
 	w.chat.push(msg);
 	if (w.chat.length > WORLD_CHAT_MAX) w.chat.splice(0, w.chat.length - WORLD_CHAT_MAX);
 	saveWorldSoon(w);
-	if (chatDb) chatDb.addWorld({ room: w.room, id: msg.id, ts: msg.ts, name: msg.name, text: msg.text });
+	if (chatDb) chatDb.addWorld({ room: w.room, id: msg.id, ts: msg.ts, name: msg.name, text: msg.text, color: msg.color });
 	return msg;
 }
 function setWorldState(room, k, v, ts) {
@@ -714,26 +715,27 @@ function presenceTick() {
 			var server = u.where.indexOf("backup") >= 0 ? "backup" : u.where.indexOf("harmony") >= 0 ? "harmony" : "mpp";
 			var rec = gPresence.people.get(key);
 			if (!rec) {
-				rec = { room: r.room, uid: u._id, name: u.name, server: server, ownTab: ownTab, seen: now, here: true };
+				rec = { room: r.room, uid: u._id, name: u.name, color: u.color, server: server, ownTab: ownTab, seen: now, here: true };
 				gPresence.people.set(key, rec);
 				changed = true;
 				if (gPresence.ready && chatDb && !(newRoom && !ownTab)) {
-					chatDb.addJoin({ room: r.room, uid: u._id, name: u.name, harmony: u.where.indexOf("harmony") >= 0, server: server });
+					chatDb.addJoin({ room: r.room, uid: u._id, name: u.name, color: u.color, harmony: u.where.indexOf("harmony") >= 0, server: server });
 				}
 				return;
 			}
 			if (!rec.here) {
 				rec.here = true;
 				changed = true;
-				if (rec.leftLogged && chatDb) chatDb.addJoin({ room: r.room, uid: u._id, name: u.name, harmony: u.where.indexOf("harmony") >= 0, server: server });
+				if (rec.leftLogged && chatDb) chatDb.addJoin({ room: r.room, uid: u._id, name: u.name, color: u.color, harmony: u.where.indexOf("harmony") >= 0, server: server });
 				rec.leftLogged = false;
 			}
 			if (u.name && rec.name !== u.name) {
-				if (chatDb && rec.name) chatDb.addRename({ room: r.room, uid: u._id, name: rec.name, text: u.name, server: server });
+				if (chatDb && rec.name) chatDb.addRename({ room: r.room, uid: u._id, name: rec.name, text: u.name, color: u.color, server: server });
 				rec.name = u.name;
 				changed = true;
 			}
 			rec.seen = now;
+			if (u.color) rec.color = u.color;
 			rec.ownTab = rec.ownTab || ownTab;
 		});
 	});
@@ -744,7 +746,7 @@ function presenceTick() {
 		if (!rec.leftLogged && gone >= PRESENCE_GONE_MS) {
 			rec.leftLogged = true;
 			if (chatDb && (curRooms[rec.room] || rec.ownTab)) {
-				chatDb.addLeave({ room: rec.room, uid: rec.uid, name: rec.name, ts: rec.seen + PRESENCE_TICK_MS, server: rec.server });
+				chatDb.addLeave({ room: rec.room, uid: rec.uid, name: rec.name, color: rec.color, ts: rec.seen + PRESENCE_TICK_MS, server: rec.server });
 			}
 		}
 		if (gone > PRESENCE_REJOIN_MS && rec.leftLogged) gPresence.people.delete(key);
@@ -829,8 +831,13 @@ function handleManageApi(req, res, route) {
 		if (!chatDb) return done(new Error("Chat database is not available (run npm install on the server)"));
 		done(null, chatDb.query({
 			room: q.room || "", kinds: q.kinds ? String(q.kinds).split(",") : null, q: q.q || "",
+			person: q.person || "", server: q.server || "",
 			before: q.before, after: q.after, from: q.from, to: q.to, limit: q.limit
 		}));
+		return;
+	}
+	if (sub === "/db/people" && req.method === "GET") {
+		done(null, { people: chatDb ? chatDb.people(q.room || "") : [] });
 		return;
 	}
 	if (sub === "/db/export" && req.method === "GET") {
@@ -839,7 +846,10 @@ function handleManageApi(req, res, route) {
 		var fmt;
 		try { fmt = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }); }
 		catch (e) { tz = "UTC"; fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }); }
-		var exp = chatDb.query({ room: q.room || "", kinds: q.kinds ? String(q.kinds).split(",") : null, q: q.q || "", limit: 5000 }).rows.reverse();
+		var exp = chatDb.query({
+			room: q.room || "", kinds: q.kinds ? String(q.kinds).split(",") : null, q: q.q || "",
+			person: q.person || "", server: q.server || "", from: q.from, to: q.to, limit: 5000
+		}).rows.reverse();
 		var outLines = ["Harmony chat history — room: " + (q.room || "all rooms") + " — times in " + tz, ""];
 		exp.forEach(function (r) {
 			var when = r.tz_known ? fmt.format(new Date(r.ts)).replace(",", "") : new Date(r.ts).toISOString().replace("T", " ").slice(0, 19) + " (old line, zone unknown)";
@@ -1597,7 +1607,7 @@ function mppHandle(sock, msg) {
 				mppBroadcast(room, chatFrame);
 				mppRememberChat(room._id, chatFrame);
 				if (chatDb && !mppIsSyncText(chatFrame.a)) {
-					chatDb.addChat({ room: room._id, uid: p._id, name: p.name, text: chatFrame.a, t: chatFrame.t, server: "backup" });
+					chatDb.addChat({ room: room._id, uid: p._id, name: p.name, text: chatFrame.a, t: chatFrame.t, server: "backup", color: p.color });
 				}
 			}
 			break;
@@ -1806,7 +1816,7 @@ function startMppLobbyNoobBot() {
 		var lines = msg.m === "a" ? [msg] : (msg.m === "c" && Array.isArray(msg.c) ? msg.c : []);
 		lines.forEach(function (a) {
 			if (!a || !a.p || typeof a.a !== "string" || mppIsSyncText(a.a) || a.p.name === LOBBY_NOOB.name) return;
-			chatDb.addChat({ room: "lobby", uid: a.p._id, name: a.p.name, text: a.a, t: a.t, server: "mpp" });
+			chatDb.addChat({ room: "lobby", uid: a.p._id, name: a.p.name, text: a.a, t: a.t, server: "mpp", color: a.p.color });
 		});
 	}
 	// Keep gNoobBotLobby in sync with the public lobby (for /manage). The bot

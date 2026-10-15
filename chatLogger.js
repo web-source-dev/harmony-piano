@@ -231,7 +231,7 @@
 
 		getSiteOrigin: getSiteOrigin,
 
-		// opts: { fromHistory, participantId (the person's _id), t (chat server time) }
+		// opts: { fromHistory, participantId (the person's _id), t (chat server time), color }
 		logMessage: function (userName, messageText, opts) {
 			if (!state.enabled || !messageText) return;
 			opts = opts || {};
@@ -247,21 +247,21 @@
 			var key = state.room + "\x1e" + (uid || userName) + "\x1e" + (t || "") + "\x1e" + messageText;
 			if (!t) key += "\x1e" + Math.floor(Date.now() / 60000);
 			if (!markSeen(key)) return;
-			send({ kind: "chat", name: userName || "?", uid: uid, text: String(messageText), t: t || undefined });
+			send({ kind: "chat", name: userName || "?", uid: uid, text: String(messageText), t: t || undefined, color: opts.color || "" });
 		},
 
-		logJoin: function (userName, uid) {
+		logJoin: function (userName, uid, color) {
 			if (!state.enabled) return;
 			ensureRoomSilent();
 			var site = getSiteOrigin();
-			send({ kind: "join", name: userName || "?", uid: uid || myUid(), via: site.label, harmony: site.isHarmony });
+			send({ kind: "join", name: userName || "?", uid: uid || myUid(), via: site.label, harmony: site.isHarmony, color: color || "" });
 		},
 
-		logRename: function (oldName, newName, uid) {
+		logRename: function (oldName, newName, uid, color) {
 			if (!state.enabled) return;
 			ensureRoomSilent();
 			var site = getSiteOrigin();
-			send({ kind: "rename", name: oldName || "?", text: newName || "?", uid: uid || myUid(), via: site.label, harmony: site.isHarmony });
+			send({ kind: "rename", name: oldName || "?", text: newName || "?", uid: uid || myUid(), via: site.label, harmony: site.isHarmony, color: color || "" });
 		},
 
 		logCornerPrompt: function (userName, answer) {
