@@ -48,6 +48,8 @@
 			room: "",
 			byRef: Object.create(null),     // ref -> <li>
 			byText: Object.create(null),    // name|text -> [ts] (dedupe stored lines that lack the server's time)
+			gone: Object.create(null),      // ref -> true: deleted by a moderator
+			edits: Object.create(null),     // ref -> text: edited by a moderator
 			reacts: Object.create(null),    // ref -> [{ emoji, people: { by: name } }]
 			replies: Object.create(null),   // ref -> { ref, name, text }
 			oldestId: 0,
@@ -287,6 +289,9 @@
 		var wasNear = nearBottom();
 		var $li = buildChatLine(msg, ts);
 		var li = $li[0];
+		// A moderator deleted / edited it (the public server still replays the original).
+		if (li._ref && state.gone[li._ref]) return $li;
+		if (li._ref && state.edits[li._ref] != null) setLineText(li, state.edits[li._ref]);
 		if (li._ref && state.byRef[li._ref] && state.byRef[li._ref].isConnected) {
 			// Already shown (from the stored history): keep one copy.
 			$(state.byRef[li._ref]).remove();
@@ -329,12 +334,18 @@
 			var p = { _id: r.uid, name: r.name, color: r.color };
 			var $li;
 			if (r.kind === "chat") {
-				if (r.ref && state.byRef[r.ref] && state.byRef[r.ref].isConnected) return;
+				if (r.gone) { removeChat(r.ref); return; }
+				var shown = r.ref && state.byRef[r.ref];
+				if (shown && shown.isConnected) {
+					// Shown from the chat server's replay: the stored text is the current one.
+					if (shown._text !== r.text) { state.edits[r.ref] = r.text; setLineText(shown, r.text); }
+					return;
+				}
 				if (isDupStored(r.name, r.text, r.ts)) return;
 				if (opts.isSyncText && opts.isSyncText(r.text)) return;
 				$li = buildChatLine({ p: p, a: r.text, t: r.ts, id: r.msgId }, r.ts);
 				if (r.ref) { $li.attr("data-ref", r.ref); $li[0]._ref = r.ref; state.byRef[r.ref] = $li[0]; }
-				if (opts.decorate && r.msgId) opts.decorate($li, r.msgId);
+				if (opts.decorate) opts.decorate($li, r.msgId);
 				rememberText(r.name, r.text, r.ts);
 			} else {
 				if (hasSystemNear(r.kind, r.name, r.ts)) return;
@@ -534,6 +545,33 @@
 		updateJump();
 	}
 
+	// ---- moderators: edit / delete any chat line ----
+	function setLineText(li, text) {
+		li._text = text;
+		fillMessage($(li), text);
+	}
+	function removeChat(ref) {
+		if (!ref) return;
+		state.gone[ref] = true;
+		var li = state.byRef[ref];
+		if (li && li.isConnected) {
+			$(li).remove();
+			if ($ul) { rebuildDays(); refreshFade(true); }
+		}
+	}
+	function moderate(ref, action, text) {
+		return fetch("/api/chat/moderate", {
+			method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ room: state.room || roomId(), ch: relayChannel(), ref: ref, action: action, text: text || "" })
+		}).then(function (r) {
+			return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || "HTTP " + r.status); return d; });
+		}).then(function (d) {
+			if (action === "delete") removeChat(ref);
+			else { state.edits[ref] = text; var li = state.byRef[ref]; if (li && li.isConnected) setLineText(li, text); }
+			return d;
+		});
+	}
+
 	// ---- deleted joins / leaves / name changes ----
 	// A stored note goes by its row id; one this tab made live goes by kind +
 	// name + time (the server matched it to the same stored row).
@@ -574,6 +612,12 @@
 			setReact(d.ref, d.emoji, d.by, d.name, !!d.on);
 			var li = state.byRef[d.ref];
 			if (li) renderReacts(li);
+		} else if (d.t === "e" && d.ref && typeof d.text === "string") {
+			state.edits[d.ref] = d.text;
+			var le = state.byRef[d.ref];
+			if (le && le.isConnected) setLineText(le, d.text);
+		} else if (d.t === "d" && d.ref) {
+			removeChat(d.ref);
 		} else if (d.t === "x") {
 			removeSystem(d);
 		} else if (d.t === "p" && d.ref && d.target) {
@@ -930,6 +974,8 @@
 		handleSync: handleSync,
 		refreshFade: refreshFade,
 		updateJump: updateJump,
-		chatRef: chatRef
+		chatRef: chatRef,
+		setLineText: setLineText,
+		moderate: moderate
 	};
 })(typeof window !== "undefined" ? window : this);

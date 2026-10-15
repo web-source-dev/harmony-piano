@@ -260,10 +260,12 @@ function open(rootDir, opts) {
 		// A chat line was edited (backup server). The chat row keeps the original
 		// and gets the new text in cur_text; an "edit" row records who changed
 		// what, with the text before and after.
+		// `m.row` (a stored chat row) instead of msgId: a moderator's edit/delete of
+		// a line from any server, found by its ref (see findByRef).
 		addEdit: function (m) {
 			var room = str(m.room, 120), msgId = str(m.msgId, 64), text = str(m.text).trim();
-			if (!room || !msgId || !text) return null;
-			var orig = stByMsgId.get(room, msgId);
+			if (!room || (!msgId && !m.row) || !text) return null;
+			var orig = m.row || stByMsgId.get(room, msgId);
 			var before = orig ? (orig.edited ? orig.cur_text : orig.text) : "";
 			if (orig && before === text) return null;
 			if (orig) {
@@ -274,8 +276,8 @@ function open(rootDir, opts) {
 		},
 		addDelete: function (m) {
 			var room = str(m.room, 120), msgId = str(m.msgId, 64);
-			if (!room || !msgId) return null;
-			var orig = stByMsgId.get(room, msgId);
+			if (!room || (!msgId && !m.row)) return null;
+			var orig = m.row || stByMsgId.get(room, msgId);
 			if (orig && orig.deleted) return null;
 			var now = Date.now();
 			if (orig) {
@@ -284,6 +286,15 @@ function open(rootDir, opts) {
 			}
 			var last = orig ? (orig.edited ? orig.cur_text : orig.text) : "";
 			return insertRef({ room: room, kind: "delete", ts: now, uid: m.uid, name: m.name, color: m.color, text: last, server: m.server }, orig, last);
+		},
+		// The stored chat row a ref names (chat server time + sender id, or name
+		// for old rows without an id).
+		findByRef: function (room, ref) {
+			var m = /^([0-9a-z]+)\.(.+)$/.exec(String(ref || ""));
+			if (!m) return null;
+			var ts = parseInt(m[1], 36);
+			return db.prepare("SELECT * FROM messages WHERE room = ? AND kind = 'chat' AND ts = ? AND (uid = ? OR (uid = '' AND name = ?)) ORDER BY id LIMIT 1")
+				.get(str(room, 120), ts, m[2], m[2]) || null;
 		},
 		// Every version of a chat line: the original, then each edit, then a delete.
 		versions: function (id) {
@@ -340,8 +351,8 @@ function open(rootDir, opts) {
 			room = str(room, 120);
 			limit = Math.max(1, Math.min(+limit || 150, 500));
 			var args = [room];
-			var sql = "SELECT id, kind, ts, uid, name, text, cur_text, edited, color, msg_id FROM messages " +
-				"WHERE room = ? AND kind IN ('chat', 'join', 'leave', 'rename') AND deleted = 0";
+			var sql = "SELECT id, kind, ts, uid, name, text, cur_text, edited, deleted, color, msg_id FROM messages " +
+				"WHERE room = ? AND kind IN ('chat', 'join', 'leave', 'rename') AND (deleted = 0 OR kind = 'chat')";
 			if (+before > 0) { sql += " AND id < ?"; args.push(+before); }
 			sql += " ORDER BY id DESC LIMIT " + (limit + 1);
 			var stmt = db.prepare(sql);
@@ -349,6 +360,9 @@ function open(rootDir, opts) {
 			var more = rows.length > limit;
 			if (more) rows.pop();
 			var out = rows.map(function (r) {
+				// A deleted chat line comes back as just its ref, so a tab that already
+				// shows it (the chat server's own replay) can drop it. No text, no name.
+				if (r.kind === "chat" && r.deleted) return { id: r.id, kind: "chat", ts: r.ts, ref: chatRef(r.ts, r.uid || r.name), gone: true };
 				var o = { id: r.id, kind: r.kind, ts: r.ts, uid: r.uid, name: r.name, color: r.color };
 				if (r.kind === "chat") {
 					o.text = r.edited ? r.cur_text : r.text;
@@ -359,7 +373,7 @@ function open(rootDir, opts) {
 				}
 				return o;
 			});
-			var refs = out.filter(function (o) { return o.ref; }).map(function (o) { return o.ref; });
+			var refs = out.filter(function (o) { return o.ref && !o.gone; }).map(function (o) { return o.ref; });
 			return { rows: out, more: more, meta: api.chatMeta(room, refs) };
 		},
 		// A moderator hides a join / leave / name change from the piano chat. The

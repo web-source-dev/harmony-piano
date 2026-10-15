@@ -3967,7 +3967,7 @@ Rect.prototype.contains = function(x, y) {
 		// The server broadcasts edits/deletes to everyone in the room, sender included.
 		gClient.on("a-edit", function(msg) {
 			if(!msg || msg.id == null || typeof msg.a !== "string") return;
-			chatLineById(msg.id).each(function() { this._text = msg.a; }).find(".message").text(msg.a);
+			chatLineById(msg.id).each(function() { RoomChat.setLineText(this, msg.a); });
 		});
 		gClient.on("a-del", function(msg) {
 			if(!msg || msg.id == null) return;
@@ -3984,39 +3984,60 @@ Rect.prototype.contains = function(x, y) {
 		}
 		function openChatManage($li, mode) {
 			var id = $li.attr("data-chat-id");
-			if(!id || !$chatManage.length) return;
-			var name = $li.find(".name").text().replace(/:$/, "");
-			var text = $li.find(".message").text();
+			var ref = $li.attr("data-ref");
+			if((!id && !ref) || !$chatManage.length) return;
+			var name = $li.children(".name").text().replace(/:$/, "");
+			// Photo lines: you edit the caption; the picture stays.
+			var photo = $li.children(".chat-photo").attr("href") || "";
+			var text = $li.children(".message").text();
 			var isEdit = mode === "edit";
-			chatManageTarget = { id: id, mode: mode };
+			chatManageTarget = { id: id || "", ref: ref || "", mode: mode, photo: photo, before: text, li: $li[0] };
 			$chatManage.toggleClass("is-delete", !isEdit);
 			$chatManage.find(".chat-manage-title").text(isEdit ? "Edit message" : "Delete message?");
 			$chatManage.find(".chat-manage-sub").text(isEdit
 				? "From " + name + " — the change shows for everyone in the room."
 				: "From " + name + " — this removes it for everyone in the room.");
 			$chatManage.find(".chat-manage-input").val(text).toggle(isEdit);
-			$chatManage.find(".chat-manage-preview").text(text).toggle(!isEdit);
+			$chatManage.find(".chat-manage-preview").text(photo ? "📷 Photo" + (text ? " — " + text : "") : text).toggle(!isEdit);
 			$chatManage.find(".chat-manage-error").attr("hidden", "hidden").text("");
 			$chatManage.find(".chat-manage-confirm").text(isEdit ? "Save" : "Delete");
 			openModal("#chat-manage", isEdit ? ".chat-manage-input" : ".chat-manage-confirm");
 		}
 		function submitChatManage() {
-			if(!chatManageTarget) return closeModal();
-			if(!gClient.isConnected || !gClient.isConnected()) {
-				showChatManageError("Not connected — try again in a moment.");
+			var target = chatManageTarget;
+			if(!target) return closeModal();
+			var isEdit = target.mode === "edit";
+			var next = "";
+			if(isEdit) {
+				var caption = String($chatManage.find(".chat-manage-input").val() || "").trim();
+				if(caption === target.before) { chatManageTarget = null; return closeModal(); }
+				next = target.photo
+					? ((/^https?:/i.test(target.photo) ? "" : location.origin) + target.photo + (caption ? " " + caption : ""))
+					: caption;
+				next = next.slice(0, 512);
+				if(!next) { showChatManageError("Message can't be empty."); return; }
+			}
+			// Harmony backup-server lines: that server edits/deletes them (and its replay).
+			if(target.id && gClient.isOnBackupServer && gClient.isOnBackupServer()) {
+				if(!gClient.isConnected || !gClient.isConnected()) {
+					showChatManageError("Not connected — try again in a moment.");
+					return;
+				}
+				gClient.sendArray([isEdit ? {m: "a-edit", id: target.id, message: next} : {m: "a-del", id: target.id}]);
+				chatManageTarget = null;
+				closeModal();
 				return;
 			}
-			if(chatManageTarget.mode === "edit") {
-				var next = String($chatManage.find(".chat-manage-input").val() || "").trim().slice(0, 512);
-				if(!next) { showChatManageError("Message can't be empty."); return; }
-				if(next !== chatLineById(chatManageTarget.id).find(".message").text()) {
-					gClient.sendArray([{m: "a-edit", id: chatManageTarget.id, message: next}]);
-				}
-			} else {
-				gClient.sendArray([{m: "a-del", id: chatManageTarget.id}]);
-			}
-			chatManageTarget = null;
-			closeModal();
+			// Any other line (public MPP too): the Harmony server, by the line's ref.
+			var $btn = $chatManage.find(".chat-manage-confirm").prop("disabled", true);
+			RoomChat.moderate(target.ref, isEdit ? "edit" : "delete", next).then(function() {
+				$btn.prop("disabled", false);
+				chatManageTarget = null;
+				closeModal();
+			}, function(err) {
+				$btn.prop("disabled", false);
+				showChatManageError((err && err.message) || "Could not save — try again.");
+			});
 		}
 		$chatManage.find(".chat-manage-form").on("submit", function(e) {
 			e.preventDefault();
@@ -4248,8 +4269,12 @@ Rect.prototype.contains = function(x, y) {
 	// lines ids it can edit/delete; CSS hides the buttons unless #manage is in the
 	// URL and this account is a chat moderator.
 	function addChatManageActions(li, id) {
-		if(id == null || !gClient.isOnBackupServer || !gClient.isOnBackupServer()) return;
-		li.find(".chat-actions").before('<span class="chat-manage-actions">' +
+		// Any line with a ref can be moderated (through /api/chat/moderate); lines
+		// with a backup-server id use that server's own edit/delete.
+		if(!li.attr("data-ref") && (id == null || !gClient.isOnBackupServer || !gClient.isOnBackupServer())) return;
+		if(li.children(".chat-manage-actions").length) return;
+		var $actions = li.children(".chat-actions");
+		($actions.length ? $actions : li.children(".message")).before('<span class="chat-manage-actions">' +
 			'<button type="button" class="chat-manage-edit" title="Edit this message for everyone">Edit</button>' +
 			'<button type="button" class="chat-manage-delete" title="Delete this message for everyone">Delete</button>' +
 		'</span>');

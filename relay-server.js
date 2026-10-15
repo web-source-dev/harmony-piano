@@ -1301,6 +1301,33 @@ function handleRoomChatApi(req, res, route) {
 		sendJson(res, 200, { ok: true, room: room, me: me, canManage: !!(acct && accounts.canManage(acct.id)), rows: h.rows, more: h.more, meta: h.meta });
 		return;
 	}
+	// Chat moderators: edit or delete any chat line, on any server, by its ref.
+	// (Lines on the Harmony backup server go through its own a-edit / a-del.)
+	// Harmony users see the change live and in the history; people on plain
+	// multiplayerpiano.com still see what the public server sent them.
+	if (route === "/api/chat/moderate" && req.method === "POST") {
+		readJsonBody(req, 8192, function (err, d) {
+			if (err) { sendJson(res, 400, { ok: false, error: err.message }); return; }
+			if (!acct || !accounts.canManage(acct.id)) { sendJson(res, 403, { ok: false, error: "Only chat moderators can edit or delete messages" }); return; }
+			var room = String(d.room || "").slice(0, 120), ref = String(d.ref || "").slice(0, 120);
+			var row = chatDb.findByRef(room, ref);
+			if (!row) { sendJson(res, 404, { ok: false, error: "That message isn't saved yet — try again in a few seconds" }); return; }
+			var who = { room: room, row: row, uid: acct.uid, name: acct.name, color: acct.color, server: "harmony" };
+			var ch = String(d.ch || room).slice(0, 256);
+			if (d.action === "delete") {
+				chatDb.addDelete(who);
+				chatSyncToRoom(ch, { t: "d", room: room, ref: ref });
+			} else {
+				var text = String(d.text || "").trim().slice(0, 512);
+				if (!text) { sendJson(res, 400, { ok: false, error: "Message can't be empty" }); return; }
+				who.text = text;
+				chatDb.addEdit(who);
+				chatSyncToRoom(ch, { t: "e", room: room, ref: ref, text: text });
+			}
+			sendJson(res, 200, { ok: true });
+		});
+		return;
+	}
 	// Chat moderators: hide a join / leave / name change for everyone.
 	if (route === "/api/chat/hide-event" && req.method === "POST") {
 		readJsonBody(req, 4096, function (err, d) {
