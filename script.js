@@ -3955,9 +3955,12 @@ Rect.prototype.contains = function(x, y) {
 		function chatLineById(id) {
 			return $("#chat ul li").filter(function() { return this.getAttribute("data-chat-id") === String(id); });
 		}
+		// Only accounts made chat moderators on /manage get the buttons (the
+		// server checks too); the room history tells us whether we are one.
+		var chatCanManage = false;
 		function syncChatManageHash() {
 			var hash = window.location.hash || "";
-			document.body.classList.toggle("chat-manage", /(^|#)manage(#|$)/i.test(hash));
+			document.body.classList.toggle("chat-manage", chatCanManage && /(^|#)manage(#|$)/i.test(hash));
 		}
 		syncChatManageHash();
 		window.addEventListener("hashchange", syncChatManageHash);
@@ -4155,6 +4158,11 @@ Rect.prototype.contains = function(x, y) {
 		$("#chat").show();
 
 		return {
+			setCanManage: function(can) {
+				chatCanManage = !!can;
+				syncChatManageHash();
+			},
+
 			show: function() {
 				$("#chat").show();
 			},
@@ -4221,14 +4229,7 @@ Rect.prototype.contains = function(x, y) {
 				// RoomChat builds the line (time, photo, reply, reactions) and puts it in place.
 				var li = RoomChat.addMessage(msg, { fromHistory: !!fromHistory });
 
-				// Only the Harmony backup server gives chat lines ids it can edit/delete;
-				// the buttons are hidden by CSS unless #manage is in the URL.
-				if(msg.id != null && gClient.isOnBackupServer && gClient.isOnBackupServer()) {
-					li.find(".chat-actions").before('<span class="chat-manage-actions">' +
-						'<button type="button" class="chat-manage-edit" title="Edit this message for everyone">Edit</button>' +
-						'<button type="button" class="chat-manage-delete" title="Delete this message for everyone">Delete</button>' +
-					'</span>');
-				}
+				addChatManageActions(li, msg.id);
 
 				if(typeof ChatLogger !== "undefined") {
 					ChatLogger.logMessage(msg.p.name, chatLine, {
@@ -4243,8 +4244,21 @@ Rect.prototype.contains = function(x, y) {
 		};
 	})();
 
+	// Edit / Delete buttons for a chat line. Only the Harmony backup server gives
+	// lines ids it can edit/delete; CSS hides the buttons unless #manage is in the
+	// URL and this account is a chat moderator.
+	function addChatManageActions(li, id) {
+		if(id == null || !gClient.isOnBackupServer || !gClient.isOnBackupServer()) return;
+		li.find(".chat-actions").before('<span class="chat-manage-actions">' +
+			'<button type="button" class="chat-manage-edit" title="Edit this message for everyone">Edit</button>' +
+			'<button type="button" class="chat-manage-delete" title="Delete this message for everyone">Delete</button>' +
+		'</span>');
+	}
+
 	RoomChat.init({
 		client: gClient,
+		decorate: addChatManageActions,
+		onPermission: function(can) { chat.setCanManage(can); },
 		colorFor: function(p) {
 			return (typeof gNameColor !== "undefined" && gNameColor) ? gNameColor.colorFor(p) : (p.color || "white");
 		},

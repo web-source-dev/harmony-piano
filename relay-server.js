@@ -114,7 +114,7 @@ function isAuthed(req) {
 	return !!accountFromReq(req);
 }
 function userPublic(a) {
-	return a ? { id: a.id, name: a.name, color: a.color, uid: a.uid } : null;
+	return a ? { id: a.id, name: a.name, color: a.color, uid: a.uid, canManage: !!a.can_manage } : null;
 }
 function clientIp(req) {
 	return String(req.headers["x-real-ip"] || (req.socket && req.socket.remoteAddress) || "?");
@@ -1298,7 +1298,7 @@ function handleRoomChatApi(req, res, route) {
 		var room = String(q.room || "").slice(0, 120);
 		if (!room) { sendJson(res, 400, { ok: false, error: "No room" }); return; }
 		var h = chatDb.history(room, q.before, q.limit);
-		sendJson(res, 200, { ok: true, room: room, me: me, rows: h.rows, more: h.more, meta: h.meta });
+		sendJson(res, 200, { ok: true, room: room, me: me, canManage: !!(acct && accounts.canManage(acct.id)), rows: h.rows, more: h.more, meta: h.meta });
 		return;
 	}
 	if ((route === "/api/chat/react" || route === "/api/chat/reply") && req.method === "POST") {
@@ -1811,6 +1811,9 @@ function mppJoinRoom(sock, chId, set) {
 	// Everyone else: the new participant.
 	mppBroadcast(room, { m: "p", id: part.id, _id: part._id, name: part.name, color: part.color, x: part.x, y: part.y }, sock);
 }
+function mppCanModerate(sock) {
+	return !!(accounts && sock._account && accounts.canManage(sock._account.id));
+}
 function mppHandle(sock, msg) {
 	if (!msg || typeof msg !== "object") return;
 	var st = sock.mpp;
@@ -1879,7 +1882,9 @@ function mppHandle(sock, msg) {
 			break;
 		case "a-edit":
 			// Chat line edit from a #manage tab. Updates the stored history too, so
-			// people joining later see the edited text.
+			// people joining later see the edited text. Only accounts given the
+			// chat-moderator permission on /manage may edit or delete.
+			if (!mppCanModerate(sock)) { mppSend(sock, { m: "notification", title: "Not allowed", text: "Your account can't edit messages. Ask an admin to allow it on /manage.", duration: 6000 }); break; }
 			if (room && typeof msg.id === "string" && typeof msg.message === "string") {
 				var editText = msg.message.slice(0, MAX_TEXT);
 				if (!editText.trim() || mppIsSyncText(editText)) break;
@@ -1893,6 +1898,7 @@ function mppHandle(sock, msg) {
 			}
 			break;
 		case "a-del":
+			if (!mppCanModerate(sock)) { mppSend(sock, { m: "notification", title: "Not allowed", text: "Your account can't delete messages. Ask an admin to allow it on /manage.", duration: 6000 }); break; }
 			if (room && typeof msg.id === "string") {
 				var delHist = mppChatHistory.get(room._id) || [];
 				for (var di = 0; di < delHist.length; di++) {

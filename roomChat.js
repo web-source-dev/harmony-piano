@@ -176,16 +176,20 @@
 		li._ts = ts;
 		li._kind = kind;
 		li._name = p.name || "?";
-		$li.addClass(kind === "join" ? "chat-join" : "chat-rename");
-		$li.append(timeSpan(ts));
+		$li.addClass("chat-" + kind);
+		// A centred note, so it never reads like someone's chat line.
+		var $pill = $('<span class="chat-sys-pill"/>').appendTo($li);
 		var color = opts.colorFor ? opts.colorFor(p) : (p.color || "");
 		var $who = $('<span class="chat-sys-name"/>').text(p.name || "?").css("color", color || "");
 		if (kind === "join") {
-			$li.append($('<span class="chat-sys-icon"/>').text("→"), $who, document.createTextNode(" joined the room"));
+			$pill.append($('<span class="chat-sys-icon"/>').text("→"), $who, document.createTextNode(" joined the room"));
+		} else if (kind === "leave") {
+			$pill.append($('<span class="chat-sys-icon"/>').text("←"), $who, document.createTextNode(" left the room"));
 		} else {
-			$li.append($('<span class="chat-sys-icon"/>').text("✎"), $who, document.createTextNode(" changed name to "),
+			$pill.append($('<span class="chat-sys-icon"/>').text("✎"), $who, document.createTextNode(" changed name to "),
 				$('<span class="chat-sys-name"/>').text(text || "?").css("color", color || ""));
 		}
+		$pill.append(timeSpan(ts));
 		return $li;
 	}
 
@@ -328,6 +332,7 @@
 				if (opts.isSyncText && opts.isSyncText(r.text)) return;
 				$li = buildChatLine({ p: p, a: r.text, t: r.ts, id: r.msgId }, r.ts);
 				if (r.ref) { $li.attr("data-ref", r.ref); $li[0]._ref = r.ref; state.byRef[r.ref] = $li[0]; }
+				if (opts.decorate && r.msgId) opts.decorate($li, r.msgId);
 				rememberText(r.name, r.text, r.ts);
 			} else {
 				if (hasSystemNear(r.kind, r.name, r.ts)) return;
@@ -368,6 +373,7 @@
 		fetchHistory(0).then(function (d) {
 			if (gen !== historyGen || state.room !== room) return;
 			if (d.me) state.me = d.me;
+			if (opts.onPermission) opts.onPermission(!!d.canManage);
 			var wasNear = nearBottom(200);
 			addRows(d.rows);
 			state.oldestId = d.rows.length ? d.rows[d.rows.length - 1].id : 0;
@@ -732,7 +738,20 @@
 			if (opts.isMuted && opts.isMuted(part._id)) return;
 			addSystem("join", part);
 		});
-		c.on("participant removed", function (part) { if (part && part.id != null) delete known[part.id]; });
+		// Only a "bye" from the server is someone leaving; participants are also
+		// dropped when WE change rooms or resync, which is not a leave.
+		var lastRemoved = null;
+		c.on("participant removed", function (part) {
+			if (part && part.id != null) delete known[part.id];
+			lastRemoved = part || null;
+		});
+		c.on("bye", function (msg) {
+			var part = lastRemoved;
+			lastRemoved = null;
+			if (!part || !msg || part.id !== msg.p || skip(part)) return;
+			if (opts.isMuted && opts.isMuted(part._id)) return;
+			addSystem("leave", part);
+		});
 		c.on("participant renamed", function (info) {
 			if (!info || !info.part || skip(info.part) || !info.oldName || !info.newName) return;
 			addSystem("rename", { _id: info.part._id, name: info.oldName, color: info.part.color }, info.newName);

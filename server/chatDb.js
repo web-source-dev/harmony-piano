@@ -333,7 +333,7 @@ function open(rootDir, opts) {
 		},
 
 		// ---- the piano's own chat history (what everyone in a room sees) ----
-		// Chat lines, joins and name changes, newest first, `before` a row id.
+		// Chat lines, joins, leaves and name changes, newest first, `before` a row id.
 		// Deleted lines are left out and edited ones show their current text,
 		// with no marks — only /manage sees edit/delete history.
 		history: function (room, before, limit) {
@@ -341,7 +341,7 @@ function open(rootDir, opts) {
 			limit = Math.max(1, Math.min(+limit || 150, 500));
 			var args = [room];
 			var sql = "SELECT id, kind, ts, uid, name, text, cur_text, edited, color, msg_id FROM messages " +
-				"WHERE room = ? AND kind IN ('chat', 'join', 'rename') AND deleted = 0";
+				"WHERE room = ? AND kind IN ('chat', 'join', 'leave', 'rename') AND deleted = 0";
 			if (+before > 0) { sql += " AND id < ?"; args.push(+before); }
 			sql += " ORDER BY id DESC LIMIT " + (limit + 1);
 			var stmt = db.prepare(sql);

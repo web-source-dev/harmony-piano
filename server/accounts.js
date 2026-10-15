@@ -68,6 +68,9 @@ function open(chatDb) {
 		");",
 		"CREATE INDEX IF NOT EXISTS account_uids_uid ON account_uids(uid);"
 	].join("\n"));
+	// Databases made before the chat-moderator permission existed.
+	var acctCols = db.prepare("PRAGMA table_info(accounts)").all().map(function (c) { return c.name; });
+	if (acctCols.indexOf("can_manage") < 0) db.exec("ALTER TABLE accounts ADD COLUMN can_manage INTEGER NOT NULL DEFAULT 0");
 
 	// Server secret for pw_key and the login cookie. Made once, kept in the DB,
 	// so it survives restarts and piano-password changes.
@@ -117,7 +120,7 @@ function open(chatDb) {
 	function pub(a) {
 		if (!a) return null;
 		return {
-			id: a.id, name: a.name, color: a.color, uid: a.uid, disabled: !!a.disabled,
+			id: a.id, name: a.name, color: a.color, uid: a.uid, disabled: !!a.disabled, canManage: !!a.can_manage,
 			created_ts: a.created_ts, last_login_ts: a.last_login_ts, last_seen_ts: a.last_seen_ts,
 			last_ip: a.last_ip, logins: a.logins, data_ts: a.data_ts, data_bytes: a.data.length
 		};
@@ -167,8 +170,8 @@ function open(chatDb) {
 			var id = "a" + crypto.randomBytes(8).toString("hex");
 			var uid = "u" + crypto.createHash("sha256").update("harmony-account|" + id).digest("hex").slice(0, 24);
 			db.prepare(
-				"INSERT INTO accounts (id, name, color, uid, pw_key, pw_hash, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?)"
-			).run(id, name, color(o.color), uid, pwKey(pw), pwHash(pw), Date.now());
+				"INSERT INTO accounts (id, name, color, uid, pw_key, pw_hash, created_ts, can_manage) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+			).run(id, name, color(o.color), uid, pwKey(pw), pwHash(pw), Date.now(), o.canManage ? 1 : 0);
 			changed(id, "create");
 			return pub(stById.get(id));
 		},
@@ -185,6 +188,8 @@ function open(chatDb) {
 			if (o.disabled != null) {
 				db.prepare("UPDATE accounts SET disabled = ?, session_ver = session_ver + ? WHERE id = ?").run(o.disabled ? 1 : 0, o.disabled ? 1 : 0, a.id);
 			}
+			// Chat moderator: may edit and delete chat messages (#manage on the piano).
+			if (o.canManage != null) db.prepare("UPDATE accounts SET can_manage = ? WHERE id = ?").run(o.canManage ? 1 : 0, a.id);
 			if (o.clearData) db.prepare("UPDATE accounts SET data = '', data_ts = 0 WHERE id = ?").run(a.id);
 			changed(a.id, "update");
 			return pub(stById.get(a.id));
@@ -239,6 +244,11 @@ function open(chatDb) {
 			var a = stById.get(p[0]);
 			if (!a || a.disabled || String(a.session_ver) !== p[1]) return null;
 			return a;
+		},
+		// Is this account allowed to edit/delete chat messages right now?
+		canManage: function (id) {
+			var a = stById.get(str(id, 64));
+			return !!(a && !a.disabled && a.can_manage);
 		},
 		touch: function (id) { stSeen.run(Date.now(), id); },
 		linkUid: function (accountId, uid, server) {

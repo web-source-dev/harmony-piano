@@ -226,6 +226,14 @@
   .lr.is-join { background: var(--ok-soft); }
   .lr.is-join:hover { background: rgba(63,185,125,.17); }
   .lr.is-leave .lr-body { opacity: .7; }
+  /* Joins, leaves and name changes: a centred note, apart from people's lines */
+  .lr.is-presence { display: flex; justify-content: center; align-items: baseline; gap: 8px; padding: 3px 10px; background: none; }
+  .lr.is-presence:hover { background: none; }
+  .lr.is-presence .lr-body { flex: 0 1 auto; max-width: 92%; text-align: center; font-size: 12.5px; padding: 1px 12px;
+    background: var(--card2); border: 1px solid var(--line); border-radius: 999px; }
+  .lr.is-presence.is-join .lr-body { background: var(--ok-soft); border-color: rgba(63,185,125,.3); }
+  .lr.is-presence.is-rename .lr-body { border-color: rgba(77,171,247,.3); }
+  .lr.is-presence .lr-time { order: 2; text-align: left; font-size: 11px; }
   .lr-ico { margin-right: 6px; }
   .lr-via { display: inline-block; font-size: 11px; color: var(--faint); background: var(--card2); border-radius: 6px; padding: 0 7px; margin-left: 6px; line-height: 18px; }
   .lr-room { border: 0; font: inherit; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 7px; background: var(--card2); color: var(--muted);
@@ -321,6 +329,10 @@
   .acct-row { display: flex; gap: 8px; align-items: center; padding: 4px 0; flex-wrap: wrap; color: var(--muted); }
   .acct-row .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--text); }
   .tag.ok { background: var(--ok-soft); color: #9be3bf; }
+  .tag.mod { background: rgba(245,165,36,.18); color: #ffd28a; }
+  .acct-perm { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+  .acct-perm input { width: 16px; height: 16px; accent-color: #f5a524; cursor: pointer; }
+  .acct-perm b { color: var(--text); font-weight: 650; }
   .tag.acct { background: rgba(167,139,250,.18); color: #d4c6ff; border: 0; cursor: pointer; font-family: inherit; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
   .tag.acct:hover { background: rgba(167,139,250,.3); }
   .tag.off { background: var(--danger-bg); color: #ff9b9e; }
@@ -668,6 +680,7 @@
               </div>
               <input type="color" id="acct-color" value="#e8578f" title="Chat colour" aria-label="Chat colour">
               <button type="submit" class="btn btn-accent" id="acct-create">Create user</button>
+              <label class="acct-perm"><input type="checkbox" id="acct-canmanage"> <span><b>Chat moderator</b> — can edit and delete chat messages on the piano (open the piano with <span class="mono">#manage</span> at the end of the address)</span></label>
               <span class="status" id="acct-status" role="status" aria-live="polite"></span>
             </form>
           </div>
@@ -1366,7 +1379,8 @@
   function rowEl(r, opts) {
     var q = (opts.q || "").toLowerCase();
     var isMsg = r.kind === "chat" || r.kind === "world" || r.kind === "prompt";
-    var row = el("div", "lr" + (isMsg ? "" : " event") + (r.kind === "join" ? " is-join" : r.kind === "leave" ? " is-leave" : "") +
+    var row = el("div", "lr" + (isMsg ? "" : " event") + (r.kind === "join" ? " is-join" : r.kind === "leave" ? " is-leave" : r.kind === "rename" ? " is-rename" : "") +
+      (r.kind === "join" || r.kind === "leave" || r.kind === "rename" ? " is-presence" : "") +
       (r.kind === "edit" ? " is-edit" : r.kind === "delete" ? " is-delete" : "") + (r.deleted ? " is-deleted" : "") + (opts.fresh ? " fresh" : ""));
     row.dataset.id = r.id;
     var t = el("span", "lr-time" + (r.tz_known ? "" : " legacy"), clock(new Date(r.ts), useUtc(r)));
@@ -2016,6 +2030,7 @@
     nmText.style.color = readable(a.color, a.name);
     nm.appendChild(nmText);
     if (online) nm.appendChild(el("span", "tag ok", "ONLINE"));
+    if (a.canManage) nm.appendChild(el("span", "tag mod", "CHAT MODERATOR"));
     if (a.disabled) nm.appendChild(el("span", "tag off", "DISABLED"));
     txt.appendChild(nm);
     if (online) txt.appendChild(el("div", "prof-online", "● Online now in " + onlineRooms.join(", ")));
@@ -2042,6 +2057,11 @@
       if (pw == null || !pw) return;
       updateAccount({ id: a.id, password: pw }, "Password changed — tell " + a.name + ": " + pw);
     }));
+    actions.appendChild(button("btn btn-sm", a.canManage ? "Remove moderator" : "Make moderator", function () {
+      updateAccount({ id: a.id, canManage: !a.canManage }, a.canManage
+        ? a.name + " can no longer edit or delete chat messages"
+        : a.name + " can now edit and delete chat messages (piano address + #manage)");
+    }, "Allow or stop editing and deleting chat messages on the piano"));
     actions.appendChild(button("btn btn-sm", a.disabled ? "Enable" : "Disable", function () {
       if (!a.disabled && !confirm("Disable " + a.name + "?\nThey're signed out everywhere and can't log in until you enable them again.")) return;
       updateAccount({ id: a.id, disabled: !a.disabled }, a.disabled ? a.name + " can log in again" : a.name + " is disabled");
@@ -2128,11 +2148,12 @@
     if (pw.length < 4) { st.textContent = "The password needs at least 4 characters."; st.classList.add("err"); $("acct-pw").focus(); return; }
     var btn = $("acct-create");
     btn.disabled = true;
-    api("POST", "/accounts", { name: name, password: pw, color: $("acct-color").value }).then(function (d) {
+    api("POST", "/accounts", { name: name, password: pw, color: $("acct-color").value, canManage: $("acct-canmanage").checked }).then(function (d) {
       btn.disabled = false;
-      st.textContent = "Created " + d.account.name + ". Their password is: " + pw;
+      st.textContent = "Created " + d.account.name + (d.account.canManage ? " (chat moderator)" : "") + ". Their password is: " + pw;
       $("acct-name").value = "";
       $("acct-pw").value = "";
+      $("acct-canmanage").checked = false;
       loadAccounts();
     }).catch(function (err) {
       btn.disabled = false;
