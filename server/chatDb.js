@@ -362,6 +362,28 @@ function open(rootDir, opts) {
 			var refs = out.filter(function (o) { return o.ref; }).map(function (o) { return o.ref; });
 			return { rows: out, more: more, meta: api.chatMeta(room, refs) };
 		},
+		// A moderator hides a join / leave / name change from the piano chat. The
+		// row stays (marked deleted) so /manage still sees it. Found by row id, or
+		// for a note the piano made live, by kind + name + time (within 2 min).
+		hideEvent: function (m) {
+			var room = str(m.room, 120), kind = str(m.kind, 10);
+			if (!room || ["join", "leave", "rename"].indexOf(kind) < 0) return null;
+			var row = null;
+			if (+m.id > 0) {
+				row = stById.get(+m.id);
+				if (row && (row.room !== room || row.kind !== kind)) row = null;
+			} else {
+				var ts = +m.ts || Date.now();
+				row = db.prepare("SELECT * FROM messages WHERE room = ? AND kind = ? AND name = ? AND deleted = 0 AND ts BETWEEN ? AND ? " +
+					"ORDER BY ABS(ts - ?) LIMIT 1").get(room, kind, str(m.name, 120), ts - 120e3, ts + 120e3, ts);
+			}
+			if (!row) return null;
+			if (!row.deleted) {
+				stSetDeleted.run(Date.now(), str(m.by, 120) || "?", row.id);
+				emit(Object.assign(stById.get(row.id), { updated: true }));
+			}
+			return stById.get(row.id);
+		},
 		// Reactions and reply links for a set of chat lines.
 		chatMeta: function (room, refs) {
 			var reactions = [], replies = [];

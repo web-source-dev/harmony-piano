@@ -234,6 +234,8 @@
   .lr.is-presence.is-join .lr-body { background: var(--ok-soft); border-color: rgba(63,185,125,.3); }
   .lr.is-presence.is-rename .lr-body { border-color: rgba(77,171,247,.3); }
   .lr.is-presence .lr-time { order: 2; text-align: left; font-size: 11px; }
+  .lr.is-presence.is-deleted .lr-body { opacity: .55; border-style: dashed; }
+  .lr-hidden { margin-left: 8px; cursor: help; }
   .lr-ico { margin-right: 6px; }
   .lr-via { display: inline-block; font-size: 11px; color: var(--faint); background: var(--card2); border-radius: 6px; padding: 0 7px; margin-left: 6px; line-height: 18px; }
   .lr-room { border: 0; font: inherit; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 7px; background: var(--card2); color: var(--muted);
@@ -1413,6 +1415,12 @@
       if (r.edited || r.deleted) body.appendChild(versionsButton(r, row));
     }
     if (r.via) { var v = el("span", "lr-via"); v.appendChild(hl(r.via, q)); body.appendChild(v); }
+    // A chat moderator hid this join / leave / name change from the piano chat.
+    if (r.deleted && (r.kind === "join" || r.kind === "leave" || r.kind === "rename")) {
+      var hid = el("span", "tag off lr-hidden", "HIDDEN");
+      hid.title = "Deleted from the piano chat by " + (r.deleted_by || "a moderator") + " · " + when(r.deleted);
+      body.appendChild(hid);
+    }
     row.appendChild(body);
     return row;
   }

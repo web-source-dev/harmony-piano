@@ -190,6 +190,8 @@
 				$('<span class="chat-sys-name"/>').text(text || "?").css("color", color || ""));
 		}
 		$pill.append(timeSpan(ts));
+		// Chat moderators (#manage) can delete the note for everyone.
+		$pill.append('<button type="button" class="chat-sys-del" title="Delete this for everyone" aria-label="Delete this for everyone">✕</button>');
 		return $li;
 	}
 
@@ -532,6 +534,34 @@
 		updateJump();
 	}
 
+	// ---- deleted joins / leaves / name changes ----
+	// A stored note goes by its row id; one this tab made live goes by kind +
+	// name + time (the server matched it to the same stored row).
+	function removeSystem(d) {
+		if (!$ul) return;
+		$ul.children(".chat-system").each(function () {
+			var same = (d.id && this._dbId === d.id) ||
+				(this._dbId == null && this._kind === d.kind && this._name === d.name && Math.abs(this._ts - d.ts) < 120000);
+			if (same) $(this).remove();
+		});
+		rebuildDays();
+		refreshFade(true);
+	}
+	function deleteSystem(li, $btn) {
+		$btn.prop("disabled", true).text("…");
+		fetch("/api/chat/hide-event", {
+			method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ room: state.room || roomId(), ch: relayChannel(), kind: li._kind, id: li._dbId || 0, name: li._name, ts: li._ts })
+		}).then(function (r) {
+			return r.json().then(function (d) { if (!r.ok || !d.ok) throw new Error(d.error || "HTTP " + r.status); return d; });
+		}).then(function (d) {
+			removeSystem({ id: d.id, kind: li._kind, name: li._name, ts: li._ts });
+			$(li).remove();
+		}).catch(function (e) {
+			$btn.prop("disabled", false).removeClass("confirm").text("✕").attr("title", (e && e.message) || "Could not delete");
+		});
+	}
+
 	// ---- relay sync (CX| lines) ----
 	function isSyncText(text) { return typeof text === "string" && text.indexOf(SYNC_PREFIX) === 0; }
 	function handleSync(msg) {
@@ -544,6 +574,8 @@
 			setReact(d.ref, d.emoji, d.by, d.name, !!d.on);
 			var li = state.byRef[d.ref];
 			if (li) renderReacts(li);
+		} else if (d.t === "x") {
+			removeSystem(d);
 		} else if (d.t === "p" && d.ref && d.target) {
 			state.replies[d.ref] = { ref: d.target, name: d.targetName, text: d.targetText };
 			var li2 = state.byRef[d.ref];
@@ -785,6 +817,21 @@
 			e.stopPropagation();
 		});
 		$chat.on("click", ".chat-load-older", function (e) { e.preventDefault(); loadOlder(); });
+		// First click arms it ("Delete?"), a second click within 3 s deletes.
+		$chat.on("mousedown touchstart pointerdown", ".chat-sys-del", function (e) { e.stopPropagation(); });
+		$chat.on("click", ".chat-sys-del", function (e) {
+			e.preventDefault();
+			e.stopPropagation();
+			var $btn = $(this), li = $btn.closest("li")[0];
+			if (!$btn.hasClass("confirm")) {
+				$btn.addClass("confirm").text("Delete?");
+				clearTimeout(this._disarm);
+				this._disarm = setTimeout(function () { $btn.removeClass("confirm").text("✕"); }, 3000);
+				return;
+			}
+			clearTimeout(this._disarm);
+			deleteSystem(li, $btn);
+		});
 		$chat.on("click", ".chat-act-react", function (e) {
 			e.preventDefault();
 			e.stopPropagation();

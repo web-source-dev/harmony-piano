@@ -1301,6 +1301,19 @@ function handleRoomChatApi(req, res, route) {
 		sendJson(res, 200, { ok: true, room: room, me: me, canManage: !!(acct && accounts.canManage(acct.id)), rows: h.rows, more: h.more, meta: h.meta });
 		return;
 	}
+	// Chat moderators: hide a join / leave / name change for everyone.
+	if (route === "/api/chat/hide-event" && req.method === "POST") {
+		readJsonBody(req, 4096, function (err, d) {
+			if (err) { sendJson(res, 400, { ok: false, error: err.message }); return; }
+			if (!acct || !accounts.canManage(acct.id)) { sendJson(res, 403, { ok: false, error: "Only chat moderators can delete these" }); return; }
+			var room = String(d.room || "").slice(0, 120);
+			var row = chatDb.hideEvent({ room: room, kind: d.kind, id: d.id, name: d.name, ts: d.ts, by: acct.name });
+			if (!row) { sendJson(res, 404, { ok: false, error: "Not saved yet — try again in a few seconds" }); return; }
+			chatSyncToRoom(String(d.ch || room).slice(0, 256), { t: "x", room: room, id: row.id, kind: row.kind, name: row.name, ts: row.ts });
+			sendJson(res, 200, { ok: true, id: row.id });
+		});
+		return;
+	}
 	if ((route === "/api/chat/react" || route === "/api/chat/reply") && req.method === "POST") {
 		readJsonBody(req, 8192, function (err, d) {
 			if (err) { sendJson(res, 400, { ok: false, error: err.message }); return; }
