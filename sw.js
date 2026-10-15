@@ -15,7 +15,7 @@
  */
 "use strict";
 
-var CACHE_NAME = "harmony-piano-ui-v15";
+var CACHE_NAME = "harmony-piano-ui-v16";
 
 var SHELL = [
 	"./",
@@ -49,7 +49,7 @@ var SHELL = [
 	"./pixelPet.js",
 	"./evilCursor.js",
 	"./chaosMonkey.js",
-	"./chatLogger.js?v=20261015a",
+	"./chatLogger.js?v=20261015b",
 	"./cornerBanner.js",
 	"./funVideoPopup.js",
 	"./screenShare.js",

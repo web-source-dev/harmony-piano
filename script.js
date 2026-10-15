@@ -4258,7 +4258,8 @@ Rect.prototype.contains = function(x, y) {
 				if(typeof ChatLogger !== "undefined") {
 					ChatLogger.logMessage(msg.p.name, chatLine, {
 						fromHistory: !!fromHistory,
-						participantId: msg.p && (msg.p._id != null ? msg.p._id : msg.p.id)
+						participantId: msg.p && (msg.p._id != null ? msg.p._id : msg.p.id),
+						t: msg.t
 					});
 				}
 
@@ -4305,7 +4306,7 @@ Rect.prototype.contains = function(x, y) {
 			var me = gClient.findParticipantById(gClient.participantId);
 			if(!me || !gClient.participantId) return;
 			gLoggedSelfJoinRoom = roomId;
-			ChatLogger.logJoin(me.name || "?");
+			ChatLogger.logJoin(me.name || "?", me._id);
 		}
 
 		gClient.on("room participants sync", function(ppl) {
@@ -4335,7 +4336,7 @@ Rect.prototype.contains = function(x, y) {
 				gLoggedParticipants[info.part.id] = info.newName || "";
 			}
 			if(info.part && info.part.id === gClient.participantId) {
-				ChatLogger.logRename(info.oldName, info.newName);
+				ChatLogger.logRename(info.oldName, info.newName, info.part._id);
 			}
 		});
 		ChatLogger.init();

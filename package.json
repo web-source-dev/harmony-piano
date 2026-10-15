@@ -1,0 +1,12 @@
+{
+  "name": "harmony-piano",
+  "private": true,
+  "description": "Harmony Piano: app server, real-time relay and chat history",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "ws": "^8.18.0"
+  }
+}

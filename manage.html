@@ -202,6 +202,21 @@
   .sess-sep { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--faint); padding: 8px 8px 4px; }
   .sess-sep::before, .sess-sep::after { content: ""; flex: 1; border-top: 1px dashed var(--line); }
   .more-btn { display: block; margin: 4px auto 8px; }
+  .live-card { position: relative; padding: 10px; }
+  .live-view { max-height: calc(100vh - 250px); min-height: 320px; }
+  .new-pill { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); border-radius: 999px; box-shadow: 0 6px 18px rgba(0,0,0,.45); }
+  .live-conn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .live-conn.off .live-dot { background: var(--danger); box-shadow: 0 0 0 3px rgba(229,72,77,.2); }
+  .live-dot-sm { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 6px; vertical-align: 1px; }
+  .lr-room { border: 0; font: inherit; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 8px; background: var(--card2); color: #fff;
+    margin-right: 8px; cursor: pointer; vertical-align: 1px; }
+  .lr-room:hover { background: #3a3650; }
+  .lr.is-join { background: rgba(63,185,125,.07); }
+  .lr.is-leave .lr-body { opacity: .75; }
+  .db-warning { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: var(--danger-bg); color: #ff9b9e; font-size: 13px; }
+  #log-kinds { margin-bottom: 10px; }
+  @keyframes rowIn { from { background: rgba(232,87,143,.22); } }
+  .live-view .lr:last-child { animation: rowIn 1.2s ease-out; }
   .tz-note { font-size: 12px; color: var(--faint); margin-top: 8px; }
   .tz-note b { color: var(--backup); font-weight: 600; }
   .check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); cursor: pointer; min-height: 36px; }
@@ -241,7 +256,10 @@
     box-shadow: 0 10px 30px rgba(0,0,0,.4); }
   .toast.err { background: #4a2430; border-color: #7a3444; }
   .toast.join { background: #2c3a4a; border-color: #4dabf7; }
-  #sound-toggle.locked { border-color: var(--backup); color: #ffd28a; }
+  .sound-banner { display: block; width: 100%; margin-top: 8px; padding: 9px 12px; border-radius: 10px; cursor: pointer; text-align: left;
+    background: rgba(245,165,36,.16); border: 1px solid rgba(245,165,36,.55); color: #ffd28a; font-size: 13px; animation: pulse 1.6s ease-in-out infinite; }
+  .sound-banner b { color: #fff; }
+  @keyframes pulse { 50% { background: rgba(245,165,36,.28); } }
 
   /* ---- tablets & phones: sidebar becomes a drawer ---- */
   @media (max-width: 960px) {
@@ -281,6 +299,7 @@
     .media-body { padding: 8px 10px 10px; }
     .media-actions .btn { flex: 1 1 auto; }
     .log-view { max-height: 65vh; }
+    .live-view { max-height: calc(100vh - 230px); }
     .lr { grid-template-columns: 58px minmax(0, 1fr); gap: 8px; padding: 5px 4px; }
     .upload .btn { width: 100%; }
   }
@@ -322,13 +341,14 @@
         <button type="button" class="btn" id="online-toggle" aria-controls="side" aria-expanded="false">👥 <span id="online-count-btn">0</span><span class="btn-label">&nbsp;online</span></button>
         <div class="brand"><span class="brand-mark" aria-hidden="true">🛠️</span><span class="brand-name">Harmony Manage</span></div>
         <span class="live" id="live" title="Server status"><span class="live-dot"></span><span class="live-text" id="live-text">Live</span></span>
-        <button type="button" class="btn" id="sound-toggle" aria-pressed="true" title="Sound when someone joins">🔔<span class="btn-label" id="sound-label">&nbsp;Join sound</span></button>
         <a class="btn" href="/" target="_blank" rel="noopener" title="Open piano">🎹<span class="btn-label">&nbsp;Open piano</span></a>
         <button type="button" class="btn" id="logout" title="Sign out">🚪<span class="btn-label">&nbsp;Sign out</span></button>
       </div>
+      <button type="button" class="sound-banner" id="sound-banner" hidden>🔇 Your browser blocks sound until you click this page once — <b>click anywhere to turn on the join sound</b></button>
       <nav class="tabs" role="tablist" aria-label="Sections">
-        <button type="button" class="tab" role="tab" data-tab="rooms" aria-selected="true">Rooms <span class="count" id="c-rooms">0</span></button>
-        <button type="button" class="tab" role="tab" data-tab="logs" aria-selected="false">Chat logs <span class="count" id="c-logs">0</span></button>
+        <button type="button" class="tab" role="tab" data-tab="live" aria-selected="true"><span class="live-dot-sm" aria-hidden="true"></span>Live</button>
+        <button type="button" class="tab" role="tab" data-tab="rooms" aria-selected="false">Rooms <span class="count" id="c-rooms">0</span></button>
+        <button type="button" class="tab" role="tab" data-tab="logs" aria-selected="false">Chat history <span class="count" id="c-logs">0</span></button>
         <button type="button" class="tab" role="tab" data-tab="leave" aria-selected="false">Leave a msg <span class="count" id="c-leave">0</span></button>
         <button type="button" class="tab" role="tab" data-tab="media" aria-selected="false">Media <span class="count" id="c-media">0</span></button>
       </nav>
@@ -361,8 +381,29 @@
     <div class="scrim" id="scrim"></div>
 
     <main>
+      <!-- LIVE -->
+      <section data-panel="live" role="tabpanel">
+        <div class="panel-head">
+          <h2>Live activity</h2>
+          <span class="live-conn" id="live-conn"><span class="live-dot"></span> Connecting…</span>
+        </div>
+        <p class="db-warning" id="db-warning-live" hidden>The chat database isn't running on the server (run <code>npm install</code> there and restart), so nothing is being saved.</p>
+        <div class="filters">
+          <select class="input" id="live-room" aria-label="Room" style="flex:0 1 220px"><option value="">All rooms</option></select>
+          <div class="side-chips" id="live-kinds" role="group" aria-label="Show" style="margin:0">
+            <button type="button" class="chip" data-kinds="" aria-pressed="true">Everything</button>
+            <button type="button" class="chip" data-kinds="chat,world,prompt" aria-pressed="false">Messages</button>
+            <button type="button" class="chip" data-kinds="join,leave,rename" aria-pressed="false">Joins &amp; leaves</button>
+          </div>
+        </div>
+        <div class="card live-card">
+          <div class="log-view live-view" id="live-feed" tabindex="0" role="log" aria-live="polite" aria-label="Live activity"></div>
+          <button type="button" class="btn btn-accent new-pill" id="live-new" hidden></button>
+        </div>
+      </section>
+
       <!-- ROOMS -->
-      <section data-panel="rooms" role="tabpanel">
+      <section data-panel="rooms" role="tabpanel" hidden>
         <div class="stats" id="stats"></div>
         <div class="globals">
           <div class="card row">
@@ -408,34 +449,30 @@
             <div class="filters">
               <input class="input" id="log-search" type="search" placeholder="Find a room" aria-label="Find a room">
             </div>
-            <div class="filters">
-              <select class="input" id="log-room" aria-label="Room"><option value="">All rooms</option></select>
-              <select class="input" id="log-type" aria-label="Log type">
-                <option value="">All types</option>
-                <option value="chat">Chat</option>
-                <option value="joins">Joins</option>
-                <option value="prompts">Corner prompts</option>
-                <option value="world">World chat</option>
-              </select>
-            </div>
             <div class="log-list" id="log-list"></div>
           </div>
           <div class="card">
             <div class="viewer-head">
               <div class="title"><b id="log-title">Pick a log</b><span id="log-file"></span></div>
-              <button type="button" class="btn btn-sm" id="log-refresh" disabled>Refresh</button>
               <a class="btn btn-sm" id="log-download" aria-disabled="true">Download</a>
-              <button type="button" class="btn btn-sm btn-danger" id="log-delete" disabled>Delete</button>
+              <button type="button" class="btn btn-sm btn-danger" id="log-delete" disabled>Delete history</button>
             </div>
             <div class="filters">
-              <input class="input" id="log-filter" type="search" placeholder="Filter lines (name, word…)" aria-label="Filter lines">
+              <input class="input" id="log-filter" type="search" placeholder="Search this room (name, word…)" aria-label="Search this room">
               <select class="input" id="log-tz" aria-label="Show times in" style="flex:0 1 auto"></select>
-              <label class="check"><input type="checkbox" id="log-follow"> Follow live</label>
             </div>
-            <div class="log-summary" id="log-summary"></div>
+            <div class="side-chips" id="log-kinds" role="group" aria-label="Show">
+              <button type="button" class="chip" data-kinds="" aria-pressed="true">Everything</button>
+              <button type="button" class="chip" data-kinds="chat" aria-pressed="false">Chat</button>
+              <button type="button" class="chip" data-kinds="join,leave" aria-pressed="false">Joins &amp; leaves</button>
+              <button type="button" class="chip" data-kinds="rename" aria-pressed="false">Name changes</button>
+              <button type="button" class="chip" data-kinds="prompt" aria-pressed="false">Corner replies</button>
+              <button type="button" class="chip" data-kinds="world" aria-pressed="false">World chat</button>
+            </div>
+            <p class="db-warning" id="db-warning" hidden>The chat database isn't running on the server (run <code>npm install</code> there and restart), so nothing is being saved.</p>
             <div class="log-view" id="log-text" tabindex="0" role="log" aria-label="Log lines"><span class="faint">Select a chat log to read it.</span></div>
             <div class="status" id="log-status"></div>
-            <p class="tz-note" id="tz-note" hidden><b>*</b> Older line: saved with the visitor's own clock, so its timezone is unknown and the time may be off by hours. New lines are saved in UTC and shown in your time.</p>
+            <p class="tz-note" id="tz-note" hidden><b>*</b> Older line imported from the old text logs: it was saved with the visitor's own clock, so its timezone is unknown and the time may be off by hours. Everything saved now uses one real clock and is shown in your time.</p>
           </div>
         </div>
       </section>
@@ -638,46 +675,37 @@
     }, 1000);
   }
 
-  var soundOn = true, audioCtx = null, lastRing = 0;
-  try { soundOn = localStorage.getItem("harmony_manage_sound") !== "off"; } catch (e) {}
+  // The join sound is always on. Browsers only allow a page to make sound after
+  // it has been clicked once since it loaded; until then a banner asks for that
+  // click. Once allowed, it keeps playing while the tab is in the background or
+  // another window is focused.
+  var audioCtx = null, lastRing = 0, audioWasLocked = true;
   function getAudio() {
     if (!audioCtx) {
       var AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return null;
       audioCtx = new AC();
-      audioCtx.onstatechange = updateSoundBtn;
+      audioCtx.onstatechange = updateSoundBanner;
     }
     return audioCtx;
   }
+  function audioReady() { return !!(audioCtx && audioCtx.state === "running"); }
   function unlockAudio() {
     var c = getAudio();
-    if (c && c.state === "suspended") c.resume().then(updateSoundBtn, function () {});
+    if (!c || c.state === "running") return;
+    c.resume().then(function () {
+      updateSoundBanner();
+      if (audioWasLocked && c.state === "running") { audioWasLocked = false; playDing(); }
+    }, function () {});
   }
-  function updateSoundBtn() {
-    var b = $("sound-toggle"), locked = soundOn && audioCtx && audioCtx.state !== "running";
-    b.setAttribute("aria-pressed", soundOn ? "true" : "false");
-    b.classList.toggle("locked", !!locked);
-    b.firstChild.textContent = soundOn ? "🔔" : "🔕";
-    $("sound-label").textContent = "\u00a0" + (!soundOn ? "Sound off" : locked ? "Tap to enable sound" : "Join sound");
-    b.title = !soundOn ? "Join sound is off — click to turn on"
-      : locked ? "The browser blocks sound until you click the page — click here" : "A sound plays when someone joins — click to turn off";
+  function updateSoundBanner() {
+    var ready = audioReady();
+    $("sound-banner").hidden = ready || $("app").hidden;
+    if (ready) audioWasLocked = false;
+    fitHeader();
   }
-  // A big ~5 second chime: two bright arpeggios, then a full ringing chord.
-  function playJoinSound(force) {
-    if (!soundOn && !force) return;
-    var c = getAudio();
-    if (!c) return;
-    if (c.state === "suspended") c.resume().catch(function () {});
-    if (!force && Date.now() - lastRing < 5500) return;   // never stack two chimes
-    lastRing = Date.now();
-    var t0 = c.currentTime + 0.05;
-    var comp = c.createDynamicsCompressor();
-    comp.threshold.value = -14; comp.ratio.value = 4;
-    comp.connect(c.destination);
-    var master = c.createGain();
-    master.gain.value = 1;
-    master.connect(comp);
-    function bell(freq, at, dur, vol) {
+  function bellVoice(c, out, t0) {
+    return function bell(freq, at, dur, vol) {
       [[1, 1], [2, 0.45], [3, 0.2], [4.2, 0.1]].forEach(function (p) {
         var o = c.createOscillator(), g = c.createGain();
         o.type = "sine";
@@ -685,54 +713,84 @@
         g.gain.setValueAtTime(0.0001, t0 + at);
         g.gain.exponentialRampToValueAtTime(vol * p[1], t0 + at + 0.012);
         g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + dur / p[0]);
-        o.connect(g); g.connect(master);
+        o.connect(g); g.connect(out);
         o.start(t0 + at); o.stop(t0 + at + dur + 0.05);
       });
-    }
+    };
+  }
+  function soundOut(c) {
+    var comp = c.createDynamicsCompressor();
+    comp.threshold.value = -14; comp.ratio.value = 4;
+    comp.connect(c.destination);
+    var master = c.createGain();
+    master.gain.value = 1;
+    master.connect(comp);
+    return master;
+  }
+  // Short "sound is on" confirmation after the unlocking click.
+  function playDing() {
+    var c = getAudio();
+    if (!c) return;
+    var bell = bellVoice(c, soundOut(c), c.currentTime + 0.03);
+    bell(783.99, 0, 0.6, 0.18); bell(1046.5, 0.12, 0.8, 0.18);
+  }
+  // A big ~5 second chime: two bright arpeggios, then a full ringing chord.
+  function playJoinSound() {
+    var c = getAudio();
+    if (!c) return;
+    if (c.state !== "running") c.resume().catch(function () {});
+    if (Date.now() - lastRing < 5500) return;   // never stack two chimes
+    lastRing = Date.now();
+    var bell = bellVoice(c, soundOut(c), c.currentTime + 0.05);
     var arp = [523.25, 659.25, 783.99, 1046.5];   // C5 E5 G5 C6
     [0, 1.5].forEach(function (start) {
       arp.forEach(function (f, i) { bell(f, start + i * 0.17, 1.4, 0.32); });
     });
     [261.63, 523.25, 659.25, 783.99, 1046.5].forEach(function (f) { bell(f, 3.0, 2.1, 0.26); });
   }
-  $("sound-toggle").addEventListener("click", function () {
-    var c = getAudio();
-    if (soundOn && c && c.state !== "running") { unlockAudio(); playJoinSound(true); return; }
-    soundOn = !soundOn;
-    try { localStorage.setItem("harmony_manage_sound", soundOn ? "on" : "off"); } catch (e) {}
-    if (soundOn) { unlockAudio(); playJoinSound(true); }
-    updateSoundBtn();
-  });
-  ["pointerdown", "keydown", "touchstart"].forEach(function (t) { document.addEventListener(t, unlockAudio, true); });
+  ["pointerdown", "keydown", "touchstart", "click"].forEach(function (t) { document.addEventListener(t, unlockAudio, true); });
 
-  // Who was online at the last poll, and when each person was last seen (so a quick
-  // reconnect doesn't ring again).
-  var presence = { ready: false, prev: {}, lastSeen: {} };
-  function detectJoins(o) {
-    var now = Date.now(), cur = {}, joined = [];
-    o.rooms.forEach(function (r) {
-      r.users.forEach(function (u) { if (!cur[u._id]) cur[u._id] = { u: u, room: r.room }; });
-    });
-    Object.keys(cur).forEach(function (id) {
-      var seen = presence.lastSeen[id];
-      if (presence.ready && !presence.prev[id] && !(seen && now - seen < 60000)) joined.push(cur[id]);
-      presence.lastSeen[id] = now;
-    });
-    Object.keys(presence.lastSeen).forEach(function (id) { if (now - presence.lastSeen[id] > 600000) delete presence.lastSeen[id]; });
-    presence.prev = cur;
-    presence.ready = true;
-    if (!joined.length) return;
-    var first = joined[0];
-    var who = first.u.name + (joined.length > 1 ? " +" + (joined.length - 1) + " more" : "");
+  function onJoinRow(row) {
     playJoinSound();
-    toast("🎹 " + who + " joined " + first.room).classList.add("join");
-    if (document.hidden) flashTitle("🔔 " + who + " joined!");
+    toast("🎹 " + row.name + " joined " + row.room).classList.add("join");
+    if (document.hidden) flashTitle("🔔 " + row.name + " joined!");
+  }
+
+  // ---------- live stream from the server (Server-Sent Events) ----------
+  var liveSource = null, presenceTimer = null;
+  function setLiveConn(ok) {
+    var c = $("live-conn");
+    c.classList.toggle("off", !ok);
+    c.lastChild.textContent = ok ? " Live" : " Reconnecting…";
+  }
+  function startLive() {
+    if (liveSource || typeof EventSource === "undefined") return;
+    liveSource = new EventSource("/api/manage/live");
+    liveSource.onopen = function () { setLiveConn(true); };
+    liveSource.onerror = function () {
+      setLiveConn(false);
+      // Signed out on the server? The next overview call shows the login screen.
+      if (liveSource && liveSource.readyState === 2) { stopLive(); setTimeout(function () { if (!$("app").hidden) { loadOverview(); startLive(); } }, 3000); }
+    };
+    liveSource.addEventListener("row", function (e) {
+      var row;
+      try { row = JSON.parse(e.data); } catch (err) { return; }
+      if (row.kind === "join" && !row.updated) onJoinRow(row);
+      onLiveRow(row);
+    });
+    liveSource.addEventListener("presence", function () {
+      if (presenceTimer) return;
+      presenceTimer = setTimeout(function () { presenceTimer = null; loadOverview(); }, 400);
+    });
+  }
+  function stopLive() {
+    if (liveSource) { liveSource.close(); liveSource = null; }
   }
 
   // ---------- login ----------
   function showLogin(msg) {
     stopPolling();
-    presence.ready = false; presence.prev = {};
+    stopLive();
     $("app").hidden = true;
     updateTitle();
     $("login").hidden = false;
@@ -743,9 +801,10 @@
     $("login").hidden = true;
     $("app").hidden = false;
     $("login-pw").value = "";
-    updateSoundBtn();
+    updateSoundBanner();
     fitHeader();
-    switchTab(readHashTab() || "rooms");
+    startLive();
+    switchTab(readHashTab() || "live");
   }
   $("login-eye").addEventListener("click", function () {
     var pw = $("login-pw"), show = pw.type === "password";
@@ -786,7 +845,7 @@
   // ---------- tabs ----------
   function readHashTab() {
     var h = (location.hash || "").slice(1);
-    return ["rooms", "logs", "leave", "media"].indexOf(h) >= 0 ? h : "";
+    return ["live", "rooms", "logs", "leave", "media"].indexOf(h) >= 0 ? h : "";
   }
   function switchTab(tab) {
     state.tab = tab;
@@ -795,6 +854,7 @@
     if (location.hash.slice(1) !== tab) history.replaceState(null, "", "#" + tab);
     setSideOpen(false);
     loadOverview();
+    if (tab === "live") { if (!state.live.loaded) loadLive(); loadHistRooms().catch(function () {}); }
     if (tab === "logs") loadLogs();
     if (tab === "leave") loadLeave();
     if (tab === "media") loadMedia();
@@ -806,8 +866,7 @@
 
   function startPolling() {
     stopPolling();
-    pollTimer = setInterval(loadOverview, 4000);
-    if ($("log-follow").checked) startFollow();
+    pollTimer = setInterval(loadOverview, 15000);
   }
   function stopPolling() { clearInterval(pollTimer); pollTimer = null; clearInterval(followTimer); followTimer = null; }
 
@@ -871,7 +930,6 @@
     return api("GET", "/overview").then(function (data) {
       setLive(true);
       state.overview = data;
-      detectJoins(data);
       renderOverview();
       renderSide();
     }).catch(function (err) {
@@ -884,7 +942,6 @@
     if (!o) return;
     var c = o.counts;
     $("c-rooms").textContent = o.rooms.length;
-    $("c-logs").textContent = c.chatLogs;
     $("c-leave").textContent = c.leaveMsgs;
     $("c-media").textContent = c.library + c.recent;
 
@@ -893,7 +950,7 @@
     var stats = $("stats");
     stats.textContent = "";
     [[Object.keys(online).length, "people online"], [o.rooms.length, "live rooms"], [c.relayTabs, "Harmony tabs"],
-     [c.chatLogs, "chat logs"], [c.leaveMsgs, "notes"], [c.library + c.recent, "media files"]].forEach(function (s) {
+     [c.chatRooms || 0, "rooms with history"], [c.leaveMsgs, "notes"], [c.library + c.recent, "media files"]].forEach(function (s) {
       var d = el("div", "stat");
       d.appendChild(el("b", null, String(s[0])));
       d.appendChild(el("span", null, s[1]));
@@ -926,7 +983,6 @@
       wrap.appendChild(button("btn btn-sm", r, function () { openLogsFor(r); }, "Open chat logs for " + r));
     });
 
-    setOptions($("log-room"), o.knownRooms, true);
   }
   function roomCard(r) {
     var card = el("div", "card room-card");
@@ -998,173 +1054,20 @@
   bindToggle("noob", $("noob-toggle"), "/noob", "Noob x_x");
   bindToggle("anon", $("anon-toggle"), "/anon", "Anonymous");
 
-  // ---------- chat logs ----------
-  var TYPE_LABEL = { chat: "Chat", joins: "Joins", prompts: "Corner prompts", world: "World chat" };
-  var TYPE_ICON = { chat: "💬", joins: "🚪", prompts: "📝", world: "🌍" };
-  var MAX_ROWS = 1500;
-  state.logShowAll = false;
+  // ---------- shared: rendering stored rows (Live + Chat logs) ----------
+  // Rows come from the server's database: ts is UTC ms. tz_known = 0 marks an old
+  // line imported from the text files, saved with the visitor's own clock — its
+  // numbers are shown as written, with a "*".
   state.logTz = "local";
   try { if (localStorage.getItem("harmony_manage_tz") === "utc") state.logTz = "utc"; } catch (e) {}
-
-  (function initTz() {
-    var sel = $("log-tz");
-    var mine = el("option", null, "Times: my time" + (MY_TZ ? " (" + MY_TZ.replace(/_/g, " ") + ")" : ""));
-    mine.value = "local";
-    var utc = el("option", null, "Times: UTC");
-    utc.value = "utc";
-    sel.appendChild(mine); sel.appendChild(utc);
-    sel.value = state.logTz;
-    sel.addEventListener("change", function () {
-      state.logTz = sel.value;
-      try { localStorage.setItem("harmony_manage_tz", sel.value); } catch (e) {}
-      renderLogText();
-    });
-  })();
-
-  function openLogsFor(room) {
-    setOptions($("log-room"), (state.overview ? state.overview.knownRooms : []).concat([room]), true);
-    $("log-room").value = room;
-    state.logFile = "";
-    switchTab("logs");
-  }
-  function loadLogs() {
-    return api("GET", "/chat-logs").then(function (d) {
-      state.logs = d.logs;
-      renderLogList();
-      if (!state.logFile) {
-        var first = filteredLogs()[0];
-        if (first) openLog(first.file); else clearViewer();
-      }
-    }).catch(fail);
-  }
-  function filteredLogs() {
-    var room = $("log-room").value, type = $("log-type").value, q = $("log-search").value.trim().toLowerCase();
-    return state.logs.filter(function (l) {
-      return (!room || l.room === room) && (!type || l.type === type) && (!q || l.room.toLowerCase().indexOf(q) >= 0);
-    }).sort(function (a, b) { return (b.date || "").localeCompare(a.date || "") || b.mtime - a.mtime; });
-  }
-  function logInfo(file) {
-    for (var i = 0; i < state.logs.length; i++) if (state.logs[i].file === file) return state.logs[i];
-    return null;
-  }
-  function renderLogList() {
-    var list = $("log-list");
-    list.textContent = "";
-    var logs = filteredLogs();
-    if (!logs.length) { list.appendChild(el("div", "empty", "No chat logs match.")); return; }
-    var lastDay = null;
-    logs.forEach(function (l) {
-      var day = l.date || "";
-      if (day !== lastDay) { list.appendChild(el("div", "log-group", day ? dayLabel(day) : "No date")); lastDay = day; }
-      var b = button("log-item", null, function () { openLog(l.file);
-        // Phones: the viewer sits under the list, so bring it into view.
-        if (window.matchMedia("(max-width: 960px)").matches) $("log-text").parentNode.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-      b.title = l.file;
-      if (l.file === state.logFile) b.setAttribute("aria-current", "true");
-      b.appendChild(el("span", "ico", TYPE_ICON[l.type] || "📄"));
-      var txt = el("span", "txt");
-      var t = el("div", "t", l.room + " ");
-      t.appendChild(el("span", "ty", "· " + (TYPE_LABEL[l.type] || l.type)));
-      txt.appendChild(t);
-      txt.appendChild(el("div", "m", bytes(l.size) + " · updated " + ago(l.mtime)));
-      b.appendChild(txt);
-      list.appendChild(b);
-    });
-  }
-  function onLogFilter() { state.logFile = ""; renderLogList(); var f = filteredLogs()[0]; if (f) openLog(f.file); else clearViewer(); }
-  $("log-room").addEventListener("change", onLogFilter);
-  $("log-type").addEventListener("change", onLogFilter);
-  $("log-search").addEventListener("input", onLogFilter);
-
-  function clearViewer() {
-    state.logFile = ""; state.logRaw = "";
-    $("log-title").textContent = "Pick a log";
-    $("log-file").textContent = "";
-    $("log-text").textContent = "";
-    $("log-text").appendChild(el("span", "faint", "Select a chat log to read it."));
-    $("log-summary").textContent = "";
-    $("tz-note").hidden = true;
-    $("log-refresh").disabled = true; $("log-delete").disabled = true;
-    $("log-download").removeAttribute("href"); $("log-download").setAttribute("aria-disabled", "true");
-    $("log-status").textContent = "";
-  }
-  function openLog(file, keepScroll) {
-    var switched = file !== state.logFile;
-    state.logFile = file;
-    if (switched) { state.logRaw = ""; state.logShowAll = false; }
-    renderLogList();
-    var info = logInfo(file);
-    $("log-title").textContent = info ? info.room + " · " + (TYPE_LABEL[info.type] || info.type) + (info.date ? " · " + dayLabel(info.date) : "") : file;
-    $("log-file").textContent = file;
-    $("log-refresh").disabled = false; $("log-delete").disabled = false;
-    $("log-download").href = "/api/manage/chat-log?download=1&file=" + encodeURIComponent(file);
-    $("log-download").removeAttribute("aria-disabled");
-    var view = $("log-text");
-    var atBottom = view.scrollTop + view.clientHeight >= view.scrollHeight - 30;
-    return api("GET", "/chat-log?file=" + encodeURIComponent(file), null, true).then(function (text) {
-      if (state.logFile !== file) return;
-      var changed = text !== state.logRaw;
-      state.logRaw = text;
-      $("log-status").classList.remove("err");
-      if (changed || !keepScroll) renderLogText();
-      if (!keepScroll || (changed && (atBottom || $("log-follow").checked))) view.scrollTop = view.scrollHeight;
-    }).catch(function (err) {
-      $("log-status").textContent = err.message;
-      $("log-status").classList.add("err");
-    });
-  }
-
-  // ---- turning raw log lines into readable rows ----
-  // New lines: "[2026-10-15 14:03:22 UTC] ...". Older lines have no "UTC": they were
-  // stamped with whatever clock the visitor's computer had, so their zone is unknown.
-  var STAMP_RE = /^\[(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2}):(\d{2})( UTC)?\] ?([\s\S]*)$/;
-  var HEAD_RE = /^=== (.*?)(?: \| Date: ([^|]*?))?(?: \| Started: (.*?))? ===$/;
-  var SESS_RE = /^--- room "(.*)" log started at (\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2}):(\d{2})( UTC)?(.*?) ---$/;
-
-  function makeStamp(date, h, m, sec, isUtc) {
-    if (isUtc) return { utc: true, d: new Date(date + "T" + h + ":" + m + ":" + sec + "Z") };
-    // Old line: keep the wall-clock numbers exactly as written.
-    var p = date.split("-");
-    return { utc: false, raw: date + " " + h + ":" + m + ":" + sec, day: date, d: new Date(+p[0], +p[1] - 1, +p[2], +h, +m, +sec) };
-  }
-  function stampDay(st) { return st.utc ? ymd(st.d, state.logTz === "utc") : st.day; }
-  function stampClock(st) { return st.utc ? clock(st.d, state.logTz === "utc") : clock(st.d); }
-  function stampTitle(st) {
-    if (!st.utc) return st.raw + " — older line, saved in the visitor's own clock (timezone unknown)";
-    var local = st.d.toLocaleString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" });
-    return local + (MY_TZ ? " (" + MY_TZ + ")" : " (your time)") + "\n" + st.d.toISOString().replace("T", " ").slice(0, 19) + " UTC";
-  }
-  function splitVia(text) {
-    var m = /^(.*?) via (.+)$/.exec(text);
-    return m ? { text: m[1], via: m[2] } : { text: text, via: "" };
-  }
-  function parseLine(line, type) {
-    var mh = HEAD_RE.exec(line);
-    if (mh) return { kind: "head", label: mh[1], date: (mh[2] || "").trim() };
-    var ms = SESS_RE.exec(line);
-    if (ms) return { kind: "session", room: ms[1], st: makeStamp(ms[2], ms[3], ms[4], ms[5], !!ms[6]), via: ms[7].replace(/^\s*via\s*/, "").trim() };
-    var m = STAMP_RE.exec(line);
-    if (!m) return { kind: "plain", text: line };
-    var row = { st: makeStamp(m[1], m[2], m[3], m[4], !!m[5]), raw: line };
-    var body = m[6];
-    if (type === "joins") {
-      row.harmony = body.indexOf("*** HARMONY *** ") === 0;
-      if (row.harmony) body = body.slice(16);
-      var jr = /^(.*) changed name to (.*)$/.exec(body);
-      if (jr) { var v = splitVia(jr[2]); row.kind = "rename"; row.name = jr[1]; row.text = v.text; row.via = v.via; return row; }
-      var jj = /^(.*) joined(?: via (.*))?$/.exec(body);
-      if (jj) { row.kind = "join"; row.name = jj[1]; row.via = jj[2] || ""; return row; }
-      row.kind = "event"; row.text = body; return row;
-    }
-    if (type === "prompts") {
-      var pr = /^(.*?) sent reply: ([\s\S]*)$/.exec(body);
-      if (pr) { row.kind = "msg"; row.name = pr[1]; row.text = pr[2]; row.prompt = true; return row; }
-    }
-    var i = body.indexOf(": ");
-    if (i > 0 && i < 80) { row.kind = "msg"; row.name = body.slice(0, i); row.text = body.slice(i + 2); return row; }
-    row.kind = "event"; row.text = body;
-    return row;
+  function useUtc(r) { return !r.tz_known || state.logTz === "utc"; }
+  function rowDay(r) { return ymd(new Date(r.ts), useUtc(r)); }
+  function rowClock(r) { return clock(new Date(r.ts), useUtc(r)); }
+  function rowTitle(r) {
+    var d = new Date(r.ts);
+    if (!r.tz_known) return d.toISOString().replace("T", " ").slice(0, 19) + " — older line, saved with the visitor's own clock (timezone unknown)";
+    var local = d.toLocaleString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" });
+    return local + (MY_TZ ? " (" + MY_TZ + ")" : " (your time)") + "\n" + d.toISOString().replace("T", " ").slice(0, 19) + " UTC";
   }
   function nameColor(name) {
     var h = 0;
@@ -1183,112 +1086,297 @@
     frag.appendChild(document.createTextNode(text.slice(pos)));
     return frag;
   }
-  function rowEl(r, q) {
-    var row = el("div", "lr" + (r.kind === "msg" ? "" : " event"));
-    var t = el("span", "lr-time" + (r.st.utc ? "" : " legacy"), stampClock(r.st));
-    t.title = stampTitle(r.st);
+  var KIND_ICON = { join: "➡️", leave: "⬅️", rename: "✏️", prompt: "📝", world: "🌍" };
+  function rowEl(r, opts) {
+    var q = opts.q || "";
+    var isMsg = r.kind === "chat" || r.kind === "world" || r.kind === "prompt";
+    var row = el("div", "lr" + (isMsg ? "" : " event") + (r.kind === "join" ? " is-join" : r.kind === "leave" ? " is-leave" : ""));
+    row.dataset.id = r.id;
+    var t = el("span", "lr-time" + (r.tz_known ? "" : " legacy"), rowClock(r));
+    t.title = rowTitle(r);
     row.appendChild(t);
     var body = el("div", "lr-body");
-    if (r.kind === "msg" || r.kind === "join" || r.kind === "rename") {
-      if (r.kind === "join") body.appendChild(el("span", "lr-ico", "➡️"));
-      if (r.kind === "rename") body.appendChild(el("span", "lr-ico", "✏️"));
-      if (r.prompt) body.appendChild(el("span", "lr-ico", "📝"));
-      var n = el("span", "lr-name");
-      n.style.color = nameColor(r.name);
-      n.appendChild(hl(r.name, q));
-      body.appendChild(n);
-      if (r.harmony) { var tg = el("span", "tag harmony", "HARMONY"); tg.style.marginRight = "6px"; body.appendChild(tg); }
-      if (r.kind === "join") body.appendChild(document.createTextNode("joined"));
-      if (r.kind === "rename") { body.appendChild(document.createTextNode("changed name to ")); var nn = el("b"); nn.appendChild(hl(r.text, q)); body.appendChild(nn); }
-      if (r.kind === "msg") body.appendChild(hl(r.text, q));
-      if (r.via) { var v = el("span", "lr-via"); v.appendChild(hl(r.via, q)); body.appendChild(v); }
-    } else {
-      body.appendChild(hl(r.text, q));
+    if (opts.showRoom) {
+      var rb = button("lr-room", r.room, function () { openLogsFor(r.room); }, "Open the history of " + r.room);
+      body.appendChild(rb);
     }
+    if (KIND_ICON[r.kind]) {
+      var ic = el("span", "lr-ico", KIND_ICON[r.kind]);
+      ic.title = { join: "Joined", leave: "Left", rename: "Name change", prompt: "Corner prompt reply", world: "World chat" }[r.kind];
+      body.appendChild(ic);
+    }
+    var n = el("span", "lr-name");
+    n.style.color = nameColor(r.name || "?");
+    n.appendChild(hl(r.name || "?", q));
+    if (r.uid) n.title = r.uid;
+    body.appendChild(n);
+    if (r.harmony) { var tg = el("span", "tag harmony", "HARMONY"); tg.style.marginRight = "6px"; body.appendChild(tg); }
+    if (r.kind === "join") body.appendChild(document.createTextNode("joined"));
+    else if (r.kind === "leave") body.appendChild(document.createTextNode("left"));
+    else if (r.kind === "rename") { body.appendChild(document.createTextNode("changed name to ")); var nn = el("b"); nn.appendChild(hl(r.text, q)); body.appendChild(nn); }
+    else body.appendChild(hl(r.text, q));
+    if (r.via) { var v = el("span", "lr-via"); v.appendChild(hl(r.via, q)); body.appendChild(v); }
     row.appendChild(body);
     return row;
   }
-  function renderLogText() {
-    var view = $("log-text");
-    var q = $("log-filter").value.trim().toLowerCase();
-    var info = logInfo(state.logFile) || {};
-    var type = info.type || (/_joins/.test(state.logFile) ? "joins" : /_prompts/.test(state.logFile) ? "prompts" : /_world/.test(state.logFile) ? "world" : "chat");
-    view.textContent = "";
-    var rows = [], people = {}, msgs = 0, joins = 0, legacy = 0;
-    state.logRaw.split(/\r?\n/).forEach(function (line) {
-      if (!line.trim()) return;
-      var r = parseLine(line, type);
-      if (r.kind === "head") return;
-      if (r.st) {
-        if (!r.st.utc) legacy++;
-        if (r.name) people[r.name] = true;
-        if (r.kind === "msg") msgs++;
-        if (r.kind === "join") joins++;
-      }
-      if (q && (line.toLowerCase().indexOf(q) < 0 || r.kind === "session")) return;
-      rows.push(r);
-    });
-
-    var sum = $("log-summary");
-    sum.textContent = "";
-    var bits = [];
-    if (msgs) bits.push(plural(msgs, type === "prompts" ? "reply" : "message").replace("replys", "replies"));
-    if (joins) bits.push(plural(joins, "join"));
-    var np = Object.keys(people).length;
-    if (np) bits.push(plural(np, "person").replace("persons", "people"));
-    bits.forEach(function (b) { sum.appendChild(el("span", "badge", b)); });
-    $("tz-note").hidden = !legacy;
-    $("log-status").textContent = (q ? plural(rows.length, "line") + " match · " : "") + bytes(state.logRaw.length) +
-      " · times in " + (state.logTz === "utc" ? "UTC" : "your time" + (MY_TZ ? " (" + MY_TZ.replace(/_/g, " ") + ")" : ""));
-
-    if (!rows.length) { view.appendChild(el("span", "faint", q ? "No lines match “" + q + "”." : "This log is empty.")); return; }
-    var hidden = state.logShowAll ? 0 : Math.max(0, rows.length - MAX_ROWS);
-    var frag = document.createDocumentFragment();
-    if (hidden) {
-      frag.appendChild(button("btn btn-sm more-btn", "Show " + plural(hidden, "earlier line"), function () {
-        state.logShowAll = true;
-        var before = view.scrollHeight - view.scrollTop;
-        renderLogText();
-        view.scrollTop = view.scrollHeight - before;
-      }));
+  function addRowTo(view, r, opts) {
+    var day = rowDay(r);
+    if (view._lastDay !== day) {
+      var sep = el("div", "day-sep");
+      sep.appendChild(el("span", null, dayLabel(day)));
+      view.appendChild(sep);
+      view._lastDay = day;
     }
-    var lastDay = null;
-    rows.slice(hidden).forEach(function (r) {
-      if (r.kind === "plain") { var p = el("div", "lr event"); p.appendChild(el("span")); var pb = el("div", "lr-body lr-plain"); pb.appendChild(hl(r.text, q)); p.appendChild(pb); frag.appendChild(p); return; }
-      var day = stampDay(r.st);
-      if (day !== lastDay) {
-        var sep = el("div", "day-sep");
-        sep.appendChild(el("span", null, dayLabel(day)));
-        frag.appendChild(sep);
-        lastDay = day;
-      }
-      if (r.kind === "session") {
-        var s = el("div", "sess-sep", "Logging started " + stampClock(r.st) + (r.via ? " · " + r.via : ""));
-        s.title = stampTitle(r.st);
-        frag.appendChild(s);
-        return;
-      }
-      frag.appendChild(rowEl(r, q));
+    view.appendChild(rowEl(r, opts));
+  }
+  function nearBottom(view) { return view.scrollTop + view.clientHeight >= view.scrollHeight - 40; }
+  function kindsMatch(kinds, r) { return !kinds || kinds.split(",").indexOf(r.kind) >= 0; }
+  function textMatch(q, r) {
+    return !q || [r.name, r.text, r.via].some(function (s) { return s && s.toLowerCase().indexOf(q) >= 0; });
+  }
+  function bindChips(groupId, onChange) {
+    var chips = document.querySelectorAll("#" + groupId + " .chip");
+    chips.forEach(function (c) {
+      c.addEventListener("click", function () {
+        chips.forEach(function (o) { o.setAttribute("aria-pressed", o === c ? "true" : "false"); });
+        onChange(c.dataset.kinds);
+      });
     });
-    view.appendChild(frag);
   }
-  function startFollow() {
-    clearInterval(followTimer);
-    followTimer = setInterval(function () {
-      if (state.tab === "logs" && state.logFile && !document.hidden) openLog(state.logFile, true);
-    }, 3000);
+  (function initTz() {
+    var sel = $("log-tz");
+    var mine = el("option", null, "Times: my time" + (MY_TZ ? " (" + MY_TZ.replace(/_/g, " ") + ")" : ""));
+    mine.value = "local";
+    var utc = el("option", null, "Times: UTC");
+    utc.value = "utc";
+    sel.appendChild(mine); sel.appendChild(utc);
+    sel.value = state.logTz;
+    sel.addEventListener("change", function () {
+      state.logTz = sel.value;
+      try { localStorage.setItem("harmony_manage_tz", sel.value); } catch (e) {}
+      renderLogRows(true);
+      renderLive(true);
+    });
+  })();
+
+  // ---------- LIVE: everything happening in every room, as it happens ----------
+  var LIVE_MAX = 600;
+  state.live = { rows: [], room: "", kinds: "", loaded: false, unseen: 0 };
+  function loadLive() {
+    var L = state.live;
+    var qs = "?limit=200" + (L.room ? "&room=" + encodeURIComponent(L.room) : "") + (L.kinds ? "&kinds=" + L.kinds : "");
+    return api("GET", "/db/messages" + qs).then(function (d) {
+      L.rows = d.rows.reverse();
+      L.loaded = true;
+      renderLive(false);
+    }).catch(fail);
   }
-  $("log-filter").addEventListener("input", renderLogText);
-  $("log-refresh").addEventListener("click", function () { if (state.logFile) { loadLogs(); openLog(state.logFile, true); } });
-  $("log-follow").addEventListener("change", function () { if (this.checked) startFollow(); else clearInterval(followTimer); });
+  function renderLive(keepScroll) {
+    var view = $("live-feed"), L = state.live;
+    var stick = !keepScroll || nearBottom(view);
+    view.textContent = "";
+    view._lastDay = null;
+    if (!L.rows.length) {
+      view.appendChild(el("span", "faint", L.loaded ? "Nothing yet. New chat lines, joins and leaves from every room show up here the moment they happen." : "Loading…"));
+    }
+    L.rows.forEach(function (r) { addRowTo(view, r, { showRoom: !L.room }); });
+    if (stick) view.scrollTop = view.scrollHeight;
+    L.unseen = 0;
+    updateLivePill();
+  }
+  function updateLivePill() {
+    var pill = $("live-new"), n = state.live.unseen;
+    pill.hidden = !n;
+    pill.textContent = "↓ " + plural(n, "new event");
+  }
+  $("live-new").addEventListener("click", function () {
+    var view = $("live-feed");
+    view.scrollTop = view.scrollHeight;
+    state.live.unseen = 0;
+    updateLivePill();
+  });
+  $("live-feed").addEventListener("scroll", function () {
+    if (state.live.unseen && nearBottom(this)) { state.live.unseen = 0; updateLivePill(); }
+  });
+  $("live-room").addEventListener("change", function () { state.live.room = this.value; loadLive(); });
+  bindChips("live-kinds", function (k) { state.live.kinds = k; loadLive(); });
+
+  // A new or updated row arrived from the server.
+  function onLiveRow(row) {
+    var L = state.live;
+    if (L.loaded && (!L.room || L.room === row.room) && kindsMatch(L.kinds, row)) {
+      var view = $("live-feed");
+      if (row.updated) {
+        L.rows = L.rows.map(function (r) { return r.id === row.id ? row : r; });
+        var old = view.querySelector('.lr[data-id="' + row.id + '"]');
+        if (old) old.parentNode.replaceChild(rowEl(row, { showRoom: !L.room }), old);
+      } else {
+        var stick = nearBottom(view);
+        if (!L.rows.length) view.textContent = "";
+        L.rows.push(row);
+        addRowTo(view, row, { showRoom: !L.room });
+        if (L.rows.length > LIVE_MAX) { L.rows.splice(0, L.rows.length - LIVE_MAX); if (stick) renderLive(false); }
+        if (stick) view.scrollTop = view.scrollHeight;
+        else if (state.tab === "live") { L.unseen++; updateLivePill(); }
+      }
+    }
+    onLogsRow(row);
+  }
+
+  // ---------- CHAT LOGS: full history per room, from the database ----------
+  state.hist = { rooms: [], room: "", rows: [], more: false, kinds: "", q: "", busy: false };
+  function openLogsFor(room) {
+    state.hist.room = room;
+    switchTab("logs");
+  }
+  function loadHistRooms() {
+    return api("GET", "/db/rooms").then(function (d) {
+      state.hist.rooms = d.rooms;
+      $("db-warning").hidden = d.dbOk !== false;
+      $("db-warning-live").hidden = d.dbOk !== false;
+      var names = d.rooms.map(function (r) { return r.room; }).sort();
+      setOptions($("live-room"), names, true);
+      $("c-logs").textContent = d.rooms.length;
+      renderRoomList();
+      return d;
+    });
+  }
+  function loadLogs() {
+    return loadHistRooms().then(function (d) {
+      var H = state.hist;
+      if (!H.room && d.rooms[0]) openHistRoom(d.rooms[0].room);
+      else if (H.room && !H.rows.length) openHistRoom(H.room);
+      else if (!H.room) clearViewer();
+    }).catch(fail);
+  }
+  function renderRoomList() {
+    var list = $("log-list"), H = state.hist;
+    var q = $("log-search").value.trim().toLowerCase();
+    list.textContent = "";
+    var rooms = H.rooms.filter(function (r) { return !q || r.room.toLowerCase().indexOf(q) >= 0; });
+    if (!rooms.length) { list.appendChild(el("div", "empty", H.rooms.length ? "No rooms match." : "No chat history yet.")); return; }
+    rooms.forEach(function (r) {
+      var b = button("log-item", null, function () {
+        openHistRoom(r.room);
+        if (window.matchMedia("(max-width: 960px)").matches) $("log-text").parentNode.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      if (r.room === H.room) b.setAttribute("aria-current", "true");
+      b.appendChild(el("span", "ico", r.room.charAt(0).toUpperCase() || "#"));
+      var txt = el("span", "txt");
+      txt.appendChild(el("div", "t", r.room));
+      txt.appendChild(el("div", "m", plural(r.messages || 0, "message") + " · " + plural(r.joins || 0, "join")));
+      txt.appendChild(el("div", "m", "Last activity " + ago(r.last_ts)));
+      b.appendChild(txt);
+      list.appendChild(b);
+    });
+  }
+  $("log-search").addEventListener("input", renderRoomList);
+
+  function clearViewer() {
+    var H = state.hist;
+    H.room = ""; H.rows = []; H.more = false;
+    $("log-title").textContent = "Pick a room";
+    $("log-file").textContent = "";
+    $("log-text").textContent = "";
+    $("log-text").appendChild(el("span", "faint", "Pick a room on the left to read its history."));
+    $("log-delete").disabled = true;
+    $("log-download").removeAttribute("href"); $("log-download").setAttribute("aria-disabled", "true");
+    $("log-status").textContent = "";
+  }
+  function histQuery(extra) {
+    var H = state.hist;
+    return "?room=" + encodeURIComponent(H.room) + (H.kinds ? "&kinds=" + H.kinds : "") +
+      (H.q ? "&q=" + encodeURIComponent(H.q) : "") + (extra || "");
+  }
+  function openHistRoom(room) {
+    var H = state.hist;
+    H.room = room; H.rows = []; H.more = false;
+    renderRoomList();
+    var info = H.rooms.filter(function (r) { return r.room === room; })[0];
+    $("log-title").textContent = room;
+    $("log-file").textContent = info ? "Since " + when(info.first_ts) + " · " + plural(info.total, "event") : "";
+    $("log-delete").disabled = false;
+    $("log-download").removeAttribute("aria-disabled");
+    updateDownloadLink();
+    $("log-text").textContent = "";
+    $("log-text").appendChild(el("span", "faint", "Loading…"));
+    return api("GET", "/db/messages" + histQuery("&limit=400")).then(function (d) {
+      if (H.room !== room) return;
+      H.rows = d.rows.reverse();
+      H.more = d.more;
+      renderLogRows(false);
+    }).catch(fail);
+  }
+  function updateDownloadLink() {
+    var tz = state.logTz === "utc" ? "UTC" : (MY_TZ || "UTC");
+    $("log-download").href = "/api/manage/db/export" + histQuery("&tz=" + encodeURIComponent(tz));
+  }
+  function loadEarlier() {
+    var H = state.hist;
+    if (H.busy || !H.rows.length) return;
+    H.busy = true;
+    var room = H.room;
+    api("GET", "/db/messages" + histQuery("&limit=400&before=" + H.rows[0].id)).then(function (d) {
+      if (H.room !== room) return;
+      H.rows = d.rows.reverse().concat(H.rows);
+      H.more = d.more;
+      var view = $("log-text"), fromBottom = view.scrollHeight - view.scrollTop;
+      renderLogRows(true);
+      view.scrollTop = view.scrollHeight - fromBottom;
+    }).catch(fail).then(function () { H.busy = false; });
+  }
+  function renderLogRows(keepScroll) {
+    var H = state.hist, view = $("log-text");
+    if (!H.room) return;
+    var stick = !keepScroll || nearBottom(view);
+    view.textContent = "";
+    view._lastDay = null;
+    var legacy = H.rows.some(function (r) { return !r.tz_known; });
+    $("tz-note").hidden = !legacy;
+    $("log-status").textContent = plural(H.rows.length, "line") + " shown" + (H.more ? " (more above)" : "") +
+      " · times in " + (state.logTz === "utc" ? "UTC" : "your time" + (MY_TZ ? " (" + MY_TZ.replace(/_/g, " ") + ")" : "")) +
+      " · updates live";
+    if (H.more) view.appendChild(button("btn btn-sm more-btn", "Load earlier", loadEarlier));
+    if (!H.rows.length) {
+      view.appendChild(el("span", "faint", H.q || H.kinds ? "Nothing matches." : "No history in this room yet."));
+      return;
+    }
+    H.rows.forEach(function (r) { addRowTo(view, r, { q: H.q.toLowerCase() }); });
+    if (stick) view.scrollTop = view.scrollHeight;
+  }
+  // Scrolling to the top loads earlier lines automatically.
+  $("log-text").addEventListener("scroll", function () { if (this.scrollTop < 60 && state.hist.more) loadEarlier(); });
+  function onLogsRow(row) {
+    var H = state.hist;
+    if (H.room !== row.room || !kindsMatch(H.kinds, row) || !textMatch(H.q.toLowerCase(), row)) return;
+    var view = $("log-text");
+    if (row.updated) {
+      H.rows = H.rows.map(function (r) { return r.id === row.id ? row : r; });
+      var old = view.querySelector('.lr[data-id="' + row.id + '"]');
+      if (old) old.parentNode.replaceChild(rowEl(row, { q: H.q.toLowerCase() }), old);
+      return;
+    }
+    if (H.rows.some(function (r) { return r.id === row.id; })) return;
+    var stick = nearBottom(view);
+    if (!H.rows.length) view.textContent = "";
+    H.rows.push(row);
+    addRowTo(view, row, { q: H.q.toLowerCase() });
+    if (stick) view.scrollTop = view.scrollHeight;
+  }
+  var histSearchTimer = null;
+  $("log-filter").addEventListener("input", function () {
+    var v = this.value.trim();
+    clearTimeout(histSearchTimer);
+    histSearchTimer = setTimeout(function () { state.hist.q = v; if (state.hist.room) openHistRoom(state.hist.room); }, 300);
+  });
+  bindChips("log-kinds", function (k) { state.hist.kinds = k; if (state.hist.room) openHistRoom(state.hist.room); });
   $("log-delete").addEventListener("click", function () {
-    var file = state.logFile;
-    if (!file || !confirm("Delete the chat log \"" + file + "\"?\nThis cannot be undone.")) return;
-    api("DELETE", "/chat-log", { file: file }).then(function () {
-      toast("Deleted " + file);
+    var room = state.hist.room;
+    if (!room || !confirm("Delete ALL saved history for \"" + room + "\"?\nChat lines, joins and leaves. This cannot be undone.")) return;
+    api("POST", "/db/delete", { room: room }).then(function (d) {
+      toast("Deleted " + plural(d.removed, "line") + " from " + room);
       clearViewer();
       loadLogs();
-      loadOverview();
     }).catch(fail);
   });
 
@@ -1524,6 +1612,7 @@
 
   // ---------- boot ----------
   window.addEventListener("resize", fitHeader);
+  $("sound-banner").addEventListener("click", unlockAudio);
   document.addEventListener("visibilitychange", function () { if (!document.hidden && !$("app").hidden) loadOverview(); });
   api("GET", "/auth").then(function (d) { if (d.authed) showApp(); else showLogin(""); })
     .catch(function () { showLogin("Can't reach the piano server."); });

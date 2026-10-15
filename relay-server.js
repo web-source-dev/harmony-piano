@@ -36,6 +36,8 @@ var WebSocketServer = ws.WebSocketServer || ws.Server;
 
 var ROOT = __dirname;
 var LOG_DIR = path.join(ROOT, "chat-logs");
+// Chat history lives in SQLite (data/harmony.sqlite): every line stored once, one true time.
+var chatDb = require("./server/chatDb").open(ROOT, { importDir: LOG_DIR });
 var LEAVE_MSG_DIR = path.join(ROOT, "leave-msgs");
 var LEAVE_MSG_MAX = 2000;
 var LEAVE_MSG_DELETED_MAX = 500;
@@ -271,6 +273,52 @@ function writeLeaveMsg(room, data, cb) {
 	} catch (e) { cb(e); }
 }
 
+// A chat-log report from a piano tab. New tabs (chatLogger.js v2) send
+// structured events; tabs still running the old script send a formatted line,
+// which is parsed. Either way it goes into the DB, where duplicates are dropped.
+function saveChatEvent(body, cb) {
+	var data;
+	try { data = JSON.parse(body || "{}"); } catch (e) { return cb(e); }
+	if (!chatDb) return cb(null, false);
+	var room = String(data.room || "").slice(0, 120);
+	if (!room) return cb(new Error("No room"));
+	var ev = data.v === 2 ? data : parseLegacyLogLine(data);
+	if (!ev) return cb(null, false);
+	var base = {
+		room: room, uid: ev.uid, name: ev.name, text: ev.text, t: ev.t, via: ev.via,
+		harmony: !!ev.harmony, server: ev.server, legacy: data.v !== 2
+	};
+	var row = null;
+	if (ev.kind === "chat") row = chatDb.addChat(base);
+	else if (ev.kind === "join") row = chatDb.addJoin(base);
+	else if (ev.kind === "rename") row = chatDb.addRename(base);
+	else if (ev.kind === "prompt") row = chatDb.addPrompt(base);
+	cb(null, !!row);
+}
+function parseLegacyLogLine(data) {
+	var line = String(data.line || "").trim();
+	var file = String(data.file || "");
+	var m = /^\[[^\]]*\] ?(.*)$/.exec(line);
+	if (!m) return null;
+	var body = m[1];
+	if (/_joins/.test(file)) {
+		var harmony = body.indexOf("*** HARMONY *** ") === 0;
+		if (harmony) body = body.slice(16);
+		var r = /^(.*) changed name to (.*?)(?: via (.*))?$/.exec(body);
+		if (r) return { kind: "rename", name: r[1], text: r[2], via: r[3] || "", harmony: harmony };
+		var j = /^(.*) joined(?: via (.*))?$/.exec(body);
+		if (j) return { kind: "join", name: j[1], via: j[2] || "", harmony: harmony };
+		return null;
+	}
+	if (/_prompts/.test(file)) {
+		var pr = /^(.*?) sent reply: (.*)$/.exec(body);
+		return pr ? { kind: "prompt", name: pr[1], text: pr[2] } : null;
+	}
+	var i = body.indexOf(": ");
+	return i > 0 ? { kind: "chat", name: body.slice(0, i), text: body.slice(i + 2) } : null;
+}
+
+// Old text-file writer, no longer used for new lines (kept for reference/exports).
 function saveChatLog(body, cb) {
 	var data;
 	try { data = JSON.parse(body || "{}"); } catch (e) { return cb(e); }
@@ -342,12 +390,7 @@ function addWorldChat(room, data) {
 	w.chat.push(msg);
 	if (w.chat.length > WORLD_CHAT_MAX) w.chat.splice(0, w.chat.length - WORLD_CHAT_MAX);
 	saveWorldSoon(w);
-	var d = new Date(msg.ts), date = worldTimeStamp(d).slice(0, 10);
-	saveChatLog(JSON.stringify({
-		room: w.room, date: date,
-		file: w.room + "_" + date + "_world.txt",
-		line: "[" + worldTimeStamp(d) + "] " + msg.name + ": " + msg.text
-	}), function () {});
+	if (chatDb) chatDb.addWorld({ room: w.room, id: msg.id, ts: msg.ts, name: msg.name, text: msg.text });
 	return msg;
 }
 function setWorldState(room, k, v, ts) {
@@ -396,6 +439,7 @@ function cacheControlFor(urlPath) {
 function isPrivatePath(urlPath) {
 	var p = String(urlPath).replace(/\\/g, "/").toLowerCase();
 	if (/(^|\/)\./.test(p)) return true;
+	if (p.indexOf("/data/") === 0 || p.indexOf("/server/") === 0) return true;
 	if (p.indexOf("/chat-logs/") === 0 || p.indexOf("/leave-msgs/") === 0 || p.indexOf("/world-data/") === 0 || p.indexOf("/__pycache__/") === 0) return true;
 	if (p === "/manage-state.json" || /\.py$/.test(p)) return true;
 	return false;
@@ -638,6 +682,79 @@ function manageRoomsSnapshot() {
 	});
 }
 
+// ---- /manage live feed ----
+var gLiveClients = new Set();
+function liveSend(event, data) {
+	if (!gLiveClients.size) return;
+	var frame = "event: " + event + "\ndata: " + JSON.stringify(data) + "\n\n";
+	gLiveClients.forEach(function (res) { try { res.write(frame); } catch (e) {} });
+}
+if (chatDb) chatDb.onRow(function (row) { liveSend("row", row); });
+
+// Watch who is online (same data /manage shows) and store joins, leaves and
+// name changes with this server's clock. Rules that avoid fake events:
+//  - the first look after start-up is only a baseline;
+//  - people already in a public MPP room when a Harmony tab first looks at it
+//    are not "joins" (we just started watching);
+//  - someone is "gone" only after 20 s missing (lists refresh every ~20 s),
+//    and when a public room stops being watched its people are not "leaving".
+var PRESENCE_TICK_MS = 2000, PRESENCE_GONE_MS = 20000, PRESENCE_REJOIN_MS = 60000;
+var gPresence = { ready: false, rooms: Object.create(null), people: new Map() };
+function presenceTick() {
+	var snap;
+	try { snap = manageRoomsSnapshot(); } catch (e) { return; }
+	var now = Date.now(), changed = false, curRooms = Object.create(null), seenNow = new Set();
+	snap.forEach(function (r) {
+		curRooms[r.room] = true;
+		var newRoom = !gPresence.rooms[r.room];
+		r.users.forEach(function (u) {
+			var key = r.room + "\x1e" + u._id;
+			seenNow.add(key);
+			var ownTab = u.where.indexOf("harmony") >= 0 || u.where.indexOf("backup") >= 0;
+			var server = u.where.indexOf("backup") >= 0 ? "backup" : u.where.indexOf("harmony") >= 0 ? "harmony" : "mpp";
+			var rec = gPresence.people.get(key);
+			if (!rec) {
+				rec = { room: r.room, uid: u._id, name: u.name, server: server, ownTab: ownTab, seen: now, here: true };
+				gPresence.people.set(key, rec);
+				changed = true;
+				if (gPresence.ready && chatDb && !(newRoom && !ownTab)) {
+					chatDb.addJoin({ room: r.room, uid: u._id, name: u.name, harmony: u.where.indexOf("harmony") >= 0, server: server });
+				}
+				return;
+			}
+			if (!rec.here) {
+				rec.here = true;
+				changed = true;
+				if (rec.leftLogged && chatDb) chatDb.addJoin({ room: r.room, uid: u._id, name: u.name, harmony: u.where.indexOf("harmony") >= 0, server: server });
+				rec.leftLogged = false;
+			}
+			if (u.name && rec.name !== u.name) {
+				if (chatDb && rec.name) chatDb.addRename({ room: r.room, uid: u._id, name: rec.name, text: u.name, server: server });
+				rec.name = u.name;
+				changed = true;
+			}
+			rec.seen = now;
+			rec.ownTab = rec.ownTab || ownTab;
+		});
+	});
+	gPresence.people.forEach(function (rec, key) {
+		if (seenNow.has(key)) return;
+		if (rec.here) { rec.here = false; changed = true; }
+		var gone = now - rec.seen;
+		if (!rec.leftLogged && gone >= PRESENCE_GONE_MS) {
+			rec.leftLogged = true;
+			if (chatDb && (curRooms[rec.room] || rec.ownTab)) {
+				chatDb.addLeave({ room: rec.room, uid: rec.uid, name: rec.name, ts: rec.seen + PRESENCE_TICK_MS, server: rec.server });
+			}
+		}
+		if (gone > PRESENCE_REJOIN_MS && rec.leftLogged) gPresence.people.delete(key);
+	});
+	gPresence.rooms = curRooms;
+	gPresence.ready = true;
+	if (changed) liveSend("presence", { at: now });
+}
+setInterval(presenceTick, PRESENCE_TICK_MS);
+
 // Same wipe as the #manage "Clear all chat" button ("CC|" over the relay),
 // but sent by the server to one room — or every room with room "*". Also drops
 // the backup server's replay history so rejoiners don't get the old lines back.
@@ -695,7 +812,7 @@ function handleManageApi(req, res, route) {
 			rooms: manageRoomsSnapshot(),
 			knownRooms: Object.keys(known).sort(),
 			counts: {
-				chatLogs: logs.length, leaveRooms: leave.length,
+				chatLogs: logs.length, chatRooms: chatDb ? chatDb.rooms().length : 0, leaveRooms: leave.length,
 				leaveMsgs: leave.reduce(function (n, l) { return n + l.count; }, 0),
 				library: media.library.length, recent: media.recent.length,
 				relayTabs: countClients()
@@ -704,6 +821,63 @@ function handleManageApi(req, res, route) {
 		return;
 	}
 
+	if (sub === "/db/rooms" && req.method === "GET") {
+		done(null, { rooms: chatDb ? chatDb.rooms() : [], dbOk: !!chatDb });
+		return;
+	}
+	if (sub === "/db/messages" && req.method === "GET") {
+		if (!chatDb) return done(new Error("Chat database is not available (run npm install on the server)"));
+		done(null, chatDb.query({
+			room: q.room || "", kinds: q.kinds ? String(q.kinds).split(",") : null, q: q.q || "",
+			before: q.before, after: q.after, from: q.from, to: q.to, limit: q.limit
+		}));
+		return;
+	}
+	if (sub === "/db/export" && req.method === "GET") {
+		if (!chatDb) return done(new Error("Chat database is not available"));
+		var tz = String(q.tz || "UTC");
+		var fmt;
+		try { fmt = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }); }
+		catch (e) { tz = "UTC"; fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }); }
+		var exp = chatDb.query({ room: q.room || "", kinds: q.kinds ? String(q.kinds).split(",") : null, q: q.q || "", limit: 5000 }).rows.reverse();
+		var outLines = ["Harmony chat history — room: " + (q.room || "all rooms") + " — times in " + tz, ""];
+		exp.forEach(function (r) {
+			var when = r.tz_known ? fmt.format(new Date(r.ts)).replace(",", "") : new Date(r.ts).toISOString().replace("T", " ").slice(0, 19) + " (old line, zone unknown)";
+			var who = r.name + (r.harmony ? " [HARMONY]" : "");
+			var what = r.kind === "join" ? who + " joined" + (r.via ? " via " + r.via : "")
+				: r.kind === "leave" ? who + " left"
+				: r.kind === "rename" ? who + " changed name to " + r.text
+				: r.kind === "prompt" ? who + " (corner reply): " + r.text
+				: who + ": " + r.text;
+			outLines.push("[" + when + "] " + (q.room ? "" : "(" + r.room + ") ") + what);
+		});
+		res.writeHead(200, {
+			"Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store",
+			"Content-Disposition": 'attachment; filename="' + sanitizeRoom(q.room || "all-rooms") + "_chat.txt" + '"'
+		});
+		res.end(outLines.join("\n") + "\n");
+		return;
+	}
+	if (sub === "/db/delete" && req.method === "POST") {
+		withBody(function (data) {
+			if (!chatDb) throw new Error("Chat database is not available");
+			done(null, { removed: chatDb.deleteWhere({ room: data.room, ids: data.ids }) });
+		});
+		return;
+	}
+	// Real-time feed for /manage (Server-Sent Events): every new stored line,
+	// join and leave as it happens, plus a nudge when who's online changes.
+	if (sub === "/live" && req.method === "GET") {
+		res.writeHead(200, {
+			"Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-store",
+			"Connection": "keep-alive", "X-Accel-Buffering": "no"
+		});
+		res.write("retry: 3000\n\n");
+		gLiveClients.add(res);
+		var ka = setInterval(function () { try { res.write(": ka\n\n"); } catch (e) {} }, 20000);
+		req.on("close", function () { clearInterval(ka); gLiveClients.delete(res); });
+		return;
+	}
 	if (sub === "/chat-logs" && req.method === "GET") { done(null, { logs: listChatLogs() }); return; }
 	if (sub === "/chat-log" && req.method === "GET") {
 		var logFile = chatLogPath(q.file);
@@ -918,9 +1092,9 @@ var server = http.createServer(function (req, res) {
 		var body = "";
 		req.on("data", function (c) { body += c; if (body.length > 1e6) req.destroy(); });
 		req.on("end", function () {
-			saveChatLog(body, function (err, file) {
-				res.writeHead(err ? 500 : 200, { "Content-Type": "application/json" });
-				res.end(JSON.stringify(err ? { ok: false, error: String(err && err.message || err) } : { ok: true, file: file }));
+			saveChatEvent(body, function (err, stored) {
+				res.writeHead(err ? 400 : 200, { "Content-Type": "application/json" });
+				res.end(JSON.stringify(err ? { ok: false, error: String(err && err.message || err) } : { ok: true, stored: stored }));
 			});
 		});
 		return;
@@ -1422,6 +1596,9 @@ function mppHandle(sock, msg) {
 				var chatFrame = { m: "a", id: mppNextChatId(), a: msg.message.slice(0, MAX_TEXT), p: mppPartPublic(p), t: Date.now() };
 				mppBroadcast(room, chatFrame);
 				mppRememberChat(room._id, chatFrame);
+				if (chatDb && !mppIsSyncText(chatFrame.a)) {
+					chatDb.addChat({ room: room._id, uid: p._id, name: p.name, text: chatFrame.a, t: chatFrame.t, server: "backup" });
+				}
 			}
 			break;
 		case "a-edit":
@@ -1602,6 +1779,7 @@ function startMppLobbyNoobBot() {
 					try { bot.send(JSON.stringify([{ m: "ch", _id: "lobby" }])); } catch (e) {}
 				}
 				trackBotLobby(msg);
+				logBotLobbyChat(msg);
 			}
 		});
 		bot.on("close", function () {
@@ -1620,6 +1798,17 @@ function startMppLobbyNoobBot() {
 		wantConnected = true;
 		connect();
 	};
+	// The bot sits in the public lobby, so it hears every lobby chat line with
+	// the MPP server's own timestamp: store them (piano tabs report the same
+	// lines; the DB keeps one copy).
+	function logBotLobbyChat(msg) {
+		if (!chatDb) return;
+		var lines = msg.m === "a" ? [msg] : (msg.m === "c" && Array.isArray(msg.c) ? msg.c : []);
+		lines.forEach(function (a) {
+			if (!a || !a.p || typeof a.a !== "string" || mppIsSyncText(a.a) || a.p.name === LOBBY_NOOB.name) return;
+			chatDb.addChat({ room: "lobby", uid: a.p._id, name: a.p.name, text: a.a, t: a.t, server: "mpp" });
+		});
+	}
 	// Keep gNoobBotLobby in sync with the public lobby (for /manage). The bot
 	// itself is left out.
 	function trackBotLobby(msg) {
