@@ -185,6 +185,7 @@ function open(rootDir, opts) {
 	}
 
 	var api = {
+		db: db,   // shared with server/accounts.js (same file)
 		onRow: function (fn) { listeners.push(fn); },
 
 		// A chat line. `t` is the chat server's timestamp when known (exact dedup);

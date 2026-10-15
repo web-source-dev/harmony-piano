@@ -38,6 +38,8 @@ var ROOT = __dirname;
 var LOG_DIR = path.join(ROOT, "chat-logs");
 // Chat history lives in SQLite (data/harmony.sqlite): every line stored once, one true time.
 var chatDb = require("./server/chatDb").open(ROOT, { importDir: LOG_DIR });
+// User accounts (created on /manage): log in with a personal password from any device.
+var accounts = require("./server/accounts").open(chatDb);
 var LEAVE_MSG_DIR = path.join(ROOT, "leave-msgs");
 var LEAVE_MSG_MAX = 2000;
 var LEAVE_MSG_DELETED_MAX = 500;
@@ -73,26 +75,15 @@ function setCors(res) {
 }
 
 // ---- Piano password gate ----
-// The browser shows a password screen before any of the app loads. The password
-// is checked HERE (never shipped to the browser) and never stored anywhere: a
-// correct guess gets a signed *session* cookie (no Max-Age/Expires), so a page
-// refresh stays unlocked but closing the browser drops it and asks again.
-// Change it with the HARMONY_PASSWORD environment variable.
-var PIANO_PASSWORD = String(process.env.HARMONY_PASSWORD || "9r2ZEPbWCHdYkm");
-var AUTH_COOKIE = "harmony_piano_auth";
-// Derived from the password, so changing the password signs everyone out.
-var AUTH_SECRET = crypto.createHash("sha256").update("harmony-piano-session|" + PIANO_PASSWORD).digest();
+// The browser shows a password screen before any of the app loads. Each person
+// types their OWN password (accounts are created on /manage → Accounts). It is
+// checked HERE (never shipped to the browser): a correct one gets a signed
+// *session* cookie (no Max-Age/Expires), so a page refresh stays unlocked but
+// closing the browser drops it and asks again.
 var AUTH_MAX_FAILS = 5;         // wrong guesses allowed before a cool-down
 var AUTH_LOCK_MS = 30 * 1000;   // cool-down length (doubles on each further lock)
 var gAuthFails = Object.create(null);   // ip -> { n, locks, until }
 
-function authSign(nonce) {
-	return crypto.createHmac("sha256", AUTH_SECRET).update(nonce).digest("hex");
-}
-function makeAuthToken() {
-	var nonce = crypto.randomBytes(16).toString("hex");
-	return nonce + "." + authSign(nonce);
-}
 function safeEqual(a, b) {
 	var ha = crypto.createHash("sha256").update(String(a)).digest();
 	var hb = crypto.createHash("sha256").update(String(b)).digest();
@@ -109,11 +100,21 @@ function readCookie(req, name) {
 	}
 	return "";
 }
+// ---- User accounts ----
+// A user's own password gets a signed session cookie naming their account. It
+// is checked against the database on every request, so deleting, disabling or
+// changing the password of an account signs it out everywhere at once.
+var USER_COOKIE = "harmony_user";
+function accountFromReq(req) {
+	if (!accounts) return null;
+	var token = readCookie(req, USER_COOKIE);
+	return token ? accounts.fromToken(token) : null;
+}
 function isAuthed(req) {
-	var token = readCookie(req, AUTH_COOKIE);
-	var dot = token.indexOf(".");
-	if (dot < 1) return false;
-	return safeEqual(token.slice(dot + 1), authSign(token.slice(0, dot)));
+	return !!accountFromReq(req);
+}
+function userPublic(a) {
+	return a ? { id: a.id, name: a.name, color: a.color, uid: a.uid } : null;
 }
 function clientIp(req) {
 	return String(req.headers["x-real-ip"] || (req.socket && req.socket.remoteAddress) || "?");
@@ -121,7 +122,7 @@ function clientIp(req) {
 function authCookieHeader(req, value, cookieName) {
 	var secure = req.headers["x-forwarded-proto"] === "https" || !!(req.socket && req.socket.encrypted);
 	// No Max-Age / Expires = session cookie: survives refresh, gone when the browser closes.
-	return (cookieName || AUTH_COOKIE) + "=" + value + "; Path=/; HttpOnly; SameSite=Strict" + (secure ? "; Secure" : "");
+	return cookieName + "=" + value + "; Path=/; HttpOnly; SameSite=Strict" + (secure ? "; Secure" : "");
 }
 function sendJson(res, status, obj) {
 	res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -147,19 +148,24 @@ function isManageAuthed(req) {
 	return safeEqual(token.slice(dot + 1), manageSign(token.slice(0, dot)));
 }
 function handleManageAuthPost(req, res) {
-	checkPasswordPost(req, res, gManageAuthFails, MANAGE_PASSWORD, function () {
+	checkPasswordPost(req, res, gManageAuthFails, function (guess) { return safeEqual(guess, MANAGE_PASSWORD); }, function () {
 		var nonce = crypto.randomBytes(16).toString("hex");
 		res.setHeader("Set-Cookie", authCookieHeader(req, nonce + "." + manageSign(nonce), MANAGE_COOKIE));
 	});
 }
 
+// The piano gate: a user's own password signs them in to their account.
 function handleAuthPost(req, res) {
-	checkPasswordPost(req, res, gAuthFails, PIANO_PASSWORD, function () {
-		res.setHeader("Set-Cookie", authCookieHeader(req, makeAuthToken()));
+	checkPasswordPost(req, res, gAuthFails, function (guess) {
+		return accounts && accounts.login(guess, clientIp(req), req.headers["user-agent"]);
+	}, function (acct) {
+		res.setHeader("Set-Cookie", authCookieHeader(req, accounts.makeToken(acct), USER_COOKIE));
+		return { user: userPublic(acct) };
 	});
 }
-// Shared password check with per-IP cool-down; onOk sets the session cookie.
-function checkPasswordPost(req, res, fails, password, onOk) {
+// Password check with per-IP cool-down. match(guess) returns something truthy
+// on success; onOk(hit) sets the session cookie and may add fields to the reply.
+function checkPasswordPost(req, res, fails, match, onOk) {
 	var ip = clientIp(req);
 	var rec = fails[ip];
 	var now = Date.now();
@@ -173,10 +179,12 @@ function checkPasswordPost(req, res, fails, password, onOk) {
 		var data;
 		try { data = JSON.parse(body || "{}"); } catch (e) { data = {}; }
 		var guess = typeof data.password === "string" ? data.password : "";
-		if (guess && safeEqual(guess, password)) {
+		var hit = guess ? match(guess) : null;
+		if (hit) {
 			delete fails[ip];
-			onOk();
-			sendJson(res, 200, { ok: true });
+			var out = { ok: true }, extra = onOk(hit) || {};
+			for (var k in extra) out[k] = extra[k];
+			sendJson(res, 200, out);
 			return;
 		}
 		rec = fails[ip] || (fails[ip] = { n: 0, locks: 0, until: 0 });
@@ -871,6 +879,7 @@ function handleManageApi(req, res, route) {
 		var prof = chatDb.profile(q.uid);
 		if (!prof) return done(new Error("Nobody with that id"));
 		prof.online = whereIsUser(String(q.uid));
+		prof.account = accounts ? accounts.byUid(q.uid) : null;
 		done(null, prof);
 		return;
 	}
@@ -994,6 +1003,35 @@ function handleManageApi(req, res, route) {
 	}
 	if (sub === "/media/upload" && req.method === "POST") { handleLibraryUpload(req, res); return; }
 
+	// ---- User accounts ----
+	if (sub.indexOf("/accounts") === 0 && !accounts) return done(new Error("Accounts need the database (run npm install on the server)"));
+	if (sub === "/accounts" && req.method === "GET") {
+		done(null, { accounts: accounts.list() });
+		return;
+	}
+	if (sub === "/accounts/detail" && req.method === "GET") {
+		var det = accounts.detail(q.id);
+		if (!det) return done(new Error("No such user"));
+		done(null, det);
+		return;
+	}
+	if ((sub === "/accounts" || sub === "/accounts/update") && req.method === "POST") {
+		withBody(function (data) {
+			if (typeof data.password === "string" && safeEqual(data.password, MANAGE_PASSWORD)) {
+				throw new Error("That is the manage password — pick a different one");
+			}
+			done(null, { account: sub === "/accounts" ? accounts.create(data) : accounts.update(data) });
+		});
+		return;
+	}
+	if (sub === "/accounts/delete" && req.method === "POST") {
+		withBody(function (data) {
+			if (!accounts.remove(data.id)) throw new Error("No such user");
+			done(null, {});
+		});
+		return;
+	}
+
 	if (sub === "/noob" && req.method === "POST") {
 		withBody(function (data) { setLobbyNoobHidden(data.hidden); done(null, { hidden: gLobbyNoobHidden }); });
 		return;
@@ -1067,8 +1105,37 @@ var server = http.createServer(function (req, res) {
 	}
 
 	if (route === "/api/auth") {
-		if (req.method === "GET") { sendJson(res, 200, { ok: true, authed: isAuthed(req) }); return; }
+		if (req.method === "GET") {
+			var me = accountFromReq(req);
+			if (me) accounts.touch(me.id);
+			sendJson(res, 200, { ok: true, authed: !!me, user: userPublic(me) });
+			return;
+		}
 		if (req.method === "POST") { handleAuthPost(req, res); return; }
+	}
+	if (route === "/api/auth/logout" && req.method === "POST") {
+		res.setHeader("Set-Cookie", authCookieHeader(req, "", USER_COOKIE) + "; Max-Age=0");
+		sendJson(res, 200, { ok: true });
+		return;
+	}
+	// A signed-in user's saved browser settings: loaded on any device they log
+	// in from, and saved back as they change things.
+	if (route === "/api/me/data") {
+		var acct = accountFromReq(req);
+		if (!acct) { sendJson(res, 401, { ok: false, error: "Not signed in to an account" }); return; }
+		if (req.method === "GET") {
+			var saved = accounts.getData(acct.id) || {};
+			sendJson(res, 200, { ok: true, data: saved.data, ts: saved.ts, user: userPublic(acct) });
+			return;
+		}
+		if (req.method === "POST") {
+			readJsonBody(req, accounts.DATA_MAX + 65536, function (err, body) {
+				if (err) { sendJson(res, 400, { ok: false, error: String(err.message || err) }); return; }
+				try { sendJson(res, 200, { ok: true, ts: accounts.setData(acct.id, body && body.data) }); }
+				catch (e) { sendJson(res, 400, { ok: false, error: e.message }); }
+			});
+			return;
+		}
 	}
 
 	// Everything room-related needs the password cookie.
@@ -1189,6 +1256,12 @@ function rememberRelayIdentity(s, p) {
 	var clean = sanitizeP(p);
 	if (clean._id) {
 		s._p = clean;
+		// Signed-in user: remember every piano id their tabs show up as (public
+		// MPP gives a different id per browser; this ties them all to the account).
+		if (accounts && s._accountId && s._linkedId !== clean._id) {
+			s._linkedId = clean._id;
+			accounts.linkUid(s._accountId, clean._id, "harmony");
+		}
 		// A Harmony tab connects to our relay from the person's own browser, so its
 		// IP is theirs — even for people on the public MPP server. Log it once per id.
 		if (chatDb && s._ip && s._ipLoggedId !== clean._id) {
@@ -1310,6 +1383,8 @@ function setMybotAnonymousHidden(hidden) {
 wss.on("connection", function (socket, req) {
 	socket._room = null;
 	socket._ip = req ? clientIp(req) : "?";
+	var relayAcct = req ? accountFromReq(req) : null;
+	socket._accountId = relayAcct ? relayAcct.id : "";
 	socket.missedPongs = 0;
 	socket.on("pong", function () { socket.missedPongs = 0; });
 	socket.on("message", function (raw) {
@@ -1633,7 +1708,17 @@ function mppHandle(sock, msg) {
 		case "hi":
 			// A browser that reconnects keeps its identity (its token is a random
 			// per-browser value; only a hash of it is ever shown to others).
-			if (typeof msg.token === "string" && /^[A-Za-z0-9_-]{16,64}$/.test(msg.token) && !st.room) {
+			if (sock._account && !st.room) {
+				// Signed-in user: the SAME id on every device and browser.
+				var acctRow = sock._account;
+				st.user._id = acctRow.uid;
+				st.tokenKnown = true;
+				var savedA = chatDb && chatDb.getIdentity(st.user._id);
+				st.user.name = (savedA && savedA.name) || acctRow.name;
+				if (savedA && savedA.color) st.user.color = savedA.color;
+				else if (acctRow.color) st.user.color = acctRow.color;
+				accounts.linkUid(acctRow.id, acctRow.uid, "backup");
+			} else if (typeof msg.token === "string" && /^[A-Za-z0-9_-]{16,64}$/.test(msg.token) && !st.room) {
 				st.user._id = "h" + crypto.createHash("sha256").update("harmony-id|" + msg.token).digest("hex").slice(0, 24);
 				st.tokenKnown = true;
 				// Give the browser back the name and colour it had last time, so a
@@ -1769,6 +1854,7 @@ function mppHandle(sock, msg) {
 mppWss.on("connection", function (sock, req) {
 	sock.missedPongs = 0;
 	sock._ip = req ? clientIp(req) : "?";
+	sock._account = req ? accountFromReq(req) : null;
 	sock.on("pong", function () { sock.missedPongs = 0; });
 	sock.mpp = {
 		user: { _id: mppGenId("u"), name: "Anonymous", color: MPP_COLORS[Math.floor(Math.random() * MPP_COLORS.length)] },
@@ -1947,7 +2033,7 @@ server.listen(PORT, function () {
 	console.log("  backup MPP server (failover): ws://localhost:" + PORT + "/mpp");
 	console.log("  chat logs -> " + LOG_DIR);
 	console.log("  leave-a-msg -> " + LEAVE_MSG_DIR);
-	console.log("  piano password: " + (process.env.HARMONY_PASSWORD ? "from HARMONY_PASSWORD" : "DEFAULT (set HARMONY_PASSWORD to change it)"));
+	console.log("  piano login: " + (accounts ? accounts.list().length + " user account(s) — create them on /manage → Accounts" : "UNAVAILABLE (no database: run npm install)"));
 	console.log("  admin page: http://localhost:" + PORT + "/manage  (password " + (process.env.HARMONY_MANAGE_PASSWORD ? "from HARMONY_MANAGE_PASSWORD" : "DEFAULT — set HARMONY_MANAGE_PASSWORD to change it") + ")");
 	console.log("  Open http://localhost:" + PORT + "/  (media uploads still need media-server.py on :8551)");
 	startMppLobbyNoobBot();

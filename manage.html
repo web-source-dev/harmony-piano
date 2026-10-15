@@ -300,6 +300,34 @@
   .row-text { flex: 1; min-width: 0; }
   .row-title { font-weight: 700; }
   .row-sub { font-size: 12px; color: var(--muted); }
+
+  /* ================= accounts ================= */
+  .acct-top { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-bottom: 22px; }
+  .acct-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; gap: 8px; margin-top: 12px; align-items: center; }
+  .acct-form .pw-wrap { position: relative; display: flex; gap: 6px; min-width: 0; }
+  .acct-form .pw-wrap .input { flex: 1; min-width: 0; }
+  .acct-form input[type="color"] { width: 44px; height: 36px; padding: 2px; border-radius: 10px; border: 1px solid var(--line); background: rgba(0,0,0,.25); cursor: pointer; }
+  .acct-form .status { grid-column: 1 / -1; }
+  .acct-list { display: flex; flex-direction: column; gap: 10px; }
+  .acct-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+  .acct-card.off { opacity: .65; }
+  .acct-head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .acct-head .txt { flex: 1; min-width: 0; }
+  .acct-name { font-weight: 800; font-size: 15px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .acct-meta { font-size: 12px; color: var(--faint); margin-top: 2px; overflow-wrap: anywhere; }
+  .acct-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .acct-more { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 12.5px; }
+  .acct-more .prof-sec { margin-top: 10px; }
+  .acct-row { display: flex; gap: 8px; align-items: center; padding: 4px 0; flex-wrap: wrap; color: var(--muted); }
+  .acct-row .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--text); }
+  .tag.ok { background: var(--ok-soft); color: #9be3bf; }
+  .tag.off { background: var(--danger-bg); color: #ff9b9e; }
+  .link-btn { background: none; border: 0; padding: 0; color: var(--focus); cursor: pointer; font: inherit; text-decoration: underline; }
+  @media (max-width: 700px) {
+    .acct-form { grid-template-columns: minmax(0, 1fr) auto; }
+    .acct-form #acct-name, .acct-form .pw-wrap { grid-column: 1 / -1; }
+    .acct-form button[type="submit"] { width: 100%; }
+  }
   .room-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); gap: 12px; }
   .room-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
   .room-name { font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
@@ -435,6 +463,7 @@
   <symbol id="i-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 17l5-5-5-5M15 12H4"/></symbol>
   <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12M6 11l6 6 6-6M5 20h14"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 9.2-9.2M16 7l3 3M14 9l2 2"/></symbol>
   <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></symbol>
 </svg>
 
@@ -472,6 +501,7 @@
     <button type="button" class="tab" role="tab" data-tab="logs" aria-selected="false"><svg><use href="#i-chat"/></svg><span>History</span><span class="count" id="c-logs">0</span></button>
     <button type="button" class="tab" role="tab" data-tab="leave" aria-selected="false"><svg><use href="#i-note"/></svg><span>Notes</span><span class="count" id="c-leave">0</span></button>
     <button type="button" class="tab" role="tab" data-tab="people" aria-selected="false"><svg><use href="#i-users"/></svg><span>People</span><span class="count" id="c-people">0</span></button>
+    <button type="button" class="tab" role="tab" data-tab="accounts" aria-selected="false"><svg><use href="#i-key"/></svg><span>Accounts</span><span class="count" id="c-accounts">0</span></button>
     <button type="button" class="tab" role="tab" data-tab="media" aria-selected="false"><svg><use href="#i-media"/></svg><span>Media</span><span class="count" id="c-media">0</span></button>
   </nav>
 
@@ -620,6 +650,31 @@
             </div>
           </div>
         </div>
+      </section>
+
+      <!-- ACCOUNTS (users who log in with their own password, on any device) -->
+      <section class="panel scroll" data-panel="accounts" role="tabpanel" aria-label="Accounts" hidden>
+        <div class="acct-top">
+          <div class="card">
+            <div class="row-title">Create a user</div>
+            <div class="row-sub">On the piano they type only this password, on any phone, tablet or computer. They get the same name, settings and history back, and they're tracked as one person here.</div>
+            <form class="acct-form" id="acct-form" autocomplete="off" novalidate>
+              <input class="input" id="acct-name" type="text" placeholder="Name" maxlength="40" aria-label="Name" autocomplete="off">
+              <div class="pw-wrap">
+                <input class="input" id="acct-pw" type="text" placeholder="Password (unique, 4+ characters)" maxlength="200" aria-label="Password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                <button type="button" class="btn btn-icon" id="acct-gen" title="Make up a password" aria-label="Make up a password">🎲</button>
+              </div>
+              <input type="color" id="acct-color" value="#e8578f" title="Chat colour" aria-label="Chat colour">
+              <button type="submit" class="btn btn-accent" id="acct-create">Create user</button>
+              <span class="status" id="acct-status" role="status" aria-live="polite"></span>
+            </form>
+          </div>
+        </div>
+        <div class="section-head"><h2>Users <span class="faint" id="acct-summary" style="font-size:13px;font-weight:400"></span></h2></div>
+        <div class="filters">
+          <div class="search"><svg><use href="#i-search"/></svg><input class="input" id="acct-search" type="search" placeholder="Find a user" aria-label="Find a user"></div>
+        </div>
+        <div class="acct-list" id="acct-list"></div>
       </section>
 
       <!-- MEDIA -->
@@ -1028,7 +1083,7 @@
   });
 
   // ================= tabs =================
-  var TABS = ["live", "rooms", "logs", "leave", "people", "media"];
+  var TABS = ["live", "rooms", "logs", "leave", "people", "accounts", "media"];
   function readHashTab() {
     var h = (location.hash || "").slice(1);
     return TABS.indexOf(h) >= 0 ? h : "";
@@ -1044,6 +1099,7 @@
     if (tab === "logs") loadLogs();
     if (tab === "leave") loadLeave();
     if (tab === "people") loadPeopleTab();
+    if (tab === "accounts") loadAccounts();
     if (tab === "media") loadMedia();
     startPolling();
   }
@@ -1886,6 +1942,156 @@
     deleteLeave(Object.keys(state.leaveSel).map(function (k) { return state.leaveSel[k]; }));
   });
 
+  // ================= ACCOUNTS =================
+  var acctState = { list: [], open: {} };
+  function loadAccounts() {
+    return api("GET", "/accounts").then(function (d) {
+      acctState.list = d.accounts || [];
+      $("c-accounts").textContent = acctState.list.length;
+      renderAccounts();
+    }).catch(fail);
+  }
+  function renderAccounts() {
+    var list = $("acct-list");
+    var q = $("acct-search").value.trim().toLowerCase();
+    var onlineIds = onlineIdSet();
+    var rows = acctState.list.filter(function (a) { return !q || a.name.toLowerCase().indexOf(q) >= 0 || a.uid.indexOf(q) >= 0; });
+    var on = acctState.list.filter(function (a) { return onlineIds[a.uid]; }).length;
+    $("acct-summary").textContent = acctState.list.length ? plural(acctState.list.length, "user") + (on ? " · " + on + " online" : "") : "";
+    list.textContent = "";
+    if (!rows.length) { list.appendChild(emptyState("🔑", acctState.list.length ? "No user matches." : "No users yet. Create one above.")); return; }
+    rows.forEach(function (a) { list.appendChild(accountCard(a, !!onlineIds[a.uid])); });
+  }
+  function accountCard(a, online) {
+    var card = el("div", "acct-card" + (a.disabled ? " off" : ""));
+    card.id = "acct-" + a.id;
+    var head = el("div", "acct-head");
+    var av = el("span", "room-av", (a.name.replace(/[^a-z0-9]/gi, "").charAt(0) || "?").toUpperCase());
+    av.style.background = rawColor(a.color, a.name);
+    head.appendChild(av);
+    var txt = el("div", "txt");
+    var nm = el("div", "acct-name");
+    var nmText = el("span", null, a.name);
+    nmText.style.color = readable(a.color, a.name);
+    nm.appendChild(nmText);
+    if (online) nm.appendChild(el("span", "tag ok", "ONLINE"));
+    if (a.disabled) nm.appendChild(el("span", "tag off", "DISABLED"));
+    txt.appendChild(nm);
+    txt.appendChild(el("div", "acct-meta", a.last_login_ts
+      ? "Last login " + ago(a.last_login_ts) + (a.last_ip ? " from " + a.last_ip : "") + " · " + plural(a.logins, "login") + (a.last_seen_ts ? " · seen " + ago(a.last_seen_ts) : "")
+      : "Never logged in yet"));
+    txt.appendChild(el("div", "acct-meta", "Created " + when(a.created_ts) + " · piano id " + a.uid + (a.data_ts ? " · settings saved " + ago(a.data_ts) + " (" + bytes(a.data_bytes) + ")" : "")));
+    head.appendChild(txt);
+    card.appendChild(head);
+
+    var actions = el("div", "acct-actions");
+    actions.appendChild(button("btn btn-sm", acctState.open[a.id] ? "Hide details" : "Details", function () {
+      acctState.open[a.id] = !acctState.open[a.id];
+      renderAccounts();
+    }, "Logins, IPs and every piano id this user has used"));
+    actions.appendChild(button("btn btn-sm", "Tracking", function () { openProfile(a.uid); }, "Their messages, IPs and rooms (People tab)"));
+    actions.appendChild(button("btn btn-sm", "Rename", function () {
+      var name = prompt("New name for " + a.name + ":", a.name);
+      if (name == null || !name.trim() || name.trim() === a.name) return;
+      updateAccount({ id: a.id, name: name }, "Renamed to " + name.trim());
+    }));
+    actions.appendChild(button("btn btn-sm", "New password", function () {
+      var pw = prompt("New password for " + a.name + " (4+ characters, not used by anyone else).\nThey will be signed out on every device.", randomPassword());
+      if (pw == null || !pw) return;
+      updateAccount({ id: a.id, password: pw }, "Password changed — tell " + a.name + ": " + pw);
+    }));
+    actions.appendChild(button("btn btn-sm", a.disabled ? "Enable" : "Disable", function () {
+      if (!a.disabled && !confirm("Disable " + a.name + "?\nThey're signed out everywhere and can't log in until you enable them again.")) return;
+      updateAccount({ id: a.id, disabled: !a.disabled }, a.disabled ? a.name + " can log in again" : a.name + " is disabled");
+    }));
+    actions.appendChild(button("btn btn-sm btn-danger", "Delete", function () {
+      if (!confirm("Delete the user " + a.name + "?\nThey can't log in any more and their saved settings are removed. Their chat history stays. This cannot be undone.")) return;
+      api("POST", "/accounts/delete", { id: a.id }).then(function () {
+        toast("Deleted " + a.name);
+        delete acctState.open[a.id];
+        loadAccounts();
+      }).catch(fail);
+    }));
+    card.appendChild(actions);
+
+    if (acctState.open[a.id]) {
+      var more = el("div", "acct-more");
+      more.appendChild(emptyState("⏳", "Loading…"));
+      card.appendChild(more);
+      api("GET", "/accounts/detail?id=" + encodeURIComponent(a.id)).then(function (d) {
+        more.textContent = "";
+        more.appendChild(el("div", "prof-sec", "Piano ids (one per device on the public server)"));
+        if (!d.uids.length) more.appendChild(el("div", "faint", "None yet — they haven't played since the account was made."));
+        d.uids.forEach(function (u) {
+          var row = el("div", "acct-row");
+          row.appendChild(button("link-btn mono", u.uid, function () { openProfile(u.uid); }, "Open this id's profile"));
+          row.appendChild(el("span", "tag " + (u.server || "harmony"), (u.server || "harmony").toUpperCase()));
+          row.appendChild(el("span", null, "last " + ago(u.last_ts)));
+          more.appendChild(row);
+        });
+        more.appendChild(el("div", "prof-sec", "Recent logins"));
+        if (!d.logins.length) more.appendChild(el("div", "faint", "No logins yet."));
+        d.logins.forEach(function (l) {
+          var row = el("div", "acct-row");
+          row.appendChild(el("span", "mono", l.ip || "?"));
+          row.appendChild(el("span", null, when(l.ts)));
+          row.appendChild(el("span", "faint", deviceName(l.ua)));
+          more.appendChild(row);
+        });
+        if (d.account.data_ts) {
+          more.appendChild(button("btn btn-sm", "Reset saved settings", function () {
+            if (!confirm("Clear " + a.name + "'s saved piano settings?\nThe next device they log in on keeps its own settings and saves them.")) return;
+            updateAccount({ id: a.id, clearData: true }, "Saved settings cleared");
+          }));
+        }
+      }).catch(function (err) { more.textContent = ""; more.appendChild(el("div", "status err", err.message)); });
+    }
+    return card;
+  }
+  function deviceName(ua) {
+    ua = String(ua || "");
+    if (!ua) return "";
+    var os = /iPhone|iPad/.test(ua) ? "iOS" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac OS X/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "";
+    var br = /Edg\//.test(ua) ? "Edge" : /OPR\//.test(ua) ? "Opera" : /Chrome\//.test(ua) ? "Chrome" : /Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "";
+    return [br, os].filter(Boolean).join(" on ") || ua.slice(0, 60);
+  }
+  function updateAccount(body, okText) {
+    return api("POST", "/accounts/update", body).then(function () { toast(okText); loadAccounts(); }).catch(fail);
+  }
+  function randomPassword() {
+    var words = ["piano", "melody", "tempo", "chord", "forte", "sonata", "rhythm", "treble", "viola", "jazz", "harp", "lyric"];
+    var r = new Uint32Array(3);
+    crypto.getRandomValues(r);
+    return words[r[0] % words.length] + "-" + words[r[1] % words.length] + "-" + (100 + r[2] % 900);
+  }
+  function openAccount(id) {
+    acctState.open[id] = true;
+    switchTab("accounts");
+    setTimeout(function () { var c = $("acct-" + id); if (c) c.scrollIntoView({ block: "center" }); }, 300);
+  }
+  $("acct-search").addEventListener("input", renderAccounts);
+  $("acct-gen").addEventListener("click", function () { $("acct-pw").value = randomPassword(); $("acct-pw").focus(); });
+  $("acct-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var name = $("acct-name").value.trim(), pw = $("acct-pw").value, st = $("acct-status");
+    st.classList.remove("err");
+    if (!name) { st.textContent = "Give the user a name."; st.classList.add("err"); $("acct-name").focus(); return; }
+    if (pw.length < 4) { st.textContent = "The password needs at least 4 characters."; st.classList.add("err"); $("acct-pw").focus(); return; }
+    var btn = $("acct-create");
+    btn.disabled = true;
+    api("POST", "/accounts", { name: name, password: pw, color: $("acct-color").value }).then(function (d) {
+      btn.disabled = false;
+      st.textContent = "Created " + d.account.name + ". Their password is: " + pw;
+      $("acct-name").value = "";
+      $("acct-pw").value = "";
+      loadAccounts();
+    }).catch(function (err) {
+      btn.disabled = false;
+      st.textContent = err.message;
+      st.classList.add("err");
+    });
+  });
+
   // ================= MEDIA =================
   // ================= PEOPLE =================
   var peopleState = { list: [], uid: "" };
@@ -1976,6 +2182,11 @@
     if (d.online && d.online.length) {
       var where = d.online.map(function (o) { return o.room; }).join(", ");
       info.appendChild(el("div", "prof-online", "● Online now in " + where));
+    }
+    if (d.account) {
+      var acc = el("div", "faint", "Account: ");
+      acc.appendChild(button("link-btn", d.account.name, function () { openAccount(d.account.id); }, "Open this user's account"));
+      info.appendChild(acc);
     }
     top.appendChild(info);
     body.appendChild(top);

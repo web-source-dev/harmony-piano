@@ -159,7 +159,7 @@
         <form class="hg-form" autocomplete="off" novalidate>
             <div class="hg-field">
                 <label for="hg-password" class="hg-sr" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Password</label>
-                <input id="hg-password" type="password" name="hg-pass" placeholder="Password"
+                <input id="hg-password" type="password" name="hg-pass" placeholder="Your password"
                        autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="200"/>
                 <button type="button" class="hg-eye" aria-label="Show password" title="Show password">👁</button>
             </div>
@@ -213,6 +213,110 @@
             }
             say("Too many tries. Try again in " + left + "s.");
         }, 1000);
+    }
+
+    // ---- User accounts: the same person (and settings) on every device ----
+    // A user's settings live in localStorage (name, colour, volume, mutes,
+    // sound, rooms…). After they log in we load the copy saved on the server
+    // BEFORE the app starts, then keep saving changes back to it.
+    var SYNC_SKIP = { harmonyServerIndex: 1, harmonyAccountId: 1 };   // per-device only
+    var SYNC_VALUE_MAX = 256 * 1024;
+    var syncUser = null, syncLast = "", syncTimer = null;
+    function lsSnapshot() {
+        var out = {};
+        try {
+            for (var i = 0; i < localStorage.length; i++) {
+                var k = localStorage.key(i);
+                if (!k || SYNC_SKIP[k]) continue;
+                var v = localStorage.getItem(k);
+                if (v != null && v.length <= SYNC_VALUE_MAX) out[k] = v;
+            }
+        } catch (e) {}
+        return out;
+    }
+    function lsReset(data) {
+        try {
+            var keep = {};
+            for (var k in SYNC_SKIP) { var v = localStorage.getItem(k); if (v != null) keep[k] = v; }
+            localStorage.clear();
+            for (var k2 in keep) localStorage.setItem(k2, keep[k2]);
+            for (var k3 in (data || {})) localStorage.setItem(k3, String(data[k3]));
+        } catch (e) {}
+    }
+    function restoreUser(user) {
+        return fetch("/api/me/data", { credentials: "same-origin", cache: "no-store" }).then(function (res) {
+            return res.json();
+        }).then(function (d) {
+            var data = d && d.ok && d.data && typeof d.data === "object" ? d.data : null;
+            var prev = null;
+            try { prev = localStorage.getItem("harmonyAccountId"); } catch (e) {}
+            if (data) lsReset(data);                      // their saved settings, from any device
+            else if (prev && prev !== user.id) lsReset(); // someone else used this browser: start clean
+            // (first login on the browser they already used: keep what's here and upload it)
+            try {
+                localStorage.setItem("harmonyAccountId", user.id);
+                if (!localStorage.getItem("harmonyName") && user.name) localStorage.setItem("harmonyName", user.name);
+                if (!localStorage.getItem("harmonyColor") && user.color) localStorage.setItem("harmonyColor", user.color);
+            } catch (e) {}
+            startSync(user, !!data);
+        }).catch(function () { startSync(user, false); });
+    }
+    function pushData(beacon) {
+        if (!syncUser) return;
+        var json = JSON.stringify({ data: lsSnapshot() });
+        if (json === syncLast) return;
+        syncLast = json;
+        if (beacon && navigator.sendBeacon) {
+            try { navigator.sendBeacon("/api/me/data", new Blob([json], { type: "application/json" })); return; } catch (e) {}
+        }
+        fetch("/api/me/data", {
+            method: "POST", credentials: "same-origin", cache: "no-store", keepalive: json.length < 60000,
+            headers: { "Content-Type": "application/json" }, body: json
+        }).then(function (res) {
+            // Account deleted/disabled or password changed: back to the login screen.
+            if (res.status === 401) { stopSync(); location.reload(); }
+            else if (!res.ok) syncLast = "";
+        }).catch(function () { syncLast = ""; });
+    }
+    function startSync(user, justLoaded) {
+        syncUser = user;
+        window.harmonyUser = user;
+        syncLast = justLoaded ? JSON.stringify({ data: lsSnapshot() }) : "";
+        pushData();
+        syncTimer = setInterval(pushData, 15000);
+        document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") pushData(true); });
+        window.addEventListener("pagehide", function () { pushData(true); });
+    }
+    function stopSync() { clearInterval(syncTimer); syncUser = null; }
+    // Save, sign out of the account, and go back to the login screen.
+    window.harmonyLogout = function () {
+        pushData();
+        stopSync();
+        fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(function () {}).then(function () {
+            location.reload();
+        });
+    };
+    function showAccountButton(user) {
+        function go() {
+            var b = document.getElementById("account-btn");
+            if (!b) return;
+            b.textContent = "👤 " + user.name + " · Log out";
+            b.title = "Signed in as " + user.name + " — your settings follow you to any device. Click to log out.";
+            b.style.display = "";
+            b.addEventListener("click", function () {
+                if (confirm("Log out of " + user.name + "?")) window.harmonyLogout();
+            });
+            b.addEventListener("keydown", function (e) {
+                if (e.key === "Enter" || e.key === " ") { e.preventDefault(); b.click(); }
+            });
+        }
+        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", go);
+        else go();
+    }
+    function enter(user) {
+        if (!user) { loadApp(); return; }
+        showAccountButton(user);
+        restoreUser(user).then(loadApp);
     }
 
     // Load the app scripts in order (async=false keeps execution order).
@@ -274,7 +378,7 @@
             busy = false;
             btn.disabled = false;
             btn.textContent = "Enter";
-            if (data.ok) { say("Welcome! 🎶", true); loadApp(); return; }
+            if (data.ok) { say(data.user ? "Welcome, " + data.user.name + "! 🎶" : "Welcome! 🎶", true); enter(data.user); return; }
             input.value = "";
             shake();
             if (data.retryAfter) { lockFor(data.retryAfter); return; }
@@ -292,7 +396,7 @@
     // The card only fades in if the check is slow or says no, so refreshes don't flash it.
     var revealTimer = setTimeout(showCard, 400);
     request("GET").then(function (data) {
-        if (data && data.authed) { clearTimeout(revealTimer); loadApp(); }
+        if (data && data.authed) { clearTimeout(revealTimer); enter(data.user); }
         else showCard();
     }).catch(function () {
         showCard();
@@ -507,6 +611,7 @@
         <div id="wake-bell-btn" class="ugly-button" role="button" tabindex="0" title="Ring a loud 5-second wake-up bell for everyone in the room">🔔 Wake Up</div>
         <div id="love-btn" class="ugly-button" title="Love Corner">💞 Love</div>
         <div id="sound-btn" class="ugly-button sound-btn">Sound Select</div>
+        <div id="account-btn" class="ugly-button" role="button" tabindex="0" style="display:none">👤 Log out</div>
         <div id="status"></div>
         <div id="volume">
             <input type="range" id="volume-slider" min="0.0" max="1.0" step="0.01">

@@ -29,8 +29,8 @@ module.exports = {
 			max_restarts: 10,
 			env: {
 				NODE_ENV: "production",
-				HARMONY_PASSWORD: process.env.HARMONY_PASSWORD || "something",
-				// /manage admin page password (separate from the piano one)
+				// Piano logins are per-user accounts, created on /manage → Accounts.
+				// /manage admin page password:
 				HARMONY_MANAGE_PASSWORD: process.env.HARMONY_MANAGE_PASSWORD || "FF2903369355"
 			}
 		},
