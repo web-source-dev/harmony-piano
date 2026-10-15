@@ -681,11 +681,15 @@ function manageRoomsSnapshot() {
 	mppChatHistory.forEach(function (list, chId) {
 		if (byRoom[chId]) byRoom[chId].chatHistory = list.length;
 	});
+	// Which signed-in user each person is (any of their piano ids, any server).
+	var acctOf = accounts ? accounts.uidMap() : {};
 	return Object.keys(byRoom).sort().map(function (k) {
 		var r = byRoom[k];
 		r.users = Object.keys(r.users).map(function (uid) {
 			var u = r.users[uid];
 			u.where = Object.keys(u.where);
+			var acct = acctOf[uid];
+			if (acct) u.account = { id: acct.id, name: acct.name };
 			return u;
 		}).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
 		return r;
@@ -713,6 +717,15 @@ function liveSend(event, data) {
 	gLiveClients.forEach(function (res) { try { res.write(frame); } catch (e) {} });
 }
 if (chatDb) chatDb.onRow(function (row) { liveSend("row", row); });
+// Accounts changed (created, renamed, logged in, ...): /manage refreshes live,
+// and the account's own piano id carries the new name in People too.
+if (accounts) accounts.onChange(function (ev) {
+	if (ev.why === "rename" || ev.why === "update") {
+		var a = accounts.get(ev.id);
+		if (a && chatDb) chatDb.rememberIdentity({ uid: a.uid, name: a.name, color: a.color });
+	}
+	liveSend("accounts", ev);
+});
 
 // Watch who is online (same data /manage shows) and store joins, leaves and
 // name changes with this server's clock. Rules that avoid fake events:
@@ -870,7 +883,13 @@ function handleManageApi(req, res, route) {
 	}
 	// Everyone the chat log knows (the /manage People tab).
 	if (sub === "/db/roster" && req.method === "GET") {
-		done(null, { people: chatDb ? chatDb.roster({ q: q.q || "", limit: q.limit }) : [], dbOk: !!chatDb });
+		var rosterAcct = accounts ? accounts.uidMap() : {};
+		var roster = chatDb ? chatDb.roster({ q: q.q || "", limit: q.limit }) : [];
+		roster.forEach(function (p) {
+			var a = rosterAcct[p.uid];
+			if (a) { p.account = { id: a.id, name: a.name }; p.name = a.name; if (a.color) p.color = a.color; }
+		});
+		done(null, { people: roster, dbOk: !!chatDb });
 		return;
 	}
 	// One person's full profile: names, IPs, rooms, recent messages, online now.
@@ -1113,11 +1132,6 @@ var server = http.createServer(function (req, res) {
 		}
 		if (req.method === "POST") { handleAuthPost(req, res); return; }
 	}
-	if (route === "/api/auth/logout" && req.method === "POST") {
-		res.setHeader("Set-Cookie", authCookieHeader(req, "", USER_COOKIE) + "; Max-Age=0");
-		sendJson(res, 200, { ok: true });
-		return;
-	}
 	// A signed-in user's saved browser settings: loaded on any device they log
 	// in from, and saved back as they change things.
 	if (route === "/api/me/data") {
@@ -1131,7 +1145,10 @@ var server = http.createServer(function (req, res) {
 		if (req.method === "POST") {
 			readJsonBody(req, accounts.DATA_MAX + 65536, function (err, body) {
 				if (err) { sendJson(res, 400, { ok: false, error: String(err.message || err) }); return; }
-				try { sendJson(res, 200, { ok: true, ts: accounts.setData(acct.id, body && body.data) }); }
+				try {
+					var r = accounts.setData(acct.id, body && body.data, body && body.rename);
+					sendJson(res, 200, { ok: true, ts: r.ts, user: r.user });
+				}
 				catch (e) { sendJson(res, 400, { ok: false, error: e.message }); }
 			});
 			return;
@@ -1709,14 +1726,16 @@ function mppHandle(sock, msg) {
 			// A browser that reconnects keeps its identity (its token is a random
 			// per-browser value; only a hash of it is ever shown to others).
 			if (sock._account && !st.room) {
-				// Signed-in user: the SAME id on every device and browser.
-				var acctRow = sock._account;
+				// Signed-in user: the SAME id, name and colour on every device and
+				// browser (the account is the source of truth; re-read it, it may
+				// have been renamed since this socket connected).
+				var acctRow = accounts.get(sock._account.id) || sock._account;
 				st.user._id = acctRow.uid;
 				st.tokenKnown = true;
+				st.user.name = acctRow.name;
 				var savedA = chatDb && chatDb.getIdentity(st.user._id);
-				st.user.name = (savedA && savedA.name) || acctRow.name;
-				if (savedA && savedA.color) st.user.color = savedA.color;
-				else if (acctRow.color) st.user.color = acctRow.color;
+				if (acctRow.color) st.user.color = acctRow.color;
+				else if (savedA && savedA.color) st.user.color = savedA.color;
 				accounts.linkUid(acctRow.id, acctRow.uid, "backup");
 			} else if (typeof msg.token === "string" && /^[A-Za-z0-9_-]{16,64}$/.test(msg.token) && !st.room) {
 				st.user._id = "h" + crypto.createHash("sha256").update("harmony-id|" + msg.token).digest("hex").slice(0, 24);
@@ -1798,6 +1817,8 @@ function mppHandle(sock, msg) {
 				if (room) mppBroadcast(room, { m: "p", id: st.pid, _id: st.user._id, name: st.user.name, color: st.user.color, x: st.x, y: st.y });
 				// Remember the chosen name/colour so it comes back next time.
 				if (chatDb && st.tokenKnown) chatDb.rememberIdentity({ uid: st.user._id, name: st.user.name, color: st.user.color, ip: sock._ip, server: "backup" });
+				// Signed-in user renamed themselves: that's their account name now.
+				if (accounts && sock._account) accounts.rename(sock._account.id, msg.set.name, msg.set.color);
 			}
 			break;
 		case "chset":

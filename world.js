@@ -43,15 +43,25 @@ const now = () => Date.now();
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage full or blocked */ } };
 
-// one id per tab (survives reloads), so two tabs show up as two people
+// Signed in to a user account (accountSync.js)? Then this is the same person as
+// on the piano, on any device: same id, same name, and their saved settings
+// (World avatar included) are loaded before anything below reads them.
+const ACCOUNT = (window.HarmonyAccount && /^https?:$/.test(location.protocol)) ? await window.HarmonyAccount.boot() : null;
+
+// one id per tab (survives reloads), so two tabs show up as two people —
+// except a signed-in user, who is always their account's id
 let MY_ID;
 try { MY_ID = sessionStorage.getItem("harmonyWorldId"); } catch (e) {}
 if (!MY_ID) { MY_ID = "w" + Math.random().toString(36).slice(2, 10); try { sessionStorage.setItem("harmonyWorldId", MY_ID); } catch (e) {} }
+if (ACCOUNT) MY_ID = ACCOUNT.uid;
 // the piano account id this tab came from (?u=), so /manage's Close on the piano user also closes their world
 let PIANO_ID = (params.get("u") || "").slice(0, 64);
 try { if (PIANO_ID) sessionStorage.setItem("harmonyWorldPianoId", PIANO_ID); else PIANO_ID = sessionStorage.getItem("harmonyWorldPianoId") || ""; } catch (e) {}
-// stable per-browser person id (love notes remember who wrote/read them across visits)
+if (!PIANO_ID && ACCOUNT) PIANO_ID = ACCOUNT.uid;
+// stable person id (love notes remember who wrote/read them across visits);
+// for a signed-in user it's the same on every device
 let ME_PID = lsGet("harmonyWorldPid", "");
+if (ACCOUNT) ME_PID = "p" + ACCOUNT.id;
 if (!ME_PID) { ME_PID = "p" + Math.random().toString(36).slice(2, 12); lsSet("harmonyWorldPid", ME_PID); }
 
 const profile = Object.assign({
@@ -66,6 +76,8 @@ if (!MOODS.some(m => m.id === profile.mood)) profile.mood = "happy";
 	if (!profile.wardrobe || typeof profile.wardrobe !== "object") profile.wardrobe = {};
 }
 if (params.get("n") && !profile.name) profile.name = params.get("n").slice(0, 24);
+// A signed-in user is always called by their account name.
+if (ACCOUNT && ACCOUNT.name) profile.name = ACCOUNT.name.slice(0, 24);
 
 // ============================================================ graphics quality
 // Everything in the world works the same on every device; only how hard the GPU works changes.
@@ -4839,20 +4851,28 @@ $("#nm").addEventListener("keydown", e => { if (e.key === "Enter") $("#enter").c
 
 let needPassword = false;
 async function checkAuth() {
-	if (!/^https?:$/.test(location.protocol)) return true;
+	if (!/^https?:$/.test(location.protocol) || ACCOUNT) return true;
 	try { const r = await fetch("/api/auth", { cache: "no-store" }); const j = await r.json(); return !!j.authed; } catch (e) { return true; }
 }
 $("#enter").onclick = async () => {
-	profile.name = ($("#nm").value.trim() || profile.name || "").slice(0, 24);
-	if (!profile.name) { $("#nm").focus(); $("#nm").style.borderColor = "#ff7aa2"; return; }
 	if (needPassword) {
 		const pw = $("#gpw").value;
+		if (!pw) { $("#gpw").focus(); return; }
 		try {
 			const r = await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: pw }) });
 			const j = await r.json().catch(() => ({}));
 			if (!r.ok || !j.ok) { $("#gerr").textContent = j.error || "Wrong password."; return; }
-			needPassword = false; $("#gate").classList.add("hidden"); $("#gerr").textContent = "";
+			// Signed in: reload so the World starts as this user (their id, name and saved look).
+			location.reload();
+			return;
 		} catch (e) { $("#gerr").textContent = "Couldn't reach the server."; return; }
+	}
+	profile.name = ($("#nm").value.trim() || profile.name || "").slice(0, 24);
+	if (!profile.name) { $("#nm").focus(); $("#nm").style.borderColor = "#ff7aa2"; return; }
+	// Renamed in the World lobby: that's their account name now (piano too, every device).
+	if (ACCOUNT && profile.name !== String(ACCOUNT.name || "").slice(0, 24)) {
+		try { localStorage.setItem("harmonyName", profile.name); } catch (e) {}
+		window.HarmonyAccount.syncSoon();
 	}
 	lsSet(LS_PROFILE, profile);
 	rebuildMe();
@@ -5022,6 +5042,15 @@ requestAnimationFrame(frame);
 		if (ld) { ld.style.opacity = 0; setTimeout(() => ld.remove(), 600); }
 	});
 }
+// Renamed on another device, on the piano, or on /manage: take the new name here too.
+if (ACCOUNT) window.HarmonyAccount.onRename(u => {
+	const name = String(u.name || "").slice(0, 24);
+	if (!name || name === profile.name) return;
+	profile.name = name;
+	lsSet(LS_PROFILE, profile);
+	$("#nm").value = name;
+	if (entered) { rebuildMe(); send({ t: "look", lk: lookPayload() }); refreshPeople(); }
+});
 checkAuth().then(ok => {
 	if (!ok) { needPassword = true; $("#gate").classList.remove("hidden"); }
 	showLobby(false);

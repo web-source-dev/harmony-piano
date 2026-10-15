@@ -140,11 +140,6 @@
 		if (global.funSound) global.funSound("boom");
 		var isMe = id === this._selfId();
 		this._flash(isMe ? "💥 YOU exploded! 💥 lol" : "💥 " + this._name(id) + " exploded! 💥");
-		// celebrate with confetti if the emoji party module is around
-		if (global.gEmojiParty) {
-			if (isMe) global.gEmojiParty.blastConfetti();
-			else global.gEmojiParty.launchEmoji(7, 0.5); // 💀
-		}
 	};
 
 	// ---- ui --------------------------------------------------------------

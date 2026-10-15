@@ -15,7 +15,7 @@
  */
 "use strict";
 
-var CACHE_NAME = "harmony-piano-ui-v19";
+var CACHE_NAME = "harmony-piano-ui-v20";
 
 var SHELL = [
 	"./",
@@ -30,25 +30,14 @@ var SHELL = [
 	"./lame.min.js",
 	"./color.js",
 	"./sheetPlayer.js",
-	"./roomMedia.js",
+	"./mediaUpload.js",
+	"./accountSync.js",
 	"./playMp3.js",
 	"./pianoLearn.js",
 	"./metronome.js",
-	"./blobFriend.js",
-	"./desktopDoodler.js",
-	"./emojiParty.js",
 	"./nameColor.js",
 	"./cursorLooks.js",
-	"./soundBoard.js",
 	"./partyGame.js",
-	"./balloonPop.js",
-	"./carDodge.js",
-	"./reactionRoyale.js",
-	"./tugOfWar.js",
-	"./uselessButton.js",
-	"./pixelPet.js",
-	"./evilCursor.js",
-	"./chaosMonkey.js",
 	"./chatLogger.js?v=20261015d",
 	"./cornerBanner.js",
 	"./funVideoPopup.js",

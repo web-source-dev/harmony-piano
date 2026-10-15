@@ -523,8 +523,8 @@ body.touch #help { display: none; }
 		<h1>Our Little <span>World</span></h1>
 		<p class="sub">A cozy room you share with the people in this piano room. Walk around, sit together, watch TV, play games and leave love notes.</p>
 		<div id="gate" class="field hidden">
-			<label for="gpw">Piano password</label>
-			<input id="gpw" class="input" type="password" autocomplete="off" placeholder="Same password as the piano">
+			<label for="gpw">Your password</label>
+			<input id="gpw" class="input" type="password" autocomplete="off" placeholder="Your own piano password">
 		</div>
 		<div class="field">
 			<label for="nm">Your name</label>
@@ -648,7 +648,8 @@ body.touch #help { display: none; }
 <div id="modal" class="hidden"><div class="win"><header><h2 id="mtitle"></h2><button class="x" id="mclose" aria-label="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header><div class="body" id="mbody"></div></div></div>
 
 <script src="./roomSync.js?v=20261002w"></script>
-<script type="module" src="./world.js?v=20261006c"></script>
+<script src="./accountSync.js?v=20261016a"></script>
+<script type="module" src="./world.js?v=20261016a"></script>
 <script>
 // If the module never boots (old browser / CDN blocked), say so instead of spinning forever.
 setTimeout(function () {

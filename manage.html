@@ -321,6 +321,8 @@
   .acct-row { display: flex; gap: 8px; align-items: center; padding: 4px 0; flex-wrap: wrap; color: var(--muted); }
   .acct-row .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--text); }
   .tag.ok { background: var(--ok-soft); color: #9be3bf; }
+  .tag.acct { background: rgba(167,139,250,.18); color: #d4c6ff; border: 0; cursor: pointer; font-family: inherit; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: none; }
+  .tag.acct:hover { background: rgba(167,139,250,.3); }
   .tag.off { background: var(--danger-bg); color: #ff9b9e; }
   .link-btn { background: none; border: 0; padding: 0; color: var(--focus); cursor: pointer; font: inherit; text-decoration: underline; }
   @media (max-width: 700px) {
@@ -955,7 +957,7 @@
   }
 
   // ================= live stream from the server (Server-Sent Events) =================
-  var liveSource = null, presenceTimer = null;
+  var liveSource = null, presenceTimer = null, accountsTimer = null;
   function setLiveConn(ok) {
     var c = $("live-conn");
     c.classList.toggle("off", !ok);
@@ -982,6 +984,21 @@
     liveSource.addEventListener("presence", function () {
       if (presenceTimer) return;
       presenceTimer = setTimeout(function () { presenceTimer = null; loadOverview(); }, 400);
+    });
+    // An account was created, renamed, logged in, ... — refresh what shows it.
+    liveSource.addEventListener("accounts", function (e) {
+      var ev = {};
+      try { ev = JSON.parse(e.data); } catch (err) {}
+      if (ev.id) delete acctState.details[ev.id];
+      if (accountsTimer) return;
+      accountsTimer = setTimeout(function () {
+        accountsTimer = null;
+        loadAccounts();
+        if (ev.why === "rename" || ev.why === "update" || ev.why === "delete") {
+          loadOverview();
+          if (state.tab === "people") loadPeopleTab();
+        }
+      }, 400);
     });
     liveSource.addEventListener("typing", function (e) {
       var d;
@@ -1045,6 +1062,7 @@
     updateSoundBanner();
     startLive();
     switchTab(readHashTab() || "live");
+    if (state.tab !== "accounts") loadAccounts();   // the tab's count, and 🔑 labels
   }
   $("login-eye").addEventListener("click", function () {
     var pw = $("login-pw"), show = pw.type === "password";
@@ -1144,6 +1162,11 @@
     name.title = u.name + " — " + u._id + (u.ip ? " — " + u.ip : "") + "\nClick for this person's profile";
     name.addEventListener("click", function () { openProfile(u._id); });
     row.appendChild(name);
+    if (u.account) {
+      var acc = button("tag acct", "🔑 " + u.account.name, function () { openAccount(u.account.id); },
+        "Signed in as the user " + u.account.name + " — click for their account");
+      row.appendChild(acc);
+    }
     row.appendChild(tags(u.where));
     if (u.where.indexOf("harmony") >= 0) {
       var close = button("btn btn-sm btn-danger", "Close", null, "Close " + u.name + "'s Harmony tab");
@@ -1195,6 +1218,8 @@
       renderOverview();
       renderSide();
       if (state.tab === "logs") renderRoomList();
+      if (state.tab === "accounts") renderAccounts();
+      if (state.tab === "people") renderPeopleList();
     }).catch(function (err) { if (!err.data) setLive(false); });
   }
   function onlineByRoom() {
@@ -1943,26 +1968,42 @@
   });
 
   // ================= ACCOUNTS =================
-  var acctState = { list: [], open: {} };
+  var acctState = { list: [], open: {}, details: {} };
   function loadAccounts() {
     return api("GET", "/accounts").then(function (d) {
       acctState.list = d.accounts || [];
       $("c-accounts").textContent = acctState.list.length;
-      renderAccounts();
+      if (state.tab === "accounts") renderAccounts();
     }).catch(fail);
+  }
+  // Which rooms each user is in right now, on any device / any of their ids.
+  function onlineAccounts() {
+    var out = {};
+    (state.overview ? state.overview.rooms : []).forEach(function (r) {
+      r.users.forEach(function (u) {
+        if (!u.account) return;
+        var rooms = out[u.account.id] || (out[u.account.id] = []);
+        if (rooms.indexOf(r.room) < 0) rooms.push(r.room);
+      });
+    });
+    return out;
   }
   function renderAccounts() {
     var list = $("acct-list");
     var q = $("acct-search").value.trim().toLowerCase();
-    var onlineIds = onlineIdSet();
+    var online = onlineAccounts();
     var rows = acctState.list.filter(function (a) { return !q || a.name.toLowerCase().indexOf(q) >= 0 || a.uid.indexOf(q) >= 0; });
-    var on = acctState.list.filter(function (a) { return onlineIds[a.uid]; }).length;
+    var on = acctState.list.filter(function (a) { return online[a.id]; }).length;
     $("acct-summary").textContent = acctState.list.length ? plural(acctState.list.length, "user") + (on ? " · " + on + " online" : "") : "";
+    // Keep the scroll position and any half-typed search while re-rendering live.
+    var panel = list.closest(".panel"), top = panel ? panel.scrollTop : 0;
     list.textContent = "";
     if (!rows.length) { list.appendChild(emptyState("🔑", acctState.list.length ? "No user matches." : "No users yet. Create one above.")); return; }
-    rows.forEach(function (a) { list.appendChild(accountCard(a, !!onlineIds[a.uid])); });
+    rows.forEach(function (a) { list.appendChild(accountCard(a, online[a.id])); });
+    if (panel) panel.scrollTop = top;
   }
-  function accountCard(a, online) {
+  function accountCard(a, onlineRooms) {
+    var online = !!onlineRooms;
     var card = el("div", "acct-card" + (a.disabled ? " off" : ""));
     card.id = "acct-" + a.id;
     var head = el("div", "acct-head");
@@ -1977,6 +2018,7 @@
     if (online) nm.appendChild(el("span", "tag ok", "ONLINE"));
     if (a.disabled) nm.appendChild(el("span", "tag off", "DISABLED"));
     txt.appendChild(nm);
+    if (online) txt.appendChild(el("div", "prof-online", "● Online now in " + onlineRooms.join(", ")));
     txt.appendChild(el("div", "acct-meta", a.last_login_ts
       ? "Last login " + ago(a.last_login_ts) + (a.last_ip ? " from " + a.last_ip : "") + " · " + plural(a.logins, "login") + (a.last_seen_ts ? " · seen " + ago(a.last_seen_ts) : "")
       : "Never logged in yet"));
@@ -2016,9 +2058,16 @@
 
     if (acctState.open[a.id]) {
       var more = el("div", "acct-more");
-      more.appendChild(emptyState("⏳", "Loading…"));
       card.appendChild(more);
-      api("GET", "/accounts/detail?id=" + encodeURIComponent(a.id)).then(function (d) {
+      // Cached, so live re-renders don't flash "Loading…"; dropped whenever
+      // the server says this account changed.
+      var cached = acctState.details[a.id];
+      if (!cached) {
+        more.appendChild(emptyState("⏳", "Loading…"));
+        cached = acctState.details[a.id] = api("GET", "/accounts/detail?id=" + encodeURIComponent(a.id));
+        cached.catch(function () { delete acctState.details[a.id]; });
+      }
+      cached.then(function (d) {
         more.textContent = "";
         more.appendChild(el("div", "prof-sec", "Piano ids (one per device on the public server)"));
         if (!d.uids.length) more.appendChild(el("div", "faint", "None yet — they haven't played since the account was made."));
@@ -2127,6 +2176,7 @@
       nm.style.color = readable(p.color, p.name || p.uid);
       t.appendChild(nm);
       if (onlineIds[p.uid]) t.appendChild(el("span", "live-n", "online"));
+      if (p.account) t.appendChild(el("span", "tag acct", "🔑 user"));
       txt.appendChild(t);
       txt.appendChild(el("div", "m", plural(p.messages || 0, "message") + " · " + plural(p.ip_count || 0, "IP")));
       txt.appendChild(el("div", "m", "Seen " + ago(p.last_ts)));
@@ -2161,7 +2211,7 @@
     }).catch(function (err) { body.textContent = ""; body.appendChild(emptyState("⚠️", err.message)); });
   }
   function renderProfile(d) {
-    var name = (d.names[0] && d.names[0].name) || (d.identity && d.identity.name) || "(no name)";
+    var name = (d.account && d.account.name) || (d.names[0] && d.names[0].name) || (d.identity && d.identity.name) || "(no name)";
     var color = (d.names[0] && d.names[0].color) || (d.identity && d.identity.color) || "";
     $("prof-name").textContent = name;
     $("prof-sub").textContent = d.uid;

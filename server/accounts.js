@@ -123,8 +123,30 @@ function open(chatDb) {
 		};
 	}
 
+	// /manage listens so its Accounts tab updates live.
+	var listeners = [];
+	function changed(id, why) { listeners.forEach(function (fn) { try { fn({ id: id, why: why }); } catch (e) {} }); }
+
+	// The account's name/colour is THE name the person has everywhere. It also
+	// lives in their saved browser settings (harmonyName / harmonyColor), so
+	// both are always written together. Returns true when something changed.
+	function setProfile(a, name, col) {
+		var data = {};
+		try { data = a.data ? JSON.parse(a.data) : {}; } catch (e) { data = {}; }
+		var newName = name != null ? name : a.name;
+		var newColor = col != null ? col : a.color;
+		if (newName === a.name && newColor === a.color && (!a.data || (data.harmonyName === newName && (!newColor || data.harmonyColor === newColor)))) return false;
+		if (a.data) {
+			data.harmonyName = newName;
+			if (newColor) data.harmonyColor = newColor;
+		}
+		db.prepare("UPDATE accounts SET name = ?, color = ?, data = ? WHERE id = ?").run(newName, newColor, a.data ? JSON.stringify(data) : "", a.id);
+		return newName !== a.name || newColor !== a.color;
+	}
+
 	return {
 		DATA_MAX: DATA_MAX,
+		onChange: function (fn) { listeners.push(fn); },
 
 		list: function () {
 			return db.prepare("SELECT * FROM accounts ORDER BY name COLLATE NOCASE").all().map(pub);
@@ -147,13 +169,15 @@ function open(chatDb) {
 			db.prepare(
 				"INSERT INTO accounts (id, name, color, uid, pw_key, pw_hash, created_ts) VALUES (?, ?, ?, ?, ?, ?, ?)"
 			).run(id, name, color(o.color), uid, pwKey(pw), pwHash(pw), Date.now());
+			changed(id, "create");
 			return pub(stById.get(id));
 		},
 		update: function (o) {
 			var a = stById.get(str(o.id, 64));
 			if (!a) throw new Error("No such user");
-			if (o.name != null) db.prepare("UPDATE accounts SET name = ? WHERE id = ?").run(checkName(o.name), a.id);
-			if (o.color != null) db.prepare("UPDATE accounts SET color = ? WHERE id = ?").run(color(o.color), a.id);
+			if (o.name != null || o.color != null) {
+				setProfile(a, o.name != null ? checkName(o.name) : null, o.color != null ? color(o.color) : null);
+			}
 			if (o.password != null) {
 				var pw = checkPassword(o.password, a.id);
 				db.prepare("UPDATE accounts SET pw_key = ?, pw_hash = ?, session_ver = session_ver + 1 WHERE id = ?").run(pwKey(pw), pwHash(pw), a.id);
@@ -162,13 +186,26 @@ function open(chatDb) {
 				db.prepare("UPDATE accounts SET disabled = ?, session_ver = session_ver + ? WHERE id = ?").run(o.disabled ? 1 : 0, o.disabled ? 1 : 0, a.id);
 			}
 			if (o.clearData) db.prepare("UPDATE accounts SET data = '', data_ts = 0 WHERE id = ?").run(a.id);
+			changed(a.id, "update");
 			return pub(stById.get(a.id));
+		},
+		// The person renamed themselves in the piano (any server, any device).
+		rename: function (id, name, col) {
+			var a = stById.get(str(id, 64));
+			if (!a) return null;
+			name = name != null ? str(name).trim().replace(/\s+/g, " ").slice(0, NAME_MAX) : null;
+			col = col != null ? color(col) || null : null;
+			if (!name) name = null;
+			if (!name && !col) return a;
+			if (setProfile(a, name, col)) changed(a.id, "rename");
+			return stById.get(a.id);
 		},
 		remove: function (id) {
 			id = str(id, 64);
 			var n = db.prepare("DELETE FROM accounts WHERE id = ?").run(id).changes;
 			db.prepare("DELETE FROM account_logins WHERE account_id = ?").run(id);
 			db.prepare("DELETE FROM account_uids WHERE account_id = ?").run(id);
+			if (n) changed(id, "delete");
 			return n;
 		},
 
@@ -183,6 +220,7 @@ function open(chatDb) {
 			db.prepare(
 				"DELETE FROM account_logins WHERE account_id = ? AND id NOT IN " +
 				"(SELECT id FROM account_logins WHERE account_id = ? ORDER BY id DESC LIMIT " + LOGINS_KEPT + ")").run(a.id, a.id);
+			changed(a.id, "login");
 			return stById.get(a.id);
 		},
 		// Signed cookie value: id.ver.nonce.sig — changing the password or
@@ -207,7 +245,19 @@ function open(chatDb) {
 			uid = str(uid, 64);
 			if (!accountId || !uid) return;
 			var now = Date.now();
+			var isNew = !db.prepare("SELECT 1 FROM account_uids WHERE account_id = ? AND uid = ?").get(accountId, uid);
 			stLinkUid.run(accountId, uid, str(server, 20), now, now);
+			if (isNew) changed(accountId, "uid");
+		},
+		// Every piano id that belongs to an account -> { id, name } (one query,
+		// used to label who's online and the People list on /manage).
+		uidMap: function () {
+			var map = Object.create(null);
+			db.prepare("SELECT u.uid, a.id, a.name, a.color FROM account_uids u JOIN accounts a ON a.id = u.account_id ORDER BY u.last_ts").all()
+				.forEach(function (r) { map[r.uid] = { id: r.id, name: r.name, color: r.color }; });
+			db.prepare("SELECT uid, id, name, color FROM accounts").all()
+				.forEach(function (r) { map[r.uid] = { id: r.id, name: r.name, color: r.color }; });
+			return map;
 		},
 		// Which account a piano id belongs to (for /manage People profiles).
 		byUid: function (uid) {
@@ -227,7 +277,7 @@ function open(chatDb) {
 			try { data = a.data ? JSON.parse(a.data) : null; } catch (e) { data = null; }
 			return { data: data, ts: a.data_ts };
 		},
-		setData: function (id, data) {
+		setData: function (id, data, rename) {
 			if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Bad data");
 			var clean = {};
 			Object.keys(data).forEach(function (k) {
@@ -235,9 +285,19 @@ function open(chatDb) {
 			});
 			var json = JSON.stringify(clean);
 			if (json.length > DATA_MAX) throw new Error("Saved settings are too big");
+			var a = stById.get(str(id, 64));
+			if (!a) throw new Error("No such user");
+			// A rename the person made on THIS device (the browser sends it only
+			// when they changed it there), applied before anything else.
+			if (rename && typeof rename === "object") a = this.rename(a.id, rename.name, rename.color) || a;
+			// Otherwise the account's name wins: a device that's just behind can
+			// never undo a rename made on another device or on /manage.
+			clean.harmonyName = a.name;
+			if (a.color) clean.harmonyColor = a.color;
+			json = JSON.stringify(clean);
 			var now = Date.now();
-			db.prepare("UPDATE accounts SET data = ?, data_ts = ?, last_seen_ts = ? WHERE id = ?").run(json, now, now, str(id, 64));
-			return now;
+			db.prepare("UPDATE accounts SET data = ?, data_ts = ?, last_seen_ts = ? WHERE id = ?").run(json, now, now, a.id);
+			return { ts: now, user: { id: a.id, name: a.name, color: a.color, uid: a.uid } };
 		}
 	};
 }

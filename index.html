@@ -7,9 +7,11 @@
     <title>Multiplayer Piano</title>
     <meta name="description"
           content="An online piano you can play alone or with others in real-time. MIDI support, 88 keys, velocity sensitive. You can show off your skill or chat while listening to others play."/>
-    <link rel="stylesheet" href="./screen.css?v=20261010b"/>
+    <link rel="stylesheet" href="./screen.css?v=20261016a"/>
     <!-- Phone with "Desktop site" on: still use the phone layout (after the CSS it adjusts). -->
     <script src="./forceMobile.js?v=20260929a"></script>
+    <!-- User accounts: same name + settings on every device (piano and World). -->
+    <script src="./accountSync.js?v=20261016a"></script>
     <link rel="canonical" href="https://multiplayerpiano.com/">
 
     <!-- Password gate: hide the whole app until the password is verified. -->
@@ -215,108 +217,11 @@
         }, 1000);
     }
 
-    // ---- User accounts: the same person (and settings) on every device ----
-    // A user's settings live in localStorage (name, colour, volume, mutes,
-    // sound, rooms…). After they log in we load the copy saved on the server
-    // BEFORE the app starts, then keep saving changes back to it.
-    var SYNC_SKIP = { harmonyServerIndex: 1, harmonyAccountId: 1 };   // per-device only
-    var SYNC_VALUE_MAX = 256 * 1024;
-    var syncUser = null, syncLast = "", syncTimer = null;
-    function lsSnapshot() {
-        var out = {};
-        try {
-            for (var i = 0; i < localStorage.length; i++) {
-                var k = localStorage.key(i);
-                if (!k || SYNC_SKIP[k]) continue;
-                var v = localStorage.getItem(k);
-                if (v != null && v.length <= SYNC_VALUE_MAX) out[k] = v;
-            }
-        } catch (e) {}
-        return out;
-    }
-    function lsReset(data) {
-        try {
-            var keep = {};
-            for (var k in SYNC_SKIP) { var v = localStorage.getItem(k); if (v != null) keep[k] = v; }
-            localStorage.clear();
-            for (var k2 in keep) localStorage.setItem(k2, keep[k2]);
-            for (var k3 in (data || {})) localStorage.setItem(k3, String(data[k3]));
-        } catch (e) {}
-    }
-    function restoreUser(user) {
-        return fetch("/api/me/data", { credentials: "same-origin", cache: "no-store" }).then(function (res) {
-            return res.json();
-        }).then(function (d) {
-            var data = d && d.ok && d.data && typeof d.data === "object" ? d.data : null;
-            var prev = null;
-            try { prev = localStorage.getItem("harmonyAccountId"); } catch (e) {}
-            if (data) lsReset(data);                      // their saved settings, from any device
-            else if (prev && prev !== user.id) lsReset(); // someone else used this browser: start clean
-            // (first login on the browser they already used: keep what's here and upload it)
-            try {
-                localStorage.setItem("harmonyAccountId", user.id);
-                if (!localStorage.getItem("harmonyName") && user.name) localStorage.setItem("harmonyName", user.name);
-                if (!localStorage.getItem("harmonyColor") && user.color) localStorage.setItem("harmonyColor", user.color);
-            } catch (e) {}
-            startSync(user, !!data);
-        }).catch(function () { startSync(user, false); });
-    }
-    function pushData(beacon) {
-        if (!syncUser) return;
-        var json = JSON.stringify({ data: lsSnapshot() });
-        if (json === syncLast) return;
-        syncLast = json;
-        if (beacon && navigator.sendBeacon) {
-            try { navigator.sendBeacon("/api/me/data", new Blob([json], { type: "application/json" })); return; } catch (e) {}
-        }
-        fetch("/api/me/data", {
-            method: "POST", credentials: "same-origin", cache: "no-store", keepalive: json.length < 60000,
-            headers: { "Content-Type": "application/json" }, body: json
-        }).then(function (res) {
-            // Account deleted/disabled or password changed: back to the login screen.
-            if (res.status === 401) { stopSync(); location.reload(); }
-            else if (!res.ok) syncLast = "";
-        }).catch(function () { syncLast = ""; });
-    }
-    function startSync(user, justLoaded) {
-        syncUser = user;
-        window.harmonyUser = user;
-        syncLast = justLoaded ? JSON.stringify({ data: lsSnapshot() }) : "";
-        pushData();
-        syncTimer = setInterval(pushData, 15000);
-        document.addEventListener("visibilitychange", function () { if (document.visibilityState === "hidden") pushData(true); });
-        window.addEventListener("pagehide", function () { pushData(true); });
-    }
-    function stopSync() { clearInterval(syncTimer); syncUser = null; }
-    // Save, sign out of the account, and go back to the login screen.
-    window.harmonyLogout = function () {
-        pushData();
-        stopSync();
-        fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(function () {}).then(function () {
-            location.reload();
-        });
-    };
-    function showAccountButton(user) {
-        function go() {
-            var b = document.getElementById("account-btn");
-            if (!b) return;
-            b.textContent = "👤 " + user.name + " · Log out";
-            b.title = "Signed in as " + user.name + " — your settings follow you to any device. Click to log out.";
-            b.style.display = "";
-            b.addEventListener("click", function () {
-                if (confirm("Log out of " + user.name + "?")) window.harmonyLogout();
-            });
-            b.addEventListener("keydown", function (e) {
-                if (e.key === "Enter" || e.key === " ") { e.preventDefault(); b.click(); }
-            });
-        }
-        if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", go);
-        else go();
-    }
+    // Signed in: load this user's saved settings (accountSync.js) before the
+    // app starts, so they're the same person with the same settings anywhere.
     function enter(user) {
-        if (!user) { loadApp(); return; }
-        showAccountButton(user);
-        restoreUser(user).then(loadApp);
+        if (!user || !window.HarmonyAccount) { loadApp(); return; }
+        window.HarmonyAccount.restore(user).then(loadApp);
     }
 
     // Load the app scripts in order (async=false keeps execution order).
@@ -460,78 +365,12 @@
 <aside id="harmony-tools" class="harmony-tools" aria-label="Play tools">
     <div class="harmony-tools-bar">
         <span class="harmony-tools-label">Play</span>
-        <button type="button" id="harmony-blob-btn" class="harmony-tool-btn" title="Blob Friend — poke, stretch, throw">
-            <span class="harmony-tool-icon" aria-hidden="true">🫧</span> Blob
-        </button>
-        <button type="button" id="harmony-doodle-btn" class="harmony-tool-btn" title="Desktop Doodler — shared sketch pad">
-            <span class="harmony-tool-icon" aria-hidden="true">✏️</span> Doodle
-        </button>
-        <button type="button" id="harmony-react-btn" class="harmony-tool-btn" title="Emoji reactions + confetti for the whole room">
-            <span class="harmony-tool-icon" aria-hidden="true">🎉</span> React
-        </button>
-        <button type="button" id="harmony-sound-btn" class="harmony-tool-btn" title="Funny soundboard — everyone hears it">
-            <span class="harmony-tool-icon" aria-hidden="true">🔊</span> Sounds
-        </button>
         <button type="button" id="harmony-bomb-btn" class="harmony-tool-btn" title="Hot Potato Bomb — pass it before it blows!">
             <span class="harmony-tool-icon" aria-hidden="true">💣</span> Bomb
-        </button>
-        <button type="button" id="harmony-balloon-btn" class="harmony-tool-btn" title="Balloon Pop — race the room to pop the most balloons!">
-            <span class="harmony-tool-icon" aria-hidden="true">🎈</span> Balloons
-        </button>
-        <button type="button" id="harmony-cardodge-btn" class="harmony-tool-btn" title="Car Dodge — join, get a car, dodge obstacles, last one driving wins!">
-            <span class="harmony-tool-icon" aria-hidden="true">🏎️</span> Cars
-        </button>
-        <button type="button" id="harmony-reaction-btn" class="harmony-tool-btn" title="Reaction Royale — wait for green, fastest tap wins!">
-            <span class="harmony-tool-icon" aria-hidden="true">⚡</span> Reflex
-        </button>
-        <button type="button" id="harmony-tug-btn" class="harmony-tool-btn" title="Tug of War — mash to pull the flag to your team's side!">
-            <span class="harmony-tool-icon" aria-hidden="true">🪢</span> Tug
-        </button>
-        <button type="button" id="harmony-useless-btn" class="harmony-tool-btn" title="The button that refuses to be clicked">
-            <span class="harmony-tool-icon" aria-hidden="true">🙅</span> Useless
-        </button>
-        <button type="button" id="harmony-pet-btn" class="harmony-tool-btn" title="A pixel pet that follows your cursor — feed it!">
-            <span class="harmony-tool-icon" aria-hidden="true">🐾</span> Pet
-        </button>
-        <button type="button" id="harmony-evil-btn" class="harmony-tool-btn" title="An evil cursor that argues with yours">
-            <span class="harmony-tool-icon" aria-hidden="true">😈</span> Evil
-        </button>
-        <button type="button" id="harmony-chaos-btn" class="harmony-tool-btn" title="Chaos Monkey — harmless mischief (toggle off to undo)">
-            <span class="harmony-tool-icon" aria-hidden="true">🐵</span> Chaos
         </button>
         <button type="button" id="harmony-piano-btn" class="harmony-tool-btn" title="Show or hide the piano">
             <span class="harmony-tool-icon" aria-hidden="true">🎹</span> Piano
         </button>
-    </div>
-    <div id="play-area" class="play-area" hidden>
-        <div id="blob-friend" class="play-widget blob-widget blob-hidden">
-            <header class="play-widget-head">
-                <span class="play-widget-title">Blob Buddy</span>
-                <span class="play-widget-sub">poke · yeet · pop</span>
-                <button type="button" class="blob-add-btn play-widget-btn" title="Add a blob (max 5)">＋ Blob</button>
-                <button type="button" class="blob-toggle-btn play-widget-btn" title="Close">×</button>
-            </header>
-            <canvas class="blob-canvas" aria-label="Squishy blob friends"></canvas>
-        </div>
-        <div id="desktop-doodler" class="play-widget doodler-widget doodler-hidden">
-            <header class="play-widget-head">
-                <span class="play-widget-title">Doodler</span>
-                <div class="doodler-palette"></div>
-                <div class="doodler-toolbar">
-                    <div class="doodler-tool-group"></div>
-                    <div class="doodler-brush-group">
-                        <button type="button" class="doodler-brush-btn" data-width="2" title="Thin pen">●</button>
-                        <button type="button" class="doodler-brush-btn active" data-width="4" title="Medium pen">●</button>
-                        <button type="button" class="doodler-brush-btn" data-width="8" title="Thick pen">●</button>
-                    </div>
-                    <div class="doodler-stamp-group"></div>
-                    <button type="button" class="doodler-clear-btn play-widget-btn" title="Clear for everyone">Clear</button>
-                    <button type="button" class="doodler-minimize-btn play-widget-btn" title="Minimize">−</button>
-                    <button type="button" class="doodler-toggle-btn play-widget-btn" title="Close">×</button>
-                </div>
-            </header>
-            <canvas class="doodler-canvas" aria-label="Shared sketch pad"></canvas>
-        </div>
     </div>
 </aside>
 
@@ -593,8 +432,6 @@
         <div id="play-alone-btn" class="ugly-button">Play Alone</div>
         <div id="room-settings-btn" class="ugly-button">Room Settings</div>
         <div id="server-btn" class="ugly-button" title="Switch between public MPP and the Harmony backup server">Server: MPP</div>
-        <div id="room-media-btn" class="ugly-button room-dj-btn">Room DJ</div>
-        <div id="media-library-btn" class="ugly-button room-dj-btn" title="Browse and upload shared audio, video, and images">Media Library</div>
         <div id="midi-btn" class="ugly-button translate">MIDI In/Out</div>
         <div id="record-btn" class="ugly-button translate">Record MP3</div>
         <div id="play-mp3-btn" class="ugly-button translate">Play MP3</div>
@@ -610,8 +447,6 @@
         <div id="kiss-btn" class="ugly-button" title="Send a big kiss — everyone in the room sees and hears it">💋 Send Kiss</div>
         <div id="wake-bell-btn" class="ugly-button" role="button" tabindex="0" title="Ring a loud 5-second wake-up bell for everyone in the room">🔔 Wake Up</div>
         <div id="love-btn" class="ugly-button" title="Love Corner">💞 Love</div>
-        <div id="sound-btn" class="ugly-button sound-btn">Sound Select</div>
-        <div id="account-btn" class="ugly-button" role="button" tabindex="0" style="display:none">👤 Log out</div>
         <div id="status"></div>
         <div id="volume">
             <input type="range" id="volume-slider" min="0.0" max="1.0" step="0.01">
@@ -903,64 +738,6 @@
     </div>
 </div>
 
-<div id="room-media-transport" class="room-media-transport" hidden>
-    <div class="room-media-player">
-        <div class="room-media-player-head">
-            <div class="room-media-now">
-                <span class="room-media-now-label">Now playing</span>
-                <span class="room-media-title">No track loaded</span>
-                <span class="room-media-dj"></span>
-            </div>
-            <button type="button" class="room-media-player-close" title="Close player">Close</button>
-        </div>
-        <div class="room-media-timeline">
-            <span class="time-current">0:00</span>
-            <div class="room-media-seek-wrap">
-                <input type="range" name="seek" min="0" max="1000" value="0" step="0.1" class="seek-slider" title="Seek"/>
-            </div>
-            <span class="time-total">0:00</span>
-        </div>
-        <div class="room-media-toolbar">
-            <div class="room-media-toolbar-playback">
-                <button type="button" class="dj-btn back" title="Back 10 seconds">-10</button>
-                <button type="button" class="dj-btn play primary" title="Play">Play</button>
-                <button type="button" class="dj-btn pause" title="Pause" hidden>Pause</button>
-                <button type="button" class="dj-btn stop" title="Stop">Stop</button>
-                <button type="button" class="dj-btn forward" title="Forward 10 seconds">+10</button>
-            </div>
-            <div class="room-media-toolbar-view">
-                <button type="button" class="dj-btn room-media-sync" title="Request sync">Sync</button>
-                <button type="button" class="dj-btn room-media-hide-piano-transport" title="Hide piano keys" hidden>Piano</button>
-                <button type="button" class="dj-btn room-media-cinema-transport" title="Fullscreen video" hidden>Full</button>
-                <button type="button" class="dj-btn room-media-chat-transport" title="Show room chat" hidden>Chat</button>
-            </div>
-            <label class="room-media-vol" title="Volume">
-                <span class="vol-label">Volume</span>
-                <input type="range" name="volume" min="0" max="1" step="0.01" value="0.85" class="volume-slider"/>
-            </label>
-        </div>
-    </div>
-</div>
-
-<div id="room-media-video-wrap" class="room-media-video-wrap" hidden>
-    <div class="room-media-video-head">
-        <div class="room-media-video-meta">
-            <span class="room-media-video-label">Preview</span>
-            <span class="room-media-video-title">Video</span>
-        </div>
-        <div class="room-media-video-head-actions">
-            <button type="button" class="room-media-hide-piano-btn">Piano</button>
-            <button type="button" class="room-media-cinema-btn">Full</button>
-            <button type="button" class="room-media-chat-btn" hidden>Chat</button>
-            <button type="button" class="room-media-video-close">Close</button>
-        </div>
-    </div>
-    <div class="room-media-video-stage">
-        <div id="room-media-video-mount" class="room-media-video-mount"></div>
-        <div id="room-media-youtube-mount" class="room-media-youtube-mount"></div>
-    </div>
-</div>
-<div id="room-media-audio-mount" class="room-media-audio-mount" hidden aria-hidden="true"></div>
 
 <div id="modal">
     <div class="bg"></div>
@@ -1179,7 +956,7 @@
                             <span class="room-media-drop-text">Click or drop an image</span>
                             <span class="room-media-drop-name"></span>
                         </label>
-                        <p class="room-media-hint">Needs the media server running (same as Room DJ).</p>
+                        <p class="room-media-hint">Needs the media server running (media-server.py).</p>
                     </section>
                     <p class="room-media-status share-image-status">Ready</p>
                     <div class="room-media-actions">
@@ -1229,109 +1006,6 @@
                 </form>
             </div>
         </div>
-        <div id="room-media" class="dialog room-media-dialog">
-            <div class="room-media-dialog-inner">
-                <header class="room-media-dialog-header">
-                    <h2 class="room-media-dialog-title">Room DJ</h2>
-                </header>
-                <div class="room-media-dialog-body">
-
-                    <section class="room-media-section">
-                        <h3 class="room-media-section-title">Upload file</h3>
-                        <label class="room-media-drop">
-                            <input type="file" name="mediafile" accept="audio/*,video/*,.mp3,.m4a,.wav,.ogg,.mp4,.webm,.mov,.mkv"/>
-                            <span class="room-media-drop-text">Click or drop audio / video</span>
-                            <span class="room-media-drop-name"></span>
-                        </label>
-                    </section>
-
-                    <section class="room-media-section">
-                        <h3 class="room-media-section-title">Direct audio link</h3>
-                        <input type="text" name="mediaurl" class="room-media-url" placeholder="https://example.com/track.mp3" maxlength="480"/>
-                        <p class="room-media-hint">Streams from the link — no upload.</p>
-                    </section>
-
-                    <section class="room-media-section">
-                        <h3 class="room-media-section-title">Direct video link</h3>
-                        <input type="text" name="videourl" class="room-media-url room-media-video-url" placeholder="https://example.com/video.mp4 or .webm" maxlength="480"/>
-                        <p class="room-media-hint">Plays in the room like YouTube — each person streams from the URL (no VPS bandwidth).</p>
-                    </section>
-
-                    <section class="room-media-section">
-                        <h3 class="room-media-section-title">YouTube</h3>
-                        <input type="text" name="youtubeurl" class="room-media-url room-media-youtube-url" placeholder="youtube.com/watch, /shorts/, or youtu.be" maxlength="480"/>
-                    </section>
-
-                    <p class="room-media-status">Ready</p>
-
-                    <div class="room-media-actions">
-                        <button type="button" class="dj-btn primary room-media-load">Load and share</button>
-                        <div class="room-media-actions-row">
-                            <button type="button" class="dj-btn play">Play</button>
-                            <button type="button" class="dj-btn stop subtle">Stop</button>
-                            <button type="button" class="dj-btn room-media-sync subtle">Sync</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div id="media-library" class="dialog room-media-dialog media-library-dialog">
-            <div class="room-media-dialog-inner media-library-shell">
-                <header class="media-library-header">
-                    <div class="media-library-header-text">
-                        <h2 class="media-library-title">Media Library</h2>
-                    </div>
-                    <div class="media-library-header-actions">
-                        <button type="button" class="ml-btn ml-btn-ghost media-library-refresh" title="Refresh library">Refresh</button>
-                    </div>
-                </header>
-
-                <div class="media-library-stage">
-                    <div id="media-library-list" class="media-library-grid" role="list"></div>
-                    <div class="media-library-empty" hidden>
-                        <div class="media-library-empty-icon" aria-hidden="true">◇</div>
-                        <p class="media-library-empty-title">Nothing here yet</p>
-                        <p class="media-library-empty-copy">Upload audio, video, or an image to build the shared library.</p>
-                    </div>
-                </div>
-
-                <footer class="media-library-footer">
-                    <label class="media-library-drop">
-                        <input type="file" name="libraryfile" accept="audio/*,video/*,image/*,.mp3,.m4a,.wav,.ogg,.mp4,.webm,.mov,.mkv,.png,.jpg,.jpeg,.gif,.webp"/>
-                        <span class="media-library-drop-main">
-                            <span class="media-library-drop-title">Add to library</span>
-                            <span class="media-library-drop-text">Drop a file or click to browse</span>
-                            <span class="media-library-drop-name"></span>
-                        </span>
-                    </label>
-                    <button type="button" class="ml-btn ml-btn-accent media-library-upload">Upload</button>
-                </footer>
-            </div>
-        </div>
-    </div>
-</div>
-
-<div id="media-library-viewer" class="media-library-viewer" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-label="Image viewer">
-    <div class="media-library-viewer-backdrop" data-viewer-close="1"></div>
-    <div class="media-library-viewer-frame">
-        <header class="media-library-viewer-bar">
-            <div class="media-library-viewer-meta">
-                <span class="media-library-viewer-title">Image</span>
-                <span class="media-library-viewer-index">1 / 1</span>
-            </div>
-            <div class="media-library-viewer-actions">
-                <button type="button" class="ml-viewer-btn media-library-viewer-prev" title="Previous (←)" aria-label="Previous image">‹</button>
-                <button type="button" class="ml-viewer-btn media-library-viewer-next" title="Next (→)" aria-label="Next image">›</button>
-                <button type="button" class="ml-viewer-btn media-library-viewer-close" title="Close (Esc)" aria-label="Close viewer" data-viewer-close="1">✕</button>
-            </div>
-        </header>
-        <div class="media-library-viewer-stage">
-            <button type="button" class="media-library-viewer-nav media-library-viewer-nav-prev" title="Previous" aria-label="Previous image">‹</button>
-            <img class="media-library-viewer-img" alt=""/>
-            <button type="button" class="media-library-viewer-nav media-library-viewer-nav-next" title="Next" aria-label="Next image">›</button>
-        </div>
-        <p class="media-library-viewer-hint">← → navigate · Esc close</p>
     </div>
 </div>
 
@@ -1468,25 +1142,13 @@
         "./lame.min.js",
         "./color.js",
         "./sheetPlayer.js",
-        "./roomMedia.js?v=20260919b",
-        "./playMp3.js?v=20260820a",
+        "./mediaUpload.js?v=20261016a",
+        "./playMp3.js?v=20261016a",
         "./pianoLearn.js",
         "./metronome.js",
-        "./blobFriend.js?v=20260712c",
-        "./desktopDoodler.js?v=20260618i",
-        "./emojiParty.js",
         "./nameColor.js",
         "./cursorLooks.js?v=20260924b",
-        "./soundBoard.js",
-        "./partyGame.js",
-        "./balloonPop.js?v=20260712c",
-        "./carDodge.js?v=20260712c",
-        "./reactionRoyale.js?v=20260712c",
-        "./tugOfWar.js?v=20260712c",
-        "./uselessButton.js",
-        "./pixelPet.js",
-        "./evilCursor.js",
-        "./chaosMonkey.js",
+        "./partyGame.js?v=20261016a",
         "./chatLogger.js?v=20261015d",
         "./cornerBanner.js",
         "./funVideoPopup.js",
@@ -1497,7 +1159,7 @@
         "./wakeBell.js?v=20261002a",
         "./loveBits.js?v=20260925b",
         "./roomThemes.js?v=20261002v",
-        "./script.js?v=20261016a",
+        "./script.js?v=20261016c",
         "./worldEntry.js?v=20261003a"
     ];
 </script>

@@ -64,8 +64,8 @@
 		if (!url) return "";
 		if (/^https?:\/\//i.test(url)) return rewriteLocalhost(url);
 		var base = null;
-		if (typeof RoomMedia !== "undefined" && typeof RoomMedia.getMediaServerBase === "function") {
-			base = RoomMedia.getMediaServerBase();
+		if (typeof MediaUpload !== "undefined") {
+			base = MediaUpload.getMediaServerBase();
 		}
 		if (!base && typeof window !== "undefined" && window.location) {
 			base = window.location.protocol + "//" + window.location.hostname + ":8551";
@@ -79,7 +79,6 @@
 	function PlayMp3Sync(opts) {
 		opts = opts || {};
 		this.client = opts.client;
-		this.getRoomMedia = opts.getRoomMedia || function () { return null; };
 		this.ensureAudio = opts.ensureAudio || function () {};
 		this.onStatus = opts.onStatus || function () {};
 		this.onProgress = opts.onProgress || function () {};
@@ -507,8 +506,8 @@
 			}
 		};
 
-		if (typeof RoomMedia !== "undefined" && typeof RoomMedia.initMediaServer === "function") {
-			RoomMedia.initMediaServer().then(apply).catch(apply);
+		if (typeof MediaUpload !== "undefined") {
+			MediaUpload.initMediaServer().then(apply).catch(apply);
 		} else {
 			apply();
 		}
@@ -535,10 +534,7 @@
 	PlayMp3Sync.prototype._deleteServerFile = function () {
 		var url = this.serverMediaUrl;
 		if (!url) return;
-		var rm = this.getRoomMedia && this.getRoomMedia();
-		if (rm && typeof rm.deleteServerMedia === "function") {
-			rm.deleteServerMedia(url, true);
-		}
+		if (typeof MediaUpload !== "undefined") MediaUpload.deleteServerMedia(url);
 		this.serverMediaUrl = null;
 	};
 
@@ -836,14 +832,13 @@
 		this.onStatus("Sharing “" + this.title + "” with the room…");
 		this._emitProgress();
 
-		var rm = this.getRoomMedia && this.getRoomMedia();
-		if (!rm || typeof rm.uploadFile !== "function") {
+		if (typeof MediaUpload === "undefined") {
 			this.uploading = false;
 			this._loadLocalFallback(file, autoPlay);
 			return Promise.resolve();
 		}
 
-		return rm.uploadFile(file).then(function (info) {
+		return MediaUpload.uploadFile(file).then(function (info) {
 			self.uploading = false;
 			var share = toShareUrl(info.url);
 			self.sharedUrl = share;

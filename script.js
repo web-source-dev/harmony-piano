@@ -1132,21 +1132,6 @@ Rect.prototype.contains = function(x, y) {
 	        self.init();
 	    }, 250);
 
-	    $("#sound-btn").on("click", function() {
-			if (document.getElementById("Notification-Sound-Selector") != null)
-				return self.notification.close();
-			var html = document.createElement("ul");
-	        //$(html).append("<p>Current Sound: " + self.soundSelection + "</p>");
-
-	        for (var i = 0; self.packs.length > i; i++) {
-				var pack = self.packs[i];
-				if (pack.name == self.soundSelection) pack.html.classList = "pack enabled";
-				else pack.html.classList = "pack";
-				html.appendChild(pack.html);
-	        }
-
-			self.notification = new Notification({title: "Sound Selector", html: html, id: "Sound-Selector", duration: -1, target: "#sound-btn"});
-	    });
 	    self.initialized = true;
 	    self.loadPack(self.soundSelection, true);
 	};
@@ -1506,6 +1491,8 @@ Rect.prototype.contains = function(x, y) {
 			if(set.name) localStorage.harmonyName = String(set.name).slice(0, 40);
 			if(set.color) localStorage.harmonyColor = set.color;
 		} catch(e) {}
+		// Signed in to an account: save the new name to it now (see index.html).
+		if(window.harmonyAccountSync) window.harmonyAccountSync();
 	}
 	gClient.on("userset", function(set) { rememberIdentityLocal(set); });
 
@@ -1550,8 +1537,8 @@ Rect.prototype.contains = function(x, y) {
 		forceClosePianoTab();
 	}
 
-	// Real-time room sync for the custom features (Blob Friend, Doodler, Emoji
-	// Party, Sound Board, Party Game, room metronome, Room DJ controls). These
+	// Real-time room sync for the custom features (Party Game, room metronome,
+	// Play MP3, name colours, ...). These
 	// broadcast through a dedicated relay (relay-server.js) instead of abusing
 	// the rate-limited public chat. Resolve the relay URL:
 	//   ?relay=off            disable (chat fallback only)
@@ -2205,17 +2192,6 @@ Rect.prototype.contains = function(x, y) {
 			} else {
 				$("#room-settings-btn").hide();
 			}
-			$("#room-media-btn").addClass("room-dj-visible");
-			$("#media-library-btn").addClass("room-dj-visible");
-		});
-		gClient.on("connect", function() {
-			$("#room-media-btn").addClass("room-dj-visible");
-			$("#media-library-btn").addClass("room-dj-visible");
-		});
-		gClient.on("disconnect", function() {
-			$("#room-media-btn").removeClass("room-dj-visible room-dj-playing");
-			$("#media-library-btn").removeClass("room-dj-visible");
-			document.body.classList.remove("room-dj-playing", "room-media-active");
 		});
 		$("#room-settings-btn").click(function(evt) {
 			if(gClient.channel && gClient.isOwner()) {
@@ -3563,7 +3539,6 @@ Rect.prototype.contains = function(x, y) {
 
 	function modalHandleEsc(evt) {
 		if(evt.keyCode == 27) {
-			if(document.body.classList.contains("media-library-viewer-open")) return;
 			// Leave-a-message popup: Close button only (no Esc / outside click).
 			if(gModal === "#leave-msg") return;
 			closeModal();
@@ -3863,44 +3838,8 @@ Rect.prototype.contains = function(x, y) {
 			if(typeof gPlayMp3 !== "undefined" && gPlayMp3) gPlayMp3.tryHandleChat(msg);
 			return true;
 		}
-		if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) {
-			if(typeof gRoomMedia !== "undefined" && gRoomMedia) gRoomMedia.tryHandleChat(msg);
-			return true;
-		}
-		if(typeof BlobFriend !== "undefined" && BlobFriend.isSyncText(chatLine)) {
-			if(typeof gBlobFriend !== "undefined" && gBlobFriend) gBlobFriend.tryHandleChat(msg);
-			return true;
-		}
-		if(typeof DesktopDoodler !== "undefined" && DesktopDoodler.isSyncText(chatLine)) {
-			if(typeof gDesktopDoodler !== "undefined" && gDesktopDoodler) gDesktopDoodler.tryHandleChat(msg);
-			return true;
-		}
-		if(typeof EmojiParty !== "undefined" && EmojiParty.isSyncText(chatLine)) {
-			if(typeof gEmojiParty !== "undefined" && gEmojiParty) gEmojiParty.tryHandleChat(msg);
-			return true;
-		}
-		if(typeof SoundBoard !== "undefined" && SoundBoard.isSyncText(chatLine)) {
-			if(typeof gSoundBoard !== "undefined" && gSoundBoard) gSoundBoard.tryHandleChat(msg);
-			return true;
-		}
 		if(typeof PartyGame !== "undefined" && PartyGame.isSyncText(chatLine)) {
 			if(typeof gPartyGame !== "undefined" && gPartyGame) gPartyGame.tryHandleChat(msg);
-			return true;
-		}
-		if(typeof BalloonPop !== "undefined" && BalloonPop.isSyncText(chatLine)) {
-			if(typeof gBalloonPop !== "undefined" && gBalloonPop) gBalloonPop.tryHandleChat(msg);
-			return true;
-		}
-		if(typeof CarDodge !== "undefined" && CarDodge.isSyncText(chatLine)) {
-			if(typeof gCarDodge !== "undefined" && gCarDodge) gCarDodge.tryHandleChat(msg);
-			return true;
-		}
-		if(typeof ReactionRoyale !== "undefined" && ReactionRoyale.isSyncText(chatLine)) {
-			if(typeof gReactionRoyale !== "undefined" && gReactionRoyale) gReactionRoyale.tryHandleChat(msg);
-			return true;
-		}
-		if(typeof TugOfWar !== "undefined" && TugOfWar.isSyncText(chatLine)) {
-			if(typeof gTugOfWar !== "undefined" && gTugOfWar) gTugOfWar.tryHandleChat(msg);
 			return true;
 		}
 		if(typeof NameColor !== "undefined" && NameColor.isSyncText(chatLine)) {
@@ -4122,7 +4061,6 @@ Rect.prototype.contains = function(x, y) {
 			if($(evt.target).closest("#metronome-hud").length) return;
 			if($(evt.target).closest("#midi-transport").length) return;
 			if($(evt.target).closest("#mp3-transport").length) return;
-			if($(evt.target).closest("#room-media-transport").length) return;
 			if($(evt.target).closest("#harmony-tools").length) return;
 			if($(evt.target).closest("#corner-banner").length) return;
 			if($(evt.target).closest("#chat-input-bar").length) return;
@@ -4138,7 +4076,6 @@ Rect.prototype.contains = function(x, y) {
 				if($(touch.target).closest("#metronome-hud").length) continue;
 				if($(touch.target).closest("#midi-transport").length) continue;
 				if($(touch.target).closest("#mp3-transport").length) continue;
-				if($(touch.target).closest("#room-media-transport").length) continue;
 				if($(touch.target).closest("#harmony-tools").length) continue;
 				if($(touch.target).closest("#corner-banner").length) continue;
 				if($(touch.target).closest("#hacks-dock").length) continue;
@@ -4254,17 +4191,8 @@ Rect.prototype.contains = function(x, y) {
 					forceClearAllChat(false);
 					return;
 				}
-				if(typeof RoomMedia !== "undefined" && RoomMedia.isSyncText(chatLine)) return;
 				if(typeof PlayMp3Sync !== "undefined" && PlayMp3Sync.isSyncText(chatLine)) return;
-				if(typeof BlobFriend !== "undefined" && BlobFriend.isSyncText(chatLine)) return;
-				if(typeof DesktopDoodler !== "undefined" && DesktopDoodler.isSyncText(chatLine)) return;
-				if(typeof EmojiParty !== "undefined" && EmojiParty.isSyncText(chatLine)) return;
-				if(typeof SoundBoard !== "undefined" && SoundBoard.isSyncText(chatLine)) return;
 				if(typeof PartyGame !== "undefined" && PartyGame.isSyncText(chatLine)) return;
-				if(typeof BalloonPop !== "undefined" && BalloonPop.isSyncText(chatLine)) return;
-				if(typeof CarDodge !== "undefined" && CarDodge.isSyncText(chatLine)) return;
-				if(typeof ReactionRoyale !== "undefined" && ReactionRoyale.isSyncText(chatLine)) return;
-				if(typeof TugOfWar !== "undefined" && TugOfWar.isSyncText(chatLine)) return;
 				if(typeof NameColor !== "undefined" && NameColor.isSyncText(chatLine)) return;
 				if(typeof CursorLooks !== "undefined" && CursorLooks.isSyncText(chatLine)) return;
 				if(typeof ScreenShare !== "undefined" && ScreenShare.isSyncText(chatLine)) return;
@@ -4748,13 +4676,7 @@ Rect.prototype.contains = function(x, y) {
 			if(gRoomMetronome && (!gMetronome || !gMetronome.running || !gRoomMetronome.canControl())) {
 				gRoomMetronome.requestSync();
 			}
-			if(gBlobFriend) gBlobFriend.requestSync();
-			if(gDesktopDoodler) gDesktopDoodler.requestSync();
 			if(gPartyGame) gPartyGame.requestSync();
-			if(gBalloonPop) gBalloonPop.requestSync();
-			if(gCarDodge) gCarDodge.requestSync();
-			if(gReactionRoyale) gReactionRoyale.requestSync();
-			if(gTugOfWar) gTugOfWar.requestSync();
 			if(typeof gPlayMp3 !== "undefined" && gPlayMp3) gPlayMp3.requestSync();
 			updateMetronomeUI();
 		}, 400);
@@ -4932,255 +4854,11 @@ Rect.prototype.contains = function(x, y) {
 		showMidiTransport(true);
 	};
 
-	// Room DJ — shared audio/video (not piano)
-	var gRoomMedia;
 	var gPlayMp3;
-	var $roomMediaTransport = $("#room-media-transport");
-	var $roomMediaDialog = $("#room-media");
-	var $roomMediaVideoWrap = $("#room-media-video-wrap");
-	var $roomMediaVideoMount = $("#room-media-video-mount");
-	var gRoomMediaCinema = false;
-	var gRoomMediaHidePiano = false;
-	var gRoomMediaCinemaChat = false;
-	var gRoomMediaControlsIdle = null;
-
-	function showRoomMediaControls(show) {
-		var transport = document.getElementById("room-media-transport");
-		if(!transport) return;
-		if(show) {
-			transport.classList.remove("controls-hidden");
-			document.body.classList.remove("room-media-controls-hidden");
-		} else {
-			transport.classList.add("controls-hidden");
-			document.body.classList.add("room-media-controls-hidden");
-		}
-		refreshRoomMediaLayout();
-	}
-
-	function bumpRoomMediaControls() {
-		showRoomMediaControls(true);
-		if(!gRoomMediaCinema) return;
-		clearTimeout(gRoomMediaControlsIdle);
-		gRoomMediaControlsIdle = setTimeout(function() {
-			if(gRoomMediaCinema && gRoomMedia && gRoomMedia.playing) showRoomMediaControls(false);
-		}, 3500);
-	}
-
-	function roomMediaHasVideoPanel() {
-		return gRoomMedia && (gRoomMedia.kind === "youtube" || gRoomMedia.kind === "video");
-	}
-
-	function syncRoomMediaTransportDock() {
-		var transport = document.getElementById("room-media-transport");
-		var wrap = document.getElementById("room-media-video-wrap");
-		if(!transport) return;
-		var hasVideo = roomMediaHasVideoPanel() && wrap && !wrap.hasAttribute("hidden");
-		var dock = hasVideo && !gRoomMediaCinema;
-		document.body.classList.toggle("room-media-video-dock", dock);
-		transport.classList.toggle("room-media-transport-docked", dock);
-		if(gRoomMediaCinema || !dock) {
-			if(transport.parentElement !== document.body) document.body.appendChild(transport);
-			return;
-		}
-		if(wrap && transport.parentElement !== wrap) wrap.appendChild(transport);
-	}
-
-	function refreshRoomMediaLayout() {
-		syncRoomMediaTransportDock();
-		var transport = document.getElementById("room-media-transport");
-		var controlsHidden = transport && transport.classList.contains("controls-hidden");
-		var transportH = (transport && !transport.hasAttribute("hidden") && !controlsHidden) ? transport.offsetHeight : 0;
-		var inputBar = document.getElementById("chat-input-bar");
-		var inputH = (gRoomMediaCinemaChat && inputBar) ? inputBar.offsetHeight : 0;
-		var chatW = gRoomMediaCinemaChat ? Math.min(360, Math.max(280, Math.floor(window.innerWidth * 0.34))) : 0;
-		document.documentElement.style.setProperty("--room-media-transport-h", transportH + "px");
-		document.documentElement.style.setProperty("--room-media-input-h", inputH + "px");
-		document.documentElement.style.setProperty("--room-media-chat-w", chatW + "px");
-		requestAnimationFrame(function() {
-			requestAnimationFrame(function() {
-				if(gRoomMedia && gRoomMedia.fitYouTubePlayer) gRoomMedia.fitYouTubePlayer();
-			});
-		});
-		setTimeout(function() {
-			if(gRoomMedia && gRoomMedia.fitYouTubePlayer) gRoomMedia.fitYouTubePlayer();
-		}, 150);
-		setTimeout(function() {
-			if(gRoomMedia && gRoomMedia.fitYouTubePlayer) gRoomMedia.fitYouTubePlayer();
-		}, 400);
-	}
-
-	function updateRoomMediaLayoutUi() {
-		var hasTrack = gRoomMedia && !!gRoomMedia.url;
-		var hasVideo = roomMediaHasVideoPanel() && !$roomMediaVideoWrap.is("[hidden]");
-		$roomMediaTransport.find(".room-media-hide-piano-transport").prop("hidden", !hasTrack);
-		$roomMediaTransport.find(".room-media-cinema-transport").prop("hidden", !hasVideo);
-		$roomMediaTransport.find(".room-media-chat-transport").prop("hidden", !gRoomMediaCinema);
-		$roomMediaVideoWrap.find(".room-media-chat-btn").prop("hidden", !gRoomMediaCinema);
-	}
-
-	function setRoomMediaHidePiano(on) {
-		gRoomMediaHidePiano = !!on;
-		document.body.classList.toggle("room-media-hide-piano", gRoomMediaHidePiano);
-		var label = gRoomMediaHidePiano ? "Show piano" : "Piano";
-		$roomMediaVideoWrap.find(".room-media-hide-piano-btn").toggleClass("active", gRoomMediaHidePiano).text(label);
-		$roomMediaTransport.find(".room-media-hide-piano-transport").toggleClass("active", gRoomMediaHidePiano).text(label);
-		refreshRoomMediaLayout();
-	}
-
-	function toggleRoomMediaHidePiano() {
-		setRoomMediaHidePiano(!gRoomMediaHidePiano);
-	}
-
-	function setRoomMediaCinemaChat(on) {
-		gRoomMediaCinemaChat = !!on;
-		document.body.classList.toggle("room-media-cinema-chat", gRoomMediaCinemaChat);
-		var label = gRoomMediaCinemaChat ? "Hide chat" : "Chat";
-		$roomMediaVideoWrap.find(".room-media-chat-btn").toggleClass("active", gRoomMediaCinemaChat).text(label);
-		$roomMediaTransport.find(".room-media-chat-transport").toggleClass("active", gRoomMediaCinemaChat).text(label);
-		if(gRoomMediaCinemaChat) {
-			$("#chat").addClass("chatting");
-		}
-		refreshRoomMediaLayout();
-		setTimeout(refreshRoomMediaLayout, 80);
-		setTimeout(refreshRoomMediaLayout, 250);
-	}
-
-	function toggleRoomMediaCinemaChat() {
-		if(!gRoomMediaCinema) return;
-		setRoomMediaCinemaChat(!gRoomMediaCinemaChat);
-	}
-
-	function setRoomMediaCinema(on) {
-		gRoomMediaCinema = !!on;
-		document.body.classList.toggle("room-media-cinema", gRoomMediaCinema);
-		if(!gRoomMediaCinema) {
-			setRoomMediaCinemaChat(false);
-			showRoomMediaControls(true);
-			clearTimeout(gRoomMediaControlsIdle);
-		} else {
-			bumpRoomMediaControls();
-		}
-		var label = gRoomMediaCinema ? "Exit" : "Full";
-		$roomMediaVideoWrap.find(".room-media-cinema-btn").toggleClass("active", gRoomMediaCinema).text(label);
-		$roomMediaTransport.find(".room-media-cinema-transport").toggleClass("active", gRoomMediaCinema).text(label);
-		updateRoomMediaLayoutUi();
-		syncRoomMediaTransportDock();
-		refreshRoomMediaLayout();
-		setTimeout(refreshRoomMediaLayout, 100);
-	}
-
-	function toggleRoomMediaCinema() {
-		if(!roomMediaHasVideoPanel() || $roomMediaVideoWrap.is("[hidden]")) return;
-		setRoomMediaCinema(!gRoomMediaCinema);
-	}
-
-	function resetRoomMediaLayout() {
-		setRoomMediaCinema(false);
-		setRoomMediaHidePiano(false);
-		setRoomMediaCinemaChat(false);
-		showRoomMediaControls(true);
-		document.body.classList.remove("room-media-controls-hidden");
-		clearTimeout(gRoomMediaControlsIdle);
-	}
-
-	function setRoomDjPlaying(playing) {
-		var btn = document.getElementById("room-media-btn");
-		if(btn) {
-			if(playing) btn.classList.add("room-dj-playing");
-			else btn.classList.remove("room-dj-playing");
-		}
-		document.body.classList.toggle("room-dj-playing", !!playing);
-	}
-
-	function showRoomMediaTransport(show) {
-		if(show) {
-			$roomMediaTransport.removeAttr("hidden");
-			document.body.classList.add("room-media-active");
-		} else {
-			$roomMediaTransport.attr("hidden", "hidden");
-			document.body.classList.remove("room-media-active");
-			setRoomDjPlaying(false);
-		}
-	}
-
-	function updateRoomMediaProgress(info) {
-		if(!info) return;
-		if(typeof RoomMedia !== "undefined") {
-			$roomMediaTransport.find(".time-current").text(RoomMedia.formatTime(info.current));
-			$roomMediaTransport.find(".time-total").text(RoomMedia.formatTime(info.duration));
-		}
-		var seek = $roomMediaTransport.find("input[name=seek]")[0];
-		if(seek) {
-			seek.max = Math.max(0.1, info.duration || 0.1);
-			if(!seek._dragging) seek.value = info.current || 0;
-		}
-		if(info.title) $roomMediaTransport.find(".room-media-title").text(info.title);
-		if(info.dj) $roomMediaTransport.find(".room-media-dj").text("DJ · " + info.dj);
-		setRoomDjPlaying(!!info.playing);
-		$roomMediaTransport.toggleClass("is-playing", !!info.playing);
-		$roomMediaTransport.find(".play").prop("hidden", !!info.playing);
-		$roomMediaTransport.find(".pause").prop("hidden", !info.playing);
-		$roomMediaTransport.find(".play").toggleClass("primary", !info.playing);
-		$roomMediaTransport.find(".pause").toggleClass("primary", !!info.playing);
-		if(info.playing && gRoomMediaCinema) bumpRoomMediaControls();
-	}
-
-	function mountRoomMediaVideo(videoEl) {
-		if(!videoEl) return;
-		$roomMediaVideoMount.empty()[0].appendChild(videoEl);
-	}
-
-	if(typeof RoomMedia !== "undefined") {
-		gRoomMedia = new RoomMedia({
-			client: gClient,
-			onStatus: function(msg) {
-				$roomMediaDialog.find(".room-media-status").text(msg);
-				$("#status").text(msg);
-			},
-			onServerReady: function(base) {
-				var badge = $roomMediaDialog.find(".room-media-server-badge");
-				badge.text("Media server online · " + base).removeAttr("hidden");
-			},
-			onTrackChange: function(info) {
-				$roomMediaTransport.find(".room-media-title").text(info.title || "No track loaded");
-				$roomMediaTransport.find(".room-media-dj").text(info.dj ? ("DJ · " + info.dj) : "");
-				showRoomMediaTransport(true);
-				updateRoomMediaLayoutUi();
-			},
-			onProgress: updateRoomMediaProgress,
-			onLayoutChange: function() {
-				refreshRoomMediaLayout();
-			},
-			onTransport: function(info) {
-				if(info.visible) showRoomMediaTransport(true);
-				if(info.kind === "youtube") {
-					$roomMediaVideoWrap.removeClass("mode-video youtube-shorts");
-					$roomMediaVideoWrap.addClass("mode-youtube");
-					if(info.isShort) $roomMediaVideoWrap.addClass("youtube-shorts");
-					$roomMediaVideoWrap.removeAttr("hidden");
-					$roomMediaVideoWrap.find(".room-media-video-title").text(gRoomMedia.title || "YouTube");
-				} else if(info.kind === "video" && info.videoEl) {
-					$roomMediaVideoWrap.removeClass("mode-youtube youtube-shorts");
-					$roomMediaVideoWrap.addClass("mode-video");
-					mountRoomMediaVideo(info.videoEl);
-					$roomMediaVideoWrap.removeAttr("hidden");
-					$roomMediaVideoWrap.find(".room-media-video-title").text(gRoomMedia.title || "Video");
-				} else {
-					$roomMediaVideoWrap.attr("hidden", "hidden");
-					$roomMediaVideoWrap.removeClass("mode-youtube mode-video youtube-shorts");
-					resetRoomMediaLayout();
-				}
-				updateRoomMediaLayoutUi();
-				refreshRoomMediaLayout();
-			}
-		});
-		$roomMediaTransport.find("input[name=volume]").val(gRoomMedia.volume);
-	}
 
 	if(typeof PlayMp3Sync !== "undefined") {
 		gPlayMp3 = new PlayMp3Sync({
 			client: gClient,
-			getRoomMedia: function() { return gRoomMedia; },
 			ensureAudio: ensureAudioReady
 		});
 		window.gPlayMp3 = gPlayMp3;
@@ -5189,73 +4867,25 @@ Rect.prototype.contains = function(x, y) {
 		}, 800);
 	}
 
-	// Blob Friend + Desktop Doodler + party toys
-	var gBlobFriend;
-	var gDesktopDoodler;
-	var gEmojiParty;
-	var gSoundBoard;
+	// Party toys and room extras
 	var gShareImage;
 	var gKissBlast;
 	var gWakeBell;
 	var gLoveBits;
 	var gLeaveMsg;
 	var gPartyGame;
-	var gBalloonPop;
-	var gCarDodge;
-	var gReactionRoyale;
-	var gTugOfWar;
 	var gNameColor;
 	var gCursorLooks;
-	var gUselessButton;
-	var gPixelPet;
-	var gEvilCursor;
-	var gChaosMonkey;
 	var gPianoCollapsed = false;
 
 	function updateHarmonyToolsUi() {
-		var blobBtn = document.getElementById("harmony-blob-btn");
-		var doodlerBtn = document.getElementById("harmony-doodle-btn");
 		var pianoBtn = document.getElementById("harmony-piano-btn");
-		var playArea = document.getElementById("play-area");
-		var blobOn = gBlobFriend && gBlobFriend.visible;
-		var doodleOn = gDesktopDoodler && gDesktopDoodler.visible;
-
-		if(blobBtn && gBlobFriend) blobBtn.classList.toggle("active", blobOn);
-		if(doodlerBtn && gDesktopDoodler) doodlerBtn.classList.toggle("active", doodleOn);
-
-		var reactBtn = document.getElementById("harmony-react-btn");
-		var soundBtn = document.getElementById("harmony-sound-btn");
 		var bombBtn = document.getElementById("harmony-bomb-btn");
-		var balloonBtn = document.getElementById("harmony-balloon-btn");
-		var reactBar = document.getElementById("emoji-react-bar");
-		var soundBar = document.getElementById("soundboard-bar");
-		if(reactBtn) reactBtn.classList.toggle("active", !!(reactBar && !reactBar.hasAttribute("hidden")));
-		if(soundBtn) soundBtn.classList.toggle("active", !!(soundBar && !soundBar.hasAttribute("hidden")));
-		var cardodgeBtn = document.getElementById("harmony-cardodge-btn");
-		var reactionBtn = document.getElementById("harmony-reaction-btn");
-		var tugBtn = document.getElementById("harmony-tug-btn");
 		if(bombBtn && gPartyGame) bombBtn.classList.toggle("active", !!gPartyGame.visible);
-		if(balloonBtn && gBalloonPop) balloonBtn.classList.toggle("active", !!gBalloonPop.visible);
-		if(cardodgeBtn && gCarDodge) cardodgeBtn.classList.toggle("active", !!gCarDodge.visible);
-		if(reactionBtn && gReactionRoyale) reactionBtn.classList.toggle("active", !!gReactionRoyale.visible);
-		if(tugBtn && gTugOfWar) tugBtn.classList.toggle("active", !!gTugOfWar.visible);
-
-		var uselessBtn = document.getElementById("harmony-useless-btn");
-		var petBtn = document.getElementById("harmony-pet-btn");
-		var evilBtn = document.getElementById("harmony-evil-btn");
-		var chaosBtn = document.getElementById("harmony-chaos-btn");
-		if(uselessBtn && gUselessButton) uselessBtn.classList.toggle("active", !!gUselessButton.active);
-		if(petBtn && gPixelPet) petBtn.classList.toggle("active", !!gPixelPet.active);
-		if(evilBtn && gEvilCursor) evilBtn.classList.toggle("active", !!gEvilCursor.active);
-		if(chaosBtn && gChaosMonkey) chaosBtn.classList.toggle("active", !!gChaosMonkey.active);
 		if(pianoBtn) {
 			pianoBtn.classList.toggle("active", !gPianoCollapsed);
 			pianoBtn.classList.toggle("piano-off", gPianoCollapsed);
 			pianoBtn.title = gPianoCollapsed ? "Show the piano" : "Hide the piano";
-		}
-		if(playArea) {
-			if(blobOn || doodleOn) playArea.removeAttribute("hidden");
-			else playArea.setAttribute("hidden", "hidden");
 		}
 	}
 
@@ -5277,30 +4907,6 @@ Rect.prototype.contains = function(x, y) {
 	gPianoCollapsed = true;
 	document.body.classList.add("piano-collapsed");
 
-	if(typeof BlobFriend !== "undefined") {
-		gBlobFriend = new BlobFriend({
-			client: gClient,
-			mountEl: document.getElementById("blob-friend"),
-			onLayoutChange: function() {
-				if(gBlobFriend && gBlobFriend.canvas) gBlobFriend._resize();
-				updateHarmonyToolsUi();
-			}
-		});
-	}
-	if(typeof DesktopDoodler !== "undefined") {
-		gDesktopDoodler = new DesktopDoodler({
-			client: gClient,
-			mountEl: document.getElementById("desktop-doodler"),
-			onLayoutChange: function() {
-				if(gDesktopDoodler && gDesktopDoodler.canvas) gDesktopDoodler._resize();
-				updateHarmonyToolsUi();
-			}
-		});
-	}
-	if(typeof EmojiParty !== "undefined") {
-		gEmojiParty = new EmojiParty({ client: gClient });
-		window.gEmojiParty = gEmojiParty;
-	}
 	if(typeof NameColor !== "undefined") {
 		gNameColor = new NameColor({
 			client: gClient,
@@ -5326,9 +4932,6 @@ Rect.prototype.contains = function(x, y) {
 			}, 700);
 		});
 		applyAllCursorLooks();
-	}
-	if(typeof SoundBoard !== "undefined") {
-		gSoundBoard = new SoundBoard({ client: gClient });
 	}
 	if(typeof KissBlast !== "undefined") {
 		gKissBlast = new KissBlast({
@@ -5384,99 +4987,8 @@ Rect.prototype.contains = function(x, y) {
 	if(typeof PartyGame !== "undefined") {
 		gPartyGame = new PartyGame({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
 	}
-	if(typeof BalloonPop !== "undefined") {
-		gBalloonPop = new BalloonPop({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
-		window.gBalloonPop = gBalloonPop;
-	}
-	if(typeof CarDodge !== "undefined") {
-		gCarDodge = new CarDodge({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
-		window.gCarDodge = gCarDodge;
-	}
-	if(typeof ReactionRoyale !== "undefined") {
-		gReactionRoyale = new ReactionRoyale({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
-		window.gReactionRoyale = gReactionRoyale;
-	}
-	if(typeof TugOfWar !== "undefined") {
-		gTugOfWar = new TugOfWar({ client: gClient, onLayoutChange: updateHarmonyToolsUi });
-		window.gTugOfWar = gTugOfWar;
-	}
-	if(typeof UselessButton !== "undefined") gUselessButton = new UselessButton();
-	if(typeof PixelPet !== "undefined") gPixelPet = new PixelPet();
-	if(typeof EvilCursor !== "undefined") gEvilCursor = new EvilCursor();
-	if(typeof ChaosMonkey !== "undefined") gChaosMonkey = new ChaosMonkey();
 	updateHarmonyToolsUi();
 	setPianoCollapsed(gPianoCollapsed);
-
-	function ensureRoomMediaReady() {
-		if(!gClient.isConnected()) {
-			alert("Connect to a room first.");
-			return false;
-		}
-		if(typeof gRoomMedia === "undefined") {
-			alert("Room DJ is not available.");
-			return false;
-		}
-		return true;
-	}
-
-	function ensureMediaServer() {
-		if(typeof RoomMedia === "undefined") {
-			return Promise.reject(new Error("Room DJ module missing."));
-		}
-		return RoomMedia.initMediaServer().then(function(base) {
-			if(!base) {
-				throw new Error(
-					"Media server not running.\n\n" +
-					"1. Double-click run-servers.bat\n" +
-					"   OR run: python media-server.py 8551\n" +
-					"2. Open http://localhost:8550/ (not GitHub Pages)\n\n" +
-					"MPP handles piano/chat only — Room DJ needs the local media server."
-				);
-			}
-			return base;
-		});
-	}
-
-	function loadRoomMediaSelection() {
-		if(!ensureRoomMediaReady()) return Promise.reject(new Error("Not ready"));
-		var fileInput = $roomMediaDialog.find("input[name=mediafile]")[0];
-		var urlInput = ($roomMediaDialog.find("input[name=mediaurl]").val() || "").trim();
-		var videoInput = ($roomMediaDialog.find("input[name=videourl]").val() || "").trim();
-		var ytInput = ($roomMediaDialog.find("input[name=youtubeurl]").val() || "").trim();
-		var file = fileInput && fileInput.files && fileInput.files[0];
-		var ytUrl = ytInput;
-		if(!ytUrl && videoInput && typeof RoomMedia !== "undefined" && RoomMedia.isYouTubeUrl(videoInput)) {
-			ytUrl = videoInput;
-		}
-		if(!ytUrl && urlInput && typeof RoomMedia !== "undefined" && RoomMedia.isYouTubeUrl(urlInput)) {
-			ytUrl = urlInput;
-		}
-		if(ytUrl) {
-			var ytTitle = "YouTube Video";
-			if(ytUrl.indexOf("/shorts/") >= 0) ytTitle = "YouTube Short";
-			gRoomMedia.loadUrlAndShare(ytUrl, ytTitle);
-			showRoomMediaTransport(true);
-			return Promise.resolve();
-		}
-		if(videoInput) {
-			gRoomMedia.loadVideoUrlAndShare(videoInput);
-			showRoomMediaTransport(true);
-			return Promise.resolve();
-		}
-		if(file) {
-			return ensureMediaServer().then(function() {
-				return gRoomMedia.loadAndShare(file).then(function() {
-					showRoomMediaTransport(true);
-				});
-			});
-		}
-		if(urlInput) {
-			gRoomMedia.loadUrlAndShare(urlInput);
-			showRoomMediaTransport(true);
-			return Promise.resolve();
-		}
-		return Promise.reject(new Error("Choose a file, paste an audio/video/YouTube link, or use Direct video link."));
-	}
 
 	function funClearTimers() {
 		for(var i = 0; i < gFunTimers.length; i++) clearTimeout(gFunTimers[i]);
@@ -6222,419 +5734,6 @@ Rect.prototype.contains = function(x, y) {
 			});
 		}
 
-		var roomMediaBtn = document.getElementById("room-media-btn");
-		if(roomMediaBtn) {
-			roomMediaBtn.addEventListener("click", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				openModal("#room-media");
-			});
-		}
-
-		var $mediaLibraryDialog = $("#media-library");
-		var $mediaLibraryViewer = $("#media-library-viewer");
-		var mediaLibraryBtn = document.getElementById("media-library-btn");
-		var gMediaLibraryItems = [];
-		var gMediaLibraryImages = [];
-		var gMediaLibraryViewerIndex = 0;
-
-		function setMediaLibraryStatus(msg) {
-			// Status line removed from library UI — keep brief feedback in the page status bar.
-			if(msg) $("#status").text(msg);
-		}
-
-		function resetMediaLibraryUploadForm() {
-			var fileInput = $mediaLibraryDialog.find("input[name=libraryfile]")[0];
-			if(fileInput) fileInput.value = "";
-			$mediaLibraryDialog.find(".media-library-drop-name").text("");
-			$mediaLibraryDialog.find(".media-library-drop-text").text("Drop a file or click to browse");
-		}
-
-		function libraryItemUrl(item) {
-			return (item && (item.absUrl || item.url)) || "";
-		}
-
-		function libraryKindGlyph(kind) {
-			if(kind === "video") return "▶";
-			if(kind === "image") return "▣";
-			return "♪";
-		}
-
-		function renderMediaLibraryList() {
-			var $list = $("#media-library-list");
-			var $empty = $mediaLibraryDialog.find(".media-library-empty");
-			var items = gMediaLibraryItems || [];
-			$list.empty();
-			if(!items.length) {
-				$empty.removeAttr("hidden");
-				$empty.find(".media-library-empty-title").text("Nothing here yet");
-				$empty.find(".media-library-empty-copy").text("Upload audio, video, or an image to build the shared library.");
-				return;
-			}
-			$empty.attr("hidden", "hidden");
-			items.forEach(function(item) {
-				var kind = item.kind || "audio";
-				var source = item.source || "library";
-				var url = libraryItemUrl(item);
-				var title = item.title || item.name || "Media";
-				var $card = $('<article class="media-library-card" role="listitem"></article>');
-				$card.attr("data-kind", kind);
-				$card.attr("data-source", source);
-				$card.attr("data-id", item.id || "");
-				$card.attr("data-url", url);
-				$card.attr("data-title", title);
-
-				var $thumb = $('<div class="media-library-card-thumb"></div>');
-				var badgeText = source === "recent" ? ("recent · " + kind) : kind;
-				$thumb.append($('<span class="media-library-card-badge"></span>')
-					.toggleClass("is-recent", source === "recent")
-					.text(badgeText));
-				if(kind === "image" && url) {
-					var $img = $('<img alt="" loading="lazy"/>');
-					$img.attr("src", url);
-					$img.attr("alt", title);
-					$thumb.append($img);
-					$thumb.attr("role", "button");
-					$thumb.attr("tabindex", "0");
-					$thumb.attr("title", "View fullscreen");
-					$thumb.addClass("media-library-open-image");
-				} else {
-					$thumb.append($('<div class="media-library-card-glyph" aria-hidden="true"></div>')
-						.text(libraryKindGlyph(kind)));
-				}
-
-				var $body = $('<div class="media-library-card-body"></div>');
-				$body.append($('<div class="media-library-card-title"></div>')
-					.text(title)
-					.attr("title", item.name || title));
-				var meta = (source === "recent" ? "Recent · " : "") + kind.toUpperCase();
-				if(typeof RoomMedia !== "undefined" && RoomMedia.formatBytes) {
-					meta += " · " + RoomMedia.formatBytes(item.size);
-				}
-				$body.append($('<div class="media-library-card-meta"></div>').text(meta));
-
-				var $actions = $('<div class="media-library-card-actions"></div>');
-				if(kind === "image") {
-					var $view = $('<button type="button" class="ml-btn ml-btn-accent media-library-view-image">View</button>');
-					$view.attr("data-url", url);
-					$view.attr("data-title", title);
-					$view.attr("title", "Open fullscreen");
-					$actions.append($view);
-				} else {
-					var $play = $('<button type="button" class="ml-btn ml-btn-accent media-library-play">Play</button>');
-					$play.attr("data-url", url);
-					$play.attr("data-title", title);
-					$play.attr("data-kind", kind);
-					$play.attr("title", "Load and share in Room DJ");
-					$actions.append($play);
-				}
-				$body.append($actions);
-				$card.append($thumb).append($body);
-				$list.append($card);
-			});
-		}
-
-		function refreshMediaLibraryDialog() {
-			if(!$mediaLibraryDialog.length) return Promise.resolve([]);
-			if(typeof RoomMedia === "undefined" || !RoomMedia.listLibrary) {
-				gMediaLibraryItems = [];
-				renderMediaLibraryList();
-				return Promise.reject(new Error("Media module missing"));
-			}
-			return RoomMedia.listLibrary().then(function(items) {
-				gMediaLibraryItems = items || [];
-				renderMediaLibraryList();
-				return gMediaLibraryItems;
-			}).catch(function(err) {
-				gMediaLibraryItems = [];
-				renderMediaLibraryList();
-				throw err;
-			});
-		}
-		window.refreshMediaLibraryDialog = refreshMediaLibraryDialog;
-
-		function collectLibraryImages() {
-			return (gMediaLibraryItems || []).filter(function(item) {
-				return (item.kind || "") === "image" && libraryItemUrl(item);
-			});
-		}
-
-		function syncMediaLibraryViewer() {
-			if(!gMediaLibraryImages.length) return;
-			var item = gMediaLibraryImages[gMediaLibraryViewerIndex];
-			if(!item) return;
-			var url = libraryItemUrl(item);
-			var title = item.title || item.name || "Image";
-			var $img = $mediaLibraryViewer.find(".media-library-viewer-img");
-			$img.attr("src", url).attr("alt", title);
-			$mediaLibraryViewer.find(".media-library-viewer-title").text(title);
-			$mediaLibraryViewer.find(".media-library-viewer-index")
-				.text((gMediaLibraryViewerIndex + 1) + " / " + gMediaLibraryImages.length);
-			var multi = gMediaLibraryImages.length > 1;
-			$mediaLibraryViewer.find(".media-library-viewer-prev, .media-library-viewer-next, .media-library-viewer-nav")
-				.prop("disabled", !multi)
-				.css("visibility", multi ? "visible" : "hidden");
-		}
-
-		function openMediaLibraryViewer(startUrl) {
-			gMediaLibraryImages = collectLibraryImages();
-			if(!gMediaLibraryImages.length) return;
-			gMediaLibraryViewerIndex = 0;
-			if(startUrl) {
-				for(var i = 0; i < gMediaLibraryImages.length; i++) {
-					if(libraryItemUrl(gMediaLibraryImages[i]) === startUrl) {
-						gMediaLibraryViewerIndex = i;
-						break;
-					}
-				}
-			}
-			$mediaLibraryViewer.removeAttr("hidden").attr("aria-hidden", "false");
-			document.body.classList.add("media-library-viewer-open");
-			syncMediaLibraryViewer();
-			$mediaLibraryViewer.find(".media-library-viewer-close").trigger("focus");
-		}
-
-		function closeMediaLibraryViewer() {
-			$mediaLibraryViewer.attr("hidden", "hidden").attr("aria-hidden", "true");
-			document.body.classList.remove("media-library-viewer-open");
-			$mediaLibraryViewer.find(".media-library-viewer-img").attr("src", "").attr("alt", "");
-		}
-
-		function stepMediaLibraryViewer(delta) {
-			if(!gMediaLibraryImages.length) return;
-			var n = gMediaLibraryImages.length;
-			gMediaLibraryViewerIndex = (gMediaLibraryViewerIndex + delta + n) % n;
-			syncMediaLibraryViewer();
-		}
-
-		function playLibraryItem(url, title, kind) {
-			if(kind === "image") {
-				openMediaLibraryViewer(url);
-				return Promise.resolve();
-			}
-			if(!ensureRoomMediaReady()) return Promise.reject(new Error("Not ready"));
-			if(!url) return Promise.reject(new Error("Missing media URL"));
-			ensureAudioReady();
-			setMediaLibraryStatus("Loading " + (title || "media") + "…");
-			if(kind === "video") {
-				gRoomMedia.loadVideoUrlAndShare(url, title);
-			} else {
-				gRoomMedia.loadUrlAndShare(url, title);
-			}
-			showRoomMediaTransport(true);
-			closeModal();
-			return Promise.resolve();
-		}
-
-		function uploadLibraryFile(file) {
-			if(!file) return Promise.reject(new Error("Choose an audio, video, or image file"));
-			if(typeof RoomMedia === "undefined" || !RoomMedia.uploadToLibrary) {
-				return Promise.reject(new Error("Media module missing"));
-			}
-			setMediaLibraryStatus("Uploading " + file.name + "…");
-			return ensureMediaServer().then(function() {
-				return RoomMedia.uploadToLibrary(file);
-			}).then(function(info) {
-				resetMediaLibraryUploadForm();
-				setMediaLibraryStatus("Added: " + (info.title || info.name));
-				return refreshMediaLibraryDialog().then(function() {
-					return info;
-				});
-			});
-		}
-
-		function uploadLibrarySelection() {
-			var fileInput = $mediaLibraryDialog.find("input[name=libraryfile]")[0];
-			var file = fileInput && fileInput.files && fileInput.files[0];
-			return uploadLibraryFile(file);
-		}
-
-		function isLibraryDropFile(file) {
-			if(!file) return false;
-			var type = String(file.type || "");
-			var name = String(file.name || "").toLowerCase();
-			if(/^audio\//.test(type) || /^video\//.test(type) || /^image\//.test(type)) return true;
-			return /\.(mp3|m4a|wav|ogg|aac|flac|opus|weba|mp4|webm|mov|mkv|m4v|ogv|png|jpe?g|gif|webp|bmp|svg)$/i.test(name);
-		}
-
-		function assignLibraryFileInput(file) {
-			var input = $mediaLibraryDialog.find("input[name=libraryfile]")[0];
-			if(!input || !file) return false;
-			try {
-				var dt = new DataTransfer();
-				dt.items.add(file);
-				input.files = dt.files;
-			} catch (err) {
-				return false;
-			}
-			$mediaLibraryDialog.find(".media-library-drop-name").text(file.name);
-			$mediaLibraryDialog.find(".media-library-drop-text").text("Selected file");
-			return true;
-		}
-
-		function handleLibraryDroppedFiles(fileList) {
-			var files = [];
-			if(fileList && fileList.length) {
-				for(var i = 0; i < fileList.length; i++) {
-					if(isLibraryDropFile(fileList[i])) files.push(fileList[i]);
-				}
-			}
-			if(!files.length) {
-				setMediaLibraryStatus("Drop an audio, video, or image file");
-				return;
-			}
-			assignLibraryFileInput(files[0]);
-			var chain = Promise.resolve();
-			files.forEach(function(file, idx) {
-				chain = chain.then(function() {
-					if(idx > 0) assignLibraryFileInput(file);
-					return uploadLibraryFile(file);
-				});
-			});
-			chain.catch(function(err) {
-				setMediaLibraryStatus(err.message || String(err));
-				alert(err.message || String(err));
-			});
-		}
-
-		if(mediaLibraryBtn) {
-			mediaLibraryBtn.addEventListener("click", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				openModal("#media-library");
-				refreshMediaLibraryDialog().catch(function() {});
-			});
-		}
-
-		$mediaLibraryDialog.on("click", ".media-library-refresh", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			refreshMediaLibraryDialog().catch(function() {});
-		});
-		$mediaLibraryDialog.on("click", ".media-library-upload", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			uploadLibrarySelection().catch(function(err) {
-				setMediaLibraryStatus(err.message || String(err));
-				alert(err.message || String(err));
-			});
-		});
-		$mediaLibraryDialog.on("click", ".media-library-play", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			var $btn = $(this);
-			playLibraryItem(
-				$btn.attr("data-url"),
-				$btn.attr("data-title"),
-				$btn.attr("data-kind")
-			).catch(function(err) {
-				setMediaLibraryStatus(err.message || String(err));
-				alert(err.message || String(err));
-			});
-		});
-		$mediaLibraryDialog.on("click", ".media-library-view-image, .media-library-open-image", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			var $el = $(this).closest("[data-url]");
-			if(!$el.length) $el = $(this);
-			openMediaLibraryViewer($el.attr("data-url") || $(this).attr("data-url"));
-		});
-		$mediaLibraryDialog.on("keydown", ".media-library-open-image", function(e) {
-			if(e.key !== "Enter" && e.key !== " ") return;
-			e.preventDefault();
-			openMediaLibraryViewer($(this).closest("[data-url]").attr("data-url"));
-		});
-		$mediaLibraryDialog.on("change", "input[name=libraryfile]", function() {
-			var f = this.files && this.files[0];
-			if(f) {
-				$mediaLibraryDialog.find(".media-library-drop-name").text(f.name);
-				$mediaLibraryDialog.find(".media-library-drop-text").text("Selected file");
-				setMediaLibraryStatus("Ready to upload");
-			}
-		});
-		$mediaLibraryDialog.on("click", ".ml-btn", function(e) { e.stopPropagation(); });
-
-		(function bindMediaLibraryDragDrop() {
-			var shell = $mediaLibraryDialog.find(".media-library-shell")[0]
-				|| $mediaLibraryDialog[0];
-			var dropZone = $mediaLibraryDialog.find(".media-library-drop")[0];
-			if(!shell) return;
-			var dragDepth = 0;
-
-			function setDropHover(on) {
-				shell.classList.toggle("ml-drop-active", !!on);
-				if(dropZone) dropZone.classList.toggle("ml-drop-hover", !!on);
-			}
-
-			function isFileDrag(e) {
-				var types = e.dataTransfer && e.dataTransfer.types;
-				if(!types) return false;
-				for(var i = 0; i < types.length; i++) {
-					if(types[i] === "Files") return true;
-				}
-				return false;
-			}
-
-			shell.addEventListener("dragenter", function(e) {
-				if(!isFileDrag(e)) return;
-				e.preventDefault();
-				e.stopPropagation();
-				dragDepth += 1;
-				setDropHover(true);
-			});
-			shell.addEventListener("dragover", function(e) {
-				if(!isFileDrag(e)) return;
-				e.preventDefault();
-				e.stopPropagation();
-				if(e.dataTransfer) e.dataTransfer.dropEffect = "copy";
-				setDropHover(true);
-			});
-			shell.addEventListener("dragleave", function(e) {
-				if(!isFileDrag(e)) return;
-				e.preventDefault();
-				e.stopPropagation();
-				dragDepth = Math.max(0, dragDepth - 1);
-				if(dragDepth === 0) setDropHover(false);
-			});
-			shell.addEventListener("drop", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				dragDepth = 0;
-				setDropHover(false);
-				handleLibraryDroppedFiles(e.dataTransfer && e.dataTransfer.files);
-			});
-		})();
-
-		$mediaLibraryViewer.on("click", "[data-viewer-close]", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			closeMediaLibraryViewer();
-		});
-		$mediaLibraryViewer.on("click", ".media-library-viewer-prev, .media-library-viewer-nav-prev", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			stepMediaLibraryViewer(-1);
-		});
-		$mediaLibraryViewer.on("click", ".media-library-viewer-next, .media-library-viewer-nav-next", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			stepMediaLibraryViewer(1);
-		});
-		$(document).on("keydown.mediaLibraryViewer", function(e) {
-			if(!$mediaLibraryViewer.length || $mediaLibraryViewer.is("[hidden]")) return;
-			if(e.key === "Escape" || e.keyCode === 27) {
-				e.preventDefault();
-				e.stopImmediatePropagation();
-				closeMediaLibraryViewer();
-			} else if(e.key === "ArrowLeft") {
-				e.preventDefault();
-				stepMediaLibraryViewer(-1);
-			} else if(e.key === "ArrowRight") {
-				e.preventDefault();
-				stepMediaLibraryViewer(1);
-			}
-		});
-
 		var shareImageBtn = document.getElementById("share-image-btn");
 		if(shareImageBtn) {
 			shareImageBtn.addEventListener("click", function(e) {
@@ -6758,165 +5857,6 @@ Rect.prototype.contains = function(x, y) {
 			});
 		})();
 
-		$roomMediaTransport.on("click", ".dj-btn", function(e) { e.stopPropagation(); });
-		$roomMediaTransport.on("click", ".room-media-player-close", function(e) {
-			e.preventDefault();
-			resetRoomMediaLayout();
-			showRoomMediaTransport(false);
-		});
-		$roomMediaTransport.on("mousedown touchstart pointerdown", "input[name=seek]", function() {
-			this._dragging = true;
-		});
-		// Clear _dragging on document so releasing the mouse anywhere (including outside
-		// the slider) always unlocks the slider update loop.
-		$(document).on("mouseup.rmSeek touchend.rmSeek pointerup.rmSeek pointercancel.rmSeek", function() {
-			var seek = $roomMediaTransport.find("input[name=seek]")[0];
-			if(seek) seek._dragging = false;
-		});
-		$roomMediaTransport.on("input", "input[name=seek]", function() {
-			if(!gRoomMedia) return;
-			var sec = parseFloat(this.value) || 0;
-			updateRoomMediaProgress({
-				current: sec,
-				duration: gRoomMedia.getDuration ? gRoomMedia.getDuration() : (gRoomMedia.activeEl.duration || 0),
-				playing: gRoomMedia.playing,
-				title: gRoomMedia.title,
-				dj: gRoomMedia.djName
-			});
-		});
-		$roomMediaTransport.on("change", "input[name=seek]", function() {
-			if(!gRoomMedia) return;
-			var sec = parseFloat(this.value) || 0;
-			this._dragging = true;
-			gRoomMedia.seekTo(sec);
-			var el = this;
-			// Keep slider at new position for one frame while DOM currentTime catches up
-			requestAnimationFrame(function() { el._dragging = false; el.value = sec; });
-		});
-		$roomMediaTransport.on("input", "input[name=volume]", function() {
-			if(gRoomMedia) gRoomMedia.setVolume(parseFloat(this.value) || 0);
-		});
-		$roomMediaTransport.on("click", ".play", function(e) {
-			e.preventDefault();
-			ensureAudioReady();
-			if(!gRoomMedia || !gRoomMedia.url) {
-				alert("Load music from Room DJ first.");
-				return;
-			}
-			gRoomMedia.play(true);
-		});
-		$roomMediaTransport.on("click", ".pause", function(e) {
-			e.preventDefault();
-			if(gRoomMedia) gRoomMedia.pause(true);
-		});
-		$roomMediaTransport.on("click", ".stop", function(e) {
-			e.preventDefault();
-			if(gRoomMedia) gRoomMedia.stop(true);
-			resetRoomMediaLayout();
-		});
-		$roomMediaTransport.on("click", ".back", function(e) {
-			e.preventDefault();
-			if(gRoomMedia) gRoomMedia.seekTo(Math.max(0, gRoomMedia.getCurrentTime() - 10));
-		});
-		$roomMediaTransport.on("click", ".forward", function(e) {
-			e.preventDefault();
-			if(gRoomMedia) {
-				gRoomMedia.seekTo(Math.min(gRoomMedia.getDuration(), gRoomMedia.getCurrentTime() + 10));
-			}
-		});
-		$roomMediaTransport.on("click", ".room-media-sync", function(e) {
-			e.preventDefault();
-			if(ensureRoomMediaReady()) gRoomMedia.requestSync();
-		});
-		$roomMediaVideoWrap.on("click", ".room-media-video-close", function(e) {
-			e.preventDefault();
-			resetRoomMediaLayout();
-			$roomMediaVideoWrap.attr("hidden", "hidden");
-		});
-		$roomMediaVideoWrap.on("click", ".room-media-hide-piano-btn", function(e) {
-			e.preventDefault();
-			toggleRoomMediaHidePiano();
-		});
-		$roomMediaVideoWrap.on("click", ".room-media-cinema-btn", function(e) {
-			e.preventDefault();
-			toggleRoomMediaCinema();
-		});
-		$roomMediaTransport.on("click", ".room-media-hide-piano-transport", function(e) {
-			e.preventDefault();
-			toggleRoomMediaHidePiano();
-		});
-		$roomMediaTransport.on("click", ".room-media-cinema-transport", function(e) {
-			e.preventDefault();
-			toggleRoomMediaCinema();
-		});
-		$roomMediaTransport.on("click", ".room-media-chat-transport", function(e) {
-			e.preventDefault();
-			toggleRoomMediaCinemaChat();
-		});
-		$roomMediaVideoWrap.on("click", ".room-media-chat-btn", function(e) {
-			e.preventDefault();
-			toggleRoomMediaCinemaChat();
-		});
-		$(document).on("keydown.roomMediaCinema", function(e) {
-			if(e.key === "Escape" && gRoomMediaCinema) setRoomMediaCinema(false);
-		});
-		$(document).on("mousemove.roomMediaCinema touchstart.roomMediaCinema", function() {
-			if(gRoomMediaCinema) bumpRoomMediaControls();
-		});
-		$roomMediaVideoWrap.on("dblclick", ".room-media-video-stage", function(e) {
-			e.preventDefault();
-			if(roomMediaHasVideoPanel()) toggleRoomMediaCinema();
-		});
-		$roomMediaTransport.on("mouseenter mousedown touchstart focusin click", function() {
-			bumpRoomMediaControls();
-		});
-
-		$("#room-media").on("click", ".room-media-load", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			loadRoomMediaSelection().catch(function(err) {
-				alert(err.message || String(err));
-			});
-		});
-		$("#room-media").on("click", ".play", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			if(!ensureRoomMediaReady()) return;
-			ensureAudioReady();
-			function startPlay() {
-				gRoomMedia.play(true);
-				showRoomMediaTransport(true);
-				closeModal();
-			}
-			if(!gRoomMedia.url) {
-				loadRoomMediaSelection().then(startPlay).catch(function(err) {
-					alert(err.message || String(err));
-				});
-				return;
-			}
-			startPlay();
-		});
-		$("#room-media").on("click", ".stop", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			if(gRoomMedia) gRoomMedia.stop(true);
-		});
-		$("#room-media").on("click", ".room-media-sync", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			if(ensureRoomMediaReady()) gRoomMedia.requestSync();
-		});
-		$("#room-media").on("change", "input[name=mediafile]", function() {
-			var f = this.files && this.files[0];
-			if(f) {
-				$roomMediaDialog.find("input[name=mediaurl]").val("");
-				$roomMediaDialog.find("input[name=videourl]").val("");
-				$roomMediaDialog.find(".room-media-drop-name").text(f.name);
-				$roomMediaDialog.find(".room-media-drop-text").text("Selected file");
-			}
-		});
-		$("#room-media").on("click", ".dj-btn", function(e) { e.stopPropagation(); });
-
 		var learnBtn = document.getElementById("learn-btn");
 		if(learnBtn) {
 			learnBtn.addEventListener("click", function(e) {
@@ -7010,31 +5950,6 @@ Rect.prototype.contains = function(x, y) {
 			});
 		}
 
-		var blobBtn = document.getElementById("harmony-blob-btn");
-		if(blobBtn && gBlobFriend) {
-			blobBtn.addEventListener("click", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				gBlobFriend.setVisible(!gBlobFriend.visible);
-				if(gBlobFriend.visible && gBlobFriend.canvas) {
-					setTimeout(function() { gBlobFriend._resize(); }, 0);
-				}
-				updateHarmonyToolsUi();
-			});
-		}
-		var doodlerBtn = document.getElementById("harmony-doodle-btn");
-		if(doodlerBtn && gDesktopDoodler) {
-			doodlerBtn.addEventListener("click", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				gDesktopDoodler.setVisible(!gDesktopDoodler.visible);
-				if(gDesktopDoodler.visible) {
-					gDesktopDoodler.setMinimized(false);
-					if(gDesktopDoodler.canvas) setTimeout(function() { gDesktopDoodler._resize(); }, 0);
-				}
-				updateHarmonyToolsUi();
-			});
-		}
 		// Desktop: the Play bar is one scrollable row — let a normal mouse
 		// wheel scroll it sideways.
 		var toolsBar = document.querySelector(".harmony-tools-bar");
@@ -7054,64 +5969,6 @@ Rect.prototype.contains = function(x, y) {
 			});
 		}
 
-		// ---- Emoji reactions bar ----
-		var reactBtn = document.getElementById("harmony-react-btn");
-		if(reactBtn && gEmojiParty) {
-			var reactBar = document.createElement("div");
-			reactBar.id = "emoji-react-bar";
-			reactBar.className = "party-bar";
-			reactBar.setAttribute("hidden", "hidden");
-			gEmojiParty.emojis.forEach(function(em, i) {
-				var b = document.createElement("button");
-				b.type = "button";
-				b.className = "party-btn emoji-btn";
-				b.textContent = em;
-				b.addEventListener("click", function(e) { e.stopPropagation(); gEmojiParty.react(i); });
-				reactBar.appendChild(b);
-			});
-			var conf = document.createElement("button");
-			conf.type = "button";
-			conf.className = "party-btn confetti-btn";
-			conf.textContent = "🎊 Confetti!";
-			conf.addEventListener("click", function(e) { e.stopPropagation(); gEmojiParty.party(); });
-			reactBar.appendChild(conf);
-			document.body.appendChild(reactBar);
-
-			reactBtn.addEventListener("click", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				if(reactBar.hasAttribute("hidden")) reactBar.removeAttribute("hidden");
-				else reactBar.setAttribute("hidden", "hidden");
-				updateHarmonyToolsUi();
-			});
-		}
-
-		// ---- Soundboard bar ----
-		var soundBtn = document.getElementById("harmony-sound-btn");
-		if(soundBtn && gSoundBoard) {
-			var soundBar = document.createElement("div");
-			soundBar.id = "soundboard-bar";
-			soundBar.className = "party-bar";
-			soundBar.setAttribute("hidden", "hidden");
-			gSoundBoard.sounds.forEach(function(s) {
-				var b = document.createElement("button");
-				b.type = "button";
-				b.className = "party-btn sound-btn";
-				b.textContent = s.label;
-				b.addEventListener("click", function(e) { e.stopPropagation(); gSoundBoard.trigger(s.id); });
-				soundBar.appendChild(b);
-			});
-			document.body.appendChild(soundBar);
-
-			soundBtn.addEventListener("click", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				if(soundBar.hasAttribute("hidden")) soundBar.removeAttribute("hidden");
-				else soundBar.setAttribute("hidden", "hidden");
-				updateHarmonyToolsUi();
-			});
-		}
-
 		// ---- Hot Potato Bomb ----
 		var bombBtn = document.getElementById("harmony-bomb-btn");
 		if(bombBtn && gPartyGame) {
@@ -7123,66 +5980,6 @@ Rect.prototype.contains = function(x, y) {
 			});
 		}
 
-		// ---- Balloon Pop ----
-		var balloonBtn = document.getElementById("harmony-balloon-btn");
-		if(balloonBtn && gBalloonPop) {
-			balloonBtn.addEventListener("click", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				gBalloonPop.setVisible(!gBalloonPop.visible);
-				updateHarmonyToolsUi();
-			});
-		}
-
-		// ---- Car Dodge ----
-		var cardodgeBtn = document.getElementById("harmony-cardodge-btn");
-		if(cardodgeBtn && gCarDodge) {
-			cardodgeBtn.addEventListener("click", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				gCarDodge.setVisible(!gCarDodge.visible);
-				updateHarmonyToolsUi();
-			});
-		}
-
-		// ---- Reaction Royale ----
-		var reactionBtn = document.getElementById("harmony-reaction-btn");
-		if(reactionBtn && gReactionRoyale) {
-			reactionBtn.addEventListener("click", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				gReactionRoyale.setVisible(!gReactionRoyale.visible);
-				updateHarmonyToolsUi();
-			});
-		}
-
-		// ---- Tug of War ----
-		var tugBtn = document.getElementById("harmony-tug-btn");
-		if(tugBtn && gTugOfWar) {
-			tugBtn.addEventListener("click", function(e) {
-				e.preventDefault();
-				e.stopPropagation();
-				gTugOfWar.setVisible(!gTugOfWar.visible);
-				updateHarmonyToolsUi();
-			});
-		}
-
-		// ---- Local goof toys (useless button, pixel pet, evil cursor, chaos monkey) ----
-		function wireToyToggle(btnId, toy) {
-			var btn = document.getElementById(btnId);
-			if(btn && toy) {
-				btn.addEventListener("click", function(e) {
-					e.preventDefault();
-					e.stopPropagation();
-					toy.setActive(!toy.active);
-					updateHarmonyToolsUi();
-				});
-			}
-		}
-		wireToyToggle("harmony-useless-btn", gUselessButton);
-		wireToyToggle("harmony-pet-btn", gPixelPet);
-		wireToyToggle("harmony-evil-btn", gEvilCursor);
-		wireToyToggle("harmony-chaos-btn", gChaosMonkey);
 		var $harmonyTools = $("#harmony-tools");
 		$harmonyTools.on("mousedown touchstart pointerdown click", ".play-widget-btn, .doodler-color-btn, .doodler-brush-btn", function(e) {
 			e.stopPropagation();
@@ -7190,18 +5987,6 @@ Rect.prototype.contains = function(x, y) {
 		$harmonyTools.on("mousedown touchstart pointerdown", function(e) {
 			e.stopPropagation();
 			releaseKeyboard();
-		});
-		$harmonyTools.on("click", ".blob-toggle-btn", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			if(gBlobFriend) gBlobFriend.setVisible(false);
-			updateHarmonyToolsUi();
-		});
-		$harmonyTools.on("click", ".doodler-toggle-btn", function(e) {
-			e.preventDefault();
-			e.stopPropagation();
-			if(gDesktopDoodler) gDesktopDoodler.setVisible(false);
-			updateHarmonyToolsUi();
 		});
 
 		$metronomePanel.on("click", ".metronome-close", function(e) {
@@ -8621,11 +7406,8 @@ Rect.prototype.contains = function(x, y) {
 		noteQuota: gNoteQuota,
 		soundSelector: gSoundSelector,
 		sheetPlayer: gSheetPlayer,
-		roomMedia: gRoomMedia,
 		playMp3: gPlayMp3,
 		shareImage: gShareImage,
-		blobFriend: gBlobFriend,
-		desktopDoodler: gDesktopDoodler,
 		Notification: Notification
 	};
 
