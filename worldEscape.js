@@ -54,7 +54,6 @@ const DOORS = [
 	{ w: "x", c: 4.665, p: -CZ, f: -1, after: 5 }
 ];
 const KEY = "z:esc:";
-const TIMEOUT = 90 * 60e3;
 const TAU = Math.PI * 2;
 const LASERS = 5;                                   // the vault's laser beams (the cipher's shift: count them!)
 const smooth = u => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
@@ -119,17 +118,9 @@ const CONSTS = [
 	["the Summer Triangle", "Yaz Üçgeni", [[0.18, 0.26], [0.82, 0.3], [0.55, 0.84]], [[0, 1], [1, 2], [2, 0]]],
 	["Leo's Sickle", "Aslan'ın Orağı", [[0.72, 0.86], [0.66, 0.62], [0.5, 0.47], [0.45, 0.27], [0.6, 0.13], [0.82, 0.2]]]
 ];
-const MORSE = { A: ".-", B: "-...", C: "-.-.", D: "-..", E: ".", F: "..-.", G: "--.", H: "....", I: "..", J: ".---", K: "-.-", L: ".-..", M: "--", N: "-.", O: "---", P: ".--.", Q: "--.-", R: ".-.", S: "...", T: "-", U: "..-", V: "...-", W: ".--", X: "-..-", Y: "-.--", Z: "--.." };
-const MORSE_WORDS = ["STAR", "MOON", "NOVA", "MARS", "COMET", "ORBIT", "ALIEN", "ROBOT"];
-// the beacon's timeline: [on?, units] (dot 1, dash 3, gaps 1 / 3, and a long pause before it starts again)
-function morseTimeline(word) {
-	const out = [];
-	word.split("").forEach((ch, i) => {
-		MORSE[ch].split("").forEach((s, j) => { if (j) out.push([0, 1]); out.push([1, s === "." ? 1 : 3]); });
-		out.push([0, i === word.length - 1 ? 9 : 3]);
-	});
-	return out;
-}
+// the station's four oxygen tanks (the airlock code: their numbers, fullest first)
+const TANKS = [["Red", "Kırmızı", "#e8503e"], ["Blue", "Mavi", "#3e7ee8"], ["Green", "Yeşil", "#3ec86a"], ["Yellow", "Sarı", "#e8c23e"]];
+const TANK_LV = [14, 31, 47, 62, 78, 93];
 // wizard
 const RIDDLES = [
 	[["I speak without a mouth and hear without ears. I have no body, but I come alive with the wind. What am I?", "Ağzım yok ama konuşurum, kulağım yok ama duyarım. Bedenim yok, rüzgârla canlanırım. Ben neyim?"], ["ECHO", "AN ECHO", "YANKI"]],
@@ -244,14 +235,14 @@ const MISSIONS = {
 			const rule = R() * PRULES.length | 0;
 			let pl;
 			do pl = shuffle(range(8), R).slice(0, 5); while (!pl.some(i => PRULES[rule][1](PLANETS[i])) || pl.every(i => PRULES[rule][1](PLANETS[i])));
-			return { rule, pl, cs: shuffle(range(6), R).slice(0, 3), word: MORSE_WORDS[R() * MORSE_WORDS.length | 0] };
+			return { rule, pl, cs: shuffle(range(6), R).slice(0, 3), tn: shuffle(range(9).map(i => i + 1), R).slice(0, 4), lv: shuffle(TANK_LV, R).slice(0, 4) };
 		},
 		steps: [
 			{ f: "power", t: ["Reboot the station", "İstasyonu yeniden başlat"], h: [["Read the captain's log on the tablet.", "Tabletteki kaptan seyir kaydını oku."], ["The log says which planets' switches go ON. The planet chart on the wall has their rings and moons.", "Kayıt hangi gezegenlerin düğmelerinin AÇIK olacağını söylüyor. Duvardaki gezegen tablosunda halkaları ve uyduları var."], ["Check each switch's planet against the rule. Every other switch stays OFF.", "Her düğmenin gezegenini kurala göre kontrol et. Diğer bütün düğmeler KAPALI kalır."]] },
 			{ f: "locker", t: ["Open the supply locker", "Erzak dolabını aç"], h: [["With power back, the navigation console shows a star chart.", "Enerji gelince navigasyon konsolu bir yıldız haritası gösteriyor."], ["The log names three constellations. Count the bright stars in each, in that order.", "Kayıtta üç takımyıldız var. Her birindeki parlak yıldızları o sırayla say."]] },
-			{ f: "out", t: ["Get through the airlock", "Hava kilidinden geç"], h: [["The airlock wants a password. The station's beacon keeps sending it in Morse code.", "Hava kilidi bir şifre istiyor. İstasyonun işaret lambası onu sürekli Mors alfabesiyle gönderiyor."], ["The Morse card from the locker is in your clues. Short flash = dot, long flash = dash. Longer gaps split the letters.", "Dolaptan çıkan Mors kartı ipuçlarında. Kısa yanıp sönme = nokta, uzun = çizgi. Daha uzun aralar harfleri ayırır."], ["Use the beacon for a close-up. The word starts after the longest pause.", "Yakından izlemek için işaret lambasına tıkla. Kelime en uzun aradan sonra başlar."]] }
+			{ f: "out", t: ["Open the airlock", "Hava kilidini aç"], h: [["The airlock manual from the supply locker is in your clues.", "Erzak dolabından çıkan hava kilidi kılavuzu ipuçlarında."], ["Four oxygen tanks stand around the station, each with a big number and a gauge. Walk up to each one and check it.", "İstasyonda dört oksijen tüpü var, her birinde büyük bir numara ve bir gösterge var. Her birine git ve kontrol et."], ["Put the tanks' numbers in order from the highest % to the lowest %, and enter them at the airlock terminal.", "Tüplerin numaralarını en yüksek %'den en düşük %'ye sırala ve hava kilidi terminaline gir."]] }
 		],
-		items: [{ f: "locker", n: ["Access card", "Giriş kartı"], ic: "💳" }, { f: "locker", n: ["Morse card", "Mors kartı"], ic: "📡" }]
+		items: [{ f: "locker", n: ["Access card", "Giriş kartı"], ic: "💳" }, { f: "locker", n: ["Airlock manual", "Hava kilidi kılavuzu"], ic: "📘" }]
 	},
 	wizard: {
 		name: ["Wizard's Tower", "Büyücünün Kulesi"], stars: 3, color: "#b48cff", light: "#b49cff",
@@ -433,6 +424,20 @@ function drawPlanetChart(c, w, h) {
 		fitText(c, sp, h, L("moons: ", "uydu: ") + P[3], { x, y: h * 0.84, size: h * 0.045, weight: 700, color: "#a8ffcf" });
 	});
 }
+// an oxygen tank, close up: its number and its gauge
+function drawTank(c, w, h, num, lv, col) {
+	c.fillStyle = "#0e141c"; c.fillRect(0, 0, w, h);
+	const x = w / 2, tw = w * 0.56, top = h * 0.12, bot = h * 0.95;
+	c.fillStyle = "#8a9099"; c.fillRect(x - tw * 0.12, top - h * 0.08, tw * 0.24, h * 0.1);
+	c.fillStyle = col; c.beginPath(); c.roundRect(x - tw / 2, top, tw, bot - top, tw * 0.42); c.fill();
+	const gx = x - tw * 0.36, gw = tw * 0.2, g0 = top + h * 0.14, g1 = bot - h * 0.08, gh = g1 - g0;
+	c.fillStyle = "#05080c"; c.fillRect(gx, g0, gw, gh);
+	c.fillStyle = "#7affd0"; c.fillRect(gx + 4, g1 - gh * lv / 100, gw - 8, gh * lv / 100);
+	c.fillStyle = "rgba(255,255,255,.7)";
+	for (let i = 0; i <= 10; i++) c.fillRect(gx + gw, g1 - gh * i / 10 - 1, i % 5 ? 6 : 12, 2);
+	fitText(c, tw * 0.5, h, String(num), { x: x + tw * 0.14, y: h * 0.42, size: h * 0.24, color: "#ffffff", glow: "rgba(0,0,0,.6)", blur: 8 });
+	fitText(c, tw * 0.6, h, "O₂ " + lv + "%", { x: x + tw * 0.14, y: h * 0.7, size: h * 0.07, color: "#0e141c" });
+}
 function drawStrokes(c, strokes, x, y, s, lw) {
 	c.lineWidth = lw; c.lineCap = "round"; c.lineJoin = "round";
 	c.beginPath();
@@ -529,10 +534,8 @@ const CSS = `
 .esc-lo { display: grid; grid-template-columns: repeat(3, 72px); gap: 10px; justify-content: center; margin: 4px 0; }
 .esc-lo button { width: 72px; height: 72px; border-radius: 16px; border: 2px solid #3a4a5a; background: #141a22; cursor: pointer; }
 .esc-lo button.on { background: radial-gradient(circle, #ff8a8a, #d82a2a); border-color: #ffb0b0; box-shadow: 0 0 18px rgba(255,60,60,.6); }
-.esc-beacon { width: 90px; height: 90px; border-radius: 50%; margin: 6px auto 14px; background: #2a0a0a; border: 3px solid #4a2a2a; transition: background .05s; }
-.esc-beacon.on { background: radial-gradient(circle, #fff, #ff3a3a); box-shadow: 0 0 40px #ff3a3a; }
-.esc-morse { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px 8px; font: 800 14px ui-monospace, Consolas, monospace; margin-bottom: 8px; }
-.esc-morse span b { color: #ffd36b; margin-right: 6px; }
+.esc-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.esc-tabs .btn { padding: 6px 10px; font-size: 12.5px; border-radius: 10px; }
 `;
 
 export function build(k) {
@@ -551,7 +554,8 @@ export function build(k) {
 	// KEY + "run": { s: "run" | "won" | "idle", id, at, by, t } - KEY + room + ":" + thing: { r: the run's id, v }
 	const RK = KEY + "run";
 	const st = () => { const v = ctx.get(RK); return v && typeof v === "object" ? v : null; };
-	const running = () => { const s = st(); return !!s && s.s === "run" && now() - s.at < TIMEOUT; };
+	// (a run never expires: the team can leave and come back, and every solved room stays solved until someone gives up)
+	const running = () => { const s = st(); return !!s && s.s === "run"; };
 	const won = () => { const s = st(); return !!s && s.s === "won"; };
 	const runId = () => { const s = st(); return s && (running() || s.s === "won") ? s.id : null; };
 	function flag(rid, f) { const id = runId(); if (!id) return undefined; const v = ctx.get(KEY + rid + ":" + f); return v && v.r === id ? v.v : undefined; }
@@ -618,7 +622,9 @@ export function build(k) {
 		else ctx.toast(L("The mission hasn't started yet. Press <b>Start mission</b> on the panel (in room 1) to lock yourselves in.", "Görev henüz başlamadı. Kendinizi kilitlemek için (1. odada) paneldeki <b>Görevi başlat</b>'a bas."), L("Start", "Başlat"), start, 7000);
 	}
 	function askQuit() { ctx.toast(L("Give up the mission? Every room's progress will be lost.", "Görevden vazgeçilsin mi? Bütün odalardaki ilerleme silinir."), L("Give up", "Vazgeç"), abandon, 7000); }
-	function breakLock() { ctx.toast(L("Break the lock? The team inside loses their mission.", "Kilit kırılsın mı? İçerideki ekip görevini kaybeder."), L("Break it", "Kır"), () => { abandon(); ctx.sfx("smack", 0.6); }, 7000); }
+	// the room the team is up to, and walking there (through the rooms already solved: their doors stay open)
+	const current = () => Math.min(solved(), ROOMS.length - 1);
+	function goOn() { const p = FR[ROOMS[current()].id].P(0, 2.6); ctx.closeModal(); ctx.walkTo(p[0] + OX, p[1] + OZ); }
 	function inventory(rid) {
 		const M = MISSIONS[rid], f = x => flag(rid, x);
 		const out = M.items.filter(it => f(it.f) && !(it.u && f(it.u))).map(it => it.ic + " " + TX(it.n));
@@ -626,16 +632,14 @@ export function build(k) {
 	}
 
 	// ================================================================ clues, locks and hints (windows)
-	const journal = {};   // rid -> { id, list: [{ key, title, html }] }: what you've found this run
-	function note(rid, key, title, html) {
-		const id = runId();
-		if (!id) return;
-		let J = journal[rid];
-		if (!J || J.id !== id) J = journal[rid] = { id, list: [] };
-		const e = { key, title, html }, i = J.list.findIndex(x => x.key === key);
-		if (i >= 0) J.list[i] = e; else J.list.push(e);
-	}
-	const found = rid => { const J = journal[rid]; return J && J.id === runId() ? J.list : []; };
+	// every clue a room has (title / html: functions, so they follow the language and the run), and which ones the
+	// team has found this run: a shared flag each, so they're kept when you leave or reload, and everyone sees them
+	const CLUES = {};   // rid -> [{ key, title, html, w }]
+	function defClue(rid, key, title, html, w) { (CLUES[rid] = CLUES[rid] || []).push({ key, title, html, w }); }
+	const clueOf = (rid, key) => (CLUES[rid] || []).find(c => c.key === key);
+	const seen = (rid, key) => flag(rid, "c:" + key) !== undefined;
+	function learn(rid, key) { if (runId() && !seen(rid, key)) setFlag(rid, "c:" + key); }
+	const found = rid => (CLUES[rid] || []).filter(c => seen(rid, c.key));
 	let closeFns = [];
 	const dropClose = () => { closeFns.forEach(f => f()); closeFns = []; };
 	function openEsc(title, html, w, onClose) {
@@ -643,7 +647,7 @@ export function build(k) {
 		if (onClose) closeFns.push(onClose);
 		return ctx.openModal("escape", title, html, w || 460, dropClose);
 	}
-	function clue(rid, key, title, html, w) { note(rid, key, title, html); openEsc(title, `<div class="esc-clue">${html}</div>`, w || 500); }
+	function clue(rid, key) { const c = clueOf(rid, key); learn(rid, key); openEsc(c.title(), `<div class="esc-clue">${c.html()}</div>`, c.w || 500); }
 	// a lock: kind "digits" (a keypad), "word" (type it), "seq" (press keys in order: o.keys [{ v, html, sub, c }])
 	function lockUI(o) {
 		const len = o.len || 4;
@@ -707,9 +711,14 @@ export function build(k) {
 		Hn.n++;
 		openEsc(L("Hint", "İpucu"), `<div class="esc-clue"><p class="esc-p" style="color:var(--muted)">${L("Puzzle", "Bulmaca")} ${si + 1} / ${M.steps.length}: <b style="color:var(--text)">${TX(s.t)}</b></p><p class="esc-p">${TX(s.h[n])}</p>${n < s.h.length - 1 ? `<p class="esc-p" style="color:var(--muted);font-size:13px">${L("Still stuck? Ask again for a bigger hint.", "Hâlâ takıldın mı? Daha büyük bir ipucu için tekrar sor.")}</p>` : ""}</div>`, 420);
 	}
+	// the clue book: every room's clues the team has found (a tab per room), from anywhere in the house
 	function showClues(rid) {
-		const J = found(rid);
-		openEsc(L("Clues - ", "İpuçları - ") + nameOf(rid), J.length ? `<div class="esc-j esc-clue">${J.map(e => `<h4>${e.title}</h4>${e.html}`).join("")}</div>` : `<p class="esc-p">${L("Nothing yet. Look at, read and search everything in the room: every clue you find is kept here.", "Henüz bir şey yok. Odadaki her şeye bak, oku ve ara: bulduğun her ipucu burada saklanır.")}</p>`, 540);
+		const rooms = ROOMS.map(R => R.id).filter(id => found(id).length);
+		if (!rid || !found(rid).length) rid = rooms[rooms.length - 1] || rid;
+		const J = rid ? found(rid) : [];
+		const tabs = rooms.length > 1 ? `<div class="esc-tabs">${rooms.map(id => `<button class="btn${id === rid ? " primary" : ""}" data-r="${id}">${ROOMS.findIndex(R => R.id === id) + 1}. ${nameOf(id)}</button>`).join("")}</div>` : "";
+		const body = openEsc(L("Clues - ", "İpuçları - ") + (rid ? nameOf(rid) : L("Escape House", "Kaçış Evi")), tabs + (J.length ? `<div class="esc-j esc-clue">${J.map(e => `<h4>${e.title()}</h4>${e.html()}`).join("")}</div>` : `<p class="esc-p">${L("Nothing yet. Look at, read and search everything in the room (the little glowing diamonds show what you can use): every clue anyone on the team finds is kept here.", "Henüz bir şey yok. Odadaki her şeye bak, oku ve ara (parlayan küçük elmaslar kullanabileceğin şeyleri gösterir): ekipten birinin bulduğu her ipucu burada saklanır.")}</p>`), 560);
+		body.querySelectorAll("[data-r]").forEach(b => b.onclick = () => showClues(b.dataset.r));
 	}
 
 	// ================================================================ textures and materials
@@ -817,7 +826,8 @@ export function build(k) {
 	k.hemi = 0.4; k.env = 0.28; k.exposure = 1.02;
 
 	// ================================================================ the doors
-	const doorOpen = i => { const D = DOORS[i]; return D.after < 0 ? !running() : solved() > D.after; };
+	// (the way in never locks: leave whenever you like and come back to carry on where the team got to)
+	const doorOpen = i => { const D = DOORS[i]; return D.after < 0 ? true : solved() > D.after; };
 	const onFrom = D => { const m = me(), lx = m.x - OX, lz = m.z - OZ; return Math.sign((D.w === "x" ? lz : lx) - D.p) === D.f; };
 	const exitDoor = ri => DOORS.findIndex((D, i) => D.after === ri && i !== 4);
 	const standOf = (D, side, d = 0.85) => D.w === "x" ? [D.c, D.p + side * d] : [D.p + side * d, D.c];
@@ -848,7 +858,7 @@ export function build(k) {
 	function doorLabel(i) {
 		const D = DOORS[i], open = doorOpen(i), from = onFrom(D), s = st();
 		if (i === 0) {
-			if (running()) return from ? L(`Locked: ${s.by}'s team is inside (${fmt(now() - s.at)})`, `Kilitli: ${s.by} ve ekibi içeride (${fmt(now() - s.at)})`) : L("The door is locked behind you", "Kapı arkanızdan kilitlendi");
+			if (running()) return from ? L(`Rejoin the mission (room ${current() + 1} of 6)`, `Göreve geri dön (6 odadan ${current() + 1}.)`) : L("Step out to the corridor (progress is kept)", "Koridora çık (ilerleme saklanır)");
 			if (from) return L("Go into room 1", "1. odaya gir");
 			return won() ? L("Play again: start a new mission", "Tekrar oyna: yeni görev başlat") : L("Start the mission", "Görevi başlat");
 		}
@@ -862,7 +872,13 @@ export function build(k) {
 	function doorUse(i) {
 		const D = DOORS[i], from = onFrom(D);
 		if (i === 0) {
-			if (running()) { ctx.toast(from ? L(`${esc(st().by)}'s team is on the mission. Wait for them, or press <b>R</b> to break the lock.`, `${esc(st().by)} ve ekibi görevde. Onları bekle ya da kilidi kırmak için <b>R</b>'ye bas.`) : L("Locked behind you! The only way out is through all six rooms.", "Kapı arkanızdan kilitlendi! Tek çıkış altı odanın hepsinden geçmek.")); return; }
+			if (running()) {
+				if (!from) { const p = standOf(D, D.f, 1.2); ctx.walkTo(p[0] + OX, p[1] + OZ); return; }
+				const sv = solved();
+				goOn();
+				ctx.toast(L(`<b>Welcome back!</b> Nothing was lost: ${sv} of 6 rooms solved, and their doors are open. Carry on in room ${current() + 1}, ${nameOf(ROOMS[current()].id)}.`, `<b>Tekrar hoş geldin!</b> Hiçbir şey kaybolmadı: 6 odadan ${sv} tanesi çözüldü ve kapıları açık. ${current() + 1}. odada (${nameOf(ROOMS[current()].id)}) devam et.`), null, null, 8000);
+				return;
+			}
 			if (from) {
 				const p = FR.study.P(0, 2.6);
 				ctx.walkTo(p[0] + OX, p[1] + OZ);
@@ -899,6 +915,18 @@ export function build(k) {
 		add(parent, new THREE.CylinderGeometry(0.015, 0.015, 1.55, 8), blackM, x, 0.8, z, { cast: false });
 		add(parent, new THREE.CylinderGeometry(0.14, 0.24, 0.3, 18, 1, true), new THREE.MeshStandardMaterial({ color: "#efe2c4", emissive: color, emissiveIntensity: 0.7, side: THREE.DoubleSide }), x, 1.62, z, { cast: false });
 	}
+	// a cupboard with an open front (its doors are added on their own, so you can see inside once they swing open):
+	// the floor at y 0, the front at z d / 2, a shelf at each height in shelves
+	function shell(parent, w, h, d, m, shelves = []) {
+		const t = 0.03;
+		add(parent, new THREE.BoxGeometry(w, h, t), m, 0, h / 2, -d / 2 + t / 2);
+		for (const sx of [-1, 1]) add(parent, new THREE.BoxGeometry(t, h, d), m, sx * (w / 2 - t / 2), h / 2, 0);
+		for (const y of [t / 2, h - t / 2].concat(shelves)) add(parent, new THREE.BoxGeometry(w - 2 * t, t, d - t), m, 0, y, t / 2, { cast: false });
+		// (a dim inside, so it doesn't look like a solid block)
+		add(parent, new THREE.PlaneGeometry(w - 2 * t, h - 2 * t), mat("#141018", 0.95), 0, h / 2, -d / 2 + t + 0.002, { cast: false });
+	}
+	// a little stack of boxes / books / jars on a shelf: [x, w, h, d, colour]
+	function stuff(parent, y, z, list) { for (const [x, w, h, d, c] of list) add(parent, rbox(w, h, d, Math.min(w, h, d) * 0.12), mat(c, 0.75), x, y + h / 2, z, { cast: false }); }
 	function plant(parent, x, z, s = 1) {
 		add(parent, new THREE.CylinderGeometry(0.2 * s, 0.15 * s, 0.4 * s, 14), mat("#e8e2d8", 0.6), x, 0.2 * s, z);
 		for (let i = 0; i < 5; i++) add(parent, new THREE.SphereGeometry((0.22 + i * 0.02) * s, 10, 8), mat(i % 2 ? "#3a7a3a" : "#2f6a34", 0.8), x + Math.sin(i * 2.4) * 0.12 * s, (0.6 + i * 0.12) * s, z + Math.cos(i * 2.4) * 0.12 * s);
@@ -918,8 +946,9 @@ export function build(k) {
 		// the room's own frame: x across (±hw), z from the back wall (-RD) to the front, the corridor side (+RD)
 		const Pt = (lx, lz) => [C.cx + s * lx, cz + s * lz];
 		const fr = {
-			rid, ri, M, g: G, hw: C.hw, P: Pt, solids: [],
+			rid, ri, M, g: G, hw: C.hw, P: Pt, solids: [], its: [],
 			p: () => P(rid), flag: f => flag(rid, f), set: (f, v) => setFlag(rid, f, v), solve: () => solveRoom(rid),
+			clue: (key, title, html, w) => defClue(rid, key, title, html, w),
 			box(x0, x1, z0, z1) { const a = Pt(x0, z0), b = Pt(x1, z1); k.box(Math.min(a[0], b[0]), Math.max(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[1], b[1])); },
 			// a box (room frame) that's solid only while on() says so
 			solid(x0, x1, z0, z1, on) { const a = Pt(x0, z0), b = Pt(x1, z1); fr.solids.push({ r: [Math.min(a[0], b[0]), Math.max(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[1], b[1])], on }); },
@@ -928,11 +957,12 @@ export function build(k) {
 				const lab = def.label, use = def.use;
 				const d = {
 					label: () => typeof lab === "function" ? lab() : TX(lab),
-					use: () => { if (!def.always && !running()) { notStarted(); return; } use(); },
-					reach: def.reach || 2.4,
+					use: () => { if (!def.always && !running()) { notStarted(); return; } used.add(runId() + ":" + rid + ":" + name); use(); },
+					reach: def.reach || 2.6,
 					stand: Pt(def.stand[0], def.stand[1])
 				};
 				if (def.at) { const a = Pt(def.at[0], def.at[1]); d.face = Math.atan2(a[0] - d.stand[0], a[1] - d.stand[1]); }
+				fr.its.push({ name, d, objs });
 				return k.interact("esc:" + rid + ":" + name, d, ...objs);
 			},
 			// the floor and the wall faces (inside the room's walls, with holes where its doors are)
@@ -955,7 +985,48 @@ export function build(k) {
 			door: null, anim: null
 		};
 		BUILD[rid](fr);
+		// a little glowing diamond over everything you can use (dimmer once you've tried it), and where each thing is
+		// (its footprint on the floor, so E works from anywhere close to it, not just one spot)
+		g.updateMatrixWorld(true);
+		const b = new THREE.Box3(), v = new THREE.Vector3();
+		fr.its.forEach((it, i) => {
+			b.makeEmpty(); it.objs.forEach(o => b.expandByObject(o));
+			if (b.isEmpty()) return;
+			const a = g.worldToLocal(v.copy(b.min)).clone(), c = g.worldToLocal(v.copy(b.max));
+			it.foot = [Math.min(a.x, c.x), Math.max(a.x, c.x), Math.min(a.z, c.z), Math.max(a.z, c.z)];   // (zone coordinates)
+			const top = G.worldToLocal(v.set((b.min.x + b.max.x) / 2, b.max.y, (b.min.z + b.max.z) / 2)).clone();
+			const mk = add(G, new THREE.OctahedronGeometry(0.07), glow(M.color, { transparent: true, opacity: 0.9, depthWrite: false }), top.x, 0, top.z, { cast: false, receive: false });
+			mk.raycast = () => {};
+			mk.visible = false;
+			it.mk = mk; it.y = Math.min(H - 0.3, top.y + 0.28); it.ph = i * 0.9;
+		});
 		return fr;
+	}
+	const used = new Set();   // run:room:thing - what you've tried already (its marker dims)
+	function markers(fr, t) {
+		const show = running() && myRoom() === fr.rid && solved() <= fr.ri;
+		for (const it of fr.its) {
+			if (!it.mk) continue;
+			it.mk.visible = show;
+			if (!show) continue;
+			const tried = used.has(runId() + ":" + fr.rid + ":" + it.name);
+			it.mk.position.y = it.y + Math.sin(t * 2.4 + it.ph) * 0.05;
+			it.mk.rotation.y = t * 1.6 + it.ph;
+			it.mk.scale.setScalar(tried ? 0.6 : 1);
+			it.mk.material.opacity = tried ? 0.35 : 0.65 + 0.3 * Math.sin(t * 3 + it.ph);
+		}
+	}
+	// the thing in your room closest to you (within reach of its footprint): what E does, if nothing else is closer
+	function nearestThing() {
+		const rid = myRoom(), m = me(), x = m.x - OX, z = m.z - OZ;
+		if (!rid) return null;
+		let best = null, bd = 1.15;
+		for (const it of FR[rid].its) {
+			if (!it.foot) continue;
+			const f = it.foot, dx = Math.max(f[0] - x, 0, x - f[1]), dz = Math.max(f[2] - z, 0, z - f[3]), dd = Math.hypot(dx, dz);
+			if (dd < bd) { bd = dd; best = it; }
+		}
+		return best;
 	}
 
 	// ---------------------------------------------------------------- 1. the Detective's Study (in: front, out: right)
@@ -975,8 +1046,15 @@ export function build(k) {
 		const desk = group(G, 0, 0, -3.2);
 		add(desk, rbox(2.1, 0.07, 0.9, 0.02), woodM, 0, 0.78, 0);
 		for (const sx of [-0.75, 0.75]) add(desk, rbox(0.52, 0.74, 0.84, 0.02), woodM, sx, 0.37, 0);
-		const drawer = group(desk, 0, 0.64, 0);
-		add(drawer, rbox(0.92, 0.18, 0.8, 0.015), mat("#5a3620", 0.6), 0, 0, 0);
+		const drawer = group(desk, 0, 0.64, 0), drM = mat("#5a3620", 0.6);
+		// (hollow: old papers, a photo and a pencil inside)
+		add(drawer, new THREE.BoxGeometry(0.92, 0.02, 0.8), drM, 0, -0.08, 0);
+		for (const z of [-0.39, 0.39]) add(drawer, new THREE.BoxGeometry(0.92, 0.18, 0.02), drM, 0, 0, z);
+		for (const x of [-0.45, 0.45]) add(drawer, new THREE.BoxGeometry(0.02, 0.18, 0.76), drM, x, 0, 0, { cast: false });
+		add(drawer, new THREE.PlaneGeometry(0.3, 0.22), mat("#efe6cf", 0.9), -0.15, -0.068, 0.1, { rx: -Math.PI / 2, rz: 0.15, cast: false });
+		add(drawer, new THREE.PlaneGeometry(0.28, 0.2), mat("#e4d8b8", 0.9), -0.1, -0.066, -0.15, { rx: -Math.PI / 2, rz: -0.2, cast: false });
+		add(drawer, new THREE.PlaneGeometry(0.12, 0.09), mat("#8a7454", 0.6), 0.22, -0.066, 0.12, { rx: -Math.PI / 2, rz: 0.3, cast: false });
+		add(drawer, new THREE.CylinderGeometry(0.007, 0.007, 0.18, 6), mat("#e8b830", 0.6), 0.2, -0.062, -0.12, { rz: Math.PI / 2, ry: 0.5, cast: false });
 		add(drawer, new THREE.BoxGeometry(0.16, 0.03, 0.03), goldM, 0, 0, 0.415, { cast: false });
 		add(drawer, new THREE.BoxGeometry(0.1, 0.06, 0.02), mat("#1a1a1a", 0.4, 0.6), 0.3, 0, 0.41, { cast: false });
 		const file = add(desk, rbox(0.36, 0.025, 0.26, 0.008), mat("#c8a46a", 0.8), -0.55, 0.83, 0.12, { cast: false }); file.rotation.y = 0.2;
@@ -995,7 +1073,20 @@ export function build(k) {
 		const shelfG = group(G, -hw + 0.2, 0, 1.0, Math.PI / 2);
 		bookshelf(shelfG, 1.6, 2.2, 61, woodM); fr.box(-hw, -hw + 0.42, 0.15, 1.85);
 		const cab = group(G, hw - 0.25, 0, -1.3, -Math.PI / 2), cabDoors = [];
-		add(cab, rbox(1.0, 1.9, 0.46, 0.02), woodM, 0, 0.95, 0);
+		// (inside: the detective's archive boxes, a fedora, a camera, a fingerprint kit, a trench coat on a hook)
+		shell(cab, 1.0, 1.9, 0.46, woodM, [0.62, 1.25]);
+		stuff(cab, 0.03, 0, [[-0.28, 0.3, 0.24, 0.32, "#b8925a"], [0.06, 0.3, 0.24, 0.32, "#a8824a"], [0.32, 0.16, 0.36, 0.3, "#3a2a1a"]]);
+		stuff(cab, 0.635, 0, [[-0.3, 0.22, 0.12, 0.26, "#1a1a1e"], [-0.3, 0.2, 0.06, 0.24, "#2a2a30"], [0.0, 0.08, 0.3, 0.2, "#6a1a1a"], [0.09, 0.07, 0.26, 0.2, "#1a4a2a"], [0.17, 0.08, 0.28, 0.2, "#2a2a6a"]]);
+		add(cab, rbox(0.16, 0.1, 0.08, 0.02), mat("#1a1a1a", 0.4, 0.5), 0.34, 0.72, 0.02, { cast: false });
+		add(cab, new THREE.CylinderGeometry(0.035, 0.035, 0.05, 12), mat("#3a3a40", 0.2, 0.8), 0.34, 0.72, 0.075, { rx: Math.PI / 2, cast: false });
+		{
+			const hat = mat("#4a3c2c", 0.8);
+			add(cab, new THREE.CylinderGeometry(0.19, 0.19, 0.012, 22), hat, -0.2, 1.272, 0, { cast: false });
+			add(cab, new THREE.CylinderGeometry(0.1, 0.115, 0.12, 18), hat, -0.2, 1.34, 0, { cast: false });
+			add(cab, new THREE.CylinderGeometry(0.117, 0.117, 0.03, 18), mat("#1a1a1a", 0.7), -0.2, 1.3, 0, { cast: false });
+			add(cab, new THREE.CylinderGeometry(0.17, 0.24, 0.58, 14, 1, true), mat("#a8925e", 0.85, 0, { side: THREE.DoubleSide }), 0.22, 1.56, -0.04, { cast: false });
+			add(cab, new THREE.SphereGeometry(0.02, 8, 6), goldM, 0.22, 1.86, -0.18, { cast: false });
+		}
 		for (const sd of [-1, 1]) {
 			const pv = group(cab, sd * 0.48, 0, 0.235);
 			add(pv, rbox(0.47, 1.78, 0.03, 0.01), mat("#5a3620", 0.6), -sd * 0.235, 0.95, 0.015);
@@ -1008,12 +1099,18 @@ export function build(k) {
 		// the hidden message over the desk (invisible ink: it only shows once the UV torch has found it)
 		const uvT = liveTex(512, 160, (c, w, h) => drawUV(c, w, h, fr.p()));
 		const uvMsg = add(G, new THREE.PlaneGeometry(1.6, 0.5), new THREE.MeshBasicMaterial({ map: uvT, transparent: true, depthWrite: false, toneMapped: false, blending: THREE.AdditiveBlending }), 0, 2.15, -RD + 0.03, { cast: false, receive: false });
+		// (where it is: a smudged, faded patch of wallpaper you can see, and use, from the start)
+		const patch = add(G, new THREE.PlaneGeometry(1.8, 0.62), mat("#ffffff", 0.95, 0, { map: canvasTex(256, 96, (c, w, h) => { c.fillStyle = "#33503f"; c.fillRect(0, 0, w, h); const r = rng(5); for (let n = 0; n < 60; n++) { c.fillStyle = `rgba(230,220,190,${r() * 0.12})`; c.beginPath(); c.arc(r() * w, r() * h, 4 + r() * 14, 0, TAU); c.fill(); } }) }), 0, 2.15, -RD + 0.02, { cast: false });
 		// the keypad by the way out
 		const pad = add(G, rbox(0.18, 0.26, 0.04, 0.01), mat("#2a2a30", 0.4, 0.6), hw - 0.03, 1.35, SIDE_Z + 1.0, { ry: -Math.PI / 2, cast: false });
 		add(G, new THREE.PlaneGeometry(0.12, 0.05), glow("#6dff9a"), hw - 0.055, 1.43, SIDE_Z + 1.0, { ry: -Math.PI / 2, cast: false });
 
 		const p = () => fr.p();
-		fr.it("file", { stand: [-0.9, -2.15], at: [-0.55, -3.1], label: ["Read the case file", "Dava dosyasını oku"], use: () => clue(rid, "file", L("Case file", "Dava dosyası"), `<div class="paper">${L(`Case #47: The Stopped Clock.<br><br>The culprit struck at the very moment the wall clock stopped. My notes are locked in the desk drawer: <b>the real time of the crime, hours then minutes</b> (4 digits).<br><br>Careful: that old clock always ran <b>${p().fast} minutes fast</b>.<br><br>And if anything happens to me... look where I work, in a different light.<br>- D.`, `Dosya #47: Duran Saat.<br><br>Suçlu, duvar saatinin durduğu anda harekete geçti. Notlarım masanın çekmecesinde kilitli: <b>suçun gerçek saati, önce saat sonra dakika</b> (4 rakam).<br><br>Dikkat: o eski saat hep <b>${p().fast} dakika ileri</b> giderdi.<br><br>Bana bir şey olursa... çalıştığım yere bak, başka bir ışıkla.<br>- D.`)}</div>`) }, file);
+		fr.clue("file", () => L("Case file", "Dava dosyası"), () => `<div class="paper">${L(`Case #47: The Stopped Clock.<br><br>The culprit struck at the very moment the wall clock stopped. My notes are locked in the desk drawer: <b>the real time of the crime, hours then minutes</b> (4 digits).<br><br>Careful: that old clock always ran <b>${p().fast} minutes fast</b>.<br><br>And if anything happens to me... look where I work, in a different light.<br>- D.`, `Dosya #47: Duran Saat.<br><br>Suçlu, duvar saatinin durduğu anda harekete geçti. Notlarım masanın çekmecesinde kilitli: <b>suçun gerçek saati, önce saat sonra dakika</b> (4 rakam).<br><br>Dikkat: o eski saat hep <b>${p().fast} dakika ileri</b> giderdi.<br><br>Bana bir şey olursa... çalıştığım yere bak, başka bir ışıkla.<br>- D.`)}</div>`);
+		fr.clue("clock", () => L("The wall clock", "Duvar saati"), () => `${img(400, 400, (c, w, h) => drawClock(c, w, h, p().sh, p().sm), "max-width:300px;margin:0 auto 10px")}<p class="esc-p">${L("The old clock has stopped. Its hands haven't moved since that night.", "Eski saat durmuş. Akrep ve yelkovan o geceden beri kıpırdamamış.")}</p>`, 380);
+		fr.clue("uv", () => L("Under UV light", "UV ışık altında"), () => `${img(512, 160, (c, w, h) => drawUV(c, w, h, p(), true))}<p class="esc-p">${L("Four glowing symbols appear on the wall above the desk, one after another.", "Masanın üstündeki duvarda yan yana dört parlayan sembol beliriyor.")}</p>`, 460);
+		fr.clue("board", () => L("Evidence board", "Delil panosu"), () => { const close = !!fr.flag("cab"); return `${img(640, 448, (c, w, h) => drawEvidence(c, w, h, p(), close))}<p class="esc-p">${close ? L("Through the magnifying glass you can read a tiny number next to each suspect.", "Büyüteçle her şüphelinin yanındaki minicik sayıyı okuyabiliyorsun.") : L("Four suspects, each pinned with a symbol. Something tiny is written by each photo, far too small to read.", "Dört şüpheli, her biri bir sembolle iğnelenmiş. Her fotoğrafın yanında okunamayacak kadar küçük bir şey yazıyor.")}</p><div class="paper">${L("Note to self: I hide my secrets where I work, but only the right light shows them.", "Kendime not: Sırlarımı çalıştığım yere saklarım, ama onları sadece doğru ışık gösterir.")}</div>`; }, 540);
+		fr.it("file", { stand: [-0.9, -2.15], at: [-0.55, -3.1], label: ["Read the case file", "Dava dosyasını oku"], use: () => clue(rid, "file") }, file);
 		fr.it("drawer", {
 			stand: [0.55, -2.15], at: [0, -3.2], label: () => fr.flag("drawer") ? L("The drawer (empty now)", "Çekmece (artık boş)") : L("Try the locked desk drawer", "Kilitli çekmeceyi dene"),
 			use: () => {
@@ -1021,7 +1118,7 @@ export function build(k) {
 				lockUI({ title: L("Desk drawer", "Masa çekmecesi"), text: L("A heavy drawer with a <b>4-digit</b> combination lock.", "<b>4 haneli</b> şifreli kilidi olan ağır bir çekmece."), kind: "digits", len: 4, check: v => v.join("") === pad2(p().rh) + pad2(p().rm), ok: () => { fr.set("drawer"); ctx.sfx("clack", 0.6); ctx.toast(L("Click! The drawer slides open. Inside: a <b>brass key</b>.", "Klik! Çekmece açıldı. İçinde: <b>pirinç bir anahtar</b>.")); } });
 			}
 		}, drawer);
-		fr.it("clock", { stand: [-hw + 1.0, -1.0], at: [-hw, -1.0], label: ["Look at the wall clock", "Duvar saatine bak"], use: () => clue(rid, "clock", L("The wall clock", "Duvar saati"), `${img(400, 400, (c, w, h) => drawClock(c, w, h, p().sh, p().sm), "max-width:300px;margin:0 auto 10px")}<p class="esc-p">${L("The old clock has stopped. Its hands haven't moved since that night.", "Eski saat durmuş. Akrep ve yelkovan o geceden beri kıpırdamamış.")}</p>`, 380) }, clockG);
+		fr.it("clock", { stand: [-hw + 1.0, -1.0], at: [-hw, -1.0], label: ["Look at the wall clock", "Duvar saatine bak"], use: () => clue(rid, "clock") }, clockG);
 		let shelfN = 0;
 		fr.it("books", { stand: [-hw + 1.0, 1.0], at: [-hw, 1.0], always: true, label: ["Browse the bookshelf", "Kitaplığa göz at"], use: () => { const n = shelfN++ % 2; openEsc(L("The bookshelf", "Kitaplık"), `<p class="esc-p">${n ? L("A book falls open at a page on invisible ink: <i>'Lemon juice... or a UV pen. Only ultraviolet light will show it.'</i>", "Bir kitap görünmez mürekkep sayfasında açılıyor: <i>'Limon suyu... ya da UV kalem. Onu sadece morötesi ışık gösterir.'</i>") : L("'The Hound of the Basketballs', 'Murder on the Disoriented Express'... nothing hidden behind them.", "'Basketbolların Köpeği', 'Şaşkın Ekspreste Cinayet'... arkalarında hiçbir şey yok.")}</p>`, 420); } }, shelfG);
 		fr.it("cab", {
@@ -1036,16 +1133,14 @@ export function build(k) {
 			stand: [1.75, -3.6], at: [0, -RD], label: () => fr.flag("cab") ? L("Shine the UV torch over the desk", "UV feneri masanın üstüne tut") : L("A patch of faded wallpaper", "Solmuş bir duvar kâğıdı parçası"),
 			use: () => {
 				if (!fr.flag("cab")) { ctx.toast(L("Just faded wallpaper... though it's oddly smudged, as if someone wrote on it.", "Sadece solmuş duvar kâğıdı... ama tuhaf biçimde lekeli, sanki biri üstüne bir şey yazmış.")); return; }
-				fr.set("uv"); ctx.sfx("wink", 0.6);
-				clue(rid, "uv", L("Under UV light", "UV ışık altında"), `${img(512, 160, (c, w, h) => drawUV(c, w, h, p(), true))}<p class="esc-p">${L("Four glowing symbols appear on the wall above the desk, one after another.", "Masanın üstündeki duvarda yan yana dört parlayan sembol beliriyor.")}</p>`, 460);
+				if (!fr.flag("uv")) fr.set("uv");
+				ctx.sfx("wink", 0.6);
+				clue(rid, "uv");
 			}
-		}, uvMsg);
+		}, patch, uvMsg);
 		fr.it("board", {
 			stand: [hw - 1.0, 1.0], at: [hw, 1.0], label: () => fr.flag("cab") ? L("Study the evidence board with the magnifying glass", "Delil panosunu büyüteçle incele") : L("Study the evidence board", "Delil panosunu incele"),
-			use: () => {
-				const close = !!fr.flag("cab");
-				clue(rid, close ? "board2" : "board", L("Evidence board", "Delil panosu"), `${img(640, 448, (c, w, h) => drawEvidence(c, w, h, p(), close))}<p class="esc-p">${close ? L("Through the magnifying glass you can read a tiny number next to each suspect.", "Büyüteçle her şüphelinin yanındaki minicik sayıyı okuyabiliyorsun.") : L("Four suspects, each pinned with a symbol. Something tiny is written by each photo, far too small to read.", "Dört şüpheli, her biri bir sembolle iğnelenmiş. Her fotoğrafın yanında okunamayacak kadar küçük bir şey yazıyor.")}</p><div class="paper">${L("Note to self: I hide my secrets where I work, but only the right light shows them.", "Kendime not: Sırlarımı çalıştığım yere saklarım, ama onları sadece doğru ışık gösterir.")}</div>`, 540);
-			}
+			use: () => clue(rid, "board")
 		}, board);
 		fr.door = {
 			label: () => L("Enter the door code", "Kapı şifresini gir"),
@@ -1093,7 +1188,15 @@ export function build(k) {
 		});
 		// the sea chest (back wall): its lid lifts once it's unlocked
 		const chest = group(G, 0, 0, -3.95);
-		add(chest, rbox(1.2, 0.5, 0.65, 0.03), woodM, 0, 0.25, 0);
+		// (hollow: a heap of gold coins, a pearl necklace and a ruby inside)
+		add(chest, new THREE.BoxGeometry(1.2, 0.05, 0.65), woodM, 0, 0.025, 0);
+		for (const z of [-0.3, 0.3]) add(chest, rbox(1.2, 0.5, 0.05, 0.015), woodM, 0, 0.25, z);
+		for (const x of [-0.575, 0.575]) add(chest, rbox(0.05, 0.5, 0.65, 0.015), woodM, x, 0.25, 0);
+		add(chest, new THREE.SphereGeometry(0.3, 18, 10), goldM, 0, 0.3, 0, { cast: false }).scale.set(1.7, 0.55, 0.85);
+		for (let i = 0; i < 14; i++) add(chest, new THREE.CylinderGeometry(0.035, 0.035, 0.008, 12), goldM, -0.45 + (i * 0.37) % 0.9, 0.36 + (i % 3) * 0.02, -0.18 + (i * 0.23) % 0.36, { rx: 0.3 * (i % 4), cast: false });
+		add(chest, new THREE.TorusGeometry(0.1, 0.012, 6, 20), mat("#f4f0e8", 0.2, 0.3), 0.28, 0.44, 0.08, { rx: -1.2, cast: false });
+		add(chest, new THREE.OctahedronGeometry(0.05), glow("#ff2a4a"), -0.25, 0.45, 0.05, { cast: false });
+		add(chest, new THREE.CylinderGeometry(0.03, 0.03, 0.3, 10), mat("#efe2c0", 0.9), 0.05, 0.44, 0.12, { rz: Math.PI / 2, ry: 0.4, cast: false });
 		for (const x of [-0.45, 0.45]) add(chest, new THREE.BoxGeometry(0.06, 0.52, 0.67), brass, x, 0.26, 0, { cast: false });
 		const lidP = group(chest, 0, 0.5, -0.33);
 		add(lidP, new THREE.CylinderGeometry(0.33, 0.33, 1.2, 16, 1, false, 0, Math.PI), woodM, 0, 0, 0.33, { rz: Math.PI / 2 });
@@ -1101,13 +1204,22 @@ export function build(k) {
 		fr.box(-0.65, 0.65, -RD, -3.55);
 		// the captain's locker (right wall), with a compass dial for a lock
 		const lk = group(G, hw - 0.3, 0, -1.6, -Math.PI / 2), lkDoors = [];
-		add(lk, rbox(1.0, 2.0, 0.55, 0.02), darkWoodM, 0, 1.0, 0);
+		// (inside: the captain's red coat on a rail, a tricorn hat, a cutlass, a bottle and a map case)
+		shell(lk, 1.0, 2.0, 0.55, darkWoodM, [1.55]);
+		add(lk, new THREE.CylinderGeometry(0.012, 0.012, 0.94, 6), brass, 0, 1.42, 0, { rz: Math.PI / 2, cast: false });
+		add(lk, new THREE.CylinderGeometry(0.15, 0.24, 0.95, 14, 1, true), mat("#8a1a1a", 0.8, 0, { side: THREE.DoubleSide }), -0.18, 0.92, -0.02, { cast: false });
+		add(lk, new THREE.TorusGeometry(0.06, 0.01, 6, 12), brass, -0.18, 1.42, 0, { cast: false });
+		add(lk, new THREE.CylinderGeometry(0.2, 0.14, 0.1, 3), mat("#141014", 0.8), -0.2, 1.62, 0, { cast: false });
+		add(lk, new THREE.BoxGeometry(0.03, 0.9, 0.06), steelM, 0.3, 0.5, -0.1, { rz: 0.12, cast: false });
+		add(lk, new THREE.BoxGeometry(0.16, 0.03, 0.08), brass, 0.25, 0.98, -0.1, { cast: false });
+		add(lk, new THREE.CylinderGeometry(0.05, 0.06, 0.24, 10), mat("#2a5a3a", 0.2, 0.1, { transparent: true, opacity: 0.85 }), 0.25, 1.69, 0.05, { cast: false });
+		add(lk, new THREE.CylinderGeometry(0.045, 0.045, 0.42, 10), mat("#5a3a20", 0.7), 0.2, 1.62, -0.12, { rz: Math.PI / 2, cast: false });
 		for (const sd of [-1, 1]) { const pv = group(lk, sd * 0.48, 0, 0.28); add(pv, rbox(0.47, 1.86, 0.03, 0.01), woodM, -sd * 0.235, 1.0, 0.015); lkDoors.push({ pv, sd }); }
 		const rose = canvasTex(256, 256, (c, w, h) => {
 			c.fillStyle = "#e8d4a6"; c.beginPath(); c.arc(128, 128, 124, 0, TAU); c.fill();
 			c.fillStyle = "#8a2a1a"; for (let i = 0; i < 4; i++) { c.save(); c.translate(128, 128); c.rotate(i * Math.PI / 2); c.beginPath(); c.moveTo(0, -110); c.lineTo(18, 0); c.lineTo(-18, 0); c.fill(); c.restore(); }
 		});
-		add(lk, new THREE.CircleGeometry(0.17, 24), mat("#ffffff", 0.6, 0, { map: rose }), 0, 1.3, 0.31, { cast: false });
+		add(lkDoors[1].pv, new THREE.CircleGeometry(0.15, 24), mat("#ffffff", 0.6, 0, { map: rose }), -0.24, 1.3, 0.035, { cast: false });
 		fr.box(hw - 0.6, hw, -2.12, -1.08);
 		// three portholes (back wall), two anchors (front wall), a ship's wheel (right wall)
 		const seaT = canvasTex(256, 256, (c, w, h) => drawSea(c, w, h));
@@ -1132,7 +1244,8 @@ export function build(k) {
 		}
 
 		const p = () => fr.p();
-		fr.it("log", { stand: [0, 0.65], at: [0, -0.6], label: ["Read the captain's logbook", "Kaptanın seyir defterini oku"], use: () => clue(rid, "log", L("Captain's logbook", "Seyir defteri"), `<div class="paper">${L(`I hid the key to my sea chest in the barrel whose number is <b>${TX(FORMULAS[p().fi][0])}</b>.<br><br>Count carefully, sailor!<br>- Captain Redbeard`, `Deniz sandığımın anahtarını, numarası <b>${TX(FORMULAS[p().fi][0])}</b> olan fıçıya sakladım.<br><br>Dikkatli say, tayfa!<br>- Kaptan Kızıl Sakal`)}</div>`) }, tbl);
+		fr.clue("log", () => L("Captain's logbook", "Seyir defteri"), () => `<div class="paper">${L(`I hid the key to my sea chest in the barrel whose number is <b>${TX(FORMULAS[p().fi][0])}</b>.<br><br>Count carefully, sailor!<br>- Captain Redbeard`, `Deniz sandığımın anahtarını, numarası <b>${TX(FORMULAS[p().fi][0])}</b> olan fıçıya sakladım.<br><br>Dikkatli say, tayfa!<br>- Kaptan Kızıl Sakal`)}</div>`);
+		fr.it("log", { stand: [0, 0.65], at: [0, -0.6], label: ["Read the captain's logbook", "Kaptanın seyir defterini oku"], use: () => clue(rid, "log") }, tbl);
 		const FLAV = [["Ship's biscuits, hard as rocks.", "Kaya gibi sert peksimetler."], ["Salted fish. Phew!", "Tuzlu balık. Of!"], ["Rum. Empty rum.", "Rom. Boş rom."], ["Cannonballs. Heavy and very boring.", "Gülleler. Ağır ve çok sıkıcı."]];
 		barrels.forEach((bg, i) => fr.it("barrel" + i, {
 			stand: [-hw + 1.3, BZ[i]], at: [-hw + 0.45, BZ[i]], label: () => L(`Search barrel no. ${p().nums[i]}`, `${p().nums[i]} numaralı fıçıyı ara`),
@@ -1143,24 +1256,27 @@ export function build(k) {
 		}, bg));
 		const capNote = () => { const q = p(); return `<div class="paper">${L(`"My locker answers only to the winds. Stand facing <b>${TX(DIR_START[DIRS[q.start]])}</b> and turn the dial to where you face.`, `"Dolabım sadece rüzgârlara cevap verir. <b>${TX(DIR_START[DIRS[q.start]])}</b> dönük dur ve kadranı baktığın yöne çevir.`)}<br>${q.turns.map(tn => L(`Then <b>${TX(TURN[tn])}</b>, and turn the dial again.`, `Sonra <b>${TX(TURN[tn])}</b> ve kadranı yine çevir.`)).join("<br>")}"<br>- ${L("Captain Redbeard", "Kaptan Kızıl Sakal")}</div><p class="esc-p" style="color:var(--muted)">${L("(Sailors know: the sun rises in the east and sets in the west.)", "(Denizciler bilir: güneş doğudan doğar, batıdan batar.)")}</p>`; };
 		const codebook = () => { const q = p(); return `<p class="esc-p">${L("The signal book: what each flag means.", "İşaret kitabı: her bayrağın anlamı.")}</p><div class="esc-flags">${range(10).map(i => `<div>${img(96, 64, (c, w, h) => drawFlag(c, i, 2, 2, w - 4, h - 4))}${q.flagMap[i]}</div>`).join("")}</div>`; };
+		fr.clue("note", () => L("The captain's note", "Kaptanın notu"), capNote);
+		fr.clue("book", () => L("Signal book", "İşaret kitabı"), codebook);
+		fr.clue("spy", () => L("Through the spyglass", "Dürbünle"), () => `${img(640, 360, (c, w, h) => drawSea(c, w, h, p().ships))}<p class="esc-p">${L("Three ships in the bay, each flying a signal flag. Left to right...", "Koyda üç gemi, her birinde bir işaret bayrağı. Soldan sağa...")}</p>`, 540);
 		fr.it("chest", {
 			stand: [0, -2.95], at: [0, -3.95], label: () => fr.flag("chest") ? L("Read the captain's note", "Kaptanın notunu oku") : fr.flag("key") ? L("Unlock the sea chest with the rusty key", "Sandığı paslı anahtarla aç") : L("A heavy sea chest (locked)", "Ağır bir deniz sandığı (kilitli)"),
 			use: () => {
 				if (!fr.flag("key")) { ctx.toast(L("Locked with a big rusty padlock.", "Büyük, paslı bir asma kilitle kilitli.")); return; }
 				if (!fr.flag("chest")) { fr.set("chest"); ctx.sfx("creak", 0.6); }
-				clue(rid, "note", L("The captain's note", "Kaptanın notu"), capNote());
+				clue(rid, "note");
 			}
 		}, chest);
 		fr.it("locker", {
 			stand: [hw - 1.15, -1.6], at: [hw, -1.6], label: () => fr.flag("locker") ? L("Read the signal book", "İşaret kitabını oku") : L("Turn the locker's compass dial", "Dolabın pusula kadranını çevir"),
 			use: () => {
-				if (fr.flag("locker")) { clue(rid, "book", L("Signal book", "İşaret kitabı"), codebook()); return; }
+				if (fr.flag("locker")) { clue(rid, "book"); return; }
 				lockUI({
 					title: L("The captain's locker", "Kaptanın dolabı"), text: L("A compass dial instead of a keyhole. Turn it <b>5</b> times.", "Anahtar deliği yerine bir pusula kadranı. <b>5</b> kez çevir."), kind: "seq", len: 5,
 					keys: DIRS.map(d => ({ v: d, html: ARROW[d] + " " + TX(DIR_KEY[d]), slot: TX(DIR_KEY[d]), sub: TX(DIR_NAME[d]) })),
 					keyMap: { ArrowUp: "N", ArrowRight: "E", ArrowDown: "S", ArrowLeft: "W" },
 					check: v => v.join("") === p().seq.join(""), fail: L("The dial spins back to the start.", "Kadran başa döndü."),
-					ok: () => { fr.set("locker"); ctx.sfx("door", 0.5); ctx.toast(L("The locker swings open: a brass <b>spyglass</b> and a <b>signal book</b>!", "Dolap açıldı: pirinç bir <b>dürbün</b> ve bir <b>işaret kitabı</b>!")); setTimeout(() => clue(rid, "book", L("Signal book", "İşaret kitabı"), codebook()), 150); }
+					ok: () => { fr.set("locker"); ctx.sfx("door", 0.5); ctx.toast(L("The locker swings open: a brass <b>spyglass</b> and a <b>signal book</b>!", "Dolap açıldı: pirinç bir <b>dürbün</b> ve bir <b>işaret kitabı</b>!")); setTimeout(() => clue(rid, "book"), 150); }
 				});
 			}
 		}, lk);
@@ -1168,10 +1284,11 @@ export function build(k) {
 			stand: [2.6, -3.6], at: [2.6, -RD], label: () => fr.flag("locker") ? L("Look out through the spyglass", "Dürbünle dışarı bak") : L("Look out of the porthole", "Lombozdan dışarı bak"),
 			use: () => {
 				if (!fr.flag("locker")) { ctx.toast(L("Ships far out in the bay, flying little flags... too far away to make out.", "Koyun uzağında küçük bayraklı gemiler... seçilemeyecek kadar uzakta.")); return; }
-				fr.set("spy"); ctx.sfx("whoosh", 0.4);
-				clue(rid, "spy", L("Through the spyglass", "Dürbünle"), `${img(640, 360, (c, w, h) => drawSea(c, w, h, p().ships))}<p class="esc-p">${L("Three ships in the bay, each flying a signal flag. Left to right...", "Koyda üç gemi, her birinde bir işaret bayrağı. Soldan sağa...")}</p>`, 540);
+				if (!fr.flag("spy")) fr.set("spy");
+				ctx.sfx("whoosh", 0.4);
+				clue(rid, "spy");
 			}
-		}, portholes[2]);
+		}, ...portholes);
 		fr.door = {
 			label: () => L("Try the hatch padlock", "Ambar kilidini dene"),
 			use: () => lockUI({ title: L("The hatch padlock", "Ambar kilidi"), text: L("A heavy padlock with <b>3</b> number wheels.", "<b>3</b> rakam çarkı olan ağır bir asma kilit."), kind: "digits", len: 3, check: v => v.join("") === p().ships.map(i => p().flagMap[i]).join(""), ok: () => { fr.solve(); ctx.sfx("creak", 0.6); } })
@@ -1281,16 +1398,20 @@ export function build(k) {
 				});
 			}
 		}, fb);
-		fr.it("rules", { stand: [-2.0, 3.7], at: [-2.2, RD], label: ["Read the safety poster", "Güvenlik afişini oku"], use: () => clue(rid, "rules", L("Safety poster", "Güvenlik afişi"), img(512, 640, (c, w, h) => rulesT.image && c.drawImage(rulesT.image, 0, 0), "max-width:320px;margin:0 auto 10px"), 400) }, rules);
-		fr.it("board", { stand: [hw - 1.1, 0.3], at: [hw, 0.3], label: ["Read the whiteboard", "Beyaz tahtayı oku"], use: () => clue(rid, "board", L("The whiteboard", "Beyaz tahta"), img(768, 480, (c, w, h) => drawWhiteboard(c, w, h, (getLang() === "tr" ? WORDS_TR : WORDS)[p().word][1])), 520) }, wb);
-		fr.it("poster", { stand: [-1.8, -3.5], at: [-1.8, -RD], label: ["Look at the periodic table", "Periyodik tabloya bak"], use: () => clue(rid, "poster", L("Periodic table", "Periyodik tablo"), img(1024, 620, drawPeriodic), 620) }, pt);
 		const formula = () => { const e = p().eq; return `<pre class="term">${L("OMEGA LABS TERMINAL\n> ACCESS GRANTED\n\nANTIDOTE FORMULA (drops of each)\n", "OMEGA LABS TERMİNALİ\n> ERİŞİM VERİLDİ\n\nPANZEHİR FORMÜLÜ (her birinden damla)\n")}  ${L("RED + GREEN", "KIRMIZI + YEŞİL")} = ${e[0]}\n  ${L("GREEN + BLUE", "YEŞİL + MAVİ")} = ${e[1]}\n  ${L("RED + BLUE", "KIRMIZI + MAVİ")} = ${e[2]}\n\n${L("Mix it at the lab bench. Hurry!", "Laboratuvar tezgâhında karıştır. Acele et!")}</pre>`; };
+		fr.clue("rules", () => L("Safety poster", "Güvenlik afişi"), () => { paint(liveTexes.find(R => R.t === rulesT)); return img(512, 640, c => c.drawImage(rulesT.image, 0, 0), "max-width:320px;margin:0 auto 10px"); }, 400);
+		fr.clue("board", () => L("The whiteboard", "Beyaz tahta"), () => img(768, 480, (c, w, h) => drawWhiteboard(c, w, h, (getLang() === "tr" ? WORDS_TR : WORDS)[p().word][1])), 520);
+		fr.clue("poster", () => L("Periodic table", "Periyodik tablo"), () => img(1024, 620, drawPeriodic), 620);
+		fr.clue("pc", () => L("The computer", "Bilgisayar"), formula);
+		fr.it("rules", { stand: [-2.0, 3.7], at: [-2.2, RD], label: ["Read the safety poster", "Güvenlik afişini oku"], use: () => clue(rid, "rules") }, rules);
+		fr.it("board", { stand: [hw - 1.1, 0.3], at: [hw, 0.3], label: ["Read the whiteboard", "Beyaz tahtayı oku"], use: () => clue(rid, "board") }, wb);
+		fr.it("poster", { stand: [-1.8, -3.5], at: [-1.8, -RD], label: ["Look at the periodic table", "Periyodik tabloya bak"], use: () => clue(rid, "poster") }, pt);
 		fr.it("pc", {
 			stand: [1.6, -3.2], at: [1.6, -4.15], label: () => !fr.flag("power") ? L("The computer (no power)", "Bilgisayar (elektrik yok)") : fr.flag("login") ? L("Read the computer screen", "Bilgisayar ekranını oku") : L("Log in to the computer", "Bilgisayara giriş yap"),
 			use: () => {
 				if (!fr.flag("power")) { ctx.toast(L("The screen is dead. There's no power in the lab.", "Ekran kapalı. Laboratuvarda elektrik yok.")); return; }
-				if (fr.flag("login")) { clue(rid, "pc", L("The computer", "Bilgisayar"), formula()); return; }
-				lockUI({ title: L("Omega Labs terminal", "Omega Labs terminali"), text: `<span style="font-family:monospace;color:#6dff9a">${L("ENTER PASSWORD:", "ŞİFREYİ GİRİN:")}</span>`, kind: "word", ph: L("Password", "Şifre"), check: v => v === WORDS[p().word][0] || v === WORDS_TR[p().word][0], fail: L("ACCESS DENIED", "ERİŞİM REDDEDİLDİ"), ok: () => { fr.set("login"); ctx.sfx("chime", 0.6); setTimeout(() => clue(rid, "pc", L("The computer", "Bilgisayar"), formula()), 120); } });
+				if (fr.flag("login")) { clue(rid, "pc"); return; }
+				lockUI({ title: L("Omega Labs terminal", "Omega Labs terminali"), text: `<span style="font-family:monospace;color:#6dff9a">${L("ENTER PASSWORD:", "ŞİFREYİ GİRİN:")}</span>`, kind: "word", ph: L("Password", "Şifre"), check: v => v === WORDS[p().word][0] || v === WORDS_TR[p().word][0], fail: L("ACCESS DENIED", "ERİŞİM REDDEDİLDİ"), ok: () => { fr.set("login"); ctx.sfx("chime", 0.6); setTimeout(() => clue(rid, "pc"), 120); } });
 			}
 		}, desk);
 		fr.it("mix", {
@@ -1332,6 +1453,10 @@ export function build(k) {
 		const boxWall = add(G, new THREE.PlaneGeometry(4.8, 2.2), mat("#ffffff", 0.35, 0.6, { map: canvasTex(1200, 560, drawBoxes) }), 0, 1.6, -RD + 0.105, { cast: false });
 		const openBox = group(G, 0, 0, -RD + 0.11);
 		add(openBox, new THREE.PlaneGeometry(0.72, 0.47), blackM, 0, 0, 0.002, { cast: false });
+		// (inside: the coded note in an envelope, and a gold bar)
+		add(openBox, new THREE.PlaneGeometry(0.34, 0.2), mat("#f4efe2", 0.9), -0.1, 0.04, 0.006, { rz: 0.08, cast: false });
+		add(openBox, new THREE.PlaneGeometry(0.1, 0.06), mat("#a02a2a", 0.6), -0.1, 0.04, 0.008, { cast: false });
+		add(openBox, new THREE.BoxGeometry(0.2, 0.06, 0.08), goldBar, 0.18, -0.17, 0.04, { cast: false });
 		const boxLid = group(openBox, -0.36, 0, 0.01);
 		add(boxLid, new THREE.BoxGeometry(0.72, 0.47, 0.02), metal, 0.36, 0, 0, { cast: false });
 		// gold bars and money bags in the back corners (behind the lasers)
@@ -1370,22 +1495,20 @@ export function build(k) {
 		const p = () => fr.p();
 		const pinNote = () => `<div class="paper">${L(`My PIN (I always forget it!):<br>• the 1st digit is double the last one<br>• the 2nd digit is the 1st plus the last<br>• all four digits add up to <b>${p().sum}</b>`, `PIN'im (hep unutuyorum!):<br>• 1. rakam sonuncunun iki katı<br>• 2. rakam 1. ile sonuncunun toplamı<br>• dört rakamın toplamı <b>${p().sum}</b>`)}</div>`;
 		const receipt = () => `<div class="paper">${L(`DEPOSIT RECEIPT<br>Client: <s>~~~~~~</s> (torn off)<br>Visit time: <b>${p().times[p().target]}</b><br>Item deposited: 1 gold bar`, `KASA MAKBUZU<br>Müşteri: <s>~~~~~~</s> (yırtılmış)<br>Ziyaret saati: <b>${p().times[p().target]}</b><br>Bırakılan eşya: 1 külçe altın`)}</div>`;
+		fr.clue("pin", () => L("Sticky note", "Yapışkan not"), pinNote);
+		fr.clue("receipt", () => L("Torn receipt", "Yırtık makbuz"), receipt);
+		fr.clue("ledger", () => L("The ledger", "Kayıt defteri"), () => { const q = p(); return `<table class="esc-tbl"><tr><th>${L("Client", "Müşteri")}</th><th>${L("Box no.", "Kasa no.")}</th></tr>${q.ledgerOrder.map(i => `<tr><td>${CLIENTS[i]}</td><td><b>${q.boxes[i]}</b></td></tr>`).join("")}</table>`; }, 420);
+		fr.clue("visitors", () => L("Visitor log", "Ziyaretçi defteri"), () => { const q = p(); return `<table class="esc-tbl"><tr><th>${L("Visitor", "Ziyaretçi")}</th><th>${L("Time", "Saat")}</th></tr>${q.logOrder.map(i => `<tr><td>${CLIENTS[i]}</td><td><b>${q.times[i]}</b></td></tr>`).join("")}</table>`; }, 420);
 		fr.it("drawer", {
 			stand: [-2.2, 1.1], at: [-3.3, 1.1], label: () => fr.flag("drawer") ? L("Read the torn receipt", "Yırtık makbuzu oku") : L("Open the guard's drawer", "Bekçinin çekmecesini aç"),
 			use: () => {
-				if (fr.flag("drawer")) { clue(rid, "receipt", L("Torn receipt", "Yırtık makbuz"), receipt()); return; }
-				note(rid, "pin", L("Sticky note", "Yapışkan not"), pinNote());
-				lockUI({ title: L("The guard's drawer", "Bekçinin çekmecesi"), text: L("A 4-digit lock. A sticky note on the monitor says:", "4 haneli bir kilit. Monitördeki yapışkan notta şöyle yazıyor:") + pinNote(), kind: "digits", len: 4, w: 460, check: v => v.join("") === p().pin.join(""), ok: () => { fr.set("drawer"); ctx.sfx("clack", 0.6); ctx.toast(L("Inside: the guard's <b>keycard</b>, a <b>deposit box key</b> and a <b>torn receipt</b>.", "İçinde: bekçinin <b>giriş kartı</b>, bir <b>kasa anahtarı</b> ve <b>yırtık bir makbuz</b>.")); setTimeout(() => clue(rid, "receipt", L("Torn receipt", "Yırtık makbuz"), receipt()), 150); } });
+				if (fr.flag("drawer")) { clue(rid, "receipt"); return; }
+				learn(rid, "pin");
+				lockUI({ title: L("The guard's drawer", "Bekçinin çekmecesi"), text: L("A 4-digit lock. A sticky note on the monitor says:", "4 haneli bir kilit. Monitördeki yapışkan notta şöyle yazıyor:") + pinNote(), kind: "digits", len: 4, w: 460, check: v => v.join("") === p().pin.join(""), ok: () => { fr.set("drawer"); ctx.sfx("clack", 0.6); ctx.toast(L("Inside: the guard's <b>keycard</b>, a <b>deposit box key</b> and a <b>torn receipt</b>.", "İçinde: bekçinin <b>giriş kartı</b>, bir <b>kasa anahtarı</b> ve <b>yırtık bir makbuz</b>.")); setTimeout(() => clue(rid, "receipt"), 150); } });
 			}
 		}, desk);
-		fr.it("ledger", {
-			stand: [-2.2, -0.2], at: [-3.3, -0.2], label: ["Read the bank's ledger", "Bankanın kayıt defterini oku"],
-			use: () => { const q = p(); clue(rid, "ledger", L("The ledger", "Kayıt defteri"), `<table class="esc-tbl"><tr><th>${L("Client", "Müşteri")}</th><th>${L("Box no.", "Kasa no.")}</th></tr>${q.ledgerOrder.map(i => `<tr><td>${CLIENTS[i]}</td><td><b>${q.boxes[i]}</b></td></tr>`).join("")}</table>`, 420); }
-		}, ledger);
-		fr.it("log", {
-			stand: [-2.3, 3.6], at: [-2.3, RD], label: ["Read the visitor log", "Ziyaretçi defterini oku"],
-			use: () => { const q = p(); clue(rid, "visitors", L("Visitor log", "Ziyaretçi defteri"), `<table class="esc-tbl"><tr><th>${L("Visitor", "Ziyaretçi")}</th><th>${L("Time", "Saat")}</th></tr>${q.logOrder.map(i => `<tr><td>${CLIENTS[i]}</td><td><b>${q.times[i]}</b></td></tr>`).join("")}</table>`, 420); }
-		}, logB);
+		fr.it("ledger", { stand: [-2.2, -0.2], at: [-3.3, -0.2], label: ["Read the bank's ledger", "Bankanın kayıt defterini oku"], use: () => clue(rid, "ledger") }, ledger);
+		fr.it("log", { stand: [-2.3, 3.6], at: [-2.3, RD], label: ["Read the visitor log", "Ziyaretçi defterini oku"], use: () => clue(rid, "visitors") }, logB);
 		let lo = null, loId = null;
 		fr.it("panel", {
 			stand: [hw - 1.0, 0.8], at: [hw, 0.8], label: () => fr.flag("lasers") ? L("The security panel (lasers off)", "Güvenlik paneli (lazerler kapalı)") : fr.flag("drawer") ? L("Swipe the keycard at the security panel", "Kartı güvenlik paneline okut") : L("The security panel", "Güvenlik paneli"),
@@ -1406,12 +1529,13 @@ export function build(k) {
 			}
 		}, panel);
 		const cipher = () => { const q = p(), words = q.vault.map(d => caesar(NUMW[getLang() === "tr" ? 1 : 0][d], LASERS)); return `<div class="paper">${L("VAULT COMBINATION<br>Every letter has been moved FORWARD in the alphabet by as many places as there are laser beams guarding these boxes:", "KASA ŞİFRESİ<br>Her harf alfabede, bu kasaları koruyan lazer ışını sayısı kadar İLERİ kaydırıldı:")}<br><br><b style="font-family:'Courier New',monospace;font-size:24px;letter-spacing:.12em">${words.join(" · ")}</b></div><p class="esc-p" style="font-family:monospace;letter-spacing:.2em;color:var(--muted)">A B C D E F G H I J K L M N O P Q R S T U V W X Y Z</p>${getLang() === "tr" ? `<p class="esc-p" style="color:var(--muted)">(Türkçe harfler kullanılmadı: Ü yerine U, Ö yerine O, Ç yerine C...)</p>` : ""}`; };
+		fr.clue("cipher", () => L("Coded note", "Şifreli not"), cipher);
 		fr.it("boxes", {
 			stand: [0, -3.5], at: [0, -RD], label: () => fr.flag("box") ? L("Read the coded note", "Şifreli notu oku") : L("Open a deposit box", "Bir kiralık kasa aç"),
 			use: () => {
-				if (fr.flag("box")) { clue(rid, "cipher", L("Coded note", "Şifreli not"), cipher()); return; }
+				if (fr.flag("box")) { clue(rid, "cipher"); return; }
 				if (!fr.flag("drawer")) { ctx.toast(L("24 locked deposit boxes. You'd need a key.", "24 kilitli kiralık kasa. Bir anahtar lazım.")); return; }
-				lockUI({ title: L("Deposit boxes", "Kiralık kasalar"), text: L("Which box does your key belong to? (two digits: box 7 is 07)", "Anahtarın hangi kasaya ait? (iki hane: 7 numara için 07)"), kind: "digits", len: 2, check: v => +v.join("") === p().boxes[p().target], fail: L("The key won't turn in that one.", "Anahtar o kasada dönmüyor."), ok: () => { fr.set("box"); ctx.sfx("clack", 0.6); setTimeout(() => clue(rid, "cipher", L("Coded note", "Şifreli not"), cipher()), 150); } });
+				lockUI({ title: L("Deposit boxes", "Kiralık kasalar"), text: L("Which box does your key belong to? (two digits: box 7 is 07)", "Anahtarın hangi kasaya ait? (iki hane: 7 numara için 07)"), kind: "digits", len: 2, check: v => +v.join("") === p().boxes[p().target], fail: L("The key won't turn in that one.", "Anahtar o kasada dönmüyor."), ok: () => { fr.set("box"); ctx.sfx("clack", 0.6); setTimeout(() => clue(rid, "cipher"), 150); } });
 			}
 		}, boxWall);
 		fr.door = {
@@ -1466,12 +1590,19 @@ export function build(k) {
 		fr.box(-3.95, -3.25, -4.25, -3.55);
 		const chartP = add(G, new THREE.PlaneGeometry(1.7, 0.96), new THREE.MeshBasicMaterial({ map: liveTex(1024, 576, drawPlanetChart), toneMapped: false }), hw - 0.02, 1.7, 0.3, { ry: -Math.PI / 2, cast: false });
 		const lkr = group(G, hw - 0.27, 0, -2.4, -Math.PI / 2);
-		add(lkr, rbox(0.75, 1.95, 0.5, 0.02), mat("#9aa4b0", 0.35, 0.7), 0, 0.975, 0);
+		// (inside: a spare helmet, food packs, oxygen canisters, a first-aid kit and boots)
+		shell(lkr, 0.75, 1.95, 0.5, mat("#9aa4b0", 0.35, 0.7), [0.62, 1.3]);
+		stuff(lkr, 0.03, 0, [[-0.18, 0.14, 0.26, 0.24, "#e8ecf0"], [0.0, 0.14, 0.26, 0.24, "#e8ecf0"], [0.2, 0.18, 0.2, 0.3, "#d84a3a"]]);
+		stuff(lkr, 0.635, 0, [[-0.2, 0.2, 0.14, 0.26, "#ff8a2a"], [-0.2, 0.18, 0.1, 0.24, "#e8ecf0"], [0.12, 0.3, 0.2, 0.3, "#e8ecf0"]]);
+		add(lkr, new THREE.BoxGeometry(0.08, 0.08, 0.02), glow("#ff3a3a"), 0.12, 0.745, 0.155, { cast: false });
+		add(lkr, new THREE.SphereGeometry(0.15, 16, 12), white, -0.12, 1.465, 0, { cast: false });
+		add(lkr, new THREE.SphereGeometry(0.12, 16, 10, -0.9, 1.8, 0.9, 1.0), new THREE.MeshStandardMaterial({ color: "#ffd27a", roughness: 0.05, metalness: 0.8 }), -0.12, 1.47, 0.04, { cast: false });
+		for (const x of [0.12, 0.24]) { add(lkr, new THREE.CylinderGeometry(0.05, 0.05, 0.36, 12), mat("#3e7ee8", 0.35, 0.4), x, 1.5, 0, { cast: false }); add(lkr, new THREE.CylinderGeometry(0.02, 0.02, 0.06, 8), steelM, x, 1.71, 0, { cast: false }); }
 		const lkDoor = group(lkr, -0.36, 0, 0.255);
 		add(lkDoor, rbox(0.72, 1.85, 0.03, 0.01), mat("#b8c2cc", 0.35, 0.7), 0.36, 0.975, 0.015);
 		const padM = glow("#ff3a3a"); add(lkDoor, new THREE.PlaneGeometry(0.12, 0.16), padM, 0.6, 1.2, 0.034, { cast: false });
 		fr.box(hw - 0.55, hw, -2.8, -2.0);
-		// a space suit (back right), the airlock's terminal (right wall, by the way out), the beacon (front wall)
+		// a space suit (back right), the airlock's terminal (right wall, by the way out)
 		{
 			const su = group(G, 3.6, 0, -3.9, -0.6);
 			add(su, new THREE.CylinderGeometry(0.26, 0.24, 0.8, 14), white, 0, 1.15, 0);
@@ -1483,17 +1614,39 @@ export function build(k) {
 		add(term, rbox(0.4, 0.5, 0.06, 0.02), panelM, 0, 0, 0);
 		const termM = glow("#ff3a3a"); add(term, new THREE.PlaneGeometry(0.32, 0.2), termM, 0, 0.08, 0.035, { cast: false });
 		add(term, new THREE.BoxGeometry(0.2, 0.03, 0.04), blackM, 0, -0.15, 0.04, { cast: false });
-		const beaconM = glow("#3a0a0a");
-		const beacon = group(G, 0, 2.95, RD - 0.06);
-		add(beacon, new THREE.CylinderGeometry(0.1, 0.1, 0.08, 16), panelM, 0, -0.12, 0, { cast: false });
-		add(beacon, new THREE.SphereGeometry(0.12, 16, 12), beaconM, 0, 0, 0, { cast: false });
+		add(G, new THREE.PlaneGeometry(2.6, 0.5), signM(() => L("STATION OMEGA", "OMEGA İSTASYONU"), { color: "#e8f6ff", glow: "#3ad8ff", size: 130 }), 0, 2.95, RD - 0.03, { ry: Math.PI, cast: false, receive: false });
+		// four oxygen tanks round the station, each with a big number and a gauge (together: the airlock's code)
+		const TP = [[-2.2, 4.05], [2.2, 4.05], [-hw + 0.42, 1.0], [2.05, -4.05]];
+		const tanks = TP.map(([x, z], i) => {
+			const ry = Math.atan2(-x, -z), tg = group(G, x, 0, z, ry), tm = mat(TANKS[i][2], 0.35, 0.35);
+			// (something flat on the tank's round side: at angle a round from the front)
+			const onSide = (a, y, w, h, m, off) => add(tg, new THREE.PlaneGeometry(w, h), m, Math.sin(a) * (0.24 + off), y, Math.cos(a) * (0.24 + off), { ry: a, cast: false, receive: false });
+			add(tg, new THREE.CylinderGeometry(0.26, 0.28, 0.06, 20), blackM, 0, 0.03, 0);
+			add(tg, new THREE.CylinderGeometry(0.24, 0.24, 1.15, 22), tm, 0, 0.64, 0);
+			add(tg, new THREE.SphereGeometry(0.24, 22, 10, 0, TAU, 0, Math.PI / 2), tm, 0, 1.215, 0);
+			add(tg, new THREE.CylinderGeometry(0.04, 0.05, 0.16, 10), steelM, 0, 1.5, 0, { cast: false });
+			add(tg, new THREE.TorusGeometry(0.08, 0.014, 6, 16), steelM, 0, 1.59, 0, { rx: Math.PI / 2, cast: false });
+			onSide(-0.45, 0.62, 0.1, 0.76, glow("#05080c"), 0.004);
+			const fillGeo = new THREE.PlaneGeometry(0.07, 0.72); fillGeo.translate(0, 0.36, 0);
+			const fill = add(tg, fillGeo, glow("#7affd0"), Math.sin(-0.45) * 0.25, 0.26, Math.cos(-0.45) * 0.25, { ry: -0.45, cast: false, receive: false });
+			onSide(0.32, 0.86, 0.22, 0.22, new THREE.MeshBasicMaterial({ map: liveTex(256, 256, c => { c.fillStyle = "#f4f6f8"; c.beginPath(); c.arc(128, 128, 122, 0, TAU); c.fill(); fitText(c, 256, 256, String(fr.p().tn[i]), { color: "#10161e", size: 200 }); }), transparent: true, toneMapped: false }), 0.006);
+			onSide(0.32, 0.5, 0.2, 0.08, signM(() => "O₂", { color: "#ffffff", w: 256, h: 96, size: 80 }), 0.006);
+			fr.box(x - 0.3, x + 0.3, z - 0.3, z + 0.3);
+			return { tg, fill, stand: [x + Math.sin(ry) * 0.95, z + Math.cos(ry) * 0.95] };
+		});
 
 		const p = () => fr.p();
-		const tl = () => morseTimeline(p().word);
-		const logHtml = () => { const q = p(), nm = q.cs.map(i => TX([CONSTS[i][0], CONSTS[i][1]])); return `<pre class="term">${L(`CAPTAIN'S LOG - STATION OMEGA\n\nMain power has failed. To reboot, set the\nswitch panel: switch ON only the worlds that\n${TX(PRULES[q.rule][0]).toUpperCase()}. Every other switch stays OFF.\n\nSupply locker code: count the bright stars\nof ${nm[0]}, then ${nm[1]}, then ${nm[2]}.\n\nThe airlock wants a password. Our beacon keeps\nsending it, in Morse code.`, `KAPTAN KAYDI - OMEGA İSTASYONU\n\nAna güç kesildi. Yeniden başlatmak için düğme\npanelinde sadece ${TX(PRULES[q.rule][0]).toUpperCase()}\ngezegenleri AÇ. Diğer bütün düğmeler KAPALI kalsın.\n\nErzak dolabı şifresi: ${nm[0]}, sonra ${nm[1]},\nsonra ${nm[2]} takımyıldızlarının parlak yıldızlarını say.\n\nHava kilidi bir şifre istiyor. İşaret lambamız onu\nsürekli Mors alfabesiyle gönderiyor.`)}</pre>`; };
-		const morseCard = () => `<p class="esc-p">${L("The Morse code card: · is a short flash, — is a long one.", "Mors alfabesi kartı: · kısa yanıp sönme, — uzun yanıp sönmedir.")}</p><div class="esc-morse">${Object.keys(MORSE).map(ch => `<span><b>${ch}</b>${MORSE[ch].replace(/\./g, "·").replace(/-/g, "—")}</span>`).join("")}</div>`;
-		fr.it("tablet", { stand: [-3.0, -3.1], at: [-3.6, -3.9], label: ["Read the captain's log", "Kaptan kaydını oku"], use: () => clue(rid, "log", L("Captain's log", "Kaptan kaydı"), logHtml(), 520) }, crate);
-		fr.it("chart", { stand: [hw - 1.0, 0.3], at: [hw, 0.3], label: ["Look at the planet chart", "Gezegen tablosuna bak"], use: () => clue(rid, "planets", L("Planet chart", "Gezegen tablosu"), img(1024, 576, drawPlanetChart), 620) }, chartP);
+		const logHtml = () => { const q = p(), nm = q.cs.map(i => TX([CONSTS[i][0], CONSTS[i][1]])); return `<pre class="term">${L(`CAPTAIN'S LOG - STATION OMEGA\n\nMain power has failed. To reboot, set the\nswitch panel: switch ON only the worlds that\n${TX(PRULES[q.rule][0]).toUpperCase()}. Every other switch stays OFF.\n\nSupply locker code: count the bright stars\nof ${nm[0]}, then ${nm[1]}, then ${nm[2]}.\n\nThe airlock's override code is in the\nairlock manual, in the supply locker.`, `KAPTAN KAYDI - OMEGA İSTASYONU\n\nAna güç kesildi. Yeniden başlatmak için düğme\npanelinde sadece ${TX(PRULES[q.rule][0]).toUpperCase()}\ngezegenleri AÇ. Diğer bütün düğmeler KAPALI kalsın.\n\nErzak dolabı şifresi: ${nm[0]}, sonra ${nm[1]},\nsonra ${nm[2]} takımyıldızlarının parlak yıldızlarını say.\n\nHava kilidinin acil durum kodu, erzak dolabındaki\nhava kilidi kılavuzunda yazıyor.`)}</pre>`; };
+		const manual = () => `<div class="paper">${L("AIRLOCK MANUAL<br><br>Emergency override: the code is the numbers on the station's <b>four oxygen tanks</b>, from the <b>FULLEST</b> tank to the <b>EMPTIEST</b>.<br><br>Check every gauge carefully!", "HAVA KİLİDİ KILAVUZU<br><br>Acil durum kodu: istasyonun <b>dört oksijen tüpünün</b> üstündeki numaralar, <b>EN DOLU</b> tüpten <b>EN BOŞ</b> tüpe doğru.<br><br>Her göstergeyi dikkatle kontrol et!")}</div>`;
+		const tankCode = () => { const q = p(); return range(4).sort((a, b) => q.lv[b] - q.lv[a]).map(i => q.tn[i]).join(""); };
+		fr.clue("log", () => L("Captain's log", "Kaptan kaydı"), logHtml, 520);
+		fr.clue("planets", () => L("Planet chart", "Gezegen tablosu"), () => img(1024, 576, drawPlanetChart), 620);
+		fr.clue("chart", () => L("Star chart", "Yıldız haritası"), () => `${img(960, 540, drawStars)}<p class="esc-p">${L("Six constellations. Count only the bright stars.", "Altı takımyıldız. Sadece parlak yıldızları say.")}</p>`, 620);
+		fr.clue("manual", () => L("Airlock manual", "Hava kilidi kılavuzu"), manual, 440);
+		tanks.forEach((T2, i) => fr.clue("tank" + i, () => L(`The ${TANKS[i][0].toLowerCase()} oxygen tank`, `${TANKS[i][1]} oksijen tüpü`), () => { const q = p(); return `${img(300, 420, (c, w, h) => drawTank(c, w, h, q.tn[i], q.lv[i], TANKS[i][2]), "max-width:200px;margin:0 auto 10px")}<p class="esc-p" style="text-align:center">${L(`Tank number <b>${q.tn[i]}</b>. The gauge reads <b>${q.lv[i]}%</b>.`, `<b>${q.tn[i]}</b> numaralı tüp. Gösterge <b>%${q.lv[i]}</b> diyor.`)}</p>`; }, 340));
+		fr.it("tablet", { stand: [-3.0, -3.1], at: [-3.6, -3.9], label: ["Read the captain's log", "Kaptan kaydını oku"], use: () => clue(rid, "log") }, crate);
+		fr.it("chart", { stand: [hw - 1.0, 0.3], at: [hw, 0.3], label: ["Look at the planet chart", "Gezegen tablosuna bak"], use: () => clue(rid, "planets") }, chartP);
+		tanks.forEach((T2, i) => fr.it("tank" + i, { stand: T2.stand, at: TP[i], label: () => L(`Check the ${TANKS[i][0].toLowerCase()} oxygen tank`, `${TANKS[i][1]} oksijen tüpünü kontrol et`), use: () => { ctx.sfx("click", 0.5); clue(rid, "tank" + i); } }, T2.tg));
 		fr.it("switches", {
 			stand: [-hw + 1.0, -1.2], at: [-hw, -1.2], label: () => fr.flag("power") ? L("The switch panel (systems online)", "Düğme paneli (sistemler açık)") : L("Set the switch panel", "Düğme panelini ayarla"),
 			use: () => {
@@ -1514,33 +1667,20 @@ export function build(k) {
 		}, sp);
 		fr.it("console", {
 			stand: [0, -2.6], at: [0, -3.55], label: () => fr.flag("power") ? L("Read the star chart", "Yıldız haritasını oku") : L("The navigation console (dark)", "Navigasyon konsolu (kapalı)"),
-			use: () => { if (!fr.flag("power")) { ctx.toast(L("The console is dark. No power.", "Konsol kapalı. Enerji yok.")); return; } clue(rid, "chart", L("Star chart", "Yıldız haritası"), `${img(960, 540, drawStars)}<p class="esc-p">${L("Six constellations. Count only the bright stars.", "Altı takımyıldız. Sadece parlak yıldızları say.")}</p>`, 620); }
+			use: () => { if (!fr.flag("power")) { ctx.toast(L("The console is dark. No power.", "Konsol kapalı. Enerji yok.")); return; } clue(rid, "chart"); }
 		}, con);
 		fr.it("locker", {
-			stand: [hw - 1.15, -2.4], at: [hw, -2.4], label: () => fr.flag("locker") ? L("Read the Morse card", "Mors kartını oku") : L("Open the supply locker", "Erzak dolabını aç"),
+			stand: [hw - 1.15, -2.4], at: [hw, -2.4], label: () => fr.flag("locker") ? L("Read the airlock manual", "Hava kilidi kılavuzunu oku") : L("Open the supply locker", "Erzak dolabını aç"),
 			use: () => {
-				if (fr.flag("locker")) { clue(rid, "morse", L("Morse card", "Mors kartı"), morseCard(), 480); return; }
-				lockUI({ title: L("Supply locker", "Erzak dolabı"), text: L("A keypad glows red: <b>ENTER 3-DIGIT CODE</b>", "Kırmızı parlayan bir tuş takımı: <b>3 HANELİ ŞİFRE GİRİN</b>"), kind: "digits", len: 3, check: v => v.join("") === p().cs.map(i => CONSTS[i][2].length).join(""), fail: L("ACCESS DENIED", "ERİŞİM REDDEDİLDİ"), ok: () => { fr.set("locker"); ctx.sfx("door", 0.5); ctx.toast(L("The locker hisses open: an <b>access card</b> and a <b>Morse code card</b>!", "Dolap tıslayarak açıldı: bir <b>giriş kartı</b> ve bir <b>Mors kartı</b>!")); setTimeout(() => clue(rid, "morse", L("Morse card", "Mors kartı"), morseCard(), 480), 150); } });
+				if (fr.flag("locker")) { clue(rid, "manual"); return; }
+				lockUI({ title: L("Supply locker", "Erzak dolabı"), text: L("A keypad glows red: <b>ENTER 3-DIGIT CODE</b>", "Kırmızı parlayan bir tuş takımı: <b>3 HANELİ ŞİFRE GİRİN</b>"), kind: "digits", len: 3, check: v => v.join("") === p().cs.map(i => CONSTS[i][2].length).join(""), fail: L("ACCESS DENIED", "ERİŞİM REDDEDİLDİ"), ok: () => { fr.set("locker"); ctx.sfx("door", 0.5); ctx.toast(L("The locker hisses open: an <b>access card</b> and the <b>airlock manual</b>!", "Dolap tıslayarak açıldı: bir <b>giriş kartı</b> ve <b>hava kilidi kılavuzu</b>!")); setTimeout(() => clue(rid, "manual"), 150); } });
 			}
 		}, lkr);
-		fr.it("beacon", {
-			stand: [0, 3.0], at: [0, RD], label: ["Watch the beacon up close", "İşaret lambasını yakından izle"],
-			use: () => {
-				const T2 = tl(), units = T2.reduce((a, b) => a + b[1], 0);
-				const body = openEsc(L("The beacon", "İşaret lambası"), `<div class="esc-clue"><div class="esc-beacon"></div><p class="esc-p" style="text-align:center">${L("It keeps flashing the same message, over and over.", "Aynı mesajı tekrar tekrar yanıp sönerek veriyor.")}</p></div>`, 380);
-				const el = body.querySelector(".esc-beacon"), t0 = performance.now();
-				const iv = setInterval(() => {
-					let u = ((performance.now() - t0) / 280) % units;
-					for (const [on, n] of T2) { if (u < n) { el.classList.toggle("on", !!on); return; } u -= n; }
-				}, 40);
-				closeFns.push(() => clearInterval(iv));
-			}
-		}, beacon);
 		fr.it("airlock", {
-			stand: [hw - 1.1, 1.85], at: [hw, 1.85], label: () => fr.flag("locker") ? L("Swipe the card and send the password", "Kartı okut ve şifreyi gönder") : L("The airlock terminal", "Hava kilidi terminali"),
+			stand: [hw - 1.1, 1.85], at: [hw, 1.85], label: () => fr.flag("locker") ? L("Swipe the card and enter the override code", "Kartı okut ve acil durum kodunu gir") : L("The airlock terminal", "Hava kilidi terminali"),
 			use: () => {
 				if (!fr.flag("locker")) { ctx.toast(L("ACCESS CARD REQUIRED. The airlock stays sealed.", "GİRİŞ KARTI GEREKLİ. Hava kilidi kapalı kalıyor.")); return; }
-				lockUI({ title: L("Airlock", "Hava kilidi"), text: L("CARD ACCEPTED. <b>ENTER THE BEACON'S PASSWORD:</b>", "KART KABUL EDİLDİ. <b>İŞARET LAMBASININ ŞİFRESİNİ GİRİN:</b>"), kind: "word", ph: L("Password", "Şifre"), check: v => v === p().word, fail: L("PASSWORD REJECTED", "ŞİFRE REDDEDİLDİ"), ok: () => { ctx.sfx("steam", 0.7); ctx.toast(L("PSSSHHH... the airlock cycles and the far door slides open!", "PŞŞŞŞ... hava kilidi döndü ve öbür kapı kayarak açıldı!")); fr.solve(); } });
+				lockUI({ title: L("Airlock", "Hava kilidi"), text: L("CARD ACCEPTED. <b>ENTER THE 4-DIGIT OVERRIDE CODE</b>", "KART KABUL EDİLDİ. <b>4 HANELİ ACİL DURUM KODUNU GİRİN</b>"), kind: "digits", len: 4, check: v => v.join("") === tankCode(), fail: L("CODE REJECTED. Check the tanks' gauges again.", "KOD REDDEDİLDİ. Tüplerin göstergelerine tekrar bak."), ok: () => { ctx.sfx("steam", 0.7); ctx.toast(L("PSSSHHH... the airlock cycles and the far door slides open!", "PŞŞŞŞ... hava kilidi döndü ve öbür kapı kayarak açıldı!")); fr.solve(); } });
 			}
 		}, term);
 		let dO = 0;
@@ -1553,13 +1693,10 @@ export function build(k) {
 			padM.color.set(fr.flag("locker") ? "#4aff6a" : "#ff3a3a");
 			termM.color.set(fr.flag("out") !== undefined ? "#4aff6a" : fr.flag("locker") ? "#ffd24a" : "#ff3a3a");
 			dO += ((fr.flag("locker") ? 1 : 0) - dO) * Math.min(1, dt * 3); lkDoor.rotation.y = -1.6 * dO;
-			// the beacon spells the password, over and over (dot 0.28 s)
-			const T2 = tl(), units = T2.reduce((a, b) => a + b[1], 0);
-			let u = (t / 0.28) % units, lit = false;
-			for (const [o, n] of T2) { if (u < n) { lit = !!o; break; } u -= n; }
-			beaconM.color.set(lit ? "#ff5a4a" : "#3a0a0a");
+			const q = p();
+			tanks.forEach((T2, i) => { T2.fill.scale.y = Math.max(0.02, q.lv[i] / 100); });
 			if (on) { fr.L.color.set(MISSIONS.space.light); fr.L.intensity = fr.L.base; }
-			else { fr.L.color.set("#ff3030"); fr.L.intensity = fr.L.base * (0.3 + 0.25 * Math.max(0, Math.sin(t * 4))); }
+			else { fr.L.color.set("#ff5040"); fr.L.intensity = fr.L.base * (0.5 + 0.2 * Math.max(0, Math.sin(t * 3))); }
 		};
 	};
 
@@ -1626,17 +1763,22 @@ export function build(k) {
 
 		const p = () => fr.p();
 		const riddle = () => RIDDLES[p().riddle];
-		fr.it("book", { stand: [-hw + 1.15, 1.0], at: [-hw + 0.45, 1.0], label: ["Read the spellbook", "Büyü kitabını oku"], use: () => { fr.set("book"); clue(rid, "book", L("The spellbook", "Büyü kitabı"), `<div class="paper"><span class="mirror">${TX(riddle()[0])}</span></div><p class="esc-p" style="color:var(--muted)">${L("Strange... every word is written backwards.", "Tuhaf... bütün kelimeler ters yazılmış.")}</p>`); } }, lec);
+		const orbHtml = () => `<p class="esc-p">${L("Symbols swirl in the glass, one after another:", "Camın içinde semboller sırayla dönüyor:")}</p><div class="esc-orb">${p().seq.map((s, i) => `<i style="animation-delay:${i * 0.85}s">${alchSvg(s)}</i>`).join("")}</div>`;
+		fr.clue("book", () => L("The spellbook", "Büyü kitabı"), () => `<div class="paper"><span class="mirror">${TX(riddle()[0])}</span></div><p class="esc-p" style="color:var(--muted)">${L("Strange... every word is written backwards.", "Tuhaf... bütün kelimeler ters yazılmış.")}</p>`);
+		fr.clue("riddle", () => L("The riddle (in the mirror)", "Bilmece (aynada)"), () => `<div class="paper">${TX(riddle()[0])}</div>`);
+		fr.clue("orb", () => L("The crystal ball", "Kristal küre"), orbHtml, 440);
+		fr.clue("shelf", () => L("The potion shelf", "İksir rafı"), () => { const q = p(); return `<table class="esc-tbl">${POTIONS.map((P, i) => `<tr><td><b style="color:${P[2]}">● ${TX([P[0], P[1]])}</b></td><td><span class="sym">${alchSvg(q.colorOf.indexOf(i))}</span></td></tr>`).join("")}</table><p class="esc-p" style="color:var(--muted)">${L("Every label is marked with a symbol. And every label says <i>Do not drink</i>.", "Her etikette bir sembol var. Ve her etikette <i>İçmeyin</i> yazıyor.")}</p>`; }, 380);
+		stones.forEach((S, i) => fr.clue("stone" + i, () => L("Standing stone", "Dikili taş") + " (" + RUNES[i][0] + ")", () => `<p class="esc-p">${L("A standing stone carved with the rune", "Üstüne şu rün oyulmuş bir dikili taş:")} <b>${RUNES[i][0]}</b> <span class="sym">${runeSvg(i)}</span><br>${L("Scratched underneath it:", "Altına kazınmış:")} <b style="font-size:22px;font-family:Georgia,serif">${p().expr[i]}</b></p>`, 400));
+		fr.it("book", { stand: [-hw + 1.15, 1.0], at: [-hw + 0.45, 1.0], label: ["Read the spellbook", "Büyü kitabını oku"], use: () => { if (!fr.flag("book")) fr.set("book"); clue(rid, "book"); } }, lec);
 		fr.it("mirror", {
 			stand: [-2.0, -3.5], at: [-2.0, -RD], label: () => fr.flag("mirror") ? L("The magic mirror (glowing)", "Sihirli ayna (parlıyor)") : L("Look into the magic mirror", "Sihirli aynaya bak"),
 			use: () => {
 				if (fr.flag("mirror")) { ctx.toast(L("Your reflection winks at you. Rude.", "Yansıman sana göz kırpıyor. Ne kaba.")); return; }
 				if (!fr.flag("book")) { ctx.toast(L("Your reflection stares back. \"Show me something worth reading,\" it whispers.", "Yansıman sana bakıyor. \"Bana okumaya değer bir şey göster,\" diye fısıldıyor.")); return; }
-				note(rid, "riddle", L("The riddle (in the mirror)", "Bilmece (aynada)"), `<div class="paper">${TX(riddle()[0])}</div>`);
+				learn(rid, "riddle");
 				lockUI({ title: L("The magic mirror", "Sihirli ayna"), text: L("You hold the spellbook up to the mirror, and the backwards words turn the right way round:", "Büyü kitabını aynaya tutuyorsun ve ters kelimeler düzeliyor:") + `<div class="paper">${TX(riddle()[0])}</div>` + L("Your reflection asks: <i>\"Well? What is it?\"</i>", "Yansıman soruyor: <i>\"Eee? Nedir?\"</i>"), kind: "word", w: 460, check: v => riddle()[1].includes(v) || RIDDLES[p().riddle][1].some(a => norm(a) === v), fail: L("\"Wrong!\" laughs your reflection.", "\"Yanlış!\" diye gülüyor yansıman."), ok: () => { fr.set("mirror"); ctx.sfx("chime", 0.7); ctx.toast(L("The mirror ripples like water... and a glowing <b>moonstone</b> drops into your hand!", "Ayna su gibi dalgalanıyor... ve avucuna parlayan bir <b>ay taşı</b> düşüyor!")); } });
 			}
 		}, mir);
-		const orbHtml = () => `<p class="esc-p">${L("Symbols swirl in the glass, one after another:", "Camın içinde semboller sırayla dönüyor:")}</p><div class="esc-orb">${p().seq.map((s, i) => `<i style="animation-delay:${i * 0.85}s">${alchSvg(s)}</i>`).join("")}</div>`;
 		fr.it("orb", {
 			stand: [0, 0.3], at: [0, -0.8], label: () => fr.flag("orb") ? L("Gaze into the crystal ball", "Kristal küreye bak") : fr.flag("mirror") ? L("Set the moonstone into the pedestal", "Ay taşını kaideye yerleştir") : L("Look at the crystal ball", "Kristal küreye bak"),
 			use: () => {
@@ -1644,10 +1786,10 @@ export function build(k) {
 					if (!fr.flag("mirror")) { ctx.toast(L("A cloudy crystal ball. Its pedestal has an empty socket, shaped like a small round stone.", "Bulanık bir kristal küre. Kaidesinde küçük, yuvarlak bir taş şeklinde boş bir yuva var.")); return; }
 					fr.set("orb"); ctx.sfx("love", 0.6);
 				}
-				clue(rid, "orb", L("The crystal ball", "Kristal küre"), orbHtml(), 440);
+				clue(rid, "orb");
 			}
 		}, ped);
-		fr.it("shelf", { stand: [hw - 1.0, -0.6], at: [hw, -0.6], label: ["Look at the potion shelf", "İksir rafına bak"], use: () => { const q = p(); clue(rid, "shelf", L("The potion shelf", "İksir rafı"), `<table class="esc-tbl">${POTIONS.map((P, i) => `<tr><td><b style="color:${P[2]}">● ${TX([P[0], P[1]])}</b></td><td><span class="sym">${alchSvg(q.colorOf.indexOf(i))}</span></td></tr>`).join("")}</table><p class="esc-p" style="color:var(--muted)">${L("Every label is marked with a symbol. And every label says <i>Do not drink</i>.", "Her etikette bir sembol var. Ve her etikette <i>İçmeyin</i> yazıyor.")}</p>`, 380); } }, shelf);
+		fr.it("shelf", { stand: [hw - 1.0, -0.6], at: [hw, -0.6], label: ["Look at the potion shelf", "İksir rafına bak"], use: () => clue(rid, "shelf") }, shelf);
 		fr.it("cauldron", {
 			stand: [1.5, -2.25], at: [2.3, -3.3], label: () => fr.flag("brew") ? L("The cauldron (quiet now)", "Kazan (artık sakin)") : L("Brew a potion in the cauldron", "Kazanda iksir hazırla"),
 			use: () => {
@@ -1657,7 +1799,7 @@ export function build(k) {
 			}
 		}, cau);
 		const STAND = [[-2.8, -1.65], [2.8, 1.0], [2.75, 3.05], [-1.0, 1.4]];
-		stones.forEach((S, i) => fr.it("stone" + i, { stand: STAND[i], at: SZ[i], label: ["Examine the standing stone", "Dikili taşı incele"], use: () => clue(rid, "stone" + i, L("Standing stone", "Dikili taş"), `<p class="esc-p">${L("A standing stone carved with the rune", "Üstüne şu rün oyulmuş bir dikili taş:")} <b>${RUNES[i][0]}</b> <span class="sym">${runeSvg(i)}</span><br>${L("Scratched underneath it:", "Altına kazınmış:")} <b style="font-size:22px;font-family:Georgia,serif">${p().expr[i]}</b></p>`, 400) }, S.sg));
+		stones.forEach((S, i) => fr.it("stone" + i, { stand: STAND[i], at: SZ[i], label: ["Examine the standing stone", "Dikili taşı incele"], use: () => clue(rid, "stone" + i) }, S.sg));
 		fr.door = {
 			label: () => fr.flag("brew") ? L("Trace the runes on the seal with the wand", "Asayla mühre rünleri çiz") : L("The rune seal on the door", "Kapıdaki rün mührü"),
 			use: () => {
@@ -1730,9 +1872,9 @@ export function build(k) {
 			const ic = i < sv ? "✅" : i === sv && running() ? "▶️" : "🔒";
 			return `<div class="esc-m" style="--c:${M.color}"><span class="ic">${ic}</span><b>${i + 1}. ${TX(M.name)}<em>${stars(M.stars)}</em></b><span class="s">${TX(M.blurb)}${tt !== undefined ? ` <b style="color:var(--ok)">(${fmt(tt)})</b>` : ""}</span></div>`;
 		}).join("");
-		const body = openEsc(L("Escape House - The Mission", "Kaçış Evi - Görev"), `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px"><span class="esc-p" style="margin:0">${status}</span>${langBtns()}</div><p class="esc-p">${L("Six linked rooms, one way out. Start in room 1 (off the corridor): each room's last lock opens the door into the next. Everyone inside plays together, and the codes change every time.", "Birbirine bağlı altı oda, tek çıkış. 1. odadan başla (koridorda): her odanın son kilidi sıradakinin kapısını açar. İçerideki herkes birlikte oynar ve şifreler her seferinde değişir.")}</p><div class="esc-board">${rows}</div><p class="esc-p" style="margin-top:12px">${L("Best time:", "En iyi süre:")} ${b && b.t ? `<b>${fmt(b.t)}</b> (${esc(b.by)})` : L("nobody yet", "henüz kimse")}</p><button class="btn primary" data-x="go">${L("Take me to room 1", "Beni 1. odaya götür")}</button>`, 600);
+		const body = openEsc(L("Escape House - The Mission", "Kaçış Evi - Görev"), `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px"><span class="esc-p" style="margin:0">${status}</span>${langBtns()}</div><p class="esc-p">${L("Six linked rooms, one way out. Start in room 1 (off the corridor): each room's last lock opens the door into the next. Everyone inside plays together, and the codes change every time. Your progress is saved: leave whenever you like and carry on later.", "Birbirine bağlı altı oda, tek çıkış. 1. odadan başla (koridorda): her odanın son kilidi sıradakinin kapısını açar. İçerideki herkes birlikte oynar ve şifreler her seferinde değişir. İlerlemen saklanır: istediğin zaman çık, sonra kaldığın yerden devam et.")}</p><div class="esc-board">${rows}</div><p class="esc-p" style="margin-top:12px">${L("Best time:", "En iyi süre:")} ${b && b.t ? `<b>${fmt(b.t)}</b> (${esc(b.by)})` : L("nobody yet", "henüz kimse")}</p><button class="btn primary" data-x="go">${running() ? L(`Take me to room ${current() + 1}`, `Beni ${current() + 1}. odaya götür`) : L("Take me to room 1", "Beni 1. odaya götür")}</button>`, 600);
 		body.querySelectorAll("[data-lang]").forEach(bt => bt.onclick = () => { setLang(bt.dataset.lang); openBoard(); });
-		body.querySelector("[data-x=go]").onclick = () => { ctx.closeModal(); const p = standOf(DOORS[0], DOORS[0].f, 0.95); ctx.walkTo(p[0] + OX, p[1] + OZ, "esc:door0"); };
+		body.querySelector("[data-x=go]").onclick = () => { if (running()) { goOn(); return; } ctx.closeModal(); const p = standOf(DOORS[0], DOORS[0].f, 0.95); ctx.walkTo(p[0] + OX, p[1] + OZ, "esc:door0"); };
 	}
 
 	// ================================================================ the outside
@@ -1798,9 +1940,10 @@ export function build(k) {
 		const a = b.dataset.a;
 		if (a === "start") start();
 		else if (a === "board") openBoard();
+		else if (a === "clues") showClues(rid);
+		else if (a === "go") goOn();
 		else if (!rid) return;
 		else if (a === "hint") hint(rid);
-		else if (a === "clues") showClues(rid);
 		else if (a === "quit") askQuit();
 	});
 	function renderHud() {
@@ -1811,8 +1954,10 @@ export function build(k) {
 		const M = rid ? MISSIONS[rid] : null;
 		const steps = M ? M.steps.filter(x => flag(rid, x.f) !== undefined).length : 0;
 		const si = M ? M.steps.findIndex(x => flag(rid, x.f) === undefined) : -1;
-		const items = run && rid ? inventory(rid) : [], nJ = rid ? found(rid).length : 0;
+		const items = run && rid ? inventory(rid) : [], nJ = run ? ROOMS.reduce((n, R) => n + found(R.id).length, 0) : 0;
 		const sig = [getLang(), pl, run, done, sv, steps, si, items.join("|"), nJ, s && s.id].join("/");
+		const clueBtn = `<button class="btn" data-a="clues">${L("Clues", "İpuçları")}${nJ ? " (" + nJ + ")" : ""}</button>`;
+		const goBtn = `<button class="btn primary" data-a="go">${L(`Continue in room ${current() + 1}`, `${current() + 1}. odada devam et`)}</button>`;
 		hud.classList.remove("hidden");
 		if (sig !== hudSig) {
 			hudSig = sig;
@@ -1825,7 +1970,7 @@ export function build(k) {
 					: done ? `<b>${L("Mission complete!", "Görev tamamlandı!")}</b> ${L("Play again from room 1: the codes will all be new.", "1. odadan tekrar oyna: bütün şifreler yeni olacak.")}`
 						: solvedHere ? `<b>${L("Room solved!", "Oda çözüldü!")}</b> ${next ? L("The door to ", "Kapı açık: ") + next + L(" is open.", "") : L("The way out is open!", "Çıkış açık!")}`
 							: `${L("Puzzle", "Bulmaca")} ${si + 1} / ${M.steps.length}: <b>${TX(M.steps[si].t)}</b>`;
-				const btns = run ? `<button class="btn" data-a="hint">${L("Hint", "İpucu")} (G)</button><button class="btn" data-a="clues">${L("Clues", "İpuçları")}${nJ ? " (" + nJ + ")" : ""}</button><button class="btn ghost" data-a="quit">${L("Give up", "Vazgeç")}</button>`
+				const btns = run ? `${solvedHere ? goBtn : `<button class="btn" data-a="hint">${L("Hint", "İpucu")} (G)</button>`}${clueBtn}<button class="btn ghost" data-a="quit">${L("Give up", "Vazgeç")}</button>`
 					: ri === 0 ? `<button class="btn primary" data-a="start">${done ? L("Play again", "Tekrar oyna") : L("Start mission", "Görevi başlat")}</button>` : "";
 				body = `<div class="eh-n">${L("Room", "Oda")} ${ri + 1} / 6</div><div class="eh-h"><b>${TX(M.name)}</b><span class="eh-st">${stars(M.stars)}</span></div>
 					<div class="eh-t"><span></span><small>${run ? L("mission time", "görev süresi") : done ? L("escaped!", "kaçtınız!") : L("not started", "başlamadı")}</small></div>${bar}
@@ -1833,10 +1978,10 @@ export function build(k) {
 					<div class="eh-b">${btns}${langBtns()}</div>`;
 			} else {
 				const b = ctx.get(KEY + "best");
-				const line = run ? L(`${esc(s.by)}'s team is on the mission: room ${Math.min(sv + 1, 6)} of 6.`, `${esc(s.by)} ve ekibi görevde: 6 odadan ${Math.min(sv + 1, 6)}.`) : done ? L("The last team escaped! Room 1 is open for a new mission.", "Son ekip kaçtı! 1. oda yeni bir görev için açık.") : L("Six linked rooms, one way out. Room 1 is off the corridor.", "Birbirine bağlı altı oda, tek çıkış. 1. oda koridorda.");
+				const line = run ? L(`${esc(s.by)}'s team is on the mission: room ${current() + 1} of 6. Progress is saved, so anyone can go in and carry on.`, `${esc(s.by)} ve ekibi görevde: 6 odadan ${current() + 1}. İlerleme saklanıyor, herkes içeri girip devam edebilir.`) : done ? L("The last team escaped! Room 1 is open for a new mission.", "Son ekip kaçtı! 1. oda yeni bir görev için açık.") : L("Six linked rooms, one way out. Room 1 is off the corridor.", "Birbirine bağlı altı oda, tek çıkış. 1. oda koridorda.");
 				body = `<div class="eh-h"><b>${L("Escape House", "Kaçış Evi")}</b></div><div class="eh-t"><span></span><small>${run ? L("mission time", "görev süresi") : done ? L("last escape", "son kaçış") : ""}</small></div>${bar}
 					<div class="eh-step">${line}${b && b.t ? `<br>${L("Best time:", "En iyi süre:")} <b>${fmt(b.t)}</b>` : ""}</div>
-					<div class="eh-b"><button class="btn" data-a="board">${L("Mission board", "Görev panosu")}</button>${langBtns()}</div>`;
+					<div class="eh-b">${run ? goBtn + clueBtn : ""}<button class="btn" data-a="board">${L("Mission board", "Görev panosu")}</button>${langBtns()}</div>`;
 			}
 			hud.innerHTML = body;
 		}
@@ -1849,7 +1994,7 @@ export function build(k) {
 	function transition(from, to, s) {
 		if (to.indexOf("run:") === 0) {
 			ctx.sfx("door", 0.8); setTimeout(() => ctx.sfx("thunk", 0.7), 250);
-			ctx.toast(L("<b>The door locks behind you!</b> Search everything, collect items and clues, and crack each room's last lock to open the next. Six rooms, one way out.", "<b>Kapı arkanızdan kilitlendi!</b> Her şeyi ara, eşyaları ve ipuçlarını topla, sıradakini açmak için her odanın son kilidini kır. Altı oda, tek çıkış."), null, null, 9000);
+			ctx.toast(L("<b>The mission has started!</b> The glowing diamonds show what you can use: search everything, collect items and clues (they're all kept in the clue book, <b>F</b>), and crack each room's last lock to open the next. Your progress is saved, even if you leave.", "<b>Görev başladı!</b> Parlayan elmaslar kullanabileceğin şeyleri gösterir: her şeyi ara, eşyaları ve ipuçlarını topla (hepsi ipucu defterinde, <b>F</b>), sıradakini açmak için her odanın son kilidini kır. Çıksan bile ilerlemen saklanır."), null, null, 10000);
 		} else if (to.indexOf("won:") === 0) {
 			ctx.sfx("yes", 0.8); setTimeout(() => ctx.sfx("applause", 0.5), 300); ctx.doUpper("cheer", 2600);
 			const b = ctx.get(KEY + "best");
@@ -1883,7 +2028,7 @@ export function build(k) {
 			F.piv.rotation.y = (F.ax ? -F.sw : F.sw) * 1.45 * smooth(F.k);
 			F.lampM.color.set(doorOpen(i) ? "#5dff8a" : running() && i === 0 ? (Math.sin(t * 5) > 0 ? "#ff3a3a" : "#5a1010") : "#ff3a3a");
 		});
-		for (const R of ROOMS) { const fr = FR[R.id]; if (fr.anim) fr.anim(dt, t); }
+		for (const R of ROOMS) { const fr = FR[R.id]; if (fr.anim) fr.anim(dt, t); markers(fr, t); }
 		lobbyL.intensity = lobbyL.base * (0.96 + 0.04 * Math.sin(t * 1.3));
 		slow -= dt;
 		if (slow <= 0) { slow = 0.25; liveTexes.forEach(paint); renderHud(); }
@@ -1913,14 +2058,11 @@ export function build(k) {
 			const pl = myPlace(), free = key => !opts.some(o => o.k === key);
 			if (pl === null) return;
 			const rid = myRoom();
-			if (rid && running()) {
-				if (free("G")) opts.push({ k: "G", label: L("Hint", "İpucu"), fn: () => hint(rid) });
-				if (free("R")) opts.push({ k: "R", label: L("Give up the mission", "Görevden vazgeç"), fn: askQuit });
-				return;
-			}
-			// in the corridor, by the locked way in
-			const m = me(), D = DOORS[0];
-			if (running() && pl === -1 && Math.abs(m.x - OX - D.c) < 1.4 && Math.abs(m.z - OZ - D.p) < 1.4 && free("R")) opts.push({ k: "R", label: L("Break the lock (ends their mission)", "Kilidi kır (görevlerini bitirir)"), fn: breakLock });
+			// E: whatever you're right next to in the room (anywhere round it, not only on its one spot)
+			const it = rid && free("E") ? nearestThing() : null;
+			if (it) opts.unshift({ k: "E", label: it.d.label(), fn: () => { const m = me(), f = it.foot; m.h = Math.atan2((f[0] + f[1]) / 2 + OX - m.x, (f[2] + f[3]) / 2 + OZ - m.z); it.d.use(); } });
+			if (rid && running() && free("G")) opts.push({ k: "G", label: L("Hint", "İpucu"), fn: () => hint(rid) });
+			if (running() && ROOMS.some(R => found(R.id).length) && free("F")) opts.push({ k: "F", label: L("Clue book", "İpucu defteri"), fn: () => showClues(rid) });
 		}
 	};
 }
