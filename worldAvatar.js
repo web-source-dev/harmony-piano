@@ -32,7 +32,7 @@ export const MOODS = [
 ];
 const MOOD_COLOR = Object.fromEntries(MOODS.map(m => [m.id, m.color]));
 // arm-layer animations that make the cheeks go pink
-const LOVE_UPPERS = new Set(["foreheadkiss", "boop", "backhug", "neckkiss", "buttpat", "beckon", "flirty", "bitelip", "shy", "melt", "giggle", "eep", "dz_sway", "blush", "lovestruck", "heartarms", "smooch", "cheekkiss", "cuddle", "slowdance", "propose", "kiss", "hug", "nightkiss", "carry", "carrykiss", "handhold"]);
+const LOVE_UPPERS = new Set(["foreheadkiss", "boop", "backhug", "neckkiss", "buttpat", "beckon", "flirty", "bitelip", "shy", "melt", "giggle", "eep", "dz_sway", "blush", "lovestruck", "heartarms", "smooch", "cheekkiss", "cuddle", "slowdance", "propose", "kiss", "hug", "nightkiss", "carry", "carrykiss", "handhold", "cd_waltz", "cd_tango", "cd_tangof", "cd_salsa", "cd_twirl", "cd_twirlf", "cd_dip", "cd_dipf", "cd_cheek", "cd_lift", "cd_liftf", "cd_heart", "cd_heartf", "cd_swing", "cd_swingf"]);
 // love you can still do while treading water (your legs keep kicking underneath)
 const WATER_UPPERS = new Set(["handhold", "smooch", "cheekkiss", "kiss", "hug", "highfive", "blush", "lovestruck", "heart", "heartarms", "wink", "cuddle", "slowdance"]);
 // solo ones also float little hearts
@@ -458,17 +458,17 @@ function irisTex(color) {
 // ---------- the head: a sphere sculpted into a skull, cheeks, jaw and chin (unit direction in, a point on the face out)
 const HEAD_R = 0.132;
 function headShape(x, y, z, female, out) {
-	// the skull: round, a touch narrower than it is deep
-	x *= female ? 0.86 : 0.88; y *= 1.03; z *= 1.0;
+	// the skull: round (a cute, youthful head: almost as wide as it is deep)
+	x *= female ? 0.92 : 0.91; y *= 1.02; z *= 1.0;
 	// the jaw: gently narrower toward a soft chin; the back of the jaw tucks in to the neck
 	if (y < 0.0) {
 		const s = smooth01(-y / 1.0);
-		x *= 1 - s * (female ? 0.33 : 0.26);
+		x *= 1 - s * (female ? 0.27 : 0.23);
 		z *= z < 0 ? 1 - s * 0.55 : 1 - s * 0.1;
 	}
 	// a chin, not a point: the bottom of the face is flattened off
 	if (y < -0.4) { const d = -0.4 - y; y = -0.4 - d * (1 - 0.45 * smooth01(d / 0.6)); }
-	if (!female && y < -0.2 && y > -0.75) x *= 1 + 0.025 * gauss((y + 0.5) ** 2, 0.12);   // a slightly squarer jaw (young: still soft)
+	if (!female && y < -0.2 && y > -0.8) x *= 1 + 0.045 * gauss((y + 0.52) ** 2, 0.1);   // a cleaner, squarer jaw (handsome, still young)
 	// the face is flatter than the back of the head
 	if (z > 0.55) z = 0.55 + (z - 0.55) * 0.85;
 	// cheekbones, the brow ridge, eye sockets, the chin
@@ -477,9 +477,9 @@ function headShape(x, y, z, female, out) {
 		const zf = smooth01(z / 0.6);
 		x *= 1 + 0.035 * gauss((y + 0.1) ** 2, 0.18) * zf;   // cheekbones
 		z += 0.01 * gauss((y - 0.24) ** 2, 0.07) * gauss((ax - 0.3) ** 2, 0.25) * zf;    // the brow (barely there: a young face)
-		z -= 0.028 * gauss((y - 0.07) ** 2, 0.08) * gauss((ax - 0.36) ** 2, 0.12) * zf;  // the eye sockets (shallow)
-		z += 0.02 * gauss((y + 0.7) ** 2, 0.1) * gauss(ax * ax, female ? 0.14 : 0.2) * zf;   // the chin
-		z += 0.03 * gauss((y + 0.22) ** 2, 0.15) * gauss((ax - 0.4) ** 2, 0.15) * zf;    // full, round cheeks
+		z -= 0.028 * gauss((y - 0.06) ** 2, 0.08) * gauss((ax - 0.37) ** 2, 0.12) * zf;  // the eye sockets (the eyes sit in them)
+		z += (female ? 0.014 : 0.022) * gauss((y + 0.7) ** 2, 0.1) * gauss(ax * ax, female ? 0.12 : 0.2) * zf;   // the chin (small and soft)
+		z += (female ? 0.042 : 0.034) * gauss((y + 0.24) ** 2, 0.16) * gauss((ax - 0.4) ** 2, 0.16) * zf;    // full, round cheeks
 	}
 	return out.set(x * HEAD_R, y * HEAD_R, z * HEAD_R);
 }
@@ -682,7 +682,7 @@ export class Avatar {
 		const C = look.colors;
 		const T = tex();
 		const skinC = new THREE.Color(look.skin);
-		const skin = new THREE.MeshPhysicalMaterial({ color: skinC, roughness: 0.42, sheen: 0.45, sheenRoughness: 0.5, sheenColor: skinC.clone().lerp(new THREE.Color("#ff8a7a"), 0.55).multiplyScalar(0.6) });
+		const skin = new THREE.MeshPhysicalMaterial({ color: skinC, roughness: 0.46, sheen: 0.6, sheenRoughness: 0.45, sheenColor: skinC.clone().lerp(new THREE.Color("#ff8a7a"), 0.55).multiplyScalar(0.6) });
 		const skinShade = skin.clone(); skinShade.color = skinC.clone().multiplyScalar(0.9);
 		// every garment's cloth (shared between the pieces of one colour and weave, so they draw as one)
 		const mats = new Map();
@@ -712,7 +712,7 @@ export class Avatar {
 		const tunic = fit.top === "kurta";   // (a long tunic over trousers)
 		const hairM = new THREE.MeshPhysicalMaterial({ color: look.hair, map: T.hair, roughness: 0.48, sheen: 0.6, sheenRoughness: 0.32, sheenColor: new THREE.Color(look.hair).lerp(new THREE.Color("#ffffff"), 0.35) });
 		const dark = new THREE.MeshStandardMaterial({ color: "#1a1214", roughness: 0.5 });
-		const blush = new THREE.MeshBasicMaterial({ color: "#ff8fa3", map: T.blush, transparent: true, opacity: female ? 0.34 : 0.2, depthWrite: false });
+		const blush = new THREE.MeshBasicMaterial({ color: "#ff8fa3", map: T.blush, transparent: true, opacity: female ? 0.46 : 0.26, depthWrite: false });
 		this.blushM = blush; this.blushBase = blush.opacity; this._rosy = false;
 		const B = new Batch();
 
@@ -902,7 +902,7 @@ export class Avatar {
 		// ================================================================ head and face
 		const head = new THREE.Group();
 		head.position.y = 0.555;
-		head.scale.setScalar(female ? 1.06 : 1.07);   // (a touch bigger than an older adult's: young proportions)
+		head.scale.setScalar(female ? 1.16 : 1.12);   // (a little big for the body: cute, young proportions)
 		torso.add(head);
 		this.head = head;
 		const face = new THREE.Group();
@@ -920,35 +920,44 @@ export class Avatar {
 		this.lids = [];
 		this.brows = [];
 		this.tears = [];
-		const eyeR = female ? 0.0232 : 0.0218;   // (big, bright eyes read young)
+		const eyeR = female ? 0.0246 : 0.0232;   // (a little big: bright, young eyes - set back into the face, not bulging)
 		const sclera = new THREE.MeshPhysicalMaterial({ color: "#f3eeea", roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.05 });
 		const irisM = new THREE.MeshPhysicalMaterial({ map: irisTex(look.eyes), transparent: true, roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.03 });
 		const browM = new THREE.MeshStandardMaterial({ color: new THREE.Color(look.hair).multiplyScalar(0.72), roughness: 0.9, side: THREE.DoubleSide });
 		const lashM = new THREE.MeshStandardMaterial({ color: "#120c0c", roughness: 0.6 });
+		const sparkM = new THREE.MeshBasicMaterial({ color: "#ffffff", toneMapped: false });   // (the catchlights: what makes eyes sparkle)
 		// the iris: a cap of the eyeball's front (uvs laid flat across it, the way the texture is drawn)
 		const irisGeo = (() => {
-			const R = eyeR * 1.008, rho = eyeR * 0.54;
+			const R = eyeR * 1.008, rho = eyeR * 0.58;
 			const g = new THREE.SphereGeometry(R, 30, 8, 0, Math.PI * 2, 0, Math.asin(rho / R)).rotateX(Math.PI / 2);
 			const p = g.attributes.position, uv = g.attributes.uv;
 			for (let i = 0; i < p.count; i++) uv.setXY(i, (p.getX(i) / rho + 1) / 2, (p.getY(i) / rho + 1) / 2);
 			return g;
 		})();
 		for (const sx of [-1, 1]) {
-			const s = faceAt(sx * 0.045, 0.008);
+			const s = faceAt(sx * 0.046, 0.005);
 			const eye = new THREE.Group();
-			eye.position.set(sx * 0.045, 0.008, s.z - eyeR * 0.42);
+			eye.position.set(sx * 0.046, 0.005, s.z - eyeR * 0.68);   // (most of the eyeball inside the head: only the front shows)
 			eye.rotation.y = sx * 0.05;
 			face.add(eye);
 			eye.add(mesh(new THREE.SphereGeometry(eyeR, 22, 16), sclera, false));
 			eye.add(mesh(irisGeo.clone(), irisM, false));
+			// two sparkles on the iris: a big one up and to the side, a little one below (the lid covers them in a blink)
+			const sp1 = mesh(new THREE.SphereGeometry(eyeR * 0.15, 10, 8), sparkM, false); sp1.position.set(-eyeR * 0.3, eyeR * 0.32, eyeR * 0.96); eye.add(sp1);
+			const sp2 = mesh(new THREE.SphereGeometry(eyeR * 0.075, 8, 6), sparkM, false); sp2.position.set(eyeR * 0.26, -eyeR * 0.24, eyeR * 0.985); eye.add(sp2);
 			// the eyelids: the top one blinks (rotation.x), the lashes ride on its edge
 			const lid = mesh(new THREE.SphereGeometry(eyeR * 1.14, 22, 10, 0, Math.PI * 2, 0, Math.PI / 2), skin, false);
 			lid.rotation.x = -0.45;
 			eye.add(lid);
 			this.lids.push(lid);
-			const lash = mesh(new THREE.TorusGeometry(eyeR * 1.15, female ? 0.0026 : 0.0016, 4, 18, Math.PI * 0.86).rotateZ(Math.PI * 0.07).rotateX(Math.PI / 2), lashM, false);
+			const lash = mesh(new THREE.TorusGeometry(eyeR * 1.15, female ? 0.0034 : 0.0019, 4, 18, Math.PI * 0.86).rotateZ(Math.PI * 0.07).rotateX(Math.PI / 2), lashM, false);
 			lash.scale.set(1, 1, female ? 1.08 : 1);
 			lid.add(lash);
+			if (female) {   // a little flick of lashes at the outer corner
+				const flick = mesh(new THREE.ConeGeometry(0.0022, 0.009, 4), lashM, false);
+				flick.position.set(sx * eyeR * 1.05, 0.0, eyeR * 0.45); flick.rotation.set(0.6, 0, sx * -1.1);
+				lid.add(flick);
+			}
 			lid.userData.lash = lash;
 			const low = mesh(new THREE.SphereGeometry(eyeR * 1.1, 22, 6, 0, Math.PI * 2, Math.PI * 0.66, Math.PI * 0.34), skin, false);
 			low.rotation.x = 0.28;
@@ -961,22 +970,22 @@ export class Avatar {
 			const bg = new THREE.ShapeGeometry(bs, 2);
 			bg.translate(-bw / 2, 0, 0);
 			if (sx < 0) bg.scale(-1, 1, 1);
-			const bp = faceAt(sx * 0.05, 0.047);
+			const bp = faceAt(sx * 0.05, 0.048);
 			const brow = mesh(bg, browM, false);
-			brow.position.set(sx * 0.05, 0.047, bp.z + 0.0035);
+			brow.position.set(sx * 0.05, 0.048, bp.z + 0.0035);
 			brow.rotation.set(-0.12, sx * 0.32, sx * -0.04);
 			face.add(brow);
 			this.brows.push({ m: brow, sx, rot: brow.rotation.z, y: brow.position.y });
-			const tp2 = faceAt(sx * 0.05, -0.014);
+			const tp2 = faceAt(sx * 0.05, -0.022);
 			const tear = mesh(new THREE.SphereGeometry(0.008, 8, 6), new THREE.MeshStandardMaterial({ color: "#8fd3ff", roughness: 0.05, transparent: true, opacity: 0.9 }), false);
 			tear.scale.set(0.8, 1.3, 0.8);
-			tear.position.set(sx * 0.05, -0.014, tp2.z + 0.006);
+			tear.position.set(sx * 0.05, -0.022, tp2.z + 0.006);
 			tear.visible = false;
 			face.add(tear);
 			this.tears.push(tear);
-			const cp = faceAt(sx * 0.066, -0.032);
-			const ch = mesh(new THREE.CircleGeometry(0.03, 20), blush, false);
-			ch.position.set(sx * 0.066, -0.032, cp.z + 0.004);
+			const cp = faceAt(sx * 0.068, -0.03);
+			const ch = mesh(new THREE.CircleGeometry(0.033, 20), blush, false);
+			ch.position.set(sx * 0.068, -0.03, cp.z + 0.004);
 			ch.rotation.y = sx * 0.5;
 			face.add(ch);
 			// the ear
@@ -989,8 +998,8 @@ export class Avatar {
 		}
 		// the nose: one sculpted shape - a narrow bridge, a rounded tip, the wings flaring either side of it, nostrils under
 		{
-			const k = female ? 0.74 : 0.84;   // (small: a young face)
-			const H = 0.05 * k, yTop = 0.018, yBot = yTop - H;
+			const k = female ? 0.6 : 0.72;   // (small: a cute face)
+			const H = 0.05 * k, yTop = 0.01, yBot = yTop - H;
 			const zs = [];
 			for (let i = 0; i <= 24; i++) zs.push(faceAt(0, yTop - i / 24 * H).z - 0.004);
 			const baseAt = t => { const f = t * 24, i = Math.min(23, Math.floor(f)); return zs[i] + (zs[i + 1] - zs[i]) * (f - i); };
@@ -1013,14 +1022,15 @@ export class Avatar {
 			const mouth = new THREE.Group();
 			mouth.position.set(0, my, mz);
 			face.add(mouth);
-			const lipC = skinC.clone().lerp(new THREE.Color(female ? "#d4506a" : "#c06a66"), female ? 0.6 : 0.42).multiplyScalar(female ? 0.95 : 0.92);
+			const lipC = skinC.clone().lerp(new THREE.Color(female ? "#e0506e" : "#b8706a"), female ? 0.62 : 0.3).multiplyScalar(female ? 0.96 : 0.93);
 			const lipM = new THREE.MeshPhysicalMaterial({ color: lipC, roughness: female ? 0.32 : 0.5, clearcoat: female ? 0.5 : 0.1, clearcoatRoughness: 0.3 });
-			const bend = (w, sy) => v => { v.y += 4.2 * v.x * v.x; v.z -= 9 * v.x * v.x; };
+			const bend = (w, sy) => v => { v.y += 5.6 * v.x * v.x; v.z -= 9 * v.x * v.x; };   // (the corners turned up: a smile)
 			const lip = (w, h, d, y, z) => reshape(bake(new THREE.SphereGeometry(1, 24, 12), [0, 0, 0], null, [w, h, d]), v => { v.y += y; v.z += z; bend()(v); });
 			const lips = new THREE.Group();
-			lips.add(mesh(lip(0.024, 0.0052, 0.0075, 0.0034, 0), lipM, false));
-			lips.add(mesh(lip(0.021, 0.0066, 0.0085, -0.0042, -0.0008), lipM, false));
-			lips.add(mesh(lip(0.0235, 0.0011, 0.004, 0.0, 0.003), M("#4a1e22", "smooth"), false));
+			const lw = female ? 0.9 : 0.92;   // (a small mouth)
+			lips.add(mesh(lip(0.024 * lw, 0.0052, 0.0075, 0.0034, 0), lipM, false));
+			lips.add(mesh(lip(0.021 * lw, female ? 0.0072 : 0.006, 0.0085, -0.0042, -0.0008), lipM, false));
+			lips.add(mesh(lip(0.0235 * lw, 0.0011, 0.004, 0.0, 0.003), M("#4a1e22", "smooth"), false));
 			mouth.add(lips);
 			this.mouth = mouth;
 			this.mouthRot = 0;
@@ -1251,22 +1261,23 @@ export class Avatar {
 			}
 			return pts;
 		};
-		const ez = faceAt(0.045, 0.008).z, z = ez + 0.02;   // (in front of the eyes, and their lids)
+		const ez = faceAt(0.046, 0.005).z, z = ez + 0.022;   // (in front of the eyes, and their lids)
 		for (const sx of [-1, 1]) {
 			const lens = new THREE.Group();
-			lens.position.set(sx * 0.045, 0.008, z - 0.002);
+			lens.position.set(sx * 0.046, 0.005, z - 0.002);
 			lens.rotation.y = sx * 0.12;
+			lens.scale.setScalar(1.06);
 			g.add(lens);
 			const pts = outline(sx);
 			lens.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 80, t, 6, true), frameM, false));
 			lens.add(mesh(new THREE.ShapeGeometry(new THREE.Shape(pts.map(p => new THREE.Vector2(p.x, p.y)))), lensM, false));
 			// the arm, from the outer edge back over the ear
 			const ear = faceAt(sx * 0.105, 0.02);
-			g.add(mesh(segment(t * 0.9, [sx * 0.072, 0.02, z - 0.008], [sx * 0.114, 0.02, ear.z - 0.05], 5), frameM, false));
+			g.add(mesh(segment(t * 0.9, [sx * 0.078, 0.016, z - 0.008], [sx * 0.114, 0.02, ear.z - 0.05], 5), frameM, false));
 			g.add(mesh(segment(t * 0.9, [sx * 0.114, 0.02, ear.z - 0.05], [sx * 0.112, -0.004, ear.z - 0.075], 5), frameM, false));
 		}
 		// the bridge over the nose
-		const br = new THREE.CatmullRomCurve3([new THREE.Vector3(-0.019, 0.016, z), new THREE.Vector3(0, 0.022, z + 0.003), new THREE.Vector3(0.019, 0.016, z)]);
+		const br = new THREE.CatmullRomCurve3([new THREE.Vector3(-0.02, 0.011, z), new THREE.Vector3(0, 0.017, z + 0.003), new THREE.Vector3(0.02, 0.011, z)]);
 		g.add(mesh(new THREE.TubeGeometry(br, 12, t, 5, false), frameM, false));
 		return g;
 	}
@@ -1357,19 +1368,22 @@ export class Avatar {
 		const dirOf = (a, y) => { const h = Math.sqrt(Math.max(0, 1 - y * y)); return new THREE.Vector3(Math.sin(a) * h, y, Math.cos(a) * h); };
 		const onHead = (d, lift) => headShape(d.x, d.y, d.z, female, new THREE.Vector3()).multiplyScalar(1 + lift);
 		// one lock from (a0, y0) on the scalp over the head to (a1, y1), lifted by lift (+ an arch in the middle); then it can
-		// hang free for fall metres (flaring out by flare, waving by wave). w: its width, tip: how fine its end is
+		// hang free for fall metres (flaring out by flare, waving by wave, or twisting round in a spiral curl of radius curl).
+		// w: its width, tip: how fine its end is; peak < 1 moves the arch's highest point toward the root (a quiff's front),
+		// liftEnd: the lift at its end (so a strand can come down to lie on the skin)
 		const lock = (a0, y0, a1, y1, o) => {
-			o = Object.assign({ lift: 0.07, arch: 0.04, w: 0.022, tip: 0.25, fall: 0, flare: 0, wave: 0, seed: 0 }, o);
-			const pts = [], N = 7, d0 = dirOf(a0, y0), d1 = dirOf(a1, y1);
-			for (let i = 0; i <= N; i++) { const t = i / N; pts.push(onHead(d0.clone().lerp(d1, t).normalize(), o.lift + o.arch * Math.sin(t * Math.PI))); }
+			o = Object.assign({ lift: 0.07, arch: 0.04, w: 0.022, tip: 0.25, fall: 0, flare: 0, wave: 0, seed: 0, peak: 1, liftEnd: null, curl: 0 }, o);
+			const pts = [], N = 7, d0 = dirOf(a0, y0), d1 = dirOf(a1, y1), le = o.liftEnd === null ? o.lift : o.liftEnd;
+			for (let i = 0; i <= N; i++) { const t = i / N; pts.push(onHead(d0.clone().lerp(d1, t).normalize(), o.lift + (le - o.lift) * t + o.arch * Math.sin(Math.pow(t, o.peak) * Math.PI))); }
 			if (o.fall) {
-				const last = pts[N], out = new THREE.Vector3(last.x, 0, last.z).normalize();
-				for (let i = 1; i <= 6; i++) {
-					const t = i / 6, wv = Math.sin(t * 7 + o.seed * 5) * o.wave;
-					pts.push(last.clone().addScaledVector(out, o.flare * t + wv).add(new THREE.Vector3(0, -o.fall * t, 0)));
+				const last = pts[N], out = new THREE.Vector3(last.x, 0, last.z).normalize(), side = new THREE.Vector3(-out.z, 0, out.x);
+				const F = o.curl ? 18 : 6;
+				for (let i = 1; i <= F; i++) {
+					const t = i / F, wv = Math.sin(t * 7 + o.seed * 5) * o.wave, c = t * Math.PI * 2 * 2.5 + o.seed, cr = o.curl * smooth01(t / 0.25);
+					pts.push(last.clone().addScaledVector(out, o.flare * t + wv + Math.sin(c) * cr).addScaledVector(side, (Math.cos(c) - 1) * cr * 0.8).add(new THREE.Vector3(0, -o.fall * t, 0)));
 				}
 			}
-			const curve = new THREE.CatmullRomCurve3(pts), TS = o.fall ? 26 : 12, RS = 6;
+			const curve = new THREE.CatmullRomCurve3(pts), TS = o.curl ? 48 : o.fall ? 26 : 12, RS = 6;
 			const g = new THREE.TubeGeometry(curve, TS, 1, RS, false), c = new THREE.Vector3(), n = new THREE.Vector3();
 			return reshape(g, (p, i) => {
 				const t = Math.floor(i / (RS + 1)) / TS;
@@ -1441,6 +1455,18 @@ export class Avatar {
 				const d = new THREE.Vector3(Math.sin(a) * r, y, Math.cos(a) * r);
 				add(bake(new THREE.TorusGeometry(0.014 + rnd(i) * 0.006, 0.0075, 6, 12), onHead(d, 0.12 + 0.05 * rnd(i + 2)).toArray(), [rnd(i) * 3, rnd(i + 1) * 3, rnd(i + 2) * 3]));
 			}
+		} else if (style === "quiff") {
+			// a quiff: short faded sides, the top full and brushed up off the forehead (highest at the front) and back,
+			// a couple of loose strands falling onto the forehead
+			add(cap(HLm, (a, y) => fade(0.06)(a, y) + 0.045 * gauss(a * a, 0.6) * smooth01((y - 0.5) / 0.2)));
+			for (const [a, y, i] of roots(95, 0.42, HLm)) {
+				const s = a >= 0 ? 1 : -1, ab = Math.abs(a), front = 1 - smooth01((ab - 0.3) / 1.3);
+				add(lock(a * 0.92, y, s * (Math.PI * 0.8 - ab * 0.2 + rnd(i) * 0.12), Math.max(0.42, 0.72 - ab * 0.1), { lift: 0.06 + 0.06 * front, liftEnd: 0.05, arch: 0.05 + 0.15 * front + rnd(i) * 0.03, peak: 0.55, w: 0.024 + 0.008 * front, tip: 0.15 }));
+			}
+			// the sides brushed back neatly over the fade
+			for (const [a, y, i] of roots(40, 0.2, HLm)) if (Math.abs(a) > 1.2 && y < 0.5) add(lock(a, y, (a >= 0 ? 1 : -1) * Math.min(Math.PI * 0.95, Math.abs(a) + 0.7), y - 0.05, { lift: 0.03, arch: 0.01, w: 0.02, tip: 0.3 }));
+			for (const [a, y1, w, sd] of [[-0.2, 0.47, 0.008, 1], [0.08, 0.5, 0.007, 2], [-0.36, 0.5, 0.0065, 3]])
+				add(lock(a * 0.4, 0.74, a, y1, { lift: 0.16, liftEnd: 0.035, arch: 0.04, peak: 0.6, w, tip: 0.12, seed: sd }));
 		}
 
 		// ================================================================ girls
@@ -1512,9 +1538,29 @@ export class Avatar {
 				else add(lock(a, y, a, -0.2, { lift: 0.06, arch: 0.02, w: 0.03, fall: 0.2 + rnd(i) * 0.08, flare: 0.05, wave: 0.012, seed: i, tip: 0.3 }));
 			}
 			knot(at, 0.04);
+		} else if (style === "curlybun") {
+			// soft waves pulled back into a big curly bun, curly tendrils falling either side of the face, baby hairs at the temples
+			add(cap(HLf, (a, y) => 0.05 + 0.01 * Math.sin(a * 13 + y * 10)));
+			headAt(Math.PI * 0.94, 0.55, female, v);
+			const at = v.clone().multiplyScalar(1.2);
+			for (const [a, y, i] of roots(70, 0.0, HLf)) add(lock(a, y, Math.PI * 0.94 * (a >= 0 ? 1 : -1), 0.56, { lift: 0.055, arch: 0.035 + rnd(i) * 0.03, w: 0.024, tip: 0.6 }));
+			knot(at, 0.058);
+			// the bun: a heap of curls
+			for (let i = 0; i < 26; i++) {
+				const y = 1 - (i + 0.5) / 26 * 1.6, r = Math.sqrt(Math.max(0, 1 - y * y)), a = i * 2.39996;
+				add(bake(new THREE.TorusGeometry(0.017 + rnd(i + 3) * 0.008, 0.0085, 6, 14, Math.PI * 1.5), [at.x + Math.sin(a) * r * 0.05, at.y + y * 0.045, at.z + Math.cos(a) * r * 0.05], [rnd(i) * 3, a, rnd(i + 4) * 3]));
+			}
+			// spiral tendrils in front of the ears, longest nearest the face
+			for (const sx of [-1, 1]) for (let j = 0; j < 3; j++)
+				add(lock(sx * (0.6 + j * 0.2), 0.5 - j * 0.06, sx * (0.98 + j * 0.15), 0.05, { lift: 0.05, arch: 0.02, w: 0.0095 - j * 0.0012, fall: 0.15 - j * 0.025 + rnd(j + sx) * 0.02, curl: 0.011, flare: 0.012, seed: sx * 3 + j, tip: 0.4 }));
+			// a curl or two loose at the nape
+			for (const sx of [-1, 1]) add(lock(sx * 2.5, 0.0, sx * 2.6, -0.3, { lift: 0.04, arch: 0.01, w: 0.008, fall: 0.06, curl: 0.009, seed: sx + 7, tip: 0.4 }));
+			// baby hairs: short wisps at the temples
+			for (const sx of [-1, 1]) for (let j = 0; j < 2; j++) add(lock(sx * (0.5 + j * 0.15), 0.6, sx * (0.62 + j * 0.15), 0.42, { lift: 0.03, liftEnd: 0.012, arch: 0.02, w: 0.0045, tip: 0.2 }));
 		}
 		B.flush();
 	}
+
 
 
 	setProp(kind) {
@@ -1741,13 +1787,46 @@ export class Avatar {
 			P.bodyY = Math.sin(t * 2) * 0.025;
 		}
 
-		// in the air (a jump): knees tucked, arms out for balance
+		// in the air (a jump; this.air: 0 pushing off .. 0.5 the top .. 1 coming down). A running leap is a stride: the
+		// front knee driving up, the back leg trailing, the arms swinging the other way. A standing jump swings the
+		// arms up, tucks the knees at the top and reaches the legs down for the ground.
 		if (this.air != null && base === "idle") {
-			const s = Math.sin(this.air * Math.PI);
-			P.leg[0].x = -0.75 * s; P.leg[1].x = -0.35 * s; P.leg[0].k = 1.25 * s; P.leg[1].k = 0.8 * s;
-			P.foot[0] = P.foot[1] = 0.3 * s;
-			if (!up) { P.arm[0].z = -0.95 * s; P.arm[1].z = 0.95 * s; P.arm[0].x = P.arm[1].x = -0.35 * s; P.arm[0].e = P.arm[1].e = -0.6 * s; }
-			P.torsoX += 0.12 * s; P.bodyY = 0;
+			const u = this.air, rise = Math.max(0, 1 - u * 2), fall = Math.max(0, u * 2 - 1), top = 1 - Math.abs(u * 2 - 1);
+			if (this.airRun) {
+				P.leg[0].x = -1.05 - 0.25 * top + 0.45 * fall; P.leg[0].k = 1.25 - 0.55 * fall;
+				P.leg[1].x = 0.55 * (1 - fall) - 0.15 * fall; P.leg[1].k = 0.35 + 0.65 * top;
+				P.foot[0] = 0.25; P.foot[1] = 0.55 * (1 - fall);
+				if (!up) {
+					P.arm[0].x = 0.75 - 0.5 * fall; P.arm[1].x = -1.15 + 0.4 * fall;
+					P.arm[0].z = -0.25 - 0.35 * fall; P.arm[1].z = 0.25 + 0.35 * fall;
+					P.arm[0].e = P.arm[1].e = -0.95;
+				}
+				P.torsoX += 0.22 - 0.1 * fall; P.headX = -0.12;
+			} else {
+				P.leg[0].x = -0.95 * top - 0.25 * fall; P.leg[1].x = -0.7 * top - 0.15 * fall;
+				P.leg[0].k = 1.55 * top + 0.25 * fall + 0.15 * rise; P.leg[1].k = 1.2 * top + 0.2 * fall + 0.15 * rise;
+				P.foot[0] = P.foot[1] = 0.35 * top - 0.2 * rise;
+				if (!up) {
+					P.arm[0].z = -(0.5 + 1.9 * rise + 0.6 * top + 0.9 * fall); P.arm[1].z = 0.5 + 1.9 * rise + 0.6 * top + 0.9 * fall;
+					P.arm[0].x = P.arm[1].x = -0.3 * top - 0.45 * fall; P.arm[0].e = P.arm[1].e = -0.35 - 0.3 * top;
+				}
+				P.torsoX += 0.12 * top - 0.06 * rise;
+			}
+			P.bodyY = 0;
+		}
+		// just landed: a quick crouch to soak it up (deeper the harder you came down)
+		if (this.landT != null) {
+			this.landT += dt;
+			const lt = this.landT / 0.24;
+			if (lt >= 1) this.landT = null;
+			else if (this.air == null && base === "idle") {
+				const s = Math.sin(lt * Math.PI) * (this.landK || 0.6);
+				P.bodyY -= 0.17 * s;
+				P.leg[0].x -= 0.75 * s; P.leg[1].x -= 0.75 * s; P.leg[0].k += 1.5 * s; P.leg[1].k += 1.5 * s;
+				P.foot[0] += 0.75 * s; P.foot[1] += 0.75 * s;
+				P.torsoX += 0.3 * s; P.headX -= 0.15 * s;
+				if (!up) { P.arm[0].x -= 0.5 * s; P.arm[1].x -= 0.5 * s; P.arm[0].z -= 0.35 * s; P.arm[1].z += 0.35 * s; }
+			}
 		}
 
 		// ---- upper layer
@@ -2182,6 +2261,125 @@ export class Avatar {
 			// hand in hand (the hand itself is placed by IK): every so often a happy glance at them
 			const glance = Math.max(0, Math.sin(t * 0.7));
 			if (side) { P.headY = side * (0.12 + glance * 0.5); P.headZ = -side * 0.06 * glance; }
+		} else if (up && up.indexOf("cd_") === 0) {
+			// couple dances: on the wall clock, so both dancers keep the same beat on everyone's screen. Whoever
+			// asked leads (cd_tango / cd_twirl / cd_dip); the one they asked follows (the same name + "f")
+			const ct = Date.now() / 1000, ease = Math.min(1, ut / 0.6), TAU = Math.PI * 2, smoothstep = u => u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u);
+			// into a hold over `i` seconds, out of it over `o` seconds at the end of a `d`-second move
+			const dipEase = (u, i, d, o) => Math.min(smoothstep(u / i), smoothstep((d - u) / o));
+			const S = Math.sin, C = Math.cos;
+			if (up === "cd_waltz") {
+				// rise and fall, one-two-three: down on one, up on two and three
+				const b = ct * TAU / 1.65, ph = (b / TAU % 1 + 1) % 1, rise = ph < 0.33 ? -smoothstep(ph / 0.33) : -1 + smoothstep((ph - 0.33) / 0.67) * 1.8;
+				P.bodyY = 0.035 * rise - 0.02;
+				P.bodyRY = S(b) * 0.1; P.torsoX = -0.06; P.torsoZ = S(b) * 0.06;
+				P.leg[0].x = S(b) * 0.32; P.leg[1].x = -S(b) * 0.32;
+				P.leg[0].k = Math.max(0, S(b)) * 0.35 + 0.05; P.leg[1].k = Math.max(0, -S(b)) * 0.35 + 0.05;
+				P.foot[0] = P.foot[1] = rise > 0 ? 0.25 * rise : 0;
+				P.arm[0].x = -1.3; P.arm[0].z = -0.55; P.arm[0].e = -0.6;
+				P.arm[1].x = -1.1; P.arm[1].e = -1.0;
+				P.headY = 0.35; P.headX = -0.06;
+			} else if (up === "cd_tango" || up === "cd_tangof") {
+				// a slow walk, then a sharp lunge and a snap of the head (the follower mirrors: stepping back)
+				const lead = up === "cd_tango", b = ct * TAU / 2.4, lunge = Math.pow(Math.max(0, S(b)), 3), back = lead ? 1 : -1;
+				const snap = S(b * 2) > 0 ? 1 : -1;
+				P.leg[0].x = -0.75 * lunge * back; P.leg[0].k = 0.9 * lunge;
+				P.leg[1].x = 0.55 * lunge * back; P.leg[1].k = 0.15;
+				P.foot[1] = 0.3 * lunge;
+				P.bodyY = -0.13 * lunge; P.torsoX = (lead ? 0.12 : -0.22) * lunge - 0.05;
+				P.headY = (lead ? 0.75 : -0.75) * snap * (0.3 + 0.7 * lunge); P.headX = -0.08;
+				// the joined hands held out to one side, straight; the other hand on their back
+				const ext = lead ? 0 : 1;
+				P.arm[ext].x = -0.75; P.arm[ext].z = (ext ? 1 : -1) * 1.15; P.arm[ext].e = -0.12;
+				P.arm[1 - ext].x = -1.15; P.arm[1 - ext].e = -1.1;
+			} else if (up === "cd_salsa") {
+				// quick-quick-slow: hips swinging, little steps, a turn every few bars
+				const b = ct * TAU / 1.0, bar = Math.floor(ct / 4) % 2;
+				P.hipsZ = S(b) * 0.2; P.torsoZ = -S(b) * 0.1; P.hipsY = S(b) * 0.15;
+				P.leg[0].x = S(b) * 0.28; P.leg[1].x = -S(b) * 0.28;
+				P.leg[0].k = 0.25 + Math.max(0, S(b)) * 0.4; P.leg[1].k = 0.25 + Math.max(0, -S(b)) * 0.4;
+				P.bodyY = -Math.abs(S(b)) * 0.04 - 0.03;
+				P.bodyRY = bar ? ((ct % 4) / 4) * TAU * 0.25 : 0;
+				P.arm[0].x = -0.9; P.arm[0].z = -0.4 + S(b) * 0.15; P.arm[0].e = -1.3;
+				P.arm[1].x = -0.9; P.arm[1].z = 0.4 - S(b) * 0.15; P.arm[1].e = -1.3;
+				P.headY = S(b * 0.5) * 0.2;
+			} else if (up === "cd_twirl") {
+				// one hand up high: they spin underneath it
+				P.arm[0].z = -2.75; P.arm[0].x = -0.35; P.arm[0].e = -0.35;
+				P.arm[1].z = 0.9; P.arm[1].x = -0.3; P.arm[1].e = -0.4;
+				P.torsoX = -0.05; P.headX = -0.25;
+				P.leg[0].x = -0.15; P.leg[1].x = 0.15; P.leg[0].k = P.leg[1].k = 0.12;
+				P.bodyRY = S(ct * 2) * 0.08;
+			} else if (up === "cd_twirlf") {
+				// spinning on the spot, on tiptoe, one hand up to meet theirs
+				P.bodyRY = ut * 7.5;   // (from when the twirl started: smooth, never wrapping round)
+				P.arm[1].z = 2.75; P.arm[1].x = -0.3; P.arm[1].e = -0.35;
+				P.arm[0].z = -1.25; P.arm[0].x = 0.1; P.arm[0].e = -0.25;
+				P.foot[0] = P.foot[1] = 0.45; P.bodyY = 0.05;
+				P.leg[0].x = -0.08; P.leg[1].x = 0.18; P.leg[1].k = 0.4;
+				P.headX = -0.15;
+			} else if (up === "cd_dip") {
+				// the dip: a lunge on the right leg, leaning out over them (they're just in front, to your left), and
+				// down for the kiss (kissAdj: the last bit of the lean, measured so your faces really meet)
+				const s = dipEase(ut, 0.9, 5.0, 0.7);
+				P.hipsX = 0.3 * s;
+				P.leg[0].x = -1.0 * s; P.leg[0].k = 1.0 * s; P.foot[0] = 0.15 * s;
+				P.leg[1].x = 0.15 * s; P.leg[1].k = 0.1 * s; P.foot[1] = 0.3 * s;
+				P.bodyY = -0.12 * s;
+				P.torsoX = (0.62 + Math.max(0, this.kissAdj)) * s; P.torsoY = 0.35 * s; P.torsoZ = -0.12 * s;
+				P.headX = 0.3 * s; P.headZ = -0.15 * s;
+				P.arm[0].x = -1.1; P.arm[0].e = -0.6; P.arm[1].x = -1.2; P.arm[1].e = -0.5;
+			} else if (up === "cd_dipf") {
+				// dipped: tipped right back from the hips over their arm, the far leg up and pointed, the other planted,
+				// one arm round their neck and the other flung out
+				const s = dipEase(ut, 0.9, 5.0, 0.7);
+				P.hipsX = -0.75 * s;
+				P.leg[1].x = 0.4 * s; P.leg[1].k = 0.9 * s; P.foot[1] = -0.2 * s;
+				P.leg[0].x = -0.8 * s; P.leg[0].k = 0.2 * s; P.foot[0] = 0.6 * s;
+				P.bodyY = -0.18 * s;
+				P.torsoX = (-0.3 + Math.min(0.25, Math.max(0, this.kissAdj))) * s; P.torsoZ = 0.1 * s;
+				P.headX = 0.32 * s; P.headZ = 0.12 * s; P.eyes = s > 0.8 ? 0.1 : 1;
+				P.arm[1].z = 0.3 + 1.5 * s; P.arm[1].x = 0.5 * s; P.arm[1].e = -0.15;
+				P.arm[0].x = -1.4; P.arm[0].e = -0.9;
+			} else if (up === "cd_lift") {
+				// the lift: knees braced, arms straight up, holding them high over your head
+				const s = dipEase(ut, 1.1, 6.5, 0.9);
+				P.bodyY = -0.06 * s; P.torsoX = -0.08 * s; P.headX = -0.35 * s;
+				P.leg[0].x = -0.25 * s; P.leg[0].k = 0.35 * s; P.leg[1].x = 0.25 * s; P.leg[1].k = 0.3 * s;
+				P.arm[0].z = -0.25 - 0.1 * s; P.arm[1].z = 0.25 + 0.1 * s; P.arm[0].x = P.arm[1].x = -0.6 - 2.3 * s; P.arm[0].e = P.arm[1].e = -0.15;
+			} else if (up === "cd_liftf") {
+				// lifted: flying flat over their head, arms spread wide, legs stretched out behind
+				const s = dipEase(ut, 1.1, 6.5, 0.9);
+				P.bodyY = 0.95 * s; P.hipsX = 1.25 * s;
+				P.leg[0].x = -0.1 * s; P.leg[1].x = 0.15 * s; P.leg[0].k = 0.1 * s; P.leg[1].k = 0.6 * s; P.foot[0] = P.foot[1] = 0.6 * s;
+				P.torsoX = -0.3 * s; P.headX = -0.55 * s;
+				P.arm[0].z = -(0.3 + 1.25 * s); P.arm[1].z = 0.3 + 1.25 * s; P.arm[0].x = P.arm[1].x = -0.25 * s; P.arm[0].e = P.arm[1].e = -0.1;
+			} else if (up === "cd_heart" || up === "cd_heartf") {
+				// side by side, each of you curving the inside arm up and over: together the two arms make a heart
+				const s = Math.min(1, ut / 0.8), i = up === "cd_heart" ? 1 : 0, o = 1 - i, sg = i ? 1 : -1;
+				P.arm[i].z = sg * (2.5 * s); P.arm[i].x = -0.25 * s; P.arm[i].e = -1.35 * s;
+				P.arm[o].z = -sg * 0.35; P.arm[o].x = -0.1; P.arm[o].e = -1.6 * s;   // (the other hand on your hip)
+				P.torsoZ = sg * 0.1 * s; P.headZ = sg * 0.22 * s; P.headY = -sg * 0.35 * s;
+				P.bodyY = -Math.abs(S(ct * 2.4)) * 0.02;
+				P.leg[i].x = -0.05; P.leg[o].x = 0.1; P.leg[o].k = 0.15;
+			} else if (up === "cd_swing" || up === "cd_swingf") {
+				// swing / jive: holding one hand at arm's length, bouncing, kicking, the free arm flying
+				const b = ct * TAU / 0.9, lead = up === "cd_swing", kick = Math.max(0, S(b)), held = lead ? 0 : 1, free = 1 - held;
+				P.bodyY = -Math.abs(S(b * 2)) * 0.06; P.torsoX = -0.12; P.hipsY = S(b) * 0.25; P.torsoY = -S(b) * 0.15;
+				P.leg[0].x = -0.75 * kick; P.leg[0].k = 0.55 * kick + 0.15; P.leg[1].x = 0.2 * kick; P.leg[1].k = 0.35;
+				P.foot[0] = 0.4 * kick;
+				P.arm[held].x = -1.25; P.arm[held].e = -0.2;
+				P.arm[free].z = (free ? 1 : -1) * (1.6 + 0.9 * Math.max(0, -S(b))); P.arm[free].x = -0.3; P.arm[free].e = -0.6;
+				P.headY = S(b * 0.5) * 0.3;
+			} else if (up === "cd_cheek") {
+				// cheek to cheek: slow, close, swaying together
+				const b = ct * TAU / 3.2;
+				P.bodyRY = S(b) * 0.1; P.torsoZ = S(b) * 0.05; P.bodyY = -Math.abs(S(b)) * 0.015;
+				P.leg[0].x = Math.max(0, S(b)) * 0.14; P.leg[1].x = Math.max(0, -S(b)) * 0.14;
+				P.leg[0].k = Math.max(0, S(b)) * 0.2; P.leg[1].k = Math.max(0, -S(b)) * 0.2;
+				P.arm[0].x = P.arm[1].x = -1.45; P.arm[0].e = P.arm[1].e = -0.8;
+				P.headZ = 0.32; P.headY = 0.22; P.headX = 0.05; P.eyes = 0.15;
+			}
 		} else if (up === "slowdance") {
 			const b = t * 1.3;
 			P.bodyRY = Math.sin(b) * 0.12;
@@ -2197,6 +2395,7 @@ export class Avatar {
 		const B = this.body, T = this.torso, H = this.head;
 		this._e(B.position, "y", P.bodyY, k);
 		this._e(B.rotation, "y", P.bodyRY, k);
+		this._e(this.hips.rotation, "x", P.hipsX, k);   // (tipping from the hips: a dip, a lift)
 		this._e(this.hips.rotation, "y", P.hipsY, k);
 		this._e(this.hips.rotation, "z", P.hipsZ, k);
 		this._e(T.rotation, "x", P.torsoX, k);

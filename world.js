@@ -22,7 +22,7 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { CSS3DRenderer, CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
 import { Avatar, SKIN_TONES, HAIR_COLORS, OUTFIT_COLORS, MOODS, drawMoodFace, FOOD_PROPS } from "./worldAvatar.js";
-import { OUTFITS, HAIR_STYLES, GLASSES, EYE_COLORS, CLOTH_COLORS, outfitById, outfitColors, normalizeLook, defaultOutfit, defaultHairStyle } from "./worldOutfits.js";
+import { OUTFITS, HAIR_STYLES, GLASSES, EYE_COLORS, CLOTH_COLORS, outfitById, outfitColors, normalizeLook, defaultOutfit, defaultHairStyle, LOOK_PRESETS, presetLook } from "./worldOutfits.js";
 import { buildRoom, ROOM, DOOR, TERRACE, TERRACE_Y, TERRACE_AT, TERRACE_FP, MOON_DIR, walkable, areaOf, floorAt, heartMesh, makeMug, shiftAt, visXZ, makePhotoFrame, tickPhotoGlow } from "./worldRoom.js";
 import { WorldAudio, TRACKS } from "./worldAudio.js";
 import * as Games from "./worldGames.js";
@@ -69,10 +69,12 @@ const profile = Object.assign({
 	skin: SKIN_TONES[1], hair: HAIR_COLORS[1], top: OUTFIT_COLORS[0], bottom: OUTFIT_COLORS[4], mood: "happy"
 }, lsGet(LS_PROFILE, {}));
 if (!MOODS.some(m => m.id === profile.mood)) profile.mood = "happy";
+// the standard characters are the two quick looks: a new character (and, once, every older one) starts as one of them
+if (profile.lookV !== 2) { Object.assign(profile, presetLook(profile.gender), { lookV: 2, wardrobe: {} }); delete profile.top; delete profile.bottom; }
 // what you wear: an outfit, each piece of it its own colour (older profiles only had top / bottom)
 {
 	const n = normalizeLook(profile);
-	Object.assign(profile, { outfit: n.outfit, colors: n.colors, hairStyle: n.hairStyle, eyes: n.eyes, glasses: n.glasses, top: n.top, bottom: n.bottom });
+	Object.assign(profile, { skin: n.skin, outfit: n.outfit, colors: n.colors, hairStyle: n.hairStyle, eyes: n.eyes, glasses: n.glasses, top: n.top, bottom: n.bottom });
 	if (!profile.wardrobe || typeof profile.wardrobe !== "object") profile.wardrobe = {};
 }
 if (params.get("n") && !profile.name) profile.name = params.get("n").slice(0, 24);
@@ -240,7 +242,8 @@ const me = {
 	x: 0.8 + (Math.random() - 0.5) * 1.5, z: 1.6 + (Math.random() - 0.5) * 1.2, h: Math.PI,
 	speed: 0, anim: "idle", upper: null, upperUntil: 0, sit: null, target: null, targetAct: null, stuck: 0,
 	pu: 0.5, pv: 0.5, path: [], partner: null, holding: null, sips: 0,
-	carrying: null, carriedBy: null   // bridal carry: who we're holding / who is holding us
+	carrying: null, carriedBy: null,  // bridal carry: who we're holding / who is holding us
+	y: null, vy: 0, air: false, avx: 0, avz: 0, coyote: 0, buffer: 0, jumpHeld: false   // jumping (see jump()): height on the floor plan, in the air
 };
 let handAuto = false;   // (holding hands: set while following - sitting / standing because the one leading did)
 const myAvatar = new Avatar(Object.assign({}, profile, { name: profile.name || "You" }));
@@ -315,7 +318,7 @@ function send(obj) {
 	sync.broadcast("W3|" + JSON.stringify(obj));
 }
 function poseMsg() {
-	return { t: "p", x: +me.x.toFixed(2), z: +me.z.toFixed(2), h: +me.h.toFixed(2), a: me.anim, u: me.upper, s: me.sit, sp: +me.speed.toFixed(2), pr: myAvatar.propKind, pu: +me.pu.toFixed(2), pv: +me.pv.toFixed(2), md: profile.mood, tg: me.partner, cb: me.carriedBy, hl: me.upper === "handhold" && me.hand && me.hand.lead ? me.hand.claim : 0 };
+	return { t: "p", x: +me.x.toFixed(2), z: +me.z.toFixed(2), h: +me.h.toFixed(2), a: me.anim, u: me.upper, s: me.sit, sp: +me.speed.toFixed(2), pr: myAvatar.propKind, pu: +me.pu.toFixed(2), pv: +me.pv.toFixed(2), md: profile.mood, tg: me.partner, cb: me.carriedBy, hl: me.upper === "handhold" && me.hand && me.hand.lead ? me.hand.claim : 0, y: me.y != null ? +me.y.toFixed(2) : undefined, ai: me.air && myAvatar.air ? +myAvatar.air.toFixed(2) : 0, ar: myAvatar.airRun ? 1 : 0 };
 }
 function startNetwork() {
 	if (typeof RoomSync === "undefined" || !/^https?:$/.test(location.protocol)) {
@@ -433,7 +436,7 @@ function upsertPeer(id, lk) {
 }
 const BASE_ANIMS = ["idle", "sit", "sleep", "floor"];
 const UPPER_ANIMS = ["wave", "dance", "clap", "heart", "drink", "paint", "write", "tug", "piano", "laugh", "cry", "kiss", "hug", "highfive", "jump", "bow", "cheer", "think", "shrug", "facepalm", "yawn", "warm", "telescope", "shake", "give", "stumble",
-	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash", "handhold", "kart", "drive", "carpass", "fly", "flypass", "freefall", "chute", "kick", "scoop", "throw",
+	"blush", "lovestruck", "heartarms", "wink", "propose", "cuddle", "smooch", "cheekkiss", "slowdance", "cd_waltz", "cd_tango", "cd_tangof", "cd_salsa", "cd_twirl", "cd_twirlf", "cd_dip", "cd_dipf", "cd_cheek", "cd_lift", "cd_liftf", "cd_heart", "cd_heartf", "cd_swing", "cd_swingf", "nightkiss", "carry", "carrykiss", "eat", "cook", "pet", "wash", "handhold", "kart", "drive", "carpass", "fly", "flypass", "freefall", "chute", "kick", "scoop", "throw",
 	"foreheadkiss", "boop", "backhug", "neckkiss", "buttpat", "beckon", "flirty", "bitelip", "shy", "melt", "giggle", "eep",
 	"dz_hiphop", "dz_floss", "dz_robot", "dz_disco", "dz_salsa", "dz_shuffle", "dz_bootyshake", "dz_ballet", "dz_kpop", "dz_sway"];
 // up in the air (a plane, a parachute: worldPlanes.js) - over the house's roof isn't "in" one of its rooms
@@ -444,6 +447,9 @@ function applyPose(p, d, snap) {
 	const wasIn = p.fresh ? null : house.regionOf(areaOf(p.tx, p.tz));
 	const prevSit = p.sit;
 	p.tx = d.x; p.tz = d.z; p.th = d.h; p.sit = d.s || null;
+	const wasAir = p.air;
+	p.ty = typeof d.y === "number" && isFinite(d.y) ? d.y : null; p.air = typeof d.ai === "number" && d.ai > 0 ? Math.min(1, d.ai) : d.ai ? 0.5 : 0; p.airRun = !!d.ar;   // (up on something, or in the air)
+	if (wasAir && !p.air) { p.avatar.landT = 0; p.avatar.landK = 0.6; }
 	if (p.sit !== prevSit) p.sitT = Date.now();
 	// went through a door: jump straight there (no gliding through walls), and say where they went
 	if (Math.hypot(p.tx - p.x, p.tz - p.z) > 6) snap = true;
@@ -825,7 +831,7 @@ function freeSpot(ids) {
 	spots.sort((a, b) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b.x - me.x, b.z - me.z));
 	return spots.find(s => !taken.has(s.id) || s.id === me.sit) || null;
 }
-function sitOn(ids) {
+function sitOn(ids, quiet) {
 	const spot = freeSpot(ids);
 	if (!spot) { addLog("That seat is taken.", true); return null; }
 	if (me.carrying) endCarry();
@@ -842,7 +848,7 @@ function sitOn(ids) {
 	cam.yaw = roomyYaw(cam.yaw, cam.pitch, cam.dist);
 	if (spot.ride) { rideView = spot.pov ? "pov" : "chase"; cam.dist = 4.6; cam.pitch = 0.3; rideLook.yaw = 0; rideLook.pitch = 0; rideLook.fov = 72; }
 	sendPose(true);
-	const nb = spot.id !== "bench" && seatNeighbor();
+	const nb = !quiet && spot.id !== "bench" && seatNeighbor();
 	if (!nb && TV_SEATS.includes(spot.id) && get("tv").on) toast("Watch through your own eyes, with nothing in the way", "TV mode", enterTV, 7000);
 	if (nb) {
 		const q = peers.get(nb);
@@ -2363,10 +2369,29 @@ function onPartnerAct(d, p) {
 // ---------- love: kisses, cuddles, slow dances and proposals
 // Cuddles happen seat to seat (sofa, bed, swing, bean bags, the candlelit table,
 // a lap in the armchair); the rest walk you up to the nearest person.
-const COUPLE_ACTS = ["smooch", "cheekkiss", "cuddle", "slowdance", "propose"];
+// which way to face your partner: straight at them, except in a dip (they're in front, to your left; dipped, you lean
+// back toward the spot in front of them) and a heart (side by side: they're on your left, and you face the way they do)
+function danceFacing(q) {
+	const at = Math.atan2(q.x - me.x, q.z - me.z);
+	if (me.upper === "cd_dip") return at - DIP_A;
+	if (me.upper === "cd_dipf") { const px = q.x + Math.sin(q.h) * DIP_R, pz = q.z + Math.cos(q.h) * DIP_R; return Math.atan2(me.x - px, me.z - pz); }
+	if (me.upper === "cd_heart") return at - Math.PI / 2;
+	if (me.upper === "cd_heartf") return q.h;
+	return at;
+}
+// couple dances (whoever asks leads; the one asked does FOLLOW[dance], or the same dance)
+const COUPLE_DANCES = ["cd_waltz", "cd_tango", "cd_salsa", "cd_twirl", "cd_dip", "cd_cheek", "cd_lift", "cd_heart", "cd_swing"];
+const FOLLOW = { cd_tango: "cd_tangof", cd_twirl: "cd_twirlf", cd_dip: "cd_dipf", cd_lift: "cd_liftf", cd_heart: "cd_heartf", cd_swing: "cd_swingf" };
+const DANCE_NAME = { cd_waltz: "a waltz", cd_tango: "a tango", cd_salsa: "a salsa", cd_twirl: "a twirl", cd_dip: "a dip and a kiss", cd_cheek: "a cheek-to-cheek dance", cd_lift: "a lift", cd_heart: "a heart", cd_swing: "a swing dance" };
+// the dip: they're in front of you and off to your left (DIP_A from straight ahead), so their head ends up under yours;
+// they turn so they lean back toward the spot DIP_R in front of you
+const DIP_A = Math.atan2(0.28, 0.14), DIP_R = 0.62;
+const COUPLE_ACTS = ["smooch", "cheekkiss", "cuddle", "slowdance", "propose"].concat(COUPLE_DANCES);
 const SEATED_LOVE = ["cuddle", "smooch", "cheekkiss"];
 const IN_BED_OK = SEATED_LOVE.concat(["blush", "nightkiss", "shake", "handhold"]);
-const COUPLE_POSES = SEATED_LOVE.concat(["slowdance", "nightkiss"]);
+const COUPLE_POSES = SEATED_LOVE.concat(["slowdance", "nightkiss", "cd_waltz", "cd_tango", "cd_tangof", "cd_salsa", "cd_dip", "cd_dipf", "cd_cheek", "cd_swing", "cd_swingf", "cd_lift", "cd_heart", "cd_heartf"]);
+// turning round each other as you dance: how fast (radians a second)
+const ORBIT = { slowdance: 0.45, cd_waltz: 1.1, cd_salsa: 0.35, cd_cheek: 0.25 };
 const NEAR_SEAT = 1.45;
 // where someone's body really is: a lying person's position is their feet, so use their middle
 function bodyXZ(o) {
@@ -2376,9 +2401,9 @@ function bodyXZ(o) {
 }
 function seatDist(a, b) { const p = bodyXZ(a), q = bodyXZ(b); return Math.hypot(p.x - q.x, p.z - q.z); }
 // root-to-root distance for things done face to face (heads / hands actually touch)
-const COUPLE_GAP = { smooch: 0.3, cheekkiss: 0.33, slowdance: 0.34, propose: 0.62, hug: 0.33, highfive: 0.6 };   // the bistro chairs face each other 1.34m apart
-const LOVE_MS = { smooch: 2600, cheekkiss: 1800, cuddle: 1e9, slowdance: 14000, propose: 6500 };
-const LONELY = { smooch: "Who wants a kiss?", cheekkiss: "No cheeks to kiss around here...", cuddle: "I need someone to cuddle...", slowdance: "Anyone want to dance with me?", propose: "I'll wait for the right person..." };
+const COUPLE_GAP = { smooch: 0.3, cheekkiss: 0.33, slowdance: 0.34, propose: 0.62, hug: 0.33, highfive: 0.6, cd_waltz: 0.36, cd_tango: 0.36, cd_salsa: 0.42, cd_twirl: 0.55, cd_dip: Math.hypot(0.28, 0.14), cd_cheek: 0.27, cd_lift: 0.25, cd_heart: 0.44, cd_swing: 0.85 };   // the bistro chairs face each other 1.34m apart
+const LOVE_MS = { smooch: 2600, cheekkiss: 1800, cuddle: 1e9, slowdance: 14000, propose: 6500, cd_waltz: 16000, cd_tango: 12000, cd_salsa: 14000, cd_twirl: 5500, cd_dip: 5000, cd_cheek: 15000, cd_lift: 6500, cd_heart: 6000, cd_swing: 14000 };
+const LONELY = { smooch: "Who wants a kiss?", cheekkiss: "No cheeks to kiss around here...", cuddle: "I need someone to cuddle...", slowdance: "Anyone want to dance with me?", cd_waltz: "Anyone for a waltz?", cd_tango: "It takes two to tango...", cd_salsa: "Who wants to salsa?", cd_twirl: "Anyone want a twirl?", cd_dip: "Who wants to be swept off their feet?", cd_cheek: "Dance with me, cheek to cheek?", cd_lift: "Nobody puts me in a corner...", cd_heart: "Make a heart with me?", cd_swing: "Who wants to swing?", propose: "I'll wait for the right person..." };
 function heartY(anim) { return anim === "sleep" ? 0.95 : anim === "sit" ? 1.3 : 1.75; }
 function posOf(id) { return id === MY_ID ? me : peers.get(id) || null; }
 // the person in the seat right next to yours
@@ -2394,14 +2419,19 @@ function seatNeighbor() {
 	});
 	return best;
 }
+// sitting up on a bed (or a daybed, a hammock, the stargazing mattress): the spot to lie down on, right where you are.
+// A cuddle there is a lying-down one: you both lie down side by side and snuggle up.
+function lieSpotOf(sitId) { const s = spotById(sitId); return s && s.bedsit ? room.sitSpots.find(o => o.lie && o.up === sitId) || null : null; }
+function lieDownForCuddle() { const ls = lieSpotOf(me.sit); if (!ls || takenSpots().has(ls.id)) return false; return !!sitOn([ls.id], true); }
 function loveAct(e) {
 	const nb = seatNeighbor();
 	if ((e === "smooch" || e === "cheekkiss") && nb && isAsleep(peers.get(nb)) && me.anim !== "sleep") { goodnightKiss(nb); return; }
 	if (SEATED_LOVE.includes(e) && nb) {
 		const q = peers.get(nb);
 		if (e === "cuddle" && me.upper === "cuddle" && me.partner === nb) { me.upper = null; me.partner = null; me.upperUntil = 0; sendPose(true); return; }
+		const lay = e === "cuddle" && lieDownForCuddle();
 		doUpper(e, LOVE_MS[e], nb);
-		send({ t: "act", kind: e, to: nb });
+		send({ t: "act", kind: e, to: nb, lie: lay || (e === "cuddle" && me.anim === "sleep") ? 1 : 0 });
 		loveFx(e, q);
 		if (e === "cuddle") addLog(handsSeat() ? "You reached over and took " + esc(q.look.name) + "'s hand" : (me.anim === "sleep" ? "You snuggled up to " : "You cuddled up with ") + esc(q.look.name), true);
 		return;
@@ -2479,6 +2509,14 @@ function loveFx(e, q) {
 	else if (e === "cheekkiss") setTimeout(() => { heartsFx(myAvatar.root, 3, null, heartY(me.anim)); if (audio) audio.sfx("smack", 0.8); }, 400);
 	else if (e === "cuddle") { heartsFx(myAvatar.root, 4, null, heartY(me.anim)); if (audio) audio.sfx("love", 0.4); }
 	else if (e === "slowdance") { heartsFx(myAvatar.root, 5); if (audio) audio.sfx("love", 0.6); if (q) addLog("You're slow dancing with " + esc(q.look.name), true); }
+	else if (COUPLE_DANCES.includes(e)) {
+		heartsFx(myAvatar.root, 5); if (audio) audio.sfx("love", 0.6);
+		if (q) addLog("You're dancing " + DANCE_NAME[e] + " with " + esc(q.look.name), true);
+		if (e === "cd_dip") setTimeout(() => { if (me.upper !== "cd_dip") return; heartsFx(myAvatar.root, 8, "#ff2d55", 1.3); send({ t: "fx", kind: "smooch" }); if (audio) audio.sfx("smooch"); }, 1800);
+		if (e === "cd_twirl" && audio) setTimeout(() => audio.sfx("whoosh", 0.4), 300);
+		if (e === "cd_lift") setTimeout(() => { if (me.upper !== "cd_lift") return; heartsFx(myAvatar.root, 8, null, 2.4); if (audio) audio.sfx("yes", 0.5); }, 1300);
+		if (e === "cd_heart") setTimeout(() => { if (me.upper !== "cd_heart") return; heartsFx(myAvatar.root, 12, "#ff2d55", 2.3); if (audio) audio.sfx("love", 0.7); }, 900);
+	}
 	else if (e === "propose") {
 		updateProps();
 		if (audio) audio.sfx("chime", 0.7);
@@ -2489,13 +2527,17 @@ function loveFx(e, q) {
 function onLoveAct(d, p) {
 	const n = esc(p.look.name);
 	switch (d.kind) {
-		case "cuddle":
+		case "cuddle": {
 			if (me.upper === "cuddle" && me.partner === d.id) return true;
+			// they lay down to cuddle (or they're lying already): lie down beside them
+			const ps = p.sit && spotById(p.sit);
+			if (d.lie || (ps && ps.lie)) lieDownForCuddle();
 			doUpper("cuddle", LOVE_MS.cuddle, d.id);
 			heartsFx(myAvatar.root, 4, null, heartY(me.anim));
-			addLog(handsSeat() ? `<b>${n}</b> reached over and took your hand` : `<b>${n}</b> cuddled up with you`, true);
+			addLog(handsSeat() ? `<b>${n}</b> reached over and took your hand` : me.anim === "sleep" ? `<b>${n}</b> snuggled up close to you` : `<b>${n}</b> cuddled up with you`, true);
 			if (audio) audio.sfx("love", 0.4);
 			return true;
+		}
 		case "smooch":
 			doUpper("smooch", LOVE_MS.smooch, d.id);
 			setTimeout(() => { heartsFx(myAvatar.root, 6, "#ff2d55", heartY(me.anim)); if (audio) audio.sfx("smooch"); }, 450);
@@ -2509,6 +2551,12 @@ function onLoveAct(d, p) {
 			doUpper("blush", 2600);
 			setTimeout(() => { if (audio) audio.sfx("smack", 0.8); }, 400);
 			addLog(`<b>${n}</b> kissed you on the cheek`, true);
+			return true;
+		case "cd_waltz": case "cd_tango": case "cd_salsa": case "cd_twirl": case "cd_dip": case "cd_cheek": case "cd_lift": case "cd_heart": case "cd_swing":
+			doUpper(FOLLOW[d.kind] || d.kind, LOVE_MS[d.kind], d.id);
+			heartsFx(myAvatar.root, 5);
+			if (audio) audio.sfx("love", 0.6);
+			addLog(`<b>${n}</b> swept you into ${DANCE_NAME[d.kind]}`, true);
 			return true;
 		case "slowdance":
 			doUpper("slowdance", LOVE_MS.slowdance, d.id);
@@ -2558,7 +2606,7 @@ function coupleSide(x, z, h, sit, partnerId, upper) {
 // Couples touch for real. Every frame we measure where the two bodies actually are (faces, near
 // shoulders, chests) and scoot along the seat / mattress until they meet - and back off again if
 // they'd sink into each other. Kisses then lean in the last bit (see kissReach).
-const KISS_D = { smooch: 0.235, cheekkiss: 0.25, carrykiss: 0.235 };   // face centre to face centre when lips / cheek touch
+const KISS_D = { smooch: 0.235, cheekkiss: 0.25, carrykiss: 0.235, cd_dip: 0.24, cd_dipf: 0.24 };   // face centre to face centre when lips / cheek touch
 const HEAD_MIN = 0.275;     // two heads never closer than this (skull radius ~0.135)
 const _ca = new THREE.Vector3(), _cb = new THREE.Vector3();
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -3203,7 +3251,7 @@ addEventListener("keydown", e => {
 	if (wheelKey(k, e)) return;
 	if (k === "enter" || k === "t") { e.preventDefault(); $("#chat").focus(); return; }
 	if ((k === "e" || k === " ") && house.vehicle()) { e.preventDefault(); keys.add(k); return; }
-	if (k === " ") { e.preventDefault(); if (!e.repeat) jump(); return; }
+	if (k === " ") { e.preventDefault(); keys.add(" "); if (!e.repeat) jump(); return; }
 	if (k === "e") { e.preventDefault(); const o = promptOpts.find(x => x.k === "E"); if (o) o.fn(); return; }
 	if (k === "1") emote("kiss"); else if (k === "2") emote("smooch"); else if (k === "3") emote("carry");
 	else if (k === "p") { callPetsNow(); return; }
@@ -3557,7 +3605,8 @@ joyEl.addEventListener("pointerdown", e => { joy.id = e.pointerId; const r = joy
 joyEl.addEventListener("pointermove", e => { if (e.pointerId === joy.id) joyMove(e); });
 const joyEnd = e => { if (e.pointerId !== joy.id) return; joy.id = null; joy.dx = joy.dy = 0; knob.style.transform = ""; };
 joyEl.addEventListener("pointerup", joyEnd);
-$("#jumpbtn").addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); jump(); });
+$("#jumpbtn").addEventListener("pointerdown", e => { e.preventDefault(); e.stopPropagation(); jumpBtnHeld = true; jump(); });
+for (const ev of ["pointerup", "pointercancel", "pointerleave"]) $("#jumpbtn").addEventListener(ev, () => { jumpBtnHeld = false; });
 joyEl.addEventListener("pointercancel", joyEnd);
 function joyMove(e) {
 	let dx = e.clientX - joy.x, dy = e.clientY - joy.y;
@@ -3641,7 +3690,7 @@ function angleDiff(a, b) { let d = b - a; while (d > Math.PI) d -= Math.PI * 2; 
 let lastPoseSent = 0, lastPoseSig = "";
 function sendPose(force) {
 	const t = performance.now();
-	const sig = me.x.toFixed(2) + me.z.toFixed(2) + me.h.toFixed(1) + me.anim + me.upper + me.sit + myAvatar.propKind + me.pu.toFixed(2) + me.pv.toFixed(2);
+	const sig = me.x.toFixed(2) + me.z.toFixed(2) + (me.y != null ? me.y.toFixed(2) : "") + me.h.toFixed(1) + me.anim + me.upper + me.sit + myAvatar.propKind + me.pu.toFixed(2) + me.pv.toFixed(2);
 	if (force || (sig !== lastPoseSig && t - lastPoseSent > 80) || t - lastPoseSent > 1500) {
 		lastPoseSent = t; lastPoseSig = sig;
 		send(poseMsg());
@@ -3776,6 +3825,11 @@ function updateMe(dt) {
 	if (me.upper === "handhold") want = Math.min(want, 1.35);   // hand in hand: a stroll, not a sprint
 	if (!veh) me.speed += (want - me.speed) * Math.min(1, dt * 10);
 	if (me.jump) { mx = 0; mz = 0; me.speed = 0; }
+	else if (me.air) {   // (in the air your momentum carries you: small fixed steps, the same at any frame rate)
+		let rest = Math.min(dt, 0.12);
+		while (rest > 1e-5 && me.air) { const h = Math.min(rest, AIR_DT); airStep(h, mx, mz, want); rest -= h; }
+		mx = 0; mz = 0;
+	}
 	if (me.speed > 0.02 && (mx || mz) && !me.sit) {
 		const v = me.speed * 2.6 * dt;
 		const nx = me.x + mx * v, nz = me.z + mz * v;
@@ -3812,17 +3866,17 @@ function updateMe(dt) {
 		break;
 	}
 	// keep facing whoever we're hugging / fighting / kissing / dancing with
-	if (me.partner && (["tug", "hug", "highfive", "give"].includes(me.upper) || (!me.sit && ["smooch", "cheekkiss", "slowdance", "propose"].includes(me.upper)))) {
+	if (me.partner && (["tug", "hug", "highfive", "give"].includes(me.upper) || (!me.sit && (["smooch", "cheekkiss", "slowdance", "propose"].includes(me.upper) || (me.upper && me.upper.indexOf("cd_") === 0))))) {
 		const q = peers.get(me.partner);
-		if (q) me.h = angleLerp(me.h, Math.atan2(q.x - me.x, q.z - me.z), Math.min(1, dt * 8));
+		if (q) me.h = angleLerp(me.h, danceFacing(q), Math.min(1, dt * 8));
 	}
-	// slow dance: both of you turn slowly around the spot between you
-	if (me.upper === "slowdance" && me.partner && !me.sit) {
+	// a slow dance (a waltz, a salsa...): both of you turn round the spot between you
+	if (ORBIT[me.upper] && me.partner && !me.sit) {
 		const q = peers.get(me.partner);
 		if (q) {
 			const cx = (me.x + q.x) / 2, cz = (me.z + q.z) / 2;
-			const a = Math.atan2(me.x - cx, me.z - cz) + dt * 0.45;
-			const r = COUPLE_GAP.slowdance / 2;
+			const a = Math.atan2(me.x - cx, me.z - cz) + dt * ORBIT[me.upper];
+			const r = COUPLE_GAP[me.upper] / 2;
 			const nx = cx + Math.sin(a) * r, nz = cz + Math.cos(a) * r;
 			if (!blocked(nx, nz, true)) { me.x = nx; me.z = nz; }
 		}
@@ -3868,15 +3922,18 @@ function updateMe(dt) {
 	}
 	// nobody left in the armchair = no lap to sit on
 	if (me.sit === "armchairLap" && !whoSits("armchair")) standUp();
+	groundTick();
 	placeBody(myAvatar, me.x, me.z, me.h, me.sit, me.carriedBy, dt);
-	if (me.jump && airborne(myAvatar, me.jump, dt)) me.jump = null;
+	if (me.jump) { if (airborne(myAvatar, me.jump, dt)) me.jump = null; }
+	else if (me.y != null) { myAvatar.root.position.y = me.y; myAvatar._fy = me.y; myAvatar.air = me.air ? Math.max(0.02, Math.min(1, 0.5 - me.vy / (2 * JUMP_V))) : null; myAvatar.airRun = Math.hypot(me.avx, me.avz) > 1.4; }
+	else myAvatar.air = null;
 	myAvatar.carriedBy = me.carriedBy;
 	myAvatar.coupleRole = coupleRole(me.sit, me.partner, me.upper);
 	myAvatar.coupleSide = coupleSide(me.x, me.z, me.h, me.sit, me.partner, me.upper);
 	snuggle(myAvatar, me.x, me.z, me.sit, me.partner, me.upper, dt);
 	kissReach(myAvatar, me.upper, me.partner, dt);
 	loveAura(myAvatar, me.upper, me.anim, dt);
-	myAvatar.speed = me.sit ? 0 : me.speed;
+	myAvatar.speed = me.sit || me.air ? 0 : me.speed;
 	myAvatar.anim = avatarAnim(me.anim, me.sit, me.carriedBy, myAvatar._who);
 	myAvatar.upper = me.upper;
 	myAvatar.lookYaw = me.sit ? null : lookYawFor(me.x, me.z, me.h, peers.values());
@@ -3934,54 +3991,125 @@ function besideThem(q, dt, still) {
 	me.speed = still ? 0 : sp > 0.05 ? Math.max(Math.min(1.4, sp), q.speed || 0) : 0;
 	if (me.speed > 0.05 && q.avatar) myAvatar.phase = q.avatar.phase;
 }
-// ---------- jumping (Space): on the spot, a running leap, over anything low in the way (railings, glass walls,
-// hedges, fences, the garden's walls, furniture), and off the roof deck or the terrace down onto the grounds below.
-// Never through the house's walls: you only land in the room you're in, or (outdoors) anywhere outdoors.
+// ---------- jumping (Space): a real jump, with gravity. Your run carries you (steer in the air), hold Space to jump higher
+// (tap it for a little hop), and it forgives you: a moment after running off an edge you can still jump, and pressing
+// just before you land jumps as soon as you touch down. High enough up, you clear anything low in the way (railings,
+// hedges, fences, furniture), but never the walls. You land on whatever's under you: the floor, or the top of anything a
+// room can stand you on (house.topAt: the Parkour Park's blocks), and some things throw you back up (house.onLand).
+// Off the edge of the roof deck or the terrace it's still a leap down onto the grounds below.
+// (snappy: about 1.2 m up in 0.3 s, and down faster than it went up; the air is worked out in small fixed steps, so
+// it feels the same however fast or slow the computer is drawing)
+const GRAV = 26, JUMP_V = 7.8, FALL = 1.6, STEP_UP = 0.45, CLEAR = 0.45, COYOTE = 0.13, BUFFER = 0.16, AIR_DT = 1 / 120;
+let jumpBtnHeld = false;
+// the highest thing you could be standing on at (x, z), no higher than y
+function groundAt(x, z, y) { const f = floorAt(x, z), t = house.topAt(x, z, y); return t > f ? t : f; }
+// a wall (or a shut door) at (x, z) between y and head height? (the camera walls are the walls, with their heights)
+function wallAt(x, z, y) {
+	for (const w of house.camWalls) {
+		const r = w.p;
+		if (x > r.minX - RADIUS && x < r.maxX + RADIUS && z > r.minZ - RADIUS && z < r.maxZ + RADIUS && y < w.y1 && y + 1.7 > w.y0 && (!w.on || w.on())) return true;
+	}
+	return false;
+}
+// can you be at (x, z) up in the air at height y? (low things are below you once you're high enough)
+function airBlocked(x, z, y) {
+	if (!walkable(x, z, RADIUS) || house.solidAt(x, z, RADIUS)) return true;
+	const high = y - floorAt(x, z) > CLEAR;
+	for (const c of collidersNear(x, z)) {
+		if (c.door ? c.door.isOpen() : high) continue;
+		if (x > c.minX - RADIUS && x < c.maxX + RADIUS && z > c.minZ - RADIUS && z < c.maxZ + RADIUS) return true;
+	}
+	return high && wallAt(x, z, y);
+}
 function jump() {
 	if (!entered || me.jump || me.sit || me.carriedBy || me.carrying || house.vehicle() || waterAt(me.x, me.z) > 0.55) return;
+	// in the air: right after running off an edge you can still jump; otherwise it waits until you land
+	if (me.air) { if (me.coyote > 0 && me.vy <= 0) startJump(JUMP_V); else me.buffer = BUFFER; return; }
 	if (me.upper && !["handhold", "drink"].includes(me.upper)) { me.upper = null; me.partner = null; updateProps(); }
-	const fx = Math.sin(me.h), fz = Math.cos(me.h);
-	const here = areaOf(me.x, me.z), up = here === "roof" || here === "terrace";
-	const outside = up || house.outdoorAt(me.x, me.z);
-	const running = me.speed > 0.3 || joy.dx || joy.dy || ["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].some(k => keys.has(k));
-	const free = (x, z) => walkable(x, z, RADIUS) && !blocked(x, z, true);
-	const okArea = (x, z) => { const a = areaOf(x, z); return a === here || (outside && (house.outdoorAt(x, z) || a === "roof" || a === "terrace")); };
-	const reach = running ? 1.5 + Math.min(1, me.speed) * 0.5 : 0.9;
-	// anything in the way just ahead?
-	let hit = -1;
-	for (let d = 0.15; d <= reach; d += 0.08) if (!free(me.x + fx * d, me.z + fz * d)) { hit = d; break; }
-	let land = null, drop = false, over = false;
-	if (hit < 0) land = running ? [me.x + fx * reach, me.z + fz * reach] : [me.x, me.z];
-	else {
-		// over it: the first clear spot on the far side
-		for (let d = hit + 0.15; d <= hit + 2.4; d += 0.08) {
-			const x = me.x + fx * d, z = me.z + fz * d;
-			if (free(x, z) && okArea(x, z)) { land = [x, z]; over = true; break; }
-		}
-		// off the edge of the roof / the terrace: down onto the ground under it
-		if (!land && up) {
-			const v0 = visXZ(me.x, me.z);
-			for (let d = hit + 0.3; d <= hit + 3.2; d += 0.08) {
-				const gx = v0[0] + fx * d, gz = v0[1] + fz * d, a = areaOf(gx, gz);
-				if (a !== "roof" && a !== "terrace" && !shiftAt(gx, gz) && house.outdoorAt(gx, gz) && free(gx, gz)) { land = [gx, gz]; drop = true; break; }
-			}
-		}
-		// nowhere to land: jump on the spot (or as far as the way is clear)
-		if (!land) land = hit > 0.5 && running ? [me.x + fx * (hit - 0.3), me.z + fz * (hit - 0.3)] : [me.x, me.z];
-	}
-	const s = visXZ(me.x, me.z), e = drop ? land : visXZ(land[0], land[1]);
-	const y0 = floorAt(me.x, me.z), y1 = drop ? floorAt(land[0], land[1]) : floorAt(land[0], land[1]);
-	const dist = Math.hypot(e[0] - s[0], e[1] - s[1]);
-	const h = over ? 0.75 : dist > 0.2 ? 0.5 : 0.42;
-	const dur = drop ? 0.6 + Math.sqrt(Math.max(0, y0 - y1)) * 0.22 : 0.5 + dist * 0.07 + (over ? 0.1 : 0);
-	const dx = land[0] - me.x, dz = land[1] - me.z;
-	me.jump = { t: 0, dur, sx: s[0], sz: s[1], ex: e[0], ez: e[1], y0, y1, h, drop };
-	me.x = land[0]; me.z = land[1];
+	const here = areaOf(me.x, me.z);
+	if ((here === "roof" || here === "terrace") && leapDown()) return;
+	startJump(JUMP_V);
+}
+function startJump(v) {
+	if (me.y == null) me.y = floorAt(me.x, me.z);
+	// your run carries on into the jump
+	const moving = me.speed > 0.05 ? me.speed * 2.6 : 0;
+	if (!me.air) { me.avx = Math.sin(me.h) * moving; me.avz = Math.cos(me.h) * moving; }
+	me.air = true; me.vy = v; me.coyote = 0; me.buffer = 0; me.bounced = false;
 	me.target = null; me.path = []; me.targetAct = null; me.stuck = 0;
-	if (drop) { cam.tx += dx; cam.tz += dz; }   // (off the roof: onto the ground's floor plan, like the stairs)
-	send({ t: "fx", kind: "jump", sx: +s[0].toFixed(2), sz: +s[1].toFixed(2), ex: +e[0].toFixed(2), ez: +e[1].toFixed(2), y0: +y0.toFixed(2), y1: +y1.toFixed(2), h, d: +dur.toFixed(2), drop: drop ? 1 : 0 });
 	sendPose(true);
 	if (audio) audio.sfx("whoosh", 0.2);
+}
+// one step in the air: gravity, your momentum (and a little steering), and landing on whatever's below
+function airStep(dt, mx, mz, want) {
+	const tx = mx * want * 2.6, tz = mz * want * 2.6, steer = !!(mx || mz);
+	const ctl = steer ? 5 : 0.4;   // (let go of the keys and you keep flying the way you were going)
+	me.avx += (tx - me.avx) * Math.min(1, dt * ctl); me.avz += (tz - me.avz) * Math.min(1, dt * ctl);
+	if (steer) me.h = angleLerp(me.h, Math.atan2(mx, mz), Math.min(1, dt * 8));
+	me.jumpHeld = keys.has(" ") || jumpBtnHeld;
+	// let go of jump on the way up and you come down sooner (a little hop); falling is a touch faster than rising
+	me.vy -= GRAV * dt * (me.vy > 0 && !me.jumpHeld && !me.bounced ? 2.6 : me.vy < 0 ? FALL : 1);
+	if (me.vy < -24) me.vy = -24;
+	me.coyote -= dt; me.buffer -= dt;
+	const nx = me.x + me.avx * dt, nz = me.z + me.avz * dt;
+	if (!airBlocked(nx, me.z, me.y)) me.x = nx; else me.avx = 0;
+	if (!airBlocked(me.x, nz, me.y)) me.z = nz; else me.avz = 0;
+	const ny = me.y + me.vy * dt;
+	// (coming down onto a ledge a little above your feet: you scramble up onto it)
+	const g = groundAt(me.x, me.z, me.y + (me.vy <= 0 ? 0.3 : 0.02));
+	if (me.vy <= 0 && ny <= g) land(g);
+	else me.y = ny;
+}
+function land(g) {
+	const hard = me.vy < -11;
+	myAvatar.landT = 0; myAvatar.landK = Math.min(1, 0.35 - me.vy / 18);
+	me.y = g; me.vy = 0; me.air = false; me.coyote = 0;
+	const v = house.onLand(me.x, me.z, g);
+	if (v > 0) { me.air = true; me.vy = v; me.bounced = true; if (audio) audio.sfx("bump", 0.5); sendPose(true); return; }   // (a bounce pad)
+	// still holding a direction: you run on; otherwise you stop
+	me.speed = Math.min(me.speed, Math.hypot(me.avx, me.avz) / 2.6);
+	if (audio) audio.sfx(hard ? "thunk" : "kick", hard ? 0.4 : 0.15);
+	if (me.buffer > 0) startJump(JUMP_V);
+	sendPose(true);
+}
+// every frame on your feet: up on something, and walk off its edge, and you fall
+function groundTick() {
+	if (me.sit || me.carriedBy || me.jump || house.vehicle()) { me.y = null; me.air = false; me.vy = 0; return; }
+	if (me.air) return;
+	const f = floorAt(me.x, me.z), cur = me.y == null ? f : me.y;
+	const g = groundAt(me.x, me.z, cur + STEP_UP);
+	if (me.y != null && g < cur - 0.3) {
+		me.air = true; me.vy = 0; me.coyote = COYOTE;
+		const sp = me.speed * 2.6; me.avx = Math.sin(me.h) * sp; me.avz = Math.cos(me.h) * sp;
+		return;
+	}
+	me.y = g > f + 0.001 ? g : null;   // (on the plain floor: back to just following it, up and down the steps)
+}
+// off the edge of the roof / the terrace: a leap down onto the grounds below (they're on another floor plan)
+function leapDown() {
+	const fx = Math.sin(me.h), fz = Math.cos(me.h);
+	const free = (x, z) => walkable(x, z, RADIUS) && !blocked(x, z, true);
+	let hit = -1;
+	for (let d = 0.15; d <= 2.0; d += 0.08) if (!free(me.x + fx * d, me.z + fz * d)) { hit = d; break; }
+	if (hit < 0) return false;
+	const v0 = visXZ(me.x, me.z);
+	let to = null;
+	for (let d = hit + 0.3; d <= hit + 3.2; d += 0.08) {
+		const gx = v0[0] + fx * d, gz = v0[1] + fz * d, a = areaOf(gx, gz);
+		if (a !== "roof" && a !== "terrace" && !shiftAt(gx, gz) && house.outdoorAt(gx, gz) && free(gx, gz)) { to = [gx, gz]; break; }
+	}
+	if (!to) return false;
+	const y0 = floorAt(me.x, me.z), y1 = floorAt(to[0], to[1]);
+	const dur = 0.6 + Math.sqrt(Math.max(0, y0 - y1)) * 0.22, h = 0.75;
+	const dx = to[0] - me.x, dz = to[1] - me.z;
+	me.jump = { t: 0, dur, sx: v0[0], sz: v0[1], ex: to[0], ez: to[1], y0, y1, h, drop: true };
+	me.x = to[0]; me.z = to[1]; me.y = null;
+	me.target = null; me.path = []; me.targetAct = null; me.stuck = 0;
+	cam.tx += dx; cam.tz += dz;   // (onto the ground's floor plan, like the stairs)
+	send({ t: "fx", kind: "jump", sx: +v0[0].toFixed(2), sz: +v0[1].toFixed(2), ex: +to[0].toFixed(2), ez: +to[1].toFixed(2), y0: +y0.toFixed(2), y1: +y1.toFixed(2), h, d: +dur.toFixed(2), drop: 1 });
+	sendPose(true);
+	if (audio) audio.sfx("whoosh", 0.2);
+	return true;
 }
 // carry an avatar along its jump (drawn coordinates): true once it has landed
 function airborne(av, J, dt) {
@@ -4158,13 +4286,38 @@ function assignIK(av, upper, sit, partnerId, store) {
 			store[0].set(mx - rx * 0.07, y, mz - rz * 0.07);
 			store[1].set(mx + rx * 0.07, y, mz + rz * 0.07);
 			av.ik[0] = store[0]; av.ik[1] = store[1];
+		} else if (upper === "cd_dip") {
+			// dipping them: one arm under their back, the other hand on their hip
+			pav.torso.getWorldPosition(store[0]); store[0].y += 0.06;
+			pav.hips.getWorldPosition(store[1]);
+			av.ik[0] = store[0]; av.ik[1] = store[1]; av.ikPole = null;
+		} else if (upper === "cd_dipf") {
+			// dipped: an arm round their neck
+			pav.head.getWorldPosition(store[0]); store[0].y -= 0.2;
+			av.ik[0] = store[0]; av.ik[1] = null;
+		} else if (upper === "cd_lift") {
+			// holding them up: a hand either side of their hips
+			pav.hips.getWorldPosition(store[0]); store[1].copy(store[0]);
+			store[0].x -= rx * 0.13; store[0].z -= rz * 0.13; store[1].x += rx * 0.13; store[1].z += rz * 0.13;
+			av.ik[0] = store[0]; av.ik[1] = store[1]; av.ikPole = null;
+		} else if (upper === "cd_heart" || upper === "cd_heartf") {
+			// side by side: the inside hands meet over your heads, between you (the two arms make the heart)
+			const h = av.root.rotation.y, lead = upper === "cd_heart";
+			store[0].set((me3.x + pp.x) / 2 + Math.sin(h) * 0.06, 1.9 * av.body.scale.y, (me3.z + pp.z) / 2 + Math.cos(h) * 0.06);
+			av.ik[lead ? 1 : 0] = store[0]; av.ik[lead ? 0 : 1] = null;
+		} else if (upper === "cd_swing" || upper === "cd_swingf") {
+			// swing: one hand held between you, at arm's length (the leader's right in the follower's left)
+			const lead = upper === "cd_swing", s = lead ? -1 : 1;
+			store[0].set((me3.x + pp.x) / 2 + rx * 0.16 * s, 1.0 * av.body.scale.y, (me3.z + pp.z) / 2 + rz * 0.16 * s);
+			av.ik[lead ? 0 : 1] = store[0]; av.ik[lead ? 1 : 0] = null;
 		} else {
 			// face to face: hands on their waist for a kiss, on their shoulders for a slow dance
-			const y = (upper === "slowdance" ? 1.36 : 1.1) * pav.body.scale.y;
+			const y = (upper === "slowdance" || upper === "cd_cheek" ? 1.36 : upper === "cd_dip" || upper === "cd_dipf" ? 1.0 : upper.indexOf("cd_") === 0 ? 1.22 : 1.1) * pav.body.scale.y;
 			store[0].set(pp.x - fx * 0.08 - rx * 0.15, y, pp.z - fz * 0.08 - rz * 0.15);
 			store[1].set(pp.x - fx * 0.08 + rx * 0.15, y, pp.z - fz * 0.08 + rz * 0.15);
 			av.ik[0] = store[0];
-			av.ik[1] = upper === "cheekkiss" ? null : store[1];
+			av.ik[1] = upper === "cheekkiss" || upper === "cd_tangof" || upper === "cd_dipf" ? null : store[1];
+			if (upper === "cd_tango" || upper === "cd_dip") av.ik[0] = upper === "cd_dip" ? store[0] : null;
 			av.ikPole = _tmpV.set(0, -0.3, 0).addScaledVector(_tmpV2.set(-fx, 0, -fz), 0.2);
 		}
 	} else if (upper === "tug" && fightRemote.visible) {
@@ -4190,14 +4343,16 @@ function updatePeers(dt) {
 		const sp = Math.hypot(p.x - ox, p.z - oz) / Math.max(dt, 0.001) / 2.6;
 		p.speed += (Math.min(1.8, sp) - p.speed) * Math.min(1, dt * 8);
 		placeBody(p.avatar, p.x, p.z, p.h, p.sit, p.carriedBy, dt);
-		if (p.jump && airborne(p.avatar, p.jump, dt)) p.jump = null;
+		if (p.jump) { if (airborne(p.avatar, p.jump, dt)) p.jump = null; }
+		else if (p.ty != null && !p.sit && !p.carriedBy) { p.yv = p.yv == null ? p.ty : p.yv + (p.ty - p.yv) * Math.min(1, dt * 14); p.avatar.root.position.y = p.yv; p.avatar._fy = p.yv; p.avatar.air = p.air || null; p.avatar.airRun = p.airRun; }
+		else { p.yv = null; if (!p.jump) p.avatar.air = null; }
 		p.avatar.carriedBy = p.carriedBy;
 		p.avatar.coupleRole = coupleRole(p.sit, p.partner, p.upper);
 		p.avatar.coupleSide = coupleSide(p.x, p.z, p.h, p.sit, p.partner, p.upper);
 		snuggle(p.avatar, p.x, p.z, p.sit, p.partner, p.upper, dt);
 		kissReach(p.avatar, p.upper, p.partner, dt);
 		loveAura(p.avatar, p.upper, p.anim, dt);
-		p.avatar.speed = p.sit ? 0 : p.speed;
+		p.avatar.speed = p.sit || p.air ? 0 : p.speed;
 		const wasSleep = p.avatar.anim === "sleep";
 		p.avatar.anim = avatarAnim(p.anim, p.sit, p.carriedBy, p);
 		p.avatar.upper = p.upper;
@@ -4323,7 +4478,7 @@ function updateCamera(dt, t) {
 	const sky = !!(air && air.camY !== undefined);
 	if (ride) { const rp = myAvatar.root.position; fx = rp.x; fz = rp.z; ty = rp.y + 1.0; }
 	else if (sky) ty = air.camY;
-	else ty += floorAt(me.x, me.z);   // up the cinema tiers, down in the pool
+	else ty += me.y != null ? me.y : floorAt(me.x, me.z);   // up the cinema tiers, down in the pool, up on a block
 	// (flying, it's locked on you: a lagging camera falls far behind a plane)
 	const kf = sky ? 1 : k;
 	cam.tx += (fx - cam.tx) * kf; cam.tz += (fz - cam.tz) * kf;
@@ -4409,7 +4564,7 @@ let weather = null;
 	// the buildings out on the grounds
 	const indoorRects = HOUSE_BLOCKS.map(b => Object.assign(R(...b), { top: ROOF_Y + 0.05 }));
 	indoorRects.push(Object.assign(R(6.75, 23.65, -6.32, 8.25), { top: LOUNGE_TOP }));
-	for (const id of ["shame", "aquarium", "haunted"]) indoorRects.push(R(...ZONES[id].bounds));
+	for (const id of ["shame", "aquarium", "haunted", "escape"]) indoorRects.push(R(...ZONES[id].bounds));
 	for (const id of ["gym", "playroom"]) indoorRects.push(Object.assign(R(WING[id][0] - 0.3, WING[id][1] + 0.3, WING[id][2] - 0.3, WING[id][3] + 0.3), { top: ROOF_FLOOR + 3.8 }));
 	// the open-air floors (not under the Box of Shame, not on the pool's water): the terrace, the pool deck, the garden,
 	// the Fun Park, the kart arena, and the lawns and paths of the grounds between them (not the buildings)
@@ -4419,9 +4574,9 @@ let weather = null;
 		...subtractRects(ROOF_DECK, [[-7.27, 23.42, -8.8, -6.1], ROOF_PLAN.upper, ROOF_PLAN.pavilion, WING.gym, WING.playroom]).map(r => R(...r, ROOF_FLOOR)),   // the roof deck
 		R(5.5, 23.2, -18.0, -6.25), R(23.2, 33.6, -18.0, -8.7),                         // the pool deck
 		...subtractRects(ZONES.garden.parts[0], [ZONES.shame.bounds]).map(r => R(...r)), R(...ZONES.garden.parts[1]),
-		R(...ZONES.park.bounds), R(...ZONES.karts.bounds),
+		R(...ZONES.park.bounds), R(...ZONES.karts.bounds), R(...ZONES.parkour.bounds), R(...ZONES.romance.bounds),
 		...subtractRects([ESTATE[0] + HEDGE_IN, ESTATE[1] - HEDGE_IN, ESTATE[2] + HEDGE_IN, ESTATE[3] - HEDGE_IN],
-			HOUSE_BLOCKS.concat(COURTS, ...["garden", "park", "karts", "aquarium", "haunted"].map(zr))).map(r => R(...r))
+			HOUSE_BLOCKS.concat(COURTS, ...["garden", "park", "karts", "aquarium", "haunted", "escape", "parkour", "romance"].map(zr))).map(r => R(...r))
 	];
 	const waterRects = [R(13.55, 21.55, -15.0, -10.1, -0.12)];
 	import("./worldWeather.js").then(mod => {
@@ -4582,6 +4737,8 @@ const LOVE_EMOTES = [
 	["beckon", "Come here"], ["flirty", "Flirty pose"], ["bitelip", "Bite your lip"], ["shy", "Shy"]
 ];
 const DANCES = [
+	["cd_waltz", "Waltz (couple)"], ["cd_tango", "Tango (couple)"], ["cd_salsa", "Salsa (couple)"], ["cd_twirl", "Twirl (couple)"], ["cd_dip", "Dip & kiss (couple)"], ["cd_cheek", "Cheek to cheek (couple)"],
+	["cd_lift", "The lift (couple)"], ["cd_heart", "Heart together (couple)"], ["cd_swing", "Swing (couple)"],
 	["dz_hiphop", "Hip hop"], ["dz_floss", "Floss"], ["dz_robot", "Robot"], ["dz_disco", "Disco"], ["dz_salsa", "Salsa"],
 	["dz_shuffle", "Shuffle"], ["dz_kpop", "K-pop"], ["dz_ballet", "Ballet"], ["dz_sway", "Slow sway"], ["dz_bootyshake", "Booty shake"]
 ];
@@ -4618,6 +4775,15 @@ const EI = {
 	carry: '<circle cx="9" cy="4" r="2"/><circle cx="17" cy="7.5" r="1.8"/><path d="M9 7v7l-2 7M9 14l2 7M9 9l3 3 7-1M12 12l-5 1.5M15.5 11l2.5 2.5h3"/>',
 	slowdance: '<circle cx="8" cy="4.5" r="2"/><circle cx="16" cy="4.5" r="2"/><path d="M8 7.5v6l-2 7M16 7.5v6l2 7M8 9.5l4 1.5 4-1.5M8 13.5h8"/>',
 	propose: '<circle cx="12" cy="15" r="6"/><path d="M9 5.5l3-3 3 3-3 3z"/>',
+	cd_waltz: '<circle cx="8" cy="4.5" r="2"/><circle cx="16" cy="4.5" r="2"/><path d="M8 7.5v6l-3 7M16 7.5v6l3 7M8 9.5l8 0M4 13c3 2 13 2 16 0"/>',
+	cd_tango: '<circle cx="7" cy="4.5" r="2"/><circle cx="15" cy="5.5" r="2"/><path d="M7 7.5l1 6-4 7M8 13.5l5 7M15 8.5l-1 5 6 6M7 9l-5 2M15 9.5l6-2"/>',
+	cd_salsa: '<circle cx="8" cy="4" r="2"/><circle cx="16" cy="4" r="2"/><path d="M8 7l-1 7 2 7M16 7l1 7-2 7M8 9l8 2M5 12c-1 2 0 3 2 3M19 12c1 2 0 3-2 3"/>',
+	cd_twirl: '<circle cx="7" cy="6" r="2"/><circle cx="16" cy="8" r="2"/><path d="M7 9v6l-2 6M7 15l2 6M7 9l4-6 5 3M16 11v4l-2 6M16 15l2 6M12 18c3 2 7 1 8-2"/>',
+	cd_dip: '<circle cx="6" cy="5" r="2"/><circle cx="15" cy="10" r="2"/><path d="M6 8l2 6-3 7M8 14l4 7M7 10l6 3M13 11l7 1 3-3M14 12l-3 6"/>',
+	cd_lift: '<circle cx="12" cy="13" r="2"/><path d="M12 16v5M9 21h6M10 12l-1-5M14 12l1-5M4 6l5-1 3 1 3-1 5 1M9 5c-1-1-1-3 1-3"/>',
+	cd_heart: '<circle cx="7" cy="10" r="2"/><circle cx="17" cy="10" r="2"/><path d="M7 13v8M17 13v8M8 8C8 3 12 3 12 6c0-3 4-3 4 2"/>',
+	cd_swing: '<circle cx="5" cy="5" r="2"/><circle cx="19" cy="5" r="2"/><path d="M5 8v6l-2 7M5 14l4 5M19 8v6l2 7M19 14l-4 5M5 10l7 2 7-2M2 7l3 3M22 7l-3 3"/>',
+	cd_cheek: '<circle cx="9.5" cy="5" r="2"/><circle cx="14.5" cy="5" r="2"/><path d="M9 8v6l-2 7M15 8v6l2 7M9 10l6 0M12 2c-.5-1-2-.5-1.8.5.1.6.9 1 1.8 1.6.9-.6 1.7-1 1.8-1.6.2-1-1.3-1.5-1.8-.5z"/>',
 	heartarms: '<circle cx="12" cy="15" r="2"/><path d="M12 17v5M12 12.5C6.5 9 5.5 3 9 3c1.5 0 2.5 1 3 2.5C12.5 4 13.5 3 15 3c3.5 0 2.5 6-3 9.5z"/>',
 	lovestruck: '<circle cx="12" cy="12" r="9"/><path d="M8.3 9c-.6-.8-1.9-.4-1.7.6.1.6 1 1.1 1.7 1.6.7-.5 1.6-1 1.7-1.6.2-1-1.1-1.4-1.7-.6zM15.7 9c-.6-.8-1.9-.4-1.7.6.1.6 1 1.1 1.7 1.6.7-.5 1.6-1 1.7-1.6.2-1-1.1-1.4-1.7-.6zM8 15c2.2 2 5.8 2 8 0"/>',
 	blush: '<circle cx="12" cy="12" r="9"/><path d="M8.5 10h.01M15.5 10h.01M10 15.5c1.2.7 2.8.7 4 0M6 13.5h2M16 13.5h2"/>',
@@ -4650,7 +4816,10 @@ function emoteIcon(id) { return `<svg viewBox="0 0 24 24" fill="none" stroke="#f
 // ---------- action / love / mood wheels (Z / X / C), opened in the middle of the screen
 const WHEEL_TITLES = { act: "Actions", love: "Love", mood: "Your mood", dance: "Dance" };
 const WHEEL_SUB = {
-	smooch: "Walks you over to the nearest person", slowdance: "Walks you over to the nearest person", propose: "Down on one knee in front of them",
+	smooch: "Walks you over to the nearest person", slowdance: "Walks you over to the nearest person",
+	cd_waltz: "Sweeps the nearest person into a waltz", cd_tango: "A dramatic tango with the nearest person", cd_salsa: "Hips swinging, with the nearest person",
+	cd_twirl: "Spin the nearest person under your arm", cd_dip: "Dip them back - and a kiss", cd_cheek: "Close and slow, cheek to cheek",
+	cd_lift: "Lift them high over your head", cd_heart: "Side by side, your arms make a heart", cd_swing: "A lively jive, holding hands", propose: "Down on one knee in front of them",
 	cuddle: "Sit next to someone, or pick them up and carry them to the bed or sofa", hug: "Walks you over to the nearest person",
 	carry: "Asks the nearest person if you can carry them - then lie down together on the bed or sofa",
 	foreheadkiss: "Walks you over to the nearest person", boop: "Walks you over to the nearest person", backhug: "Sneaks up behind the nearest person",
@@ -4765,6 +4934,7 @@ function swatches(el, list, key) {
 function rebuildMe() {
 	myAvatar.build(Object.assign({}, profile, { name: profile.name || "You" }));
 	updateProps();
+	markPresets();
 }
 // colour pickers drag through many colours a second: rebuild at most once a frame
 let rebuildQueued = false;
@@ -4780,6 +4950,27 @@ function renderGlasses() {
 	const el = $("#glasses");
 	el.innerHTML = GLASSES.map(x => `<button class="opt ${profile.glasses === x.id ? "on" : ""}" data-id="${x.id}">${esc(x.name)}</button>`).join("");
 	el.querySelectorAll("button").forEach(b => b.onclick = () => { profile.glasses = b.dataset.id; renderGlasses(); rebuildMe(); });
+}
+// the two characters (her and him): one click puts on that standard look (it can all still be changed after); the one
+// you are is always lit up
+function applyPreset(L) {
+	if (outfitById(profile.outfit)) profile.wardrobe[profile.outfit] = profile.colors;
+	Object.assign(profile, L, { colors: outfitColors(L.outfit, L.colors) });
+	profile.wardrobe[L.outfit] = profile.colors;
+	syncMainColors();
+}
+function renderPresets() {
+	const el = $("#presets");
+	el.innerHTML = LOOK_PRESETS.map(p => `<button data-id="${p.id}">${PRESET_ICONS[p.look.gender]}${esc(p.name)}</button>`).join("");
+	el.querySelectorAll("button").forEach(b => b.onclick = () => { applyPreset(LOOK_PRESETS.find(p => p.id === b.dataset.id).look); showLobby(editing); });
+	markPresets();
+}
+const PRESET_ICONS = {
+	female: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="9" r="5"/><path d="M12 14v7M9 18h6"/></svg>`,
+	male: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10" cy="14" r="5"/><path d="M14 10l6-6M15 4h5v5"/></svg>`
+};
+function markPresets() {
+	document.querySelectorAll("#presets button").forEach(b => b.classList.toggle("on", LOOK_PRESETS.find(p => p.id === b.dataset.id).look.gender === profile.gender));
 }
 function renderOutfits() {
 	const g = profile.gender === "male" ? "m" : "f";
@@ -4826,26 +5017,12 @@ function showLobby(edit) {
 	$("#enter").textContent = edit ? "Save my look" : "Enter World";
 	if (edit) { closeModal(); closeDraw(); $("#hud").classList.add("hidden"); entered = false; }
 	$("#nm").value = profile.name;
-	document.querySelectorAll("#gender button").forEach(b => b.classList.toggle("on", b.dataset.g === profile.gender));
 	swatches($("#sw-skin"), SKIN_TONES, "skin");
 	swatches($("#sw-hair"), HAIR_COLORS, "hair");
 	swatches($("#sw-eyes"), EYE_COLORS, "eyes");
-	renderHairStyles(); renderGlasses(); renderOutfits(); renderParts();
+	renderPresets(); renderHairStyles(); renderGlasses(); renderOutfits(); renderParts();
 	rebuildMe();
 }
-document.querySelectorAll("#gender button").forEach(b => b.onclick = () => {
-	const was = profile.gender;
-	profile.gender = b.dataset.g;
-	document.querySelectorAll("#gender button").forEach(x => x.classList.toggle("on", x === b));
-	if (was === profile.gender) return;
-	// men and women each have their own hairstyles and clothes
-	const g = profile.gender === "male" ? "m" : "f";
-	if (!HAIR_STYLES.some(h => h.id === profile.hairStyle && h.g === g)) profile.hairStyle = defaultHairStyle(profile.gender);
-	renderHairStyles();
-	if (outfitById(profile.outfit).g !== g) { wearOutfit(defaultOutfit(profile.gender)); return; }
-	renderOutfits();
-	rebuildMe();
-});
 $("#nm").addEventListener("input", () => { profile.name = $("#nm").value.trim().slice(0, 24); });
 $("#nm").addEventListener("keydown", e => { if (e.key === "Enter") $("#enter").click(); });
 

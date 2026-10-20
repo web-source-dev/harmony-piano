@@ -4,7 +4,7 @@
  *
  * An outfit is a set of garments; each garment is coloured by one of the outfit's parts, and every part has its own
  * colour (pick the outfit, then recolour each piece of it). A look is:
- *   { gender, skin, hair, hairStyle, eyes, outfit, colors: { <part key>: "#rrggbb" }, name }
+ *   { gender, skin, hair, hairStyle, eyes, glasses, outfit, colors: { <part key>: "#rrggbb" }, name }
  * plus top / bottom (the outfit's two main colours: the name tag's dot, the chat colour, and what older clients draw).
  *
  * Part keys (what each garment builder in worldAvatar.js reads):
@@ -17,7 +17,8 @@
  *   shoes   shoes, boots, sandals, heels
  */
 
-export const SKIN_TONES = ["#f8dcc8", "#eec4a2", "#dba57f", "#bd8058", "#8f5b3b", "#5f3c27"];
+// [1] is his standard tone: a warm light tan
+export const SKIN_TONES = ["#f8dcc8", "#e9bc96", "#dba57f", "#bd8058", "#8f5b3b", "#5f3c27"];
 export const HAIR_COLORS = ["#1c1411", "#4a2c1a", "#8a5a2b", "#e0bb6e", "#b5402f", "#ece6dd", "#5b3a7a", "#e889a8"];
 export const EYE_COLORS = ["#5a3a2a", "#3d2a1f", "#6b8e4e", "#3f7cac", "#7a8a99", "#9a6b2f"];
 // (the old single outfit palette: still what the swatches offered before, and what older looks use)
@@ -39,12 +40,14 @@ export const HAIR_STYLES = [
 	{ id: "highpony", name: "High ponytail", g: "f" },
 	{ id: "messybun", name: "Messy bun", g: "f" },
 	{ id: "halfup", name: "Half up", g: "f" },
+	{ id: "curlybun", name: "Curly bun", g: "f" },
 	{ id: "textured", name: "Textured crop", g: "m" },
 	{ id: "curtain", name: "Curtain fringe", g: "m" },
 	{ id: "fluffy", name: "Fluffy fringe", g: "m" },
 	{ id: "undercut", name: "Side-swept undercut", g: "m" },
 	{ id: "slick", name: "Slicked back", g: "m" },
-	{ id: "curls", name: "Curly top", g: "m" }
+	{ id: "curls", name: "Curly top", g: "m" },
+	{ id: "quiff", name: "Quiff", g: "m" }
 ];
 // glasses (anyone can wear any)
 export const GLASSES = [
@@ -117,9 +120,17 @@ export const OUTFITS = [
 ];
 const BY_ID = Object.fromEntries(OUTFITS.map(o => [o.id, o]));
 export const outfitById = id => BY_ID[id] || null;
-export const defaultOutfit = gender => gender === "male" ? "tee" : "sundress";
-export const defaultHairStyle = gender => gender === "male" ? "textured" : "curtainlong";
+// the two standard characters: every new character starts as one of these (and can change anything after)
+export const LOOK_PRESETS = [
+	{ id: "her", name: "Her", look: { gender: "female", skin: SKIN_TONES[0], hair: "#2a1a12", eyes: EYE_COLORS[1], hairStyle: "curlybun", glasses: "none", outfit: "ftee", colors: { top: "#a9c8e8", bottom: "#3e5f8a", shoes: "#f2f2f2" } } },
+	{ id: "him", name: "Him", look: { gender: "male", skin: SKIN_TONES[1], hair: HAIR_COLORS[0], eyes: EYE_COLORS[1], hairStyle: "quiff", glasses: "none", outfit: "tee", colors: { top: "#1c1c1e", bottom: "#2f3540", belt: "#2a211c", shoes: "#f2f2f2" } } }
+];
+export const presetLook = gender => LOOK_PRESETS[gender === "male" ? 1 : 0].look;
+export const defaultOutfit = gender => presetLook(gender).outfit;
+export const defaultHairStyle = gender => presetLook(gender).hairStyle;
 
+// the second skin tone before it was warmed up (looks saved with it get the new one)
+const OLD_TAN = "#eec4a2";
 const COLOR_RE = /^#[0-9a-f]{6}$/i;
 const okColor = c => typeof c === "string" && COLOR_RE.test(c);
 
@@ -142,16 +153,18 @@ export function normalizeLook(l) {
 		// an older look: the dress (top, its belt and shoes bottom) or the shirt and trousers
 		outfit = defaultOutfit(gender);
 		const t = okColor(l.top) ? l.top : null, b = okColor(l.bottom) ? l.bottom : null;
-		given = gender === "male" ? { top: t, bottom: b } : { top: t, shoes: b, trim: b };
+		given = t || b ? (gender === "male" ? { top: t, bottom: b } : { top: t, shoes: b, trim: b }) : null;
 	}
+	const P = presetLook(gender);
+	if (!given && outfit === P.outfit) given = P.colors;
 	const colors = outfitColors(outfit, given);
 	const hs = HAIR_STYLES.some(h => h.id === l.hairStyle && h.g === g) ? l.hairStyle : defaultHairStyle(gender);
 	return {
 		gender,
-		skin: okColor(l.skin) ? l.skin : SKIN_TONES[1],
-		hair: okColor(l.hair) ? l.hair : HAIR_COLORS[1],
+		skin: okColor(l.skin) ? (l.skin.toLowerCase() === OLD_TAN ? SKIN_TONES[1] : l.skin) : P.skin,
+		hair: okColor(l.hair) ? l.hair : P.hair,
 		hairStyle: hs,
-		eyes: okColor(l.eyes) ? l.eyes : (gender === "male" ? EYE_COLORS[1] : EYE_COLORS[0]),
+		eyes: okColor(l.eyes) ? l.eyes : P.eyes,
 		glasses: GLASSES.some(x => x.id === l.glasses) ? l.glasses : "none",
 		outfit, colors,
 		top: colors.top || colors.over,

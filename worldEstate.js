@@ -9,10 +9,12 @@
  *           terrace cantilevered off its south edge, and the double-height lounge rising out of it
  *   centre  the lawn in front of the courtyard: the cross walk, and a round plaza with the Harmony sculpture
  *   south   the walled garden (the treehouse over it, the Box of Shame in it), and past it the Fun Park
- *   west    a line of attractions along the west avenue: the Aquarium, the Haunted Mansion, the Bumper Karts
+ *   west    a line of attractions along the west avenue: the Aquarium, the Haunted Mansion, the Escape House, the Bumper Karts
  *   round   a walk all round the house and down the east side, with the roller coaster outside it
  *   far west past the ring road: the Harmony Grand Prix circuit (RACE) - a big race track with a start gantry, a
  *           grandstand, a paddock of race cars, and hurdles on the way (cone slaloms, barrier chicanes, tyre gates)
+ *   south past the ring road, off the airfield road: the Parkour Park (worldParkour.js) to its west, the Lovers' Garden
+ *           (worldRomance.js) to its east
  *   far south past the ring road, down the airfield road: Harmony Airfield (AIR) - a long runway, an apron with a hangar
  *           and a control tower, two planes to fly (worldPlanes.js), and a target on the lawn for parachutists
  *
@@ -142,6 +144,9 @@ export const GATES = [
 	{ id: "karts", r: [-28.6, -26.0, -120.6, -119.0] },
 	{ id: "aquarium", r: [-30.6, -28.0, -22.25, -20.75] },
 	{ id: "haunted", r: [-30.6, -28.0, -42.4, -40.9] },
+	{ id: "escape", r: [-27.0, -24.4, -70.9, -69.1] },
+	{ id: "parkour", r: [-61.4, -58.6, -202.6, -199.4] },
+	{ id: "romance", r: [-13.4, -10.6, -200.6, -197.4] },
 	// the Gallery's front doors, at each end of the house (reaching well past the hall's own area, whose edge the
 	// grounds keep a body's width away from: short of that there was a strip outside each door nobody could stand on)
 	{ id: "frontWest", r: [-25.2, -21.6, 9.5, 11.1] },
@@ -157,6 +162,9 @@ export const PATHS = [
 	[-20.0, -21.5, -20.0, -119.8, 2.6],     // the west avenue
 	[-20.0, -33.6, -7.6, -33.6, 1.7],       // to the garden's west gate (the Aquarium's side)
 	[-29.6, -41.65, -7.6, -41.65, 2.2],     // the Haunted Mansion's doors to the garden's west gate
+	[-26.0, -70.0, -20.0, -70.0, 2.2],      // the Escape House's door to the west avenue
+	[-60.0, -201.0, -20.0, -201.0, 2.6],    // the Parkour Park's gate to the airfield road
+	[-20.0, -199.0, -12.0, -199.0, 2.6],    // the airfield road to the Lovers' Garden's gate
 	[-27.6, -119.8, -7.6, -119.8, 2.2],     // the Bumper Karts to the Fun Park's west gate
 	[20.0, -84.1, 20.0, -108.1, 2.6],       // the garden's south gate to the Fun Park
 	[-20.0, -96.0, 39.0, -96.0, 2.0],       // the south walk, between the garden and the park

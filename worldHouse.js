@@ -11,8 +11,8 @@
  * Biscuit and Mochi wander the whole house (worldPets.js).
  * South of the garden, the Fun Park (worldPark.js): rides, and a roller coaster that runs right round the house.
  * Up in the garden's trees, the Treehouse (worldTree.js), with rope bridges and a zipline down into the pool. Off the
- * garden's west side, the Aquarium (worldAquarium.js) and the Haunted Mansion (worldHaunted.js); off the Fun Park's
- * west side, the Bumper Kart arena (worldKarts.js). The weather (worldWeather.js) is the same everywhere outdoors.
+ * garden's west side, the Aquarium (worldAquarium.js) and the Haunted Mansion (worldHaunted.js); further down the west
+ * avenue, the Escape House (worldEscape.js: six escape rooms); off the Fun Park's west side, the Bumper Kart arena (worldKarts.js). The weather (worldWeather.js) is the same everywhere outdoors.
  *
  * All of it stands on landscaped grounds (worldGrounds.js, laid out in worldEstate.js): lawns, paved paths, trees and
  * lamps between the attractions, and the house's outside - one rectangular block under one flat roof.
@@ -71,6 +71,12 @@ export const ZONES = {
 	// from the garden's west gate); you see their outsides from everywhere outdoors
 	aquarium: { name: "Aquarium", ox: -41.3, oy: 0,    oz: -21.5, bounds: [-53.0, -29.6, -27.5, -16.8],  see: ["grounds"], file: "./worldAquarium.js" },
 	haunted: { name: "Haunted Mansion", ox: -41.3, oy: 0, oz: -41.65, bounds: [-53.0, -29.6, -50.1, -39.7], see: ["grounds"], file: "./worldHaunted.js" },
+	// further down the west avenue, between the mansion and the karts: the Escape House (six escape rooms off a corridor)
+	// out past the ring road in the south, off the airfield road: the Parkour Park (blocks, beams, a tower, timed courses)
+	parkour: { name: "Parkour Park", ox: -130,  oy: 0,    oz: -201, bounds: [-200, -60, -232, -170], see: [], outdoor: true, file: "./worldParkour.js" },
+	// south of the ring road, just off the airfield road: the Lovers' Garden (a canopy bed, daybeds, a hammock, a swan boat...)
+	romance: { name: "Lovers' Garden", ox: 20, oy: 0, oz: -199, bounds: [-12, 52, -230, -168], see: [], outdoor: true, file: "./worldRomance.js" },
+	escape:  { name: "Escape House", ox: -43.0, oy: 0, oz: -70.0, bounds: [-60.0, -26.0, -81.0, -59.0], see: ["grounds"], file: "./worldEscape.js" },
 	// far south, down the path from the garden's south gate: the Fun Park (a carousel, a Ferris wheel, a drop tower,
 	// a swing ride, and the station of a roller coaster that runs all the way round the estate)
 	park:    { name: "Fun Park", ox: 13.0,   oy: 0,    oz: -126.0, bounds: [-7.6, 33.6, -144.0, -108.1], see: [], outdoor: true, file: "./worldPark.js" },
@@ -100,10 +106,10 @@ export const ZONES = {
 };
 // Outdoors you see everything out there, near and far: the outdoor places, the outsides of the buildings, and (through
 // the courtyard's glass) the rooms that open onto it. The living room / terrace sees all of it too.
-const OUTSIDE = ["main", "grounds", "pool", "garden", "shame", "tree", "park", "karts", "aquarium", "haunted", "lounge", "bedroom", "loft", "roof", "gym", "playroom", "dining", "library", "music", "gallery", "closet"];
+const OUTSIDE = ["main", "grounds", "pool", "garden", "shame", "tree", "park", "karts", "aquarium", "haunted", "escape", "parkour", "romance", "lounge", "bedroom", "loft", "roof", "gym", "playroom", "dining", "library", "music", "gallery", "closet"];
 const MAIN_SEES = OUTSIDE.concat(["cinema"]);
 // built first to last on the loading screen (the grounds first: they're what you see first, out of every window)
-const BUILD_ORDER = ["grounds", "lounge", "loft", "gallery", "roof", "pool", "garden", "shame", "tree", "park", "bedroom", "bath", "cinema", "disco", "games", "spa", "dining", "library", "music", "powder", "gym", "playroom", "closet", "aquarium", "haunted", "karts"];
+const BUILD_ORDER = ["grounds", "lounge", "loft", "gallery", "roof", "pool", "garden", "shame", "tree", "park", "bedroom", "bath", "cinema", "disco", "games", "spa", "dining", "library", "music", "powder", "gym", "playroom", "closet", "aquarium", "haunted", "escape", "karts", "parkour", "romance"];
 // Level of detail, by distance from the camera: each room's small things (and, in a building, everything inside its
 // walls) go on a render layer of its own, and the camera only draws that layer while it's near enough to see them.
 // INSIDE: up to what height (world y) a building's insides are, and from how far off you could still see them (through
@@ -111,13 +117,13 @@ const BUILD_ORDER = ["grounds", "lounge", "loft", "gallery", "roof", "pool", "ga
 // (small: under SMALL_R across, or thin - a post, a rail, a trim, a sign - under THIN thick and a couple of metres long)
 const INSIDE = {
 	lounge: [6.9, 20], loft: [6.5, 20], disco: [6.6, 16], bedroom: [3.0, 18], bath: [3.0, 14], cinema: [4.7, 14],
-	games: [3.6, 14], spa: [3.2, 14], aquarium: [5.3, 12], haunted: [3.8, 10], shame: [3.4, 10],
+	games: [3.6, 14], spa: [3.2, 14], aquarium: [5.3, 12], haunted: [3.8, 10], escape: [3.6, 12], shame: [3.4, 10],
 	gallery: [5.3, 16], dining: [3.4, 14], library: [3.6, 14], music: [3.4, 14], powder: [3.0, 10], gym: [ROOF_FLOOR + 3.3, 14], playroom: [ROOF_FLOOR + 3.3, 14], closet: [3.0, 10]
 };
 // the living room (it isn't a zone): its insides, and the terrace's small things
 const MAIN_RECT = [-7.2, 7.2, -6.3, 6.3], MAIN_INSIDE = [3.4, 18];
 const DETAIL_NEAR = 30, SMALL_R = 0.25, THIN = 0.09, THIN_R = 1.3;
-const LABEL = { grounds: "the grounds and the house", lounge: "the lounge and the kitchen", loft: "upstairs", pool: "the pool", garden: "the garden", shame: "the Box of Shame", tree: "the treehouse", park: "the Fun Park", bedroom: "the bedroom", bath: "the bathroom", cinema: "the cinema", disco: "the disco", games: "the game room", spa: "the spa", aquarium: "the aquarium", haunted: "the Haunted Mansion", karts: "the bumper karts", gallery: "the Gallery and the grand staircase", roof: "the roof deck", music: "the music room", powder: "the powder room", dining: "the dining room", library: "the library", gym: "the gym", playroom: "the playroom", closet: "the walk-in wardrobe" };
+const LABEL = { grounds: "the grounds and the house", lounge: "the lounge and the kitchen", loft: "upstairs", pool: "the pool", garden: "the garden", shame: "the Box of Shame", tree: "the treehouse", park: "the Fun Park", bedroom: "the bedroom", bath: "the bathroom", cinema: "the cinema", disco: "the disco", games: "the game room", spa: "the spa", aquarium: "the aquarium", haunted: "the Haunted Mansion", escape: "the Escape House", parkour: "the Parkour Park", romance: "the Lovers' Garden", karts: "the bumper karts", gallery: "the Gallery and the grand staircase", roof: "the roof deck", music: "the music room", powder: "the powder room", dining: "the dining room", library: "the library", gym: "the gym", playroom: "the playroom", closet: "the walk-in wardrobe" };
 
 export function createHouse(ctx) {
 	const { scene, room, renderer, camera } = ctx;
@@ -680,6 +686,10 @@ export function createHouse(ctx) {
 		lateUpdate(dt, t) { for (const id in built) { const B = built[id]; if (B.lateUpdate && visibleSet.has(id)) { try { B.lateUpdate(dt, t); } catch (e) { if (!B.failedLate) { B.failedLate = true; console.error("[house] " + id + " lateUpdate failed:", e); } } } } },
 		// something solid that moves (a car): nobody walks through it
 		solidAt(x, z, r) { for (const id in built) { const B = built[id]; if (B.solidAt && B.solidAt(x, z, r)) return true; } return false; },
+		// the highest top (no higher than y) of anything you can stand on at (x, z) - the Parkour Park's blocks - or -Infinity
+		topAt(x, z, y) { let best = -Infinity; for (const id in built) { const B = built[id]; if (B.topAt) { const t = B.topAt(x, z, y); if (t > best) best = t; } } return best; },
+		// you just landed at (x, z, y): how fast something throws you back up (a bounce pad), or 0
+		onLand(x, z, y) { for (const id in built) { const B = built[id]; if (B.onLand) { const v = B.onLand(x, z, y); if (v > 0) return v; } } return 0; },
 		// is this floor-plan point out under the sky (the terrace, the pool deck, the garden, the park...)?
 		outdoorAt(x, z) { const a = areaOf(x, z); return a === "terrace" || !!(ZONES[a] && ZONES[a].outdoor); },
 		// someone said something in the chat (a room can show it)

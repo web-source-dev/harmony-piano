@@ -36,7 +36,10 @@ const FOOT = [
 	[-7.6, 33.6, -144.0, -108.1],                                 // the Fun Park
 	[-66.0, -27.6, -143.6, -96.8],                                // the kart arena
 	[-53.0, -29.6, -27.5, -16.8],                                 // the Aquarium
-	[-53.0, -29.6, -50.1, -39.7]                                  // the Haunted Mansion
+	[-53.0, -29.6, -50.1, -39.7],                                 // the Haunted Mansion
+	[-60.0, -26.0, -81.0, -59.0],                                 // the Escape House
+	[-200, -60, -232, -170],                                      // the Parkour Park
+	[-12, 52, -230, -168]                                         // the Lovers' Garden
 ];
 // the zipline from the treehouse (over the garden) to the pool deck: nothing tall under it
 const ZIP = [[23.05, -57.5], [16.8, -7.0]];
@@ -313,9 +316,9 @@ export function build(k) {
 	{
 		const DEST = [
 			["House & Pool", 11.3, -12.0], ["Garden & Treehouse", 13.0, -41.0], ["Fun Park", 20.0, -110.0],
-			["Aquarium", -31.0, -21.5], ["Haunted Mansion", -31.0, -41.65], ["Bumper Karts", -29.0, -119.8]
+			["Aquarium", -31.0, -21.5], ["Haunted Mansion", -31.0, -41.65], ["Escape House", -27.0, -70.0], ["Parkour Park", -60.0, -201.0], ["Lovers' Garden", -12.0, -199.0], ["Bumper Karts", -29.0, -119.8]
 		];
-		const SIGNS = [[-4.75, -21.5], [11.3, -21.5], [-20.0, -21.5], [-20.0, -41.65], [-20.0, -96.0], [20.0, -96.0], [39.0, -21.5], [39.0, -96.0], [-20.0, -119.8]];
+		const SIGNS = [[-4.75, -21.5], [11.3, -21.5], [-20.0, -21.5], [-20.0, -41.65], [-20.0, -70.0], [-20.0, -96.0], [-20.0, -201.0], [20.0, -96.0], [39.0, -21.5], [39.0, -96.0], [-20.0, -119.8]];
 		const postM = mat("#2e2a31", 0.5, 0.3);
 		const arrow = (c, x, y, ang, s) => {
 			c.save(); c.translate(x, y); c.rotate(ang);
