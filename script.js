@@ -1826,6 +1826,8 @@ Rect.prototype.contains = function(x, y) {
 		var color = resolveNameColor(part);
 		var hasCustom = (typeof gNameColor !== "undefined" && gNameColor && gNameColor.hasCustom(part));
 		var textColor = hasCustom && NameColor.contrastText ? NameColor.contrastText(color) : "";
+		// mybot's Noob x_X: black name on its green tag.
+		if(typeof Client !== "undefined" && Client.isMybotAnonymousParticipant && Client.isMybotAnonymousParticipant(part)) textColor = "#000";
 		if(part.nameDiv) {
 			part.nameDiv.style.backgroundColor = color;
 			part.nameDiv.style.color = textColor;
@@ -1834,7 +1836,7 @@ Rect.prototype.contains = function(x, y) {
 			var cn = part.cursorDiv.querySelector(".name");
 			if(cn) {
 				cn.style.backgroundColor = color;
-				if(textColor) cn.style.color = textColor;
+				cn.style.color = textColor;
 			}
 		}
 	}

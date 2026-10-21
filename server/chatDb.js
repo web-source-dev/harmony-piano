@@ -309,7 +309,9 @@ function open(rootDir, opts) {
 		addJoin: function (m) {
 			var room = str(m.room, 120), uid = str(m.uid, 64), name = str(m.name, 120) || "?";
 			if (!room) return null;
-			var prev = stRecentPerson.get(room, "join", uid, uid, name, Date.now() - 120e3);
+			// m.exact: a join the server itself made happen (mybot's Noob x_X) -
+			// every one is real, never merged with an earlier one.
+			var prev = m.exact ? null : stRecentPerson.get(room, "join", uid, uid, name, Date.now() - 120e3);
 			if (prev) {
 				if (m.via && !prev.via) {
 					stSetVia.run(str(m.via, 200), m.harmony ? 1 : 0, uid, prev.id);
@@ -321,7 +323,7 @@ function open(rootDir, opts) {
 		},
 		addLeave: function (m) {
 			var room = str(m.room, 120), uid = str(m.uid, 64), name = str(m.name, 120) || "?";
-			if (!room || stRecentPerson.get(room, "leave", uid, uid, name, Date.now() - 30e3)) return null;
+			if (!room || (!m.exact && stRecentPerson.get(room, "leave", uid, uid, name, Date.now() - 30e3))) return null;
 			return insert({ room: room, kind: "leave", ts: m.ts || Date.now(), uid: uid, name: name, server: m.server, color: m.color });
 		},
 		addRename: function (m) {
@@ -388,8 +390,12 @@ function open(rootDir, opts) {
 				if (row && (row.room !== room || row.kind !== kind)) row = null;
 			} else {
 				var ts = +m.ts || Date.now();
-				row = db.prepare("SELECT * FROM messages WHERE room = ? AND kind = ? AND name = ? AND deleted = 0 AND ts BETWEEN ? AND ? " +
-					"ORDER BY ABS(ts - ?) LIMIT 1").get(room, kind, str(m.name, 120), ts - 120e3, ts + 120e3, ts);
+				// Nearest match within 2 minutes; a viewer whose clock is off gets the
+				// nearest one within 12 hours instead.
+				var near = db.prepare("SELECT * FROM messages WHERE room = ? AND kind = ? AND name = ? AND deleted = 0 AND ts BETWEEN ? AND ? " +
+					"ORDER BY ABS(ts - ?) LIMIT 1");
+				row = near.get(room, kind, str(m.name, 120), ts - 120e3, ts + 120e3, ts)
+					|| near.get(room, kind, str(m.name, 120), ts - 432e5, ts + 432e5, ts);
 			}
 			if (!row) return null;
 			if (!row.deleted) {

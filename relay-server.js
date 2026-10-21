@@ -1393,9 +1393,11 @@ function handleRoomChatApi(req, res, route) {
 			if (!acct || !accounts.canManage(acct.id)) { sendJson(res, 403, { ok: false, error: "Only chat moderators can delete these" }); return; }
 			var room = String(d.room || "").slice(0, 120);
 			var row = chatDb.hideEvent({ room: room, kind: d.kind, id: d.id, name: d.name, ts: d.ts, by: acct.name });
-			if (!row) { sendJson(res, 404, { ok: false, error: "Not saved yet — try again in a few seconds" }); return; }
-			chatSyncToRoom(String(d.ch || room).slice(0, 256), { t: "x", room: room, id: row.id, kind: row.kind, name: row.name, ts: row.ts });
-			sendJson(res, 200, { ok: true, id: row.id });
+			// Nothing saved to mark (a note only the browsers made): still remove
+			// it from everyone's chat right now.
+			var gone = row || { id: 0, kind: String(d.kind || ""), name: String(d.name || "").slice(0, 120), ts: +d.ts || Date.now() };
+			chatSyncToRoom(String(d.ch || room).slice(0, 256), { t: "x", room: room, id: gone.id, kind: gone.kind, name: gone.name, ts: gone.ts });
+			sendJson(res, 200, { ok: true, id: gone.id });
 		});
 		return;
 	}
@@ -1582,16 +1584,17 @@ function setMybotAnonymousHidden(hidden) {
 		persistManageState();
 		// Backup-server only: a real join ("p") / leave ("bye") in the mybot
 		// room, so everyone there sees "Noob x_X joined/left the room".
-		// Stored right away (presence watching skips Noob x_X) so a moderator
-		// can delete the join/leave note straight after it shows up.
 		for (var id in mppRooms) {
 			if (!isMybotRoomId(id)) continue;
 			if (hidden) mppBroadcast(mppRooms[id], { m: "bye", p: MYBOT_ANONYMOUS.id });
 			else mppBroadcast(mppRooms[id], { m: "p", id: MYBOT_ANONYMOUS.id, _id: MYBOT_ANONYMOUS._id, name: MYBOT_ANONYMOUS.name, color: MYBOT_ANONYMOUS.color, x: MYBOT_ANONYMOUS.x, y: MYBOT_ANONYMOUS.y });
-			if (chatDb) {
-				var anonEv = { room: id, uid: MYBOT_ANONYMOUS._id, name: MYBOT_ANONYMOUS.name, color: MYBOT_ANONYMOUS.color, server: "backup" };
-				if (hidden) chatDb.addLeave(anonEv); else chatDb.addJoin(anonEv);
-			}
+		}
+		// Every switch is a real join/leave in mybot, saved right away (even if
+		// no one is there) so /manage lists it and moderators can delete it.
+		// Presence watching skips Noob x_X so it's never saved twice.
+		if (chatDb) {
+			var anonEv = { room: "mybot", uid: MYBOT_ANONYMOUS._id, name: MYBOT_ANONYMOUS.name, color: MYBOT_ANONYMOUS.color, server: "backup", exact: true };
+			if (hidden) chatDb.addLeave(anonEv); else chatDb.addJoin(anonEv);
 		}
 		mppLsBroadcast();
 	}
