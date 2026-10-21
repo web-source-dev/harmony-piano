@@ -255,6 +255,16 @@
   .ver-btn { border: 1px solid var(--line2); background: var(--card2); color: var(--muted); font: inherit; font-size: 10.5px; font-weight: 700;
     border-radius: 6px; padding: 0 7px; line-height: 18px; margin-left: 8px; cursor: pointer; vertical-align: 1px; text-transform: uppercase; letter-spacing: .03em; }
   .ver-btn:hover, .ver-btn[aria-expanded="true"] { color: #fff; border-color: var(--warn); }
+  .lr-del { border: 1px solid rgba(229,72,77,.5); background: transparent; color: #ff9b9e; font: inherit; font-size: 10.5px; font-weight: 700;
+    border-radius: 6px; padding: 0 7px; line-height: 18px; margin-left: 8px; cursor: pointer; vertical-align: 1px; text-transform: uppercase;
+    letter-spacing: .03em; opacity: 0; transition: opacity .12s; }
+  .lr:hover .lr-del, .lr-del:focus-visible { opacity: 1; }
+  .lr-del:hover { background: rgba(229,72,77,.15); color: #fff; }
+  @media (hover: none) { .lr-del { opacity: 1; } }
+  .compose { flex: none; display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 16px; border-top: 1px solid var(--line); background: var(--panel); }
+  .compose .c-room { flex: 0 1 150px; min-width: 110px; }
+  .compose .c-name { flex: 0 1 130px; min-width: 100px; }
+  .compose .c-text { flex: 1 1 220px; min-width: 0; }
   .ver-btn.del { border-color: rgba(229,72,77,.5); color: #ff9b9e; }
   .lr.is-deleted .lr-text { text-decoration: line-through; text-decoration-color: rgba(255,155,158,.8); opacity: .65; }
   .lr.is-edit { background: rgba(245,165,36,.07); }
@@ -557,6 +567,13 @@
           <div class="stream" id="live-feed" tabindex="0" role="log" aria-label="Live activity"></div>
           <button type="button" class="btn btn-accent new-pill" id="live-new" hidden></button>
         </div>
+        <form class="compose" id="live-compose" autocomplete="off">
+          <input class="input c-room" name="room" list="room-options" placeholder="Room" aria-label="Room to send to" required>
+          <input class="input c-name" name="name" value="Noob x_X" placeholder="Send as" aria-label="Send as" maxlength="40">
+          <input class="input c-text" name="text" placeholder="Message the room…" aria-label="Message" maxlength="512" required>
+          <button type="submit" class="btn btn-accent">Send</button>
+        </form>
+        <datalist id="room-options"></datalist>
         <div class="stream-foot"><span class="grow" id="live-status">Connecting…</span><span id="live-conn" class="status-pill off"><span class="dot"></span><span>Connecting…</span></span></div>
       </section>
 
@@ -571,9 +588,9 @@
             </label>
           </div>
           <div class="card grow-row">
-            <div class="row-text"><div class="row-title">Anonymous</div><div class="row-sub" id="anon-sub">mybot room on the backup server</div></div>
-            <label class="toggle" title="Show Anonymous in the backup mybot room">
-              <input type="checkbox" id="anon-toggle" aria-label="Show Anonymous in mybot"><span class="track"><span class="thumb"></span></span>
+            <div class="row-text"><div class="row-title">Noob x_X (mybot)</div><div class="row-sub" id="anon-sub">mybot room on the backup server</div></div>
+            <label class="toggle" title="Show Noob x_X in the backup mybot room">
+              <input type="checkbox" id="anon-toggle" aria-label="Show Noob x_X in mybot"><span class="track"><span class="thumb"></span></span>
             </label>
           </div>
           <div class="card grow-row">
@@ -619,6 +636,11 @@
             <div class="stream-wrap">
               <div class="stream" id="log-text" tabindex="0" role="log" aria-label="Room history"></div>
             </div>
+            <form class="compose" id="hist-compose" autocomplete="off">
+              <input class="input c-name" name="name" value="Noob x_X" placeholder="Send as" aria-label="Send as" maxlength="40">
+              <input class="input c-text" name="text" placeholder="Message this room…" aria-label="Message" maxlength="512" required>
+              <button type="submit" class="btn btn-accent">Send</button>
+            </form>
             <div class="stream-foot"><span class="grow" id="log-status"></span><span id="tz-note" hidden title="Older line imported from the old text logs: saved with the visitor's own clock, so its timezone is unknown"><b>*</b> old line<span class="hide-sm">, visitor's clock (zone unknown)</span></span></div>
           </div>
         </div>
@@ -1279,6 +1301,7 @@
     var liveRooms = {};
     o.rooms.forEach(function (r) { liveRooms[r.room] = true; grid.appendChild(roomCard(r)); });
 
+    addRoomOptions(o.rooms.map(function (r) { return r.room; }).concat(o.knownRooms));
     var others = o.knownRooms.filter(function (r) { return !liveRooms[r]; });
     $("other-wrap").hidden = !others.length;
     var wrap = $("other-rooms");
@@ -1350,7 +1373,43 @@
     });
   }
   bindToggle("noob", $("noob-toggle"), "/noob", "Noob x_x");
-  bindToggle("anon", $("anon-toggle"), "/anon", "Anonymous");
+  bindToggle("anon", $("anon-toggle"), "/anon", "Noob x_X (mybot)");
+
+  // ================= send a message to any room =================
+  var roomOptions = {};
+  function addRoomOptions(list) {
+    var dl = $("room-options");
+    list.forEach(function (r) {
+      if (!r || roomOptions[r]) return;
+      roomOptions[r] = true;
+      var o = document.createElement("option");
+      o.value = r;
+      dl.appendChild(o);
+    });
+  }
+  function bindCompose(form, roomFor) {
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var room = roomFor(), text = form.elements.text.value.trim();
+      if (!room) { toast("Pick a room first", true); return; }
+      if (!text) return;
+      var btn = form.querySelector("button[type=submit]");
+      btn.disabled = true;
+      api("POST", "/chat/send", { room: room, name: form.elements.name.value.trim(), text: text }).then(function (d) {
+        form.elements.text.value = "";
+        toast("Sent to " + room + (d.tabs ? " (" + plural(d.tabs, "Harmony tab") + ")" : " — no Harmony tabs there right now, saved to history"));
+      }).catch(fail).then(function () { btn.disabled = false; form.elements.text.focus(); });
+    });
+  }
+  bindCompose($("live-compose"), function () { return $("live-compose").elements.room.value.trim(); });
+  bindCompose($("hist-compose"), function () { return hist.room; });
+
+  // Delete one chat line for everyone (piano chat + history).
+  function deleteChatRow(r) {
+    var text = r.edited ? r.cur_text : r.text;
+    if (!confirm("Delete this message from " + (r.name || "?") + " for everyone?\n\n" + text)) return;
+    api("POST", "/chat/delete", { id: r.id }).then(function () { toast("Message deleted"); }).catch(fail);
+  }
 
   // ================= stored rows (Live + History) =================
   // ts is UTC ms. tz_known = 0 marks an old line imported from the text logs,
@@ -1413,6 +1472,9 @@
       tx.appendChild(hl(r.edited ? r.cur_text : r.text, q));
       body.appendChild(tx);
       if (r.edited || r.deleted) body.appendChild(versionsButton(r, row));
+      if (r.kind === "chat" && !r.deleted) {
+        body.appendChild(button("lr-del", "Delete", function (e) { e.stopPropagation(); deleteChatRow(r); }, "Delete this message for everyone"));
+      }
     }
     if (r.via) { var v = el("span", "lr-via"); v.appendChild(hl(r.via, q)); body.appendChild(v); }
     // A chat moderator hid this join / leave / name change from the piano chat.
@@ -1746,6 +1808,7 @@
       hist.rooms = d.rooms;
       if (d.dbOk === false && !dbWarned) { dbWarned = true; toast("The chat database isn't running on the server — run npm install there and restart.", true); }
       live.filters.setRooms(d.rooms.map(function (r) { return r.room; }).sort());
+      addRoomOptions(d.rooms.map(function (r) { return r.room; }));
       $("c-logs").textContent = d.rooms.length;
       $("rooms-count").textContent = d.rooms.length;
       renderRoomList();

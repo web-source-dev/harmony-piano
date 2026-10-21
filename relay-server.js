@@ -677,6 +677,7 @@ function manageRoomsSnapshot() {
 		var br = room(id);
 		br.backup = { count: mppRoomParticipantCount(mr), settings: mr.settings };
 		mr.parts.forEach(function (p) { addUser(br, p, "backup", p.sock && p.sock._ip); });
+		if (isMybotRoomId(id) && !gMybotAnonymousHidden) addUser(br, MYBOT_ANONYMOUS, "backup");
 	}
 	mppChatHistory.forEach(function (list, chId) {
 		if (byRoom[chId]) byRoom[chId].chatHistory = list.length;
@@ -1057,6 +1058,47 @@ function handleManageApi(req, res, route) {
 	}
 	if (sub === "/anon" && req.method === "POST") {
 		withBody(function (data) { setMybotAnonymousHidden(data.hidden); done(null, { hidden: gMybotAnonymousHidden }); });
+		return;
+	}
+	// Say something in any room from /manage. Harmony tabs in the room show it
+	// as a normal chat line (relay CX "m"); it is saved like any other line.
+	if (sub === "/chat/send" && req.method === "POST") {
+		withBody(function (data) {
+			var sayRoom = String(data.room || "").trim().slice(0, 120);
+			var sayText = String(data.text || "").trim().slice(0, 512);
+			var sayName = String(data.name || "").trim().slice(0, 40) || MYBOT_ANONYMOUS.name;
+			if (!sayRoom) throw new Error("Pick a room");
+			if (!sayText) throw new Error("Message can't be empty");
+			if (mppIsSyncText(sayText)) throw new Error("That message looks like a sync command");
+			var asNoob = sayName === MYBOT_ANONYMOUS.name;
+			var say = { t: "m", room: sayRoom, ts: Date.now(), text: sayText, name: sayName,
+				uid: asNoob ? MYBOT_ANONYMOUS._id : MANAGE_SENDER._id, color: asNoob ? MYBOT_ANONYMOUS.color : "#4dabf7" };
+			chatSyncToRoom(sayRoom, say);
+			if (chatDb) chatDb.addChat({ room: sayRoom, uid: say.uid, name: say.name, text: say.text, t: say.ts, server: "harmony", color: say.color });
+			done(null, { tabs: rooms[sayRoom] ? rooms[sayRoom].size : 0 });
+		});
+		return;
+	}
+	// Delete a saved chat line for everyone: gone from the piano chat (Harmony
+	// tabs, and backup-server history), marked deleted in the history.
+	if (sub === "/chat/delete" && req.method === "POST") {
+		withBody(function (data) {
+			if (!chatDb) throw new Error("Chat database is not available");
+			var ver = chatDb.versions(data.id);
+			var row = ver && ver.message;
+			if (!row || row.kind !== "chat") throw new Error("Message not found");
+			chatDb.addDelete({ room: row.room, row: row, uid: MANAGE_SENDER._id, name: MANAGE_SENDER.name, server: "harmony" });
+			var ref = Math.round(+row.ts).toString(36) + "." + String(row.uid || row.name).slice(0, 64);
+			chatSyncToRoom(row.room, { t: "d", room: row.room, ref: ref });
+			if (row.msg_id) {
+				var hist = mppChatHistory.get(row.room) || [];
+				for (var hi = 0; hi < hist.length; hi++) {
+					if (hist[hi].id === row.msg_id) { hist.splice(hi, 1); break; }
+				}
+				if (mppRooms[row.room]) mppBroadcast(mppRooms[row.room], { m: "a-del", id: row.msg_id });
+			}
+			done(null, {});
+		});
 		return;
 	}
 	if (sub === "/clear-chat" && req.method === "POST") {
@@ -1511,7 +1553,7 @@ function setLobbyNoobHidden(hidden) {
 		if (hidden) gNoobBotStop(); else gNoobBotStart();
 		// Refresh backup-server lobby participant lists for everyone already in room.
 		for (var id in mppRooms) {
-			if (mppRooms.hasOwnProperty(id) && isLobbyRoomId(id)) mppBroadcastCh(mppRooms[id]);
+			if (isLobbyRoomId(id)) mppBroadcastCh(mppRooms[id]);
 		}
 	}
 	broadcastAll({ m: "manage-noob", hidden: gLobbyNoobHidden });
@@ -1522,11 +1564,14 @@ function setMybotAnonymousHidden(hidden) {
 	if (hidden !== gMybotAnonymousHidden) {
 		gMybotAnonymousHidden = hidden;
 		persistManageState();
-		// Backup-server only: refresh the mybot room list so everyone already
-		// connected there gains/loses the Anonymous ghost immediately.
+		// Backup-server only: a real join ("p") / leave ("bye") in the mybot
+		// room, so everyone there sees "Noob x_X joined/left the room".
 		for (var id in mppRooms) {
-			if (mppRooms.hasOwnProperty(id) && isMybotRoomId(id)) mppBroadcastCh(mppRooms[id]);
+			if (!isMybotRoomId(id)) continue;
+			if (hidden) mppBroadcast(mppRooms[id], { m: "bye", p: MYBOT_ANONYMOUS.id });
+			else mppBroadcast(mppRooms[id], { m: "p", id: MYBOT_ANONYMOUS.id, _id: MYBOT_ANONYMOUS._id, name: MYBOT_ANONYMOUS.name, color: MYBOT_ANONYMOUS.color, x: MYBOT_ANONYMOUS.x, y: MYBOT_ANONYMOUS.y });
 		}
+		mppLsBroadcast();
 	}
 	broadcastAll({ m: "manage-anon", hidden: gMybotAnonymousHidden });
 }
@@ -1619,14 +1664,16 @@ var LOBBY_NOOB = {
 	y: 50
 };
 
-// Ghost participant for the "mybot" room on THIS backup MPP server only.
-// Controlled by #manage → Anonymous. Never connects to public MPP.
+// Participant "Noob x_X" in the "mybot" room on THIS backup MPP server only.
+// Controlled by #manage → Noob x_X (mybot). Never connects to public MPP. It
+// is treated like a real user: joins/leaves are announced, it is counted and
+// listed on /manage, and its cursor is parked at the left edge (0%, 50%).
 var MYBOT_ANONYMOUS = {
 	id: "harmony-mybot-anon",
 	_id: "harmony-anon-xx",
-	name: "Anonymous",
-	color: "#6b7280",
-	x: 50,
+	name: "Noob x_X",
+	color: "#59E884",
+	x: 0,
 	y: 50
 };
 

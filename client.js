@@ -994,9 +994,9 @@ Client.MYBOT_ANONYMOUS_ID = "harmony-mybot-anon";
 Client.MYBOT_ANONYMOUS = {
 	id: Client.MYBOT_ANONYMOUS_ID,
 	_id: "harmony-anon-xx",
-	name: "Anonymous",
-	color: "#6b7280",
-	x: 50,
+	name: "Noob x_X",
+	color: "#59E884",
+	x: 0,
 	y: 50
 };
 

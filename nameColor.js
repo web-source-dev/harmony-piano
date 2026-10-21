@@ -80,6 +80,9 @@
 	// else their MPP color, else a neutral default.
 	NameColor.prototype.colorFor = function (part) {
 		if (!part) return "#777777";
+		// mybot's Noob x_X always keeps its own colour.
+		var C = global.Client;
+		if (C && C.isMybotAnonymousParticipant && C.isMybotAnonymousParticipant(part)) return C.MYBOT_ANONYMOUS.color;
 		if (part._id && this.colors[part._id]) return this.colors[part._id];
 		if (this.myColor && this._isMe(part)) return this.myColor;
 		return part.color || "#777777";

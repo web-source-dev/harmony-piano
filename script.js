@@ -1859,6 +1859,11 @@ Rect.prototype.contains = function(x, y) {
 		div.style.display = "none";
 		part.cursorDiv = host.appendChild(div);
 		$(part.cursorDiv).fadeIn(200);
+		// mybot's Noob x_X never moves: its cursor stays parked at the left edge.
+		if(typeof Client !== "undefined" && Client.isMybotAnonymousParticipant && Client.isMybotAnonymousParticipant(part)) {
+			part.cursorDiv.style.left = "0%";
+			part.cursorDiv.style.top = "50%";
+		}
 		var name = document.createElement("div");
 		name.className = "name";
 		name.style.backgroundColor = resolveNameColor(part);
@@ -2061,6 +2066,7 @@ Rect.prototype.contains = function(x, y) {
 		}
 		function updateCursor(msg) {
 			const part = gClient.ppl[msg.id];
+			if (part && Client.isMybotAnonymousParticipant(part)) return;
 			if (part && part.cursorDiv) {
 				part.cursorDiv.style.left = msg.x + "%";
 				part.cursorDiv.style.top = msg.y + "%";
@@ -4283,6 +4289,10 @@ Rect.prototype.contains = function(x, y) {
 	RoomChat.init({
 		client: gClient,
 		decorate: addChatManageActions,
+		// A line sent from /manage (relay CX "m"): show it like any chat line.
+		onSay: function(d) {
+			chat.receive({ m: "a", a: d.text, p: { id: d.uid, _id: d.uid, name: d.name, color: d.color }, t: d.ts });
+		},
 		onPermission: function(can) { chat.setCanManage(can); },
 		colorFor: function(p) {
 			return (typeof gNameColor !== "undefined" && gNameColor) ? gNameColor.colorFor(p) : (p.color || "white");

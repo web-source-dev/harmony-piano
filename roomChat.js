@@ -620,6 +620,8 @@
 			removeChat(d.ref);
 		} else if (d.t === "x") {
 			removeSystem(d);
+		} else if (d.t === "m" && typeof d.text === "string" && d.ts && d.uid) {
+			if (opts.onSay && !state.gone[chatRef(d.ts, d.uid)]) opts.onSay(d);
 		} else if (d.t === "p" && d.ref && d.target) {
 			state.replies[d.ref] = { ref: d.target, name: d.targetName, text: d.targetText };
 			var li2 = state.byRef[d.ref];
@@ -800,7 +802,6 @@
 		function skip(part) {
 			if (!part) return true;
 			if (global.Client && Client.isLobbyNoobParticipant && Client.isLobbyNoobParticipant(part)) return true;
-			if (global.Client && Client.isMybotAnonymousParticipant && Client.isMybotAnonymousParticipant(part)) return true;
 			return part.id === c.participantId;
 		}
 		c.on("room participants sync", function (ppl) {
