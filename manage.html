@@ -1404,6 +1404,12 @@
   bindCompose($("live-compose"), function () { return $("live-compose").elements.room.value.trim(); });
   bindCompose($("hist-compose"), function () { return hist.room; });
 
+  // Hide a join / leave / name change from the piano chat for everyone.
+  function hideEventRow(r) {
+    var what = r.kind === "join" ? "joined" : r.kind === "leave" ? "left" : "changed name";
+    if (!confirm("Remove “" + (r.name || "?") + " " + what + "” from the piano chat for everyone?")) return;
+    api("POST", "/chat/hide-event", { id: r.id }).then(function () { toast("Removed from the piano chat"); }).catch(fail);
+  }
   // Delete one chat line for everyone (piano chat + history).
   function deleteChatRow(r) {
     var text = r.edited ? r.cur_text : r.text;
@@ -1482,6 +1488,8 @@
       var hid = el("span", "tag off lr-hidden", "HIDDEN");
       hid.title = "Deleted from the piano chat by " + (r.deleted_by || "a moderator") + " · " + when(r.deleted);
       body.appendChild(hid);
+    } else if (r.kind === "join" || r.kind === "leave" || r.kind === "rename") {
+      body.appendChild(button("lr-del", "Hide", function (e) { e.stopPropagation(); hideEventRow(r); }, "Remove this from the piano chat for everyone"));
     }
     row.appendChild(body);
     return row;

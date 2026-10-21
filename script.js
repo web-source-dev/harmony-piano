@@ -1563,7 +1563,6 @@ Rect.prototype.contains = function(x, y) {
 				var part = gClient.ppl[id];
 				if(!part || !part._id) continue;
 				if(Client.isLobbyNoobParticipant && Client.isLobbyNoobParticipant(part)) continue;
-				if(Client.isMybotAnonymousParticipant && Client.isMybotAnonymousParticipant(part)) continue;
 				list.push({ _id: String(part._id), name: String(part.name || ""), color: String(part.color || "") });
 				if(list.length >= 300) break;
 			}

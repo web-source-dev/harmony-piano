@@ -153,7 +153,6 @@
 		var C = global.Client;
 		if (!p || !p.id) return true;
 		if (C && C.isLobbyNoobParticipant && C.isLobbyNoobParticipant(p)) return true;
-		if (C && C.isMybotAnonymousParticipant && C.isMybotAnonymousParticipant(p)) return true;
 		return false;
 	};
 

@@ -1132,7 +1132,11 @@ Client.prototype.ensureMybotAnonymous = function() {
 	// Backup server + mybot room only. Public MPP never gets this ghost.
 	if(!this.isConnected() || !this.isOnBackupServer() || !this.isMybotChannel()
 		|| Client.isMybotAnonymousHidden()) {
-		this.removeMybotAnonymous();
+		// Switched off from /manage while we're in the room: Noob x_X leaves
+		// like a real user ("left the room"), whichever of the relay switch or
+		// the server's "bye" gets here first.
+		this.removeMybotAnonymous(Client.isMybotAnonymousHidden() && this.isConnected()
+			&& this.isOnBackupServer() && this.isMybotChannel());
 		return;
 	}
 	if(this.hasMybotAnonymousParticipant()) {
@@ -1148,9 +1152,10 @@ Client.prototype.ensureMybotAnonymous = function() {
 	}
 };
 
-Client.prototype.removeMybotAnonymous = function() {
+Client.prototype.removeMybotAnonymous = function(announceLeave) {
 	if(this.ppl[Client.MYBOT_ANONYMOUS_ID]) {
 		this.removeParticipant(Client.MYBOT_ANONYMOUS_ID);
+		if(announceLeave) this.emit("bye", { p: Client.MYBOT_ANONYMOUS_ID });
 	}
 };
 

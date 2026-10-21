@@ -745,7 +745,8 @@ function presenceTick() {
 		curRooms[r.room] = true;
 		var newRoom = !gPresence.rooms[r.room];
 		r.users.forEach(function (u) {
-			var key = r.room + "\x1e" + u._id;
+			if (u._id === MYBOT_ANONYMOUS._id) return;   // its join/leave is stored by setMybotAnonymousHidden
+			var key = r.room +"\x1e" + u._id;
 			seenNow.add(key);
 			var ownTab = u.where.indexOf("harmony") >= 0 || u.where.indexOf("backup") >= 0;
 			var server = u.where.indexOf("backup") >= 0 ? "backup" : u.where.indexOf("harmony") >= 0 ? "harmony" : "mpp";
@@ -1097,6 +1098,21 @@ function handleManageApi(req, res, route) {
 				}
 				if (mppRooms[row.room]) mppBroadcast(mppRooms[row.room], { m: "a-del", id: row.msg_id });
 			}
+			done(null, {});
+		});
+		return;
+	}
+	// Hide a join / leave / name change from the piano chat for everyone (the
+	// row stays in History, marked HIDDEN) - same as a chat moderator's delete.
+	if (sub === "/chat/hide-event" && req.method === "POST") {
+		withBody(function (data) {
+			if (!chatDb) throw new Error("Chat database is not available");
+			var ver = chatDb.versions(data.id);
+			var ev = ver && ver.message;
+			if (!ev) throw new Error("Not found");
+			var hidRow = chatDb.hideEvent({ room: ev.room, kind: ev.kind, id: ev.id, by: MANAGE_SENDER.name });
+			if (!hidRow) throw new Error("Only joins, leaves and name changes can be hidden");
+			chatSyncToRoom(ev.room, { t: "x", room: ev.room, id: hidRow.id, kind: hidRow.kind, name: hidRow.name, ts: hidRow.ts });
 			done(null, {});
 		});
 		return;
@@ -1566,10 +1582,16 @@ function setMybotAnonymousHidden(hidden) {
 		persistManageState();
 		// Backup-server only: a real join ("p") / leave ("bye") in the mybot
 		// room, so everyone there sees "Noob x_X joined/left the room".
+		// Stored right away (presence watching skips Noob x_X) so a moderator
+		// can delete the join/leave note straight after it shows up.
 		for (var id in mppRooms) {
 			if (!isMybotRoomId(id)) continue;
 			if (hidden) mppBroadcast(mppRooms[id], { m: "bye", p: MYBOT_ANONYMOUS.id });
 			else mppBroadcast(mppRooms[id], { m: "p", id: MYBOT_ANONYMOUS.id, _id: MYBOT_ANONYMOUS._id, name: MYBOT_ANONYMOUS.name, color: MYBOT_ANONYMOUS.color, x: MYBOT_ANONYMOUS.x, y: MYBOT_ANONYMOUS.y });
+			if (chatDb) {
+				var anonEv = { room: id, uid: MYBOT_ANONYMOUS._id, name: MYBOT_ANONYMOUS.name, color: MYBOT_ANONYMOUS.color, server: "backup" };
+				if (hidden) chatDb.addLeave(anonEv); else chatDb.addJoin(anonEv);
+			}
 		}
 		mppLsBroadcast();
 	}
