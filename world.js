@@ -3240,6 +3240,8 @@ addEventListener("keydown", e => {
 	if (typing()) return;
 	// tug of war: mash space
 	if (fightView && (k === " " || k === "e") && (fightView.a === MY_ID || fightView.b === MY_ID)) { e.preventDefault(); if (!e.repeat) tugTap(); return; }
+	// the room you're in may have keys of its own (the cinema: play / pause, skip...)
+	if (!fightView && !wheelKind && me.upper !== "piano" && house.onKey(k, e)) return;
 	if (me.upper === "piano" && !modalKind) {
 		let n = -1;
 		if (KEYMAP_HI.indexOf(k) >= 0) n = 60 + KEYMAP_HI.indexOf(k);

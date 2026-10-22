@@ -695,6 +695,8 @@ export function createHouse(ctx) {
 		// someone said something in the chat (a room can show it)
 		onChat(id, who, text) { for (const zid in built) if (visibleSet.has(zid) && built[zid].onChat) built[zid].onChat(id, who, text); },
 		// WebRTC signalling for a live shared screen, addressed to me (whichever room I'm in: the sharer can walk out)
+		// a key press the room you're in wants (true: it used it)
+		onKey(k, e) { for (const zid in built) if (built[zid].onKey && built[zid].onKey(k, e)) return true; return false; },
 		onRtc(d) { for (const zid in built) if (built[zid].onRtc) built[zid].onRtc(d); },
 		musicAt(x, z) { const Z = built[region]; return Z && Z.musicAt ? Z.musicAt(x, z) : 0; },
 		floorAt
