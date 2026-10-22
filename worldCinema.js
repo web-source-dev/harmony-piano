@@ -4,11 +4,13 @@
  * Local coordinates: screen wall at z = -9, back wall (entrance) at z = +6,
  * side walls at x = -5 / +5. You come in at the top, on the landing (1.8 m up),
  * and the seats step down toward the screen in four rows of five. Stairs run
- * down both sides. A YouTube video plays on the screen for everyone in the
- * room, in sync (shared key z:cinema:movie, same scheme as the living-room TV).
+ * down both sides. A movie plays on the screen for everyone in the room, in sync
+ * (shared key z:cinema:movie, same scheme as the living-room TV): YouTube, a video
+ * file, another site's player, or someone's shared tab / movie file (worldScreen.js).
  */
 import { CSS3DObject } from "three/addons/renderers/CSS3DRenderer.js";
-import { parseYouTube, ytKey, ytEmbedSrc, ytThumb, followPlaylist, playlistStep } from "./worldYT.js";
+import { ytKey, ytEmbedSrc, ytThumb, followPlaylist, playlistStep } from "./worldYT.js";
+import { parseSource, probe, libraryVideos, sourceTitle, loadHls, isHls, canShareTab, canShareFile, createStreamer, serverNow, startClock, uploadMovie, deleteMovie } from "./worldScreen.js";
 
 const ROWS = 4, COLS = 5;
 const ROW_Z = [-3.0, -1.1, 0.8, 2.7];   // middle of each row's legroom/seat platform
@@ -316,113 +318,422 @@ export function build(k) {
 	// ---------------------------------------------------------------- movie playback
 	// LKEY: the house-lights mode from the projector (auto / on / off). (It used to share its key with the wall switch,
 	// which stores true / false there - each undid the other, so neither worked.) SWKEY: the wall switch.
+	// The movie is { on, kind, at, go, paused, pos, by, title } plus, by kind (see worldScreen.js):
+	//   yt: yt, list, idx    video / embed: url    share: sharer, sid, src ("tab" | "file"), jog (a skip on the file)
+	// Times are on the server's clock (serverNow), so a phone and a computer agree to the frame. at: when second 0 of
+	// the video was (or would have been); go: playing starts / resumes at this moment - until then everyone holds still
+	// at the same picture, so a resume (or a skip) starts on both screens at once, whoever's player is quicker.
 	const KEY = "z:cinema:movie", LKEY = "z:cinema:lightmode", SWKEY = "z:cinema:lights";
-	let here = false, yt = null, volAcc = 0, idleAcc = 0, lastShown = "";
+	const LEAD = 700, START_LEAD = 1500;
+	const esc = ctx.esc, now = serverNow;
+	startClock();
+	let here = false, cur = null, volAcc = 0, tick = 0, lastShown = "", starting = false, soundAsk = false, lastJog = null, holdT = 0, ytSeekAt = 0, upload = null;
 	const movie = () => ctx.get(KEY) || { on: false, yt: "", at: 0, paused: false, pos: 0 };
-	const elapsed = m => m.paused ? (m.pos || 0) : Math.max(0, (Date.now() - m.at) / 1000);
-	const playing = () => { const m = movie(); return !!(m.on && m.yt); };
-	function ytCmd(func, args) {
-		if (!yt || !yt.iframe.contentWindow) return;
-		try { yt.iframe.contentWindow.postMessage(JSON.stringify({ event: "command", func, args: args || [] }), "*"); } catch (e) { /* not ready yet */ }
+	const kindOf = m => m.kind || (m.yt ? "yt" : "");
+	const elapsed = m => m.paused ? (m.pos || 0) : Math.max(0, (Math.max(now(), m.go || 0) - m.at) / 1000);
+	const holding = m => !m.paused && !!m.go && now() < m.go;
+	// where my screen really is (pausing stops everyone on the picture the person pressing it is looking at)
+	function realPos(m) {
+		if (cur && cur.kind === "video" && cur.video.readyState >= 1) return cur.video.currentTime;
+		if (cur && cur.kind === "yt" && cur.pl && cur.pl.time() != null && (!m.list || cur.pl.index() === m.idx)) return cur.pl.time();
+		return elapsed(m);
 	}
+	// play from `pos` seconds, starting a moment from now on every screen together
+	const playFrom = (pos, lead) => { const t = now() + (lead || LEAD); return { paused: false, pos, go: t, at: t - pos * 1000 }; };
+	const playing = () => { const m = movie(), kd = kindOf(m); return !!(m.on && (kd === "yt" ? m.yt : kd === "share" ? m.sid : m.url)); };
+	const keyOf = m => { const kd = kindOf(m); return kd + "|" + (kd === "yt" ? ytKey(m) : kd === "share" ? m.sid : kd === "embed" ? m.url + "|" + m.at : m.url); };
+	const streamer = createStreamer(ctx, () => applyMovie(), () => { const m = movie(); if (kindOf(m) === "share" && m.sharer === ctx.MY_ID) ctx.setShared(KEY, Object.assign({}, m, { on: false })); }, onAsk);
+	// someone watching my shared tab wants it paused / played: only I can, and I'm probably in that other tab -
+	// so a notification and a sound as well as the toast
+	function onAsk(from, what) {
+		const p = ctx.peers().get(from), name = p ? p.look.name : "Someone", verb = what === "pause" ? "pause" : "play";
+		ctx.toast(`<b>${esc(name)}</b> asks you to <b>${verb}</b> the movie (in the tab you're sharing)`, null, null, 9000);
+		ctx.sfx("pop", 0.9);
+		try { if (document.hidden && window.Notification && Notification.permission === "granted") new Notification("Harmony Cinema", { body: name + " asks you to " + verb + " the movie", tag: "cinema-ask" }); } catch (e) { /* not on this device */ }
+	}
+	function ytCmd(func, args) {
+		if (!cur || !cur.iframe || cur.kind !== "yt" || !cur.iframe.contentWindow) return;
+		try { cur.iframe.contentWindow.postMessage(JSON.stringify({ event: "command", func, args: args || [] }), "*"); } catch (e) { /* not ready yet */ }
+	}
+	// put a player on the screen for this movie (false: the right one's there already)
 	function mount(m) {
-		if (yt && yt.id === ytKey(m)) return;
+		const key = keyOf(m);
+		if (cur && cur.key === key) return false;
 		unmount();
-		const iframe = document.createElement("iframe");
-		iframe.width = "1280"; iframe.height = "720";
-		iframe.style.cssText = "width:1280px;height:720px;border:0;background:#000";
-		iframe.allow = "autoplay; encrypted-media; picture-in-picture";
-		iframe.src = ytEmbedSrc(m, elapsed(m));
-		const obj = new CSS3DObject(iframe);
+		const kind = kindOf(m);
+		let el, iframe = null, video = null;
+		if (kind === "yt" || kind === "embed") {
+			el = iframe = document.createElement("iframe");
+			iframe.width = "1280"; iframe.height = "720";
+			iframe.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+			iframe.allowFullscreen = true;
+			// (another site's player: you may have to click its play button - in full screen, G, you can)
+			if (kind === "embed") iframe.className = "cin-click";
+			iframe.src = kind === "yt" ? ytEmbedSrc(m, elapsed(m)) : m.url;
+		} else {
+			el = video = document.createElement("video");
+			video.playsInline = true;
+			video.preload = "auto";
+		}
+		el.style.cssText = "width:1280px;height:720px;border:0;background:#000;object-fit:contain";
+		const obj = new CSS3DObject(el);
 		g.updateMatrixWorld(true);
 		screen.getWorldPosition(obj.position);
 		screen.getWorldQuaternion(obj.quaternion);
 		obj.scale.setScalar(SCREEN.w / 1280);
 		ctx.cssScene.add(obj);
 		screen.material = HOLE;
-		const mine = yt = { id: ytKey(m), obj, iframe, pl: null };
-		iframe.addEventListener("load", () => {
-			if (yt !== mine) return;
-			if (!mine.pl && iframe.contentWindow) mine.pl = followPlaylist(iframe, movie, p => ctx.setShared(KEY, Object.assign({}, movie(), p)), ytCmd, elapsed);
+		const mine = cur = { key, kind, obj, el, iframe, video, pl: null, hls: null, failed: false };
+		if (kind === "yt") iframe.addEventListener("load", () => {
+			if (cur !== mine) return;
+			if (!mine.pl && iframe.contentWindow) mine.pl = followPlaylist(iframe, movie, p => ctx.setShared(KEY, Object.assign({}, movie(), p)), ytCmd, elapsed, now);
 			try { iframe.contentWindow.postMessage(JSON.stringify({ event: "listening", id: 1 }), "*"); } catch (e) { /* cross-origin hiccup */ }
 			setTimeout(() => sync(true), 800);
 			setTimeout(() => sync(true), 2500);
 		});
+		if (kind === "video") loadVideo(mine, m.url, m.hls);
+		return true;
+	}
+	function loadVideo(c, url, hls) {
+		const v = c.video;
+		v.addEventListener("loadedmetadata", () => { if (cur === c) vidSync(true); });
+		v.addEventListener("error", () => {
+			if (cur !== c || c.failed) return;
+			c.failed = true;
+			ctx.notice("That video wouldn't load here (the site may not allow it). Try <b>Share a tab</b> at the projector instead.");
+		});
+		if ((hls || isHls(url)) && !v.canPlayType("application/vnd.apple.mpegurl")) {
+			loadHls().then(Hls => {
+				if (cur !== c) return;
+				if (!Hls.isSupported()) { ctx.notice("This browser can't play that stream."); return; }
+				c.hls = new Hls();
+				c.hls.loadSource(url);
+				c.hls.attachMedia(v);
+			}).catch(() => ctx.notice("Couldn't load the stream player - check the internet connection."));
+		} else v.src = url;
 	}
 	function unmount() {
-		if (!yt) return;
-		if (yt.pl) yt.pl.stop();
-		ctx.cssScene.remove(yt.obj);
-		yt.iframe.src = "about:blank";
-		yt.obj.element.remove();
-		yt = null;
+		if (!cur) return;
+		const c = cur;
+		cur = null;
+		if (c.pl) c.pl.stop();
+		if (c.hls) c.hls.destroy();
+		ctx.cssScene.remove(c.obj);
+		if (c.iframe) c.iframe.src = "about:blank";
+		if (c.video) { c.video.pause(); c.video.srcObject = null; c.video.removeAttribute("src"); c.video.load(); }
+		c.obj.element.remove();
 		screen.material = screenMat;
 	}
+	// play, and if the browser won't with sound, play muted and offer a button to turn it up
+	function playV(v) {
+		const p = v.play();
+		if (p && p.catch) p.catch(() => {
+			if (v.muted) return;
+			v.muted = true;
+			v.play().catch(() => {});
+			if (soundAsk) return;
+			soundAsk = true;
+			ctx.toast("The browser started the movie without sound", "Sound on", () => { soundAsk = false; if (cur && cur.video === v) { v.muted = false; v.play().catch(() => {}); } }, 15000);
+		});
+	}
+	// hold still until the shared "go" moment, then sync again
+	function holdUntilGo(m) { clearTimeout(holdT); if (holding(m)) holdT = setTimeout(() => sync(true), Math.max(0, m.go - now()) + 5); }
 	function sync(hard) {
 		const m = movie();
-		if (!yt) return;
+		if (!cur) return;
+		if (cur.kind === "video") { vidSync(hard); return; }
+		if (cur.kind !== "yt") return;
 		ytCmd("unMute");
-		if (m.paused) { ytCmd("seekTo", [m.pos || 0, true]); ytCmd("pauseVideo"); }
-		else { if (hard) ytCmd("seekTo", [elapsed(m), true]); ytCmd("playVideo"); }
-		if (yt.pl) yt.pl.sync();
+		if (m.paused || holding(m)) { ytCmd("seekTo", [elapsed(m), true]); ytCmd("pauseVideo"); holdUntilGo(m); }
+		else { if (hard) { ytCmd("seekTo", [elapsed(m), true]); ytSeekAt = performance.now(); } ytCmd("playVideo"); }
+		if (cur.pl) cur.pl.sync();
+	}
+	// YouTube drifting (it buffered, or the phone is slow): back to where everyone is
+	function ytDrift() {
+		const m = movie();
+		if (!cur || cur.kind !== "yt" || !cur.pl || m.paused || holding(m) || performance.now() - ytSeekAt < 4000) return;
+		if (m.list && cur.pl.index() !== m.idx) return;
+		const t = cur.pl.time(), want = elapsed(m);
+		if (t != null && Math.abs(t - want) > 1) { ytCmd("seekTo", [want, true]); ytSeekAt = performance.now(); }
+	}
+	// a video file: everyone on the same frame. Small differences are evened out by playing a touch faster or slower
+	// (you can't see it); big ones (it buffered) with a jump. A live stream has no length: just play it.
+	function vidSync(hard) {
+		const m = movie(), v = cur && cur.kind === "video" ? cur.video : null;
+		if (!v || v.readyState < 1) return;
+		const live = !isFinite(v.duration);
+		if (m.paused || holding(m)) {
+			if (!v.paused) v.pause();
+			v.playbackRate = 1;
+			const p = elapsed(m);
+			if (!live && Math.abs(v.currentTime - p) > 0.04) v.currentTime = p;
+			holdUntilGo(m);
+			return;
+		}
+		if (!live) {
+			const want = elapsed(m);
+			if (want >= v.duration - 0.3) { v.playbackRate = 1; if (!v.ended && Math.abs(v.currentTime - want) > 1.5) v.currentTime = Math.max(0, v.duration - 0.3); return; }   // it's over: the last picture
+			const diff = v.currentTime - want;   // > 0: ahead of everyone
+			if (Math.abs(diff) > 0.5 || (hard && Math.abs(diff) > 0.25)) { v.playbackRate = 1; v.currentTime = want + (v.paused ? 0 : 0.1); }
+			else v.playbackRate = Math.abs(diff) < 0.05 ? 1 : 1 - Math.max(-0.1, Math.min(0.1, diff * 0.5));
+		}
+		if (v.paused) playV(v);
+	}
+	// a live share on the screen: my own (no sound - I hear it already) or the one coming in
+	function attachShare() {
+		if (!cur || cur.kind !== "share") return;
+		const m = movie(), mine = streamer.sharing(m.sid) ? streamer.mine() : null;
+		const s = mine ? new MediaStream(mine.stream.getVideoTracks()) : streamer.incoming();
+		const v = cur.video;
+		const same = mine ? v.srcObject && v.srcObject.getVideoTracks()[0] === s.getVideoTracks()[0] : v.srcObject === s;
+		v.muted = !!mine;
+		if (!same) { v.srcObject = s || null; if (s) playV(v); }
 	}
 	function applyMovie() {
-		const m = movie();
-		if (here && m.on && m.yt) { const fresh = !yt || yt.id !== ytKey(m); mount(m); if (!fresh) sync(true); }
-		else unmount();
+		const m = movie(), kind = kindOf(m), on = playing();
+		// my live share stays up only while it's what's on the screen (someone pressed Stop, or put on something else)
+		if (streamer.mine() && !starting && !(on && kind === "share" && streamer.sharing(m.sid))) streamer.stop();
+		// it says I'm sharing, but I'm not (I reloaded the page): take it down
+		if (on && kind === "share" && m.sharer === ctx.MY_ID && !streamer.sharing(m.sid) && !starting) { ctx.setShared(KEY, Object.assign({}, m, { on: false })); return; }
+		// the file I'm sharing follows the projector's pause / skip buttons, whoever presses them
+		const f = on && kind === "share" ? streamer.file() : null;
+		if (f) {
+			if (m.jog && m.jog.n !== lastJog) { lastJog = m.jog.n; if (isFinite(f.duration)) f.currentTime = Math.max(0, Math.min(f.duration - 0.5, m.jog.d === 0 ? 0 : f.currentTime + m.jog.d)); }
+			if (m.paused && !f.paused) f.pause();
+			else if (!m.paused && f.paused && !f.ended) f.play().catch(() => {});
+		}
+		if (on && kind === "share" && m.sharer !== ctx.MY_ID && here) streamer.watch(m.sharer, m.sid);
+		else streamer.unwatch();
+		if (here && on && (kind !== "share" || streamer.sharing(m.sid) || streamer.incoming())) {
+			const fresh = mount(m);
+			if (kind === "share") attachShare();
+			else if (!fresh) sync(true);
+			drawIdle();
+		} else {
+			unmount();
+			drawIdle(on && kind === "share" ? (ctx.peers().has(m.sharer) ? `Connecting to ${m.by || "their"}'s screen...` : `Waiting for ${m.by || "the person sharing"} to come back...`) : "");
+		}
 		renderControls();
 	}
 	function setMovie(patch) { ctx.setShared(KEY, Object.assign({}, movie(), patch, { by: ctx.profile().name })); ctx.sfx("click"); }
-	function startLink(url) {
-		const mm = parseYouTube(url);
-		if (!mm) return false;
-		setMovie({ on: true, yt: mm.yt, list: mm.list, idx: mm.idx, at: Date.now(), paused: false, pos: 0 });
-		ctx.send({ t: "fx", kind: "sys", text: ctx.profile().name + (mm.list ? " started a playlist in the Cinema" : " started a movie in the Cinema") });
+	// something new on the screen (a fresh state, so nothing of the last one hangs on)
+	function newMovie(o, what) {
+		ctx.setShared(KEY, Object.assign({ on: true, by: ctx.profile().name }, playFrom(0, START_LEAD), o));
+		ctx.sfx("click");
+		ctx.send({ t: "fx", kind: "sys", text: ctx.profile().name + " " + what + " in the Cinema" });
+	}
+	// a pasted link -> on the screen (false: it couldn't be; say() has told them why)
+	async function startLink(text) {
+		let s = parseSource(text);
+		if (!s) { say("That doesn't look like a link. Copy the address from the video's page (or its embed code) and paste it here.", true); return false; }
+		if (s.kind === "page") {
+			say("Checking that link...");
+			const r = await probe(s.url);
+			const host = esc(sourceTitle(s.url));
+			if (r && r.video) s = { kind: "video", url: s.url, hls: r.hls };
+			else if (r && r.frameable === false) {
+				say(`<b>${host}</b> doesn't allow its videos to play inside other pages. Open the movie there in another tab, then press <b>Share a tab</b> below and pick that tab (tick <b>Share tab audio</b>).`, true);
+				return false;
+			} else s = { kind: "embed", url: s.url, unsure: true };
+		}
+		if (s.kind === "yt") newMovie({ kind: "yt", yt: s.yt, list: s.list, idx: s.idx }, s.list ? "started a playlist" : "started a movie");
+		else newMovie({ kind: s.kind, url: s.url, hls: !!s.hls, title: sourceTitle(s.url) }, "started a movie");
+		say(s.unsure ? "If the screen stays blank or shows an error, that site blocks being shown here: use <b>Share a tab</b> instead." : "");
 		return true;
+	}
+	async function startShare(kind, file) {
+		starting = true;
+		say(kind === "tab" ? "Pick the tab with the movie, and tick <b>Share tab audio</b>..." : "Opening the file...");
+		try {
+			const s = kind === "tab" ? await streamer.shareTab() : await streamer.shareFile(file);
+			lastJog = null;
+			if (kind === "tab" && window.Notification && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+			newMovie({ kind: "share", sid: s.sid, sharer: ctx.MY_ID, src: s.src, title: s.title, jog: null }, kind === "tab" ? "is sharing a tab" : "started a movie");
+			say(kind === "tab" && !s.audio
+				? "Sharing, but <b>no sound</b> came with it - press Stop, share again and tick <b>Share tab audio</b> (only Chrome / Edge can share a tab's sound)."
+				: kind === "tab" ? "Sharing! Play the movie in that tab. Tip: drag that tab into its own window so you can come back to the cinema while it plays." : "");
+		} catch (e) {
+			const n = e && e.name;
+			say(n === "NotAllowedError" || n === "AbortError" ? "" : esc((e && e.message) || "Couldn't start sharing."), n !== "NotAllowedError" && n !== "AbortError");
+		} finally {
+			starting = false;
+			applyMovie();
+		}
 	}
 
 	// ---------------------------------------------------------------- controls panel
 	let ctlOpen = false;
+	function say(html, bad) {
+		const el = ctlOpen && document.getElementById("cin-msg");
+		if (!el) { if (html && bad) ctx.notice(html); return; }
+		el.innerHTML = html || "";
+		el.classList.toggle("bad", !!bad);
+	}
 	function openControls() {
 		const body = ctx.openModal("cinema", "Cinema Projector", `<div class="cin">
 			<div class="cin-now" id="cin-now"></div>
-			<div class="row" style="gap:8px;margin-top:12px"><input id="cin-url" class="input" style="flex:1;min-width:0" placeholder="Paste a YouTube link (movie, trailer, music video, playlist...)"><button class="btn primary" id="cin-play">Play</button></div>
-			<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn" id="cin-prev">&#x23EE; Prev</button><button class="btn" id="cin-pause">Pause</button><button class="btn" id="cin-next">Next &#x23ED;</button><button class="btn" id="cin-restart">Restart</button><button class="btn" id="cin-stop">Stop</button></div>
+			<div class="row" style="gap:8px;margin-top:12px"><input id="cin-url" class="input" style="flex:1;min-width:0" placeholder="Paste any video link or embed code"><button class="btn primary" id="cin-play">Play</button></div>
+			<p class="muted cin-small">YouTube (videos and playlists), Vimeo, Dailymotion, Twitch, Google Drive, Streamable, archive.org, a video file (.mp4, .webm, .m3u8...), or any page that allows it.</p>
+			<div class="row cin-src" style="gap:8px;margin-top:10px;flex-wrap:wrap">
+				<button class="btn" id="cin-up" title="Puts the movie on the server: it plays on every device in perfect sync, pause and skip from anyone">&#x2B06;&#xFE0F; Upload a movie</button>
+				<button class="btn" id="cin-tab" title="For sites that don't give you a link: share the browser tab the movie plays in">&#x1F5A5;&#xFE0F; Share a tab</button>
+				<button class="btn" id="cin-file" title="Streams a movie file from this computer live - no upload, but this computer has to stay on">&#x1F39E;&#xFE0F; Stream a file live</button>
+				<input type="file" id="cin-pick" accept="video/*,.mkv,.mov,.m4v" hidden>
+				<input type="file" id="cin-uppick" accept="video/*,.mkv,.mov,.m4v" hidden>
+			</div>
+			<div class="cin-msg" id="cin-msg"></div>
+			<div class="cin-lib hidden" id="cin-lib"><span class="muted">From the media library</span><div id="cin-libl"></div></div>
+			<div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn" id="cin-prev">&#x23EE; Prev</button><button class="btn" id="cin-back">-10s</button><button class="btn" id="cin-pause">Pause</button><button class="btn" id="cin-fwd">+10s</button><button class="btn" id="cin-next">Next &#x23ED;</button><button class="btn" id="cin-restart">Restart</button><button class="btn" id="cin-stop">Stop</button><span class="muted" id="cin-time" style="margin-left:auto;align-self:center"></span></div>
 			<div class="row" style="gap:8px;margin-top:14px;align-items:center;flex-wrap:wrap"><span class="muted" style="min-width:92px">House lights</span><button class="btn" data-l="auto">Auto</button><button class="btn" data-l="on">On</button><button class="btn" data-l="off">Off</button></div>
-			<p class="muted" style="margin:14px 0 0">The movie plays for everyone in the cinema, in sync. Sit in any seat and press <b>F</b> for movie view. Grab popcorn from the cart by the door.</p></div>`, 540, () => { ctlOpen = false; });
+			<p class="muted" id="cin-hint" style="margin:14px 0 0"></p></div>`, 560, () => { ctlOpen = false; });
 		ctlOpen = true;
-		const inp = body.querySelector("#cin-url");
-		const go = () => { if (!startLink(inp.value)) { inp.classList.add("bad"); setTimeout(() => inp.classList.remove("bad"), 900); return; } inp.value = ""; };
-		body.querySelector("#cin-play").onclick = go;
+		const inp = body.querySelector("#cin-url"), playBtn = body.querySelector("#cin-play");
+		const go = async () => {
+			if (playBtn.disabled) return;
+			playBtn.disabled = true;
+			const ok = await startLink(inp.value).catch(() => false);
+			playBtn.disabled = false;
+			if (!ok) { inp.classList.add("bad"); setTimeout(() => inp.classList.remove("bad"), 900); return; }
+			inp.value = "";
+		};
+		playBtn.onclick = go;
 		inp.addEventListener("keydown", e => { e.stopPropagation(); if (e.key === "Enter") go(); });
+		const tabBtn = body.querySelector("#cin-tab"), fileBtn = body.querySelector("#cin-file"), pick = body.querySelector("#cin-pick");
+		tabBtn.classList.toggle("hidden", !canShareTab());
+		fileBtn.classList.toggle("hidden", !canShareFile());
+		tabBtn.onclick = () => startShare("tab");
+		fileBtn.onclick = () => pick.click();
+		pick.onchange = () => { const f = pick.files && pick.files[0]; pick.value = ""; if (f) startShare("file", f); };
+		const upPick = body.querySelector("#cin-uppick");
+		body.querySelector("#cin-up").onclick = () => { if (upload) { upload.abort(); return; } upPick.click(); };
+		upPick.onchange = () => { const f = upPick.files && upPick.files[0]; upPick.value = ""; if (f) startUpload(f); };
+		if (upload) say(upload.msg);
 		body.querySelector("#cin-pause").onclick = () => {
 			const m = movie();
-			if (!m.on || !m.yt) return;
-			if (m.paused) setMovie({ paused: false, at: Date.now() - (m.pos || 0) * 1000 });
-			else setMovie({ paused: true, pos: elapsed(m) });
+			if (!playing()) return;
+			// someone else's shared tab: only they can pause it - ask them
+			if (kindOf(m) === "share" && m.src === "tab") {
+				if (streamer.sharing(m.sid)) return;
+				const what = m.asked === "pause" ? "play" : "pause";
+				streamer.ask(what);
+				say(`Asked ${esc(m.by || "them")} to ${what} it.`);
+				ctx.setShared(KEY, Object.assign({}, m, { asked: what }));
+				return;
+			}
+			if (m.paused) setMovie(playFrom(m.pos || 0));
+			else setMovie({ paused: true, pos: realPos(m), go: 0 });
 		};
-		const step = dir => { const p = playlistStep(movie(), dir, yt && yt.pl ? yt.pl.index() : -1); if (p) setMovie(p); };
+		const skip = d => {
+			const m = movie();
+			if (!playing()) return;
+			if (kindOf(m) === "share") { setMovie({ jog: { d, n: Math.random() } }); return; }
+			if (m.paused) setMovie({ pos: Math.max(0, (m.pos || 0) + d) });
+			else setMovie(playFrom(Math.max(0, realPos(m) + d)));
+		};
+		body.querySelector("#cin-back").onclick = () => skip(-10);
+		body.querySelector("#cin-fwd").onclick = () => skip(10);
+		const step = dir => { const p = playlistStep(movie(), dir, cur && cur.pl ? cur.pl.index() : -1, now()); if (p) setMovie(p); };
 		body.querySelector("#cin-prev").onclick = () => step(-1);
 		body.querySelector("#cin-next").onclick = () => step(1);
-		body.querySelector("#cin-restart").onclick = () => { const m = movie(); if (m.yt) setMovie({ on: true, at: Date.now(), paused: false, pos: 0 }); };
+		body.querySelector("#cin-restart").onclick = () => {
+			const m = movie();
+			if (!playing()) return;
+			if (kindOf(m) === "share") setMovie({ jog: { d: 0, n: Math.random() }, paused: false });
+			else setMovie(Object.assign({ on: true }, playFrom(0, START_LEAD)));
+		};
 		body.querySelector("#cin-stop").onclick = () => setMovie({ on: false, paused: false, pos: 0 });
 		// ("On" also flips the wall switch back on, or the room would stay dark)
 		body.querySelectorAll("[data-l]").forEach(b => b.onclick = () => { ctx.setShared(LKEY, b.dataset.l); if (b.dataset.l !== "off" && ctx.get(SWKEY) === false) ctx.setShared(SWKEY, true); });
+		// the movies in the media library (anything dropped into media-library/ on the server shows up here)
+		renderLibrary();
 		renderControls();
 		if (innerWidth > 560) setTimeout(() => inp.focus(), 60);
 	}
+	// the movies on the server (uploaded here, or dropped into media-library/): one click plays one for everyone
+	function renderLibrary() {
+		libraryVideos().then(list => {
+			const body = ctlOpen && document.getElementById("mbody");
+			const wrap = body && body.querySelector("#cin-lib"), l = body && body.querySelector("#cin-libl");
+			if (!wrap) return;
+			wrap.classList.toggle("hidden", !list.length);
+			const name = v => v.title.replace(/\.[^.]+$/, "").replace(/_+/g, " ");
+			l.innerHTML = list.slice(0, 60).map((v, i) => `<span class="cin-item"><button class="btn" data-v="${i}" title="${esc(name(v))}">&#x1F3AC; ${esc(name(v))}</button>${v.mine ? `<button class="btn cin-del" data-d="${i}" title="Delete this movie from the server">&#x2715;</button>` : ""}</span>`).join("");
+			l.querySelectorAll("[data-v]").forEach(b => b.onclick = () => { const v = list[+b.dataset.v]; newMovie({ kind: "video", url: v.url, title: name(v) }, "started a movie"); say(""); });
+			l.querySelectorAll("[data-d]").forEach(b => b.onclick = () => {
+				const v = list[+b.dataset.d];
+				if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Delete?"; setTimeout(() => { b.dataset.sure = ""; b.innerHTML = "&#x2715;"; }, 3000); return; }
+				const m = movie();
+				if (m.on && kindOf(m) === "video" && m.url === v.url) setMovie({ on: false });
+				deleteMovie(v.url).then(ok => { say(ok ? "Deleted " + esc(name(v)) + "." : "Couldn't delete that.", !ok); renderLibrary(); });
+			});
+		});
+	}
+	// upload a movie to the server, then put it on for everyone
+	function startUpload(file) {
+		if (/\.mkv$/i.test(file.name)) ctx.notice("Heads up: iPhones and iPads can't play <b>.mkv</b> files - for a phone or tablet, an <b>.mp4</b> works everywhere.");
+		const mb = file.size / 1048576;
+		const sizeTxt = mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : Math.round(mb) + " MB";
+		const t0 = performance.now();
+		const job = uploadMovie(file, f => {
+			const secs = (performance.now() - t0) / 1000, left = f > 0.02 ? secs / f - secs : 0;
+			upload.msg = `Uploading <b>${esc(file.name)}</b> (${sizeTxt}): <b>${Math.floor(f * 100)}%</b>${left > 5 ? " - about " + (left > 90 ? Math.round(left / 60) + " min" : Math.round(left) + " s") + " left" : ""}. You can close this panel; press Upload again to cancel.`;
+			say(upload.msg);
+		});
+		upload = { abort: () => job.abort(), msg: "Starting the upload..." };
+		say(upload.msg);
+		renderControls();
+		job.then(r => {
+			upload = null;
+			newMovie({ kind: "video", url: r.url, title: r.title }, "started a movie");
+			say("Uploaded! It's playing for everyone - pause and skip work from any device.");
+			if (!ctlOpen) ctx.notice("Your movie finished uploading and is playing in the cinema.");
+			renderLibrary();
+		}).catch(e => {
+			upload = null;
+			say(e && e.name === "AbortError" ? "Upload cancelled." : esc((e && e.message) || "Upload failed."), !(e && e.name === "AbortError"));
+		}).then(() => renderControls());
+	}
+	const fmt = s => { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), mm = Math.floor(s / 60) % 60, ss = s % 60; return (h ? h + ":" + String(mm).padStart(2, "0") : mm) + ":" + String(ss).padStart(2, "0"); };
+	function renderTime() {
+		const el = ctlOpen && document.getElementById("cin-time");
+		if (!el) return;
+		const m = movie(), kd = kindOf(m);
+		const v = kd === "video" && cur ? cur.video : kd === "share" ? streamer.file() : null;
+		el.textContent = !playing() ? "" : v && v.readyState >= 1 ? fmt(v.currentTime) + (isFinite(v.duration) ? " / " + fmt(v.duration) : " live") : kd === "yt" ? fmt(realPos(m)) : "";
+	}
 	function renderControls() {
 		if (!ctlOpen || ctx.modalKind() !== "cinema") { ctlOpen = false; return; }
-		const m = movie(), body = document.getElementById("mbody");
+		const m = movie(), body = document.getElementById("mbody"), kd = kindOf(m), on = playing();
 		const now = body.querySelector("#cin-now");
-		if (now) now.innerHTML = m.on && m.yt
-			? `${ytThumb(m) ? `<img src="${ytThumb(m)}" alt="">` : ""}<div><b>${m.paused ? "Paused" : "Now showing"}${m.list ? " - playlist" + (m.idx >= 0 ? ", video " + (m.idx + 1) : "") : ""}</b><span>${m.by ? "Started by " + ctx.esc(m.by) : ""}</span></div>`
-			: `<div class="cin-off"><b>Nothing playing</b><span>Paste a link below to start a movie for everyone.</span></div>`;
+		const what = kd === "share" ? (m.src === "file" ? "a movie from " + ctx.esc(m.by || "their") + "'s computer" : ctx.esc(m.by || "Someone") + "'s shared tab") : "";
+		const icon = { video: "&#x1F3AC;", embed: "&#x1F310;", share: m.src === "file" ? "&#x1F39E;&#xFE0F;" : "&#x1F5A5;&#xFE0F;" }[kd] || "&#x1F3AC;";
+		if (now) now.innerHTML = on
+			? `${kd === "yt" && ytThumb(m) ? `<img src="${ytThumb(m)}" alt="">` : `<div class="cin-ico">${icon}</div>`}<div><b>${m.paused ? "Paused" : "Now showing"}${m.list ? " - playlist" + (m.idx >= 0 ? ", video " + (m.idx + 1) : "") : ""}${m.title ? ": " + ctx.esc(m.title) : ""}</b><span>${what ? "Live: " + what : m.by ? "Started by " + ctx.esc(m.by) : ""}${kd === "share" && streamer.sharing(m.sid) ? " - " + streamer.viewers() + " watching" : ""}</span></div>`
+			: `<div class="cin-off"><b>Nothing playing</b><span>Paste a link below, share a tab, or play a file from your computer.</span></div>`;
+		const canPause = on && (kd === "yt" || kd === "video" || (kd === "share" && m.src === "file"));
+		const tabViewer = on && kd === "share" && m.src === "tab" && !streamer.sharing(m.sid);
+		const show = (id, yes) => { const b = body.querySelector(id); if (b) b.classList.toggle("hidden", !yes); };
 		const pb = body.querySelector("#cin-pause");
-		if (pb) { pb.textContent = m.paused ? "Resume" : "Pause"; pb.disabled = !(m.on && m.yt); }
-		for (const id of ["#cin-prev", "#cin-next"]) { const b = body.querySelector(id); if (b) b.classList.toggle("hidden", !(m.on && m.yt && m.list)); }
+		if (pb) pb.textContent = tabViewer ? (m.asked === "pause" ? "Ask to play" : "Ask to pause") : m.paused ? "Resume" : "Pause";
+		show("#cin-pause", canPause || tabViewer);
+		show("#cin-back", canPause); show("#cin-fwd", canPause);
+		show("#cin-prev", on && kd === "yt" && !!m.list); show("#cin-next", on && kd === "yt" && !!m.list);
+		show("#cin-restart", on && kd !== "share" || canPause);
+		show("#cin-stop", on);
+		const tb = body.querySelector("#cin-tab");
+		if (tb) tb.innerHTML = kd === "share" && streamer.sharing(m.sid) && m.src === "tab" ? "&#x1F5A5;&#xFE0F; Share a different tab" : "&#x1F5A5;&#xFE0F; Share a tab";
+		const ub = body.querySelector("#cin-up");
+		if (ub) ub.innerHTML = upload ? "&#x2716;&#xFE0F; Cancel upload" : "&#x2B06;&#xFE0F; Upload a movie";
+		const hint = body.querySelector("#cin-hint");
+		if (hint) hint.innerHTML = (kd === "embed" && on
+			? "Another site's player: if it doesn't start by itself, sit down, press <b>F</b> then <b>G</b> for full screen, and click its play button. Each of you presses play at the same time - its pause and skip buttons are on the player itself. "
+			: kd === "share" && m.src === "tab" && on ? (streamer.sharing(m.sid) ? "Pause and skip in the tab you're sharing - everyone sees exactly what it shows. " : "You see exactly what " + esc(m.by || "they") + " sees, live. Only they can pause it: <b>Ask to pause</b> pings them. ")
+			: on ? "It plays for everyone in the cinema in sync - pause, skip and restart from any device. "
+			: "<b>Best sync on a phone or tablet too:</b> upload the movie file, or paste a direct video / YouTube link. For a site with no link, share its tab from a computer. ")
+			+ "Sit in any seat and press <b>F</b> for movie view, <b>G</b> for full screen. Grab popcorn from the cart by the door.";
 		const lm = ctx.get(LKEY) || "auto";
 		body.querySelectorAll("[data-l]").forEach(b => b.classList.toggle("primary", b.dataset.l === lm));
+		renderTime();
 	}
 
 	// ---------------------------------------------------------------- popcorn
@@ -438,15 +749,24 @@ export function build(k) {
 	let popT = 0;
 
 	// ---------------------------------------------------------------- the idle screen picture
-	// a plain blank screen while nothing's playing (soft light from the projector, a little darker at the edges)
-	function drawIdle() {
+	// a plain blank screen while nothing's playing (soft light from the projector, a little darker at the edges),
+	// with a line of text on it while a shared screen is on its way
+	let idleText = null;
+	function drawIdle(text) {
+		text = text || "";
+		if (text === idleText) return;
+		idleText = text;
 		const c = idleCanvas.getContext("2d"), w = 1024, h = 576;
 		const gr = c.createRadialGradient(w / 2, h / 2, 60, w / 2, h / 2, w * 0.62);
 		gr.addColorStop(0, "#d8d6de"); gr.addColorStop(1, "#9c99a6");
 		c.fillStyle = gr; c.fillRect(0, 0, w, h);
+		if (text) {
+			c.fillStyle = "#2a2433"; c.font = "800 38px Nunito, sans-serif"; c.textAlign = "center"; c.textBaseline = "middle";
+			c.fillText(text, w / 2, h / 2, w - 80);
+		}
 		idleTex.needsUpdate = true;
 	}
-	drawIdle(0);
+	drawIdle();
 
 	// ---------------------------------------------------------------- every frame (while you're in here)
 	let dim = 0;   // 0 = house lights up .. 1 = dark for the movie
@@ -480,11 +800,16 @@ export function build(k) {
 			L.screen.color.set("#e8d0ff");
 		}
 		beamM.opacity = playing() ? 0.05 + dim * 0.03 + Math.sin(t * 9) * 0.004 : 0;
-		// idle picture a few times a second
 		// keep the movie in step and at the right volume
-		if (yt) {
-			volAcc += dt;
-			if (volAcc > 0.5) { volAcc = 0; ytCmd("setVolume", [ctx.muted() ? 0 : 100]); }
+		volAcc += dt;
+		if (volAcc > 0.5 && (cur || streamer.mine())) {
+			volAcc = 0;
+			const vol = ctx.muted() ? 0 : 1;
+			if (cur && cur.kind === "yt") ytCmd("setVolume", [vol * 100]);
+			if (cur && cur.video) cur.video.volume = vol;
+			streamer.setVolume(vol);
+			if (++tick % 2 === 0 && cur) { if (cur.kind === "video") vidSync(false); else if (cur.kind === "yt") ytDrift(); }
+			if (ctlOpen) renderTime();
 		}
 		// popcorn kernels popping in the cart
 		popT += dt;
@@ -508,17 +833,19 @@ export function build(k) {
 	return {
 		update,
 		onEnter() { here = true; applyMovie(); },
-		onLeave() { here = false; unmount(); if (ctlOpen) ctx.closeModal(); },
+		onLeave() { here = false; applyMovie(); if (ctlOpen) ctx.closeModal(); },
+		onRtc: d => streamer.onRtc(d),
 		applyKey(key, remote) {
 			if (key === KEY) {
 				const m = movie();
 				applyMovie();
-				if (remote && m.on && m.yt && m.yt !== lastShown && here) ctx.notice(`<b>${ctx.esc(m.by || "Someone")}</b> started a movie`);
-				lastShown = m.on ? m.yt : "";
+				const shown = playing() ? keyOf(m) : "";
+				if (remote && shown && shown !== lastShown && here) ctx.notice(`<b>${ctx.esc(m.by || "Someone")}</b> ${kindOf(m) === "share" && m.src === "tab" ? "is sharing a tab" : "started a movie"}`);
+				lastShown = shown;
 			}
 			if (key === LKEY || key === SWKEY) renderControls();
 		},
-		cssActive: () => !!yt,
+		cssActive: () => !!cur,
 		screenFor: id => (seatIds.has(id) ? screen : null),
 		promptOpts(opts) {
 			const me = ctx.me();

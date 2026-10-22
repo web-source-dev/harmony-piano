@@ -162,6 +162,18 @@ button { font: inherit; color: inherit; }
 .cin-now b { display: block; font-size: 15px; }
 .cin-now span { color: var(--muted); font-size: 13px; }
 .cin-off { padding: 4px 6px; }
+.cin-ico { width: 124px; height: 70px; border-radius: 10px; flex: none; display: grid; place-items: center; font-size: 34px; background: rgba(0,0,0,.25); }
+.cin-small { margin: 6px 0 0; font-size: 12px; }
+.cin-msg { margin-top: 8px; font-size: 13px; line-height: 1.4; color: var(--muted); }
+.cin-msg:empty { display: none; }
+.cin-msg.bad { color: #ffb4a8; }
+.cin-lib { margin-top: 12px; }
+.cin-lib > span { display: block; font-size: 12px; margin-bottom: 6px; }
+#cin-libl { display: flex; flex-wrap: wrap; gap: 6px; max-height: 120px; overflow-y: auto; }
+.cin-item { display: inline-flex; gap: 2px; max-width: 100%; }
+#cin-libl .cin-del { padding-left: 10px; padding-right: 10px; opacity: .7; flex: none; }
+#cin-libl .cin-del:hover { opacity: 1; }
+#cin-libl .btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .hs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 .hs-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 10px; border-radius: 16px; border: 1px solid var(--line); background: rgba(255,255,255,.06); color: var(--text); font: inherit; cursor: pointer; text-align: center; transition: background .15s, transform .1s, border-color .15s; }
 .hs-card:hover { background: rgba(255,255,255,.11); border-color: rgba(255,255,255,.25); }
@@ -176,7 +188,7 @@ button { font: inherit; color: inherit; }
 .hs-pet > div { padding: 12px; border-radius: 14px; background: rgba(255,255,255,.05); border: 1px solid var(--line); }
 .hs-pet .lbl { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-top: 8px; }
 .hs-pet input { margin-top: 6px; }
-@media (max-width: 520px) { .hs-pet { grid-template-columns: 1fr; } .cin-now img { width: 96px; height: 54px; } }
+@media (max-width: 520px) { .hs-pet { grid-template-columns: 1fr; } .cin-now img, .cin-ico { width: 96px; height: 54px; } }
 #pianobar { align-self: center; padding: 10px 14px; display: flex; align-items: center; gap: 14px; max-width: calc(100% - 28px); font-size: 13px; }
 #pianobar .keys { display: flex; gap: 3px; flex-wrap: wrap; align-items: center; }
 #pianobar kbd { display: inline-grid; place-items: center; min-width: 20px; height: 22px; border-radius: 5px; background: #fff; color: #2a1f33; font: 900 11px "Nunito", sans-serif; padding: 0 4px; box-shadow: 0 2px 0 #b8a9c9; }
@@ -258,6 +270,8 @@ body.tvmode #help { display: none; }
 body.fullvid { background: #000; }
 body.fullvid > :not(#css3d):not(#view):not(#fullexit) { display: none !important; }
 body.fullvid.fvvideo #view { visibility: hidden; }
+/* another site's player on the cinema screen: in full screen you can click it (its own play / pause buttons) */
+body.fullvid #css3d .cin-click { pointer-events: auto; }
 #fullexit { display: none; position: fixed; top: max(14px, env(safe-area-inset-top)); right: 14px; z-index: 30; padding: 8px 14px; border: 0; border-radius: 999px; background: rgba(20,14,28,.6); color: #fff; font: 800 13px "Nunito", sans-serif; cursor: pointer; opacity: 0; transition: opacity .3s; }
 body.fullvid #fullexit { display: block; }
 body.fullvid:hover #fullexit, #fullexit:focus-visible { opacity: 1; }
@@ -646,7 +660,7 @@ body.touch #help { display: none; }
 
 <script src="./roomSync.js?v=20261002w"></script>
 <script src="./accountSync.js?v=20261016a"></script>
-<script type="module" src="./world.js?v=20261016a"></script>
+<script type="module" src="./world.js?v=20261022b"></script>
 <script>
 // If the module never boots (old browser / CDN blocked), say so instead of spinning forever.
 setTimeout(function () {

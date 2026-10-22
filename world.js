@@ -402,6 +402,7 @@ function onNet(d) {
 			}
 			break;
 		case "fx": onFx(d, p); break;
+		case "rtc": if (d.to === MY_ID) house.onRtc(d); break;   // a shared screen in the cinema (worldScreen.js)
 		case "note": {
 			const n = +d.n;
 			if (audio) audio.pianoNote(n, 0.18);

@@ -45,10 +45,13 @@ addEventListener("message", e => {
  *   patch(p)     merge p into the shared state (no click sound: this happens by itself)
  *   cmd(f, args) send the player a command
  *   elapsed(m)   seconds into the current video
- * Returns { stop(), index(), sync() } - sync() puts the player on the shared video (call it after a remote change).
+ *   now()        the clock the shared state's times are on (the cinema uses the server's)
+ * Returns { stop(), index(), sync(), time() } - sync() puts the player on the shared video (call it after a remote
+ * change); time() is where the player really is, in seconds (null until it has said).
  */
-export function followPlaylist(iframe, get, patch, cmd, elapsed) {
-	let cur = -1, seekT = 0;
+export function followPlaylist(iframe, get, patch, cmd, elapsed, now) {
+	now = now || Date.now;
+	let cur = -1, seekT = 0, ct = null, ctAt = 0, state = -1;
 	const win = iframe.contentWindow;
 	const goTo = idx => {
 		cmd("playVideoAt", [idx]);
@@ -62,21 +65,24 @@ export function followPlaylist(iframe, get, patch, cmd, elapsed) {
 		if (cur !== m.idx) goTo(m.idx);
 	};
 	listeners.set(win, info => {
+		if (typeof info.playerState === "number") state = info.playerState;
+		if (typeof info.currentTime === "number") { ct = info.currentTime; ctAt = performance.now(); }
 		if (typeof info.playlistIndex !== "number" || info.playlistIndex === cur) return;
 		cur = info.playlistIndex;
 		const m = get();
 		if (!m.list || !m.on) return;
 		const idx = typeof m.idx === "number" ? m.idx : -1;
 		if (idx < 0) patch({ idx: cur });                                                        // where the link started
-		else if (cur === idx + 1 && !m.paused && Date.now() - m.at > 4000) patch({ idx: cur, at: Date.now(), pos: 0 });   // that video ended
+		else if (cur === idx + 1 && !m.paused && now() - m.at > 4000) patch({ idx: cur, at: now(), pos: 0, go: 0 });   // that video ended
 		else if (cur !== idx) goTo(idx);                                                           // we're on the wrong one
 	});
-	return { stop() { listeners.delete(win); clearTimeout(seekT); }, index: () => cur, sync };
+	const time = () => ct == null ? null : ct + (state === 1 ? (performance.now() - ctAt) / 1000 : 0);
+	return { stop() { listeners.delete(win); clearTimeout(seekT); }, index: () => cur, sync, time };
 }
 
 // the next / previous video of the playlist (a patch for the shared state), or null with no playlist
-export function playlistStep(m, dir, cur) {
+export function playlistStep(m, dir, cur, now) {
 	if (!m.list) return null;
 	const idx = typeof m.idx === "number" && m.idx >= 0 ? m.idx : Math.max(0, cur);
-	return { idx: Math.max(0, idx + dir), at: Date.now(), pos: 0, paused: false };
+	return { idx: Math.max(0, idx + dir), at: now || Date.now(), pos: 0, paused: false, go: 0 };
 }

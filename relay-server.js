@@ -31,6 +31,8 @@ var fs = require("fs");
 var path = require("path");
 var url = require("url");
 var crypto = require("crypto");
+var dns = require("dns");
+var net = require("net");
 var ws = require("ws");
 var WebSocketServer = ws.WebSocketServer || ws.Server;
 
@@ -424,6 +426,66 @@ function listLibraryImages() {
 	});
 }
 
+function listLibraryVideos() {
+	var media = listMedia();
+	return media.library.concat(media.recent).filter(function (m) { return m.kind === "video"; }).map(function (m) {
+		return { url: m.url, title: m.title || m.file, size: m.size, mine: m.from === "cinema" };
+	});
+}
+
+// What is this link? A video file the cinema can play itself, or a page - and if a page, will it let itself be shown
+// inside ours (X-Frame-Options / CSP frame-ancestors)? Only looks at the headers; never follows into a private address.
+function isPrivateAddr(ip) {
+	if (net.isIPv4(ip)) {
+		var p = ip.split(".").map(Number);
+		return p[0] === 10 || p[0] === 127 || p[0] === 0 || (p[0] === 169 && p[1] === 254) || (p[0] === 172 && p[1] >= 16 && p[1] <= 31) || (p[0] === 192 && p[1] === 168) || (p[0] === 100 && p[1] >= 64 && p[1] <= 127);
+	}
+	var s = ip.toLowerCase();
+	if (s.indexOf("::ffff:") === 0) return isPrivateAddr(s.slice(7));
+	return s === "::1" || s === "::" || /^f[cd]/.test(s) || /^fe[89ab]/.test(s);
+}
+function probeLink(link, cb) {
+	var u;
+	try { u = new URL(link); } catch (e) { cb({ ok: false, error: "Not a link" }); return; }
+	if (!/^https?:$/.test(u.protocol)) { cb({ ok: false, error: "Not a web link" }); return; }
+	var hops = 0;
+	(function go(target) {
+		var t;
+		try { t = new URL(target); } catch (e) { cb({ ok: false, error: "Bad redirect" }); return; }
+		dns.lookup(t.hostname.replace(/^\[|\]$/g, ""), { all: true }, function (err, addrs) {
+			if (err || !addrs || !addrs.length) { cb({ ok: false, error: "Can't find that site" }); return; }
+			if (addrs.some(function (a) { return isPrivateAddr(a.address); })) { cb({ ok: false, error: "Private address" }); return; }
+			var ac = new AbortController();
+			var timer = setTimeout(function () { ac.abort(); }, 8000);
+			fetch(t.href, {
+				method: "GET", redirect: "manual", signal: ac.signal,
+				headers: { "Range": "bytes=0-0", "Accept": "*/*", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36" }
+			}).then(function (r) {
+				clearTimeout(timer);
+				try { if (r.body) r.body.cancel(); } catch (e) {}
+				var loc = r.headers.get("location");
+				if (r.status >= 300 && r.status < 400 && loc && hops++ < 5) { go(new URL(loc, t.href).href); return; }
+				var type = String(r.headers.get("content-type") || "").toLowerCase().split(";")[0].trim();
+				var video = /^video\//.test(type) || /mpegurl/.test(type) || type === "application/dash+xml";
+				var xfo = String(r.headers.get("x-frame-options") || "").toLowerCase();
+				var fa = /frame-ancestors([^;]*)/i.exec(String(r.headers.get("content-security-policy") || ""));
+				var frameable = !(/deny|sameorigin/.test(xfo) || (fa && !/(^|\s)(\*|https:)(\s|$)/.test(fa[1].trim())));
+				cb({ ok: r.status < 400, status: r.status, url: t.href, type: type, video: video, hls: /mpegurl/.test(type), frameable: frameable });
+			}).catch(function () {
+				clearTimeout(timer);
+				cb({ ok: false, error: "That site didn't answer" });
+			});
+		});
+	})(u.href);
+}
+// STUN finds a way between two people's homes most of the time; set HARMONY_TURN_URL (+ _USER, _PASS) for the rest
+function iceServers() {
+	var list = [{ urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302", "stun:stun.cloudflare.com:3478"] }];
+	var turn = process.env.HARMONY_TURN_URL;
+	if (turn) list.push({ urls: turn.split(",").map(function (s) { return s.trim(); }).filter(Boolean), username: process.env.HARMONY_TURN_USER || "", credential: process.env.HARMONY_TURN_PASS || "" });
+	return list;
+}
+
 function cacheControlFor(urlPath) {
 	// Service worker must revalidate so CACHE_NAME bumps take effect.
 	if (urlPath === "/sw.js") return "no-cache, must-revalidate";
@@ -463,6 +525,8 @@ var MEDIA_DIR = path.join(ROOT, "room-media");
 var LIBRARY_DIR = path.join(ROOT, "media-library");
 var LIBRARY_INDEX = path.join(LIBRARY_DIR, "index.json");
 var MAX_MEDIA_BYTES = 80 * 1024 * 1024;
+// a whole movie uploaded from the cinema's projector (HARMONY_MAX_MOVIE_GB to change it)
+var MAX_MOVIE_BYTES = (parseFloat(process.env.HARMONY_MAX_MOVIE_GB) || 8) * 1024 * 1024 * 1024;
 var MEDIA_EXT = {
 	".mp3": "audio", ".m4a": "audio", ".wav": "audio", ".ogg": "audio", ".aac": "audio",
 	".flac": "audio", ".opus": "audio", ".weba": "audio",
@@ -553,7 +617,7 @@ function listMedia() {
 			source: "library", file: file, url: "/media-library/" + file,
 			title: item.title || item.name || file, name: item.name || file,
 			kind: item.kind || MEDIA_EXT[path.extname(file).toLowerCase()] || "audio",
-			size: st.size, added: (item.added ? item.added * 1000 : st.mtimeMs)
+			from: item.from || "", size: st.size, added: (item.added ? item.added * 1000 : st.mtimeMs)
 		});
 	});
 	// Files dropped into media-library/ without an index entry still show up.
@@ -594,13 +658,16 @@ function deleteMedia(source, file) {
 	}
 	if (!existed) throw new Error("File not found");
 }
-function handleLibraryUpload(req, res) {
+function handleLibraryUpload(req, res, opts) {
+	opts = opts || {};
+	var max = opts.max || MAX_MEDIA_BYTES;
+	var tooBig = "File too large (max " + (max >= 1073741824 ? Math.round(max / 1073741824) + " GB" : Math.round(max / 1048576) + " MB") + ")";
 	var original = String(req.headers["x-filename"] || "upload");
 	try { original = decodeURIComponent(original); } catch (e) {}
 	original = path.basename(original).replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_").slice(0, 120) || "upload";
 	var ext = path.extname(original).toLowerCase();
-	if (!MEDIA_EXT[ext]) { sendJson(res, 400, { ok: false, error: "Unsupported file type: " + (ext || "(none)") }); return; }
-	if (parseInt(req.headers["content-length"], 10) > MAX_MEDIA_BYTES) { sendJson(res, 413, { ok: false, error: "File too large (max 80 MB)" }); return; }
+	if (!MEDIA_EXT[ext] || (opts.videoOnly && MEDIA_EXT[ext] !== "video")) { sendJson(res, 400, { ok: false, error: "Unsupported file type: " + (ext || "(none)") }); return; }
+	if (parseInt(req.headers["content-length"], 10) > max) { sendJson(res, 413, { ok: false, error: tooBig }); return; }
 	var id = crypto.randomBytes(6).toString("hex");
 	var file = id + ext;
 	var full = path.join(LIBRARY_DIR, file);
@@ -617,7 +684,7 @@ function handleLibraryUpload(req, res) {
 	}
 	req.on("data", function (c) {
 		size += c.length;
-		if (size > MAX_MEDIA_BYTES) { fail(413, "File too large (max 80 MB)"); req.destroy(); }
+		if (size > max) { fail(413, tooBig); req.destroy(); }
 	});
 	req.on("error", function () { fail(400, "Upload interrupted"); });
 	out.on("error", function (e) { fail(500, String(e && e.message || e)); });
@@ -629,7 +696,8 @@ function handleLibraryUpload(req, res) {
 			items.push({
 				id: id, file: file, name: original,
 				title: (path.basename(original, ext).replace(/_+/g, " ").trim() || "Media").slice(0, 120),
-				kind: MEDIA_EXT[ext], size: size, added: Math.floor(Date.now() / 1000)
+				kind: MEDIA_EXT[ext], size: size, added: Math.floor(Date.now() / 1000),
+				from: opts.from || undefined
 			});
 			saveLibraryIndex(items);
 			sendJson(res, 200, { ok: true, file: file, url: "/media-library/" + file });
@@ -1156,7 +1224,23 @@ function serveStatic(req, res) {
 			res.end();
 			return;
 		}
+		// byte ranges: a movie on the cinema screen seeks (and starts part way in, to catch up with everyone)
+		var rm = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || "").trim());
+		if (rm && (rm[1] || rm[2]) && st.size > 0) {
+			var start = rm[1] ? parseInt(rm[1], 10) : Math.max(0, st.size - parseInt(rm[2], 10));
+			var end = rm[1] && rm[2] ? Math.min(parseInt(rm[2], 10), st.size - 1) : st.size - 1;
+			if (start > end || start >= st.size) {
+				res.writeHead(416, { "Content-Range": "bytes */" + st.size });
+				res.end();
+				return;
+			}
+			res.writeHead(206, { "Content-Range": "bytes " + start + "-" + end + "/" + st.size, "Content-Length": end - start + 1 });
+			if (req.method === "HEAD") { res.end(); return; }
+			fs.createReadStream(filePath, { start: start, end: end }).on("error", function () { try { res.end(); } catch (e) {} }).pipe(res);
+			return;
+		}
 		res.setHeader("Content-Length", st.size);
+		if (req.method === "HEAD") { res.end(); return; }
 		fs.createReadStream(filePath).on("error", function () { try { res.end(); } catch (e) {} }).pipe(res);
 	});
 }
@@ -1261,6 +1345,39 @@ var server = http.createServer(function (req, res) {
 	}
 	if (req.method === "GET" && route === "/api/world/library") {
 		sendJson(res, 200, { ok: true, images: listLibraryImages() });
+		return;
+	}
+	// the cinema: movies in the media library, what a pasted link is, and the WebRTC servers for a shared tab
+	if (req.method === "GET" && route === "/api/world/videos") {
+		sendJson(res, 200, { ok: true, videos: listLibraryVideos() });
+		return;
+	}
+	if (req.method === "GET" && route === "/api/world/probe") {
+		probeLink(String((url.parse(req.url, true).query || {}).u || ""), function (out) { sendJson(res, 200, out); });
+		return;
+	}
+	// a movie file uploaded at the projector (streamed straight to disk), and taking one away again
+	if (req.method === "POST" && route === "/api/world/movie") {
+		handleLibraryUpload(req, res, { max: MAX_MOVIE_BYTES, videoOnly: true, from: "cinema" });
+		return;
+	}
+	if (req.method === "DELETE" && route === "/api/world/movie") {
+		var mf = path.basename(String((url.parse(req.url, true).query || {}).file || ""));
+		var items = loadLibraryIndex();
+		var item = items.filter(function (it) { return it && it.file === mf && it.from === "cinema"; })[0];
+		if (!item) { sendJson(res, 404, { ok: false, error: "Not found" }); return; }
+		try { fs.unlinkSync(path.join(LIBRARY_DIR, mf)); } catch (e) {}
+		saveLibraryIndex(items.filter(function (it) { return it !== item; }));
+		sendJson(res, 200, { ok: true });
+		return;
+	}
+	// the server's clock: everyone's player counts from the same "now", whatever their own device's clock says
+	if (req.method === "GET" && route === "/api/world/time") {
+		sendJson(res, 200, { ok: true, now: Date.now() });
+		return;
+	}
+	if (req.method === "GET" && route === "/api/world/ice") {
+		sendJson(res, 200, { ok: true, iceServers: iceServers() });
 		return;
 	}
 	if (req.method === "POST" && (route === "/api/world/chat" || route === "/api/world/state")) {
